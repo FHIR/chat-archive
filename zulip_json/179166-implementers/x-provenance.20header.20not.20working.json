@@ -1,0 +1,68 @@
+[
+    {
+        "content": "<p>Hello Friends, I have been reading docs and desperately looking for an example how this X-Provenance works?. Here is what I tried:<br>\nI use the JPA Version R4.0.0. Upgraded to 4.0.1 also still not working. </p>\n<div class=\"codehilite\"><pre><span></span>   @Autowired\n   private  IGenericClient fhirClient;\n    Patient patient = new Patient();\n    patient.addIdentifier().setUse(Identifier.IdentifierUse.OFFICIAL).setSystem(&quot;urn:example&quot;)\n        .setValue(&quot;101&quot;);\n   - - - - more fields to patient object\n\n    Bundle bundle = new Bundle();\n    bundle.setType(Bundle.BundleType.TRANSACTION);\n    bundle.addEntry()\n        .setFullUrl(patient.getIdElement().getValue())\n        .setResource(patient)\n        .getRequest()\n        .setUrl(&quot;Patient&quot;)\n        .setIfNoneExist(&quot;identifier=http://xyz.org/mrns|12345&quot;)\n        .setMethod(Bundle.HTTPVerb.POST);\n\n\n  AdditionalRequestHeadersInterceptor additionalRequestHeadersInterceptor = new AdditionalRequestHeadersInterceptor();\n    JSONObject jsonObject = new JSONObject();\n    try {\n        jsonObject.put(&quot;resourceType&quot;, &quot;Provenance&quot;);\n        jsonObject.put(&quot;recorded&quot;, new Date());\n        JSONObject j = new JSONObject();\n        j.put(&quot;who&quot;, &quot;Patient/1&quot;);  // existing patient in my system \n        jsonObject.put(&quot;agent&quot;, j);\n    }\n    catch (Exception e) {}\n\n    additionalRequestHeadersInterceptor.addHeaderValue(&quot;X-Provenance&quot;, jsonObject.toString());\n    additionalRequestHeadersInterceptor.addHeaderValue(&quot;content-type&quot;, &quot;application/fhir+json&quot;);\n    fhirClient.registerInterceptor(additionalRequestHeadersInterceptor);\n\n    Bundle resp = fhirClient\n        .transaction()\n        .withBundle(bundle)\n        .execute();\n</pre></div>\n\n\n<hr>\n<p>I checked the database, I see the patient is created but no provenance resource. Can someone help me what I am doing wrong ?. <br>\nSince there is no proper example describing this X-Provenance, its hard. I searched the code also but not able to find where X-Provenance is used as well. I will debug it further if someone points me to the source code. </p>\n<p>thanks for your help<br>\nNath</p>",
+        "id": 186577368,
+        "sender_full_name": "Nath",
+        "timestamp": 1579966208
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span></p>",
+        "id": 186577428,
+        "sender_full_name": "David Pyke",
+        "timestamp": 1579966340
+    },
+    {
+        "content": "<p>If you're using HAPI-FHIR, it doesn't appear to support the X-Provenance header yet.  We had to implement our own support for the header in order for it to work.  Are there any servers that support it out of the box at this point in time?</p>",
+        "id": 186581920,
+        "sender_full_name": "Scott Fradkin",
+        "timestamp": 1579974285
+    },
+    {
+        "content": "<p>thanks <span class=\"user-mention\" data-user-id=\"238352\">@Scott Fradkin</span> Yes I am using Hapi fhir. Is there a link or document where I can see what's supported or not. Sorry I am new to this. <br>\nSorry for this basic question,  so where is this functionality currently implemented then ?</p>\n<p>Also, \"we had to implement our own support for the header ..\", you mean if the header contains  X-Provenance then do this functionality of creating the provenance resource youself in hapi fhir ?. Is that what you mean ?.  basically, duplicate the functionality from the place where its currently implemented to hapi fhir ?</p>\n<p>thanks</p>",
+        "id": 186589535,
+        "sender_full_name": "Nath",
+        "timestamp": 1579988032
+    },
+    {
+        "content": "<p>You would probably want to implement this as a Server Interceptor (see <a href=\"https://hapifhir.io/hapi-fhir/docs/interceptors/\" target=\"_blank\" title=\"https://hapifhir.io/hapi-fhir/docs/interceptors/\">https://hapifhir.io/hapi-fhir/docs/interceptors/</a> ). We'd gladly welcome any contributions of such an interceptor if someone wanted to try building it and sharing their work.</p>",
+        "id": 186592870,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1579994390
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> thanks. sure, let me understand interceptor and provider. <br>\nHigh level this is what I am thinking:<br>\nIn the bundle provider method, </p>\n<p>JpaSystemProviderR4.java</p>\n<p>@Transaction<br>\n    public Bundle transaction(RequestDetails theRequestDetails, @TransactionParam Bundle theResources) {<br>\n        startRequest(((ServletRequestDetails) theRequestDetails).getServletRequest());<br>\n        try {<br>\n            return getDao().transaction(theRequestDetails, theResources);<br>\n        } finally {<br>\n            endRequest(((ServletRequestDetails) theRequestDetails).getServletRequest());<br>\n        }<br>\n    }</p>\n<p>I looked at all server interceptor and I see there is none currently for bundle pre-commit resources. I see only STORAGE_PRESTORAGE_RESOURCE_CREATED. </p>\n<p>So, in the above method transaction(..) after getDao().transaction(theRequestDetails, theResources) is called, invoke the new interceptor say STORAGE_PRECOMMIT_RESOURCES.</p>\n<p>JpaInterceptorBroadcaster.doCallHooks(myInterceptorBroadcaster, theRequest, Pointcut.STORAGE_PRECOMMIT_RESOURCES, theResources); </p>\n<p>inside the interceptor, it should walk thru the theResources, get the id and version, create the provenance resource, call getDao().transaction(newRequest, provenanceResource)</p>\n<p>This is for JPA but not sure what needs to be done for Restful server(non-jpa). <br>\nPlease kindly guide me,</p>",
+        "id": 186600493,
+        "sender_full_name": "Nath",
+        "timestamp": 1580009022
+    },
+    {
+        "content": "<p>I think you should be fine to just hook into <code>STORAGE_PRESTORAGE_RESOURCE_CREATED</code> and also <code>STORAGE_PRESTORAGE_RESOURCE_UPDATED</code> if you want. Those will get called both for normal CRUD and for transaction operations.</p>",
+        "id": 186623274,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1580047618
+    },
+    {
+        "content": "<p>thanks <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> . Sorry, I am bit confused now. The STORAGE_PRESTORAGE_RESOURCE_CREATED is fired for each resource. So, if my txn bundle contains 3 resources I will get 3 times this interceptor be called and that's not what we want here.RIght?</p>\n<p>In this case once all my 3 resources are created I want my interceptor be called and it will create provenance resource with version id's. So, I am thinking we need a new interceptor that should be invoked once all the resources in the bundle are processed.</p>\n<p>thanks</p>",
+        "id": 186630882,
+        "sender_full_name": "Nath",
+        "timestamp": 1580061007
+    },
+    {
+        "content": "<p>ah, if the logic you're after is for a single call to happen after the whole bundle is done, you probably want to hook into SERVER_PROCESSING_COMPLETED_NORMALLY</p>",
+        "id": 186645411,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1580086068
+    },
+    {
+        "content": "<p>Our implementation was for prototype functionality for a single operation, so we didn't implement anything generic enough like a server interceptor, but basically, yes we created a new Provenance resource out of the header and added the resource identifiers inserted from the bundle as the target to the Provenance resource.  So the Provenance resource was created and inserted after the bundle transaction was completed.</p>",
+        "id": 186652671,
+        "sender_full_name": "Scott Fradkin",
+        "timestamp": 1580099791
+    },
+    {
+        "content": "<p>thanks <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span>. I looked at the server interceptor diagram <a href=\"https://hapifhir.io/hapi-fhir/docs/interceptors/server_pointcuts.html\" target=\"_blank\" title=\"https://hapifhir.io/hapi-fhir/docs/interceptors/server_pointcuts.html\">https://hapifhir.io/hapi-fhir/docs/interceptors/server_pointcuts.html</a>. The event SERVER_PROCESSING_COMPLETED_NORMALLY is raised after the transaction is completed but I want to add provenance resource within the same txn. So, I need something after all resources in the bundle are processed, id, version is generated, then I use those versions, id and create provenance resource in the same txn. <br>\nThis will work for JPA.</p>\n<p>Also, 2nd question is about Plain server, do I need to do anything since storage is done externally. </p>\n<p><span class=\"user-mention\" data-user-id=\"238352\">@Scott Fradkin</span> thanks for the information. <br>\nthanks a lot.</p>",
+        "id": 186654354,
+        "sender_full_name": "Nath",
+        "timestamp": 1580102849
+    }
+]

@@ -1,0 +1,32 @@
+[
+    {
+        "content": "<p>Early on in my SUSHI-usage, I discovered that SUSHI can automatically populate some values in <code>Instance</code>s, like so:</p>\n<div class=\"codehilite\"><pre><span></span><code>Profile: MyPatient1\nParent: Patient\n* name ^slicing.discriminator.path = &quot;family&quot;\n* name ^slicing.discriminator.type = #pattern\n* name contains bäcker 0..1\n* name[bäcker].family = &quot;Bäcker&quot;\n\nInstance: ExamplePatient1\nInstanceOf: MyPatient1\n* name[bäcker].given = &quot;Jürgen&quot;\n</code></pre></div>\n<p>In the output, the Patient's name \"Jürgen Bäcker\" is automatically given in full:</p>\n<div class=\"codehilite\" data-code-language=\"JSON\"><pre><span></span><code><span class=\"p\">{</span>\n  <span class=\"nt\">\"resourceType\"</span><span class=\"p\">:</span> <span class=\"s2\">\"Patient\"</span>\n  <span class=\"err\">...</span>\n  <span class=\"nt\">\"name\"</span><span class=\"p\">:</span> <span class=\"p\">[{</span>\n      <span class=\"nt\">\"family\"</span><span class=\"p\">:</span> <span class=\"nt\">\"Bäcker\"</span>\n      <span class=\"nt\">\"given\"</span><span class=\"p\">:</span> <span class=\"p\">[</span><span class=\"s2\">\"Jürgen\"</span><span class=\"p\">]</span>\n    <span class=\"p\">}</span>\n  <span class=\"p\">]</span>\n<span class=\"p\">}</span>\n</code></pre></div>\n<p>This feature delighted be, because it spared me from having to write \"obvious\", \"already constrained\" information twice. </p>\n<p>But when discriminating on deeper paths, this feature did not work for me. For example:</p>\n<div class=\"codehilite\"><pre><span></span><code>Profile: MyPatient2\nParent: Patient\n* contact ^slicing.discriminator.path = &quot;address.text&quot;\n* contact ^slicing.discriminator.type = #pattern\n* contact contains mars 0..1\n* contact[mars].address.text = &quot;Mars&quot;\n\nInstance: ExamplePatient2\nInstanceOf: MyPatient2\n* contact[mars].gender = #male\n</code></pre></div>\n<p>The output is</p>\n<div class=\"codehilite\" data-code-language=\"JSON\"><pre><span></span><code><span class=\"p\">{</span>\n  <span class=\"nt\">\"resourceType\"</span><span class=\"p\">:</span> <span class=\"s2\">\"Patient\"</span><span class=\"p\">,</span>\n  <span class=\"err\">...</span>\n  <span class=\"nt\">\"contact\"</span><span class=\"p\">:</span> <span class=\"p\">[</span>\n    <span class=\"p\">{</span>\n      <span class=\"nt\">\"gender\"</span><span class=\"p\">:</span> <span class=\"s2\">\"male\"</span>\n    <span class=\"p\">}</span>\n  <span class=\"p\">]</span>\n<span class=\"p\">}</span>\n</code></pre></div>\n<p>Is there a way to ask SUSHI to automatically populate all fields that have a fixed value (or an unambiguous pattern value)?</p>",
+        "id": 227844631,
+        "sender_full_name": "Martin Höcker",
+        "timestamp": 1614289633
+    },
+    {
+        "content": "<p>When adding this feature, we did not want to make it so that SUSHI would auto-populate incorrect values, since then a user would have very little way of removing those auto-populated values. So the automatic population is intentionally conservative. In this case, the <code>contact[mars].address.text</code> field is constrained to the value <code>Mars</code>, but this field has cardinality <code>0..1</code>, so SUSHI cannot know for sure that the value should be populated. Unfortunately there isn't a way to ask SUSHI to automatically populate all fixed values. The concern would be that such a feature could lead to many unwanted values being populated, because so many elements are optional.</p>",
+        "id": 227846018,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1614290220
+    },
+    {
+        "content": "<p>Ahh, thank you, I had missed the cardinality side of it. So now I understand why the following example only worked \"sometimes\" for me:</p>\n<div class=\"codehilite\"><pre><span></span><code>Profile: MyPatient1\nParent: Patient\n* active = true\n* active 1..1\n\nInstance: ExamplePatient1\nInstanceOf: MyPatient1\n</code></pre></div>\n<p>On some real-world examples, I did not have the corresponding element fixed to 1..1.</p>\n<p>But coming back to the slicing-example, I would argue that by using the slice I show my intent that it should be a valid slice that corresponds to my discriminator, so I would kind-of expect that the constrained element should be there.  It's a minor issue though, since changing my code to </p>\n<div class=\"codehilite\"><pre><span></span><code>Profile: MyPatient2\nParent: Patient\n* contact ^slicing.discriminator.path = &quot;address.text&quot;\n* contact ^slicing.discriminator.type = #pattern\n* contact contains mars 0..1\n* contact[mars].address.text = &quot;Mars&quot;\n* contact[mars].address 1..1\n\nInstance: ExamplePatient2\nInstanceOf: MyPatient2\n* contact[mars].gender = #male\n</code></pre></div>\n<p>fixes the issue for me. Thank you for your help!</p>",
+        "id": 227847136,
+        "sender_full_name": "Martin Höcker",
+        "timestamp": 1614290704
+    },
+    {
+        "content": "<p>Short addendum: The first example I posted also discriminates on an optional element, but in that example it is automatically populated (which is helpful, I think). My proposal would be to extend this behavior to deep paths, if and only if they are used in discriminators.</p>",
+        "id": 227851447,
+        "sender_full_name": "Martin Höcker",
+        "timestamp": 1614292659
+    },
+    {
+        "content": "<p>That is a good point. Currently SUSHI does not really handle discriminators in a \"smart\" way. SUSHI doesn't do any sort of validation or interpretation of discriminator values. Ideally we would be able to detect that the constrained element should be there though.</p>",
+        "id": 227928790,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1614346959
+    }
+]

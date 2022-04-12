@@ -1,0 +1,110 @@
+---
+layout: page
+title: "FHIR Chat  · Exclusion of Patients Based on Existence of Conditions · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Exclusion.20of.20Patients.20Based.20on.20Existence.20of.20Conditions.html">Exclusion of Patients Based on Existence of Conditions</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="231492509"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Exclusion%20of%20Patients%20Based%20on%20Existence%20of%20Conditions/near/231492509" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Exclusion.20of.20Patients.20Based.20on.20Existence.20of.20Conditions.html#231492509">(Mar 23 2021 at 15:44)</a>:</h4>
+<p>What's the proper cql framwork for doing exclusionary relationships? For example, let's say I'm in a patient context, and I have a condition A, but I want to check for exclusionary symptoms B for at least 30 days before the condition. I was thinking of using the exists clause, but I'm not sure how to extend this into a population context easily.</p>
+<p>Something like this</p>
+<div class="codehilite"><pre><span></span><code>context Patient
+
+define &quot;exclusionexists&quot;:
+    [Condition: Code in &quot;ConditionCodesA&quot;] conditionA
+        with [Condition: Code in &quot;ConditionCodesB&quot;] conditionB
+              such that not conditionA.onset.start after 30 days conditionB.onset
+        return exists(conditionA)
+</code></pre></div>
+
+
+
+<a name="231497826"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Exclusion%20of%20Patients%20Based%20on%20Existence%20of%20Conditions/near/231497826" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Exclusion.20of.20Patients.20Based.20on.20Existence.20of.20Conditions.html#231497826">(Mar 23 2021 at 16:13)</a>:</h4>
+<p>I'm not sure if I'm understanding your question right, but it seems to me that you're probably close.  Perhaps you're just looking to wrap the exists around the whole thing rather in a <code>return</code> statement?  E.g.,</p>
+<div class="codehilite"><pre><span></span><code>context Patient
+
+define &quot;exclusionexists&quot;:
+  exists(
+    [Condition: &quot;ConditionCodesA&quot;] conditionA
+      without [Condition: &quot;ConditionCodesB&quot;] conditionB
+      such that
+        (conditionB.onset.value as DateTime) occurs 30 days or more before (conditionA.onset.value as DateTime)
+  )
+</code></pre></div>
+<p>Again, I don't know if this is what you're looking for, but maybe it helps point you in the right direction.  It returns true only if there exists ConditionA <em>without</em> ConditionB onsetting 30 days or more before ConditionA.  Note that, for simplicity, it assumes the onset is available as a DateTime -- so you'd need to do further modification to handle other onset types (like Period).</p>
+
+
+
+<a name="231503248"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Exclusion%20of%20Patients%20Based%20on%20Existence%20of%20Conditions/near/231503248" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Exclusion.20of.20Patients.20Based.20on.20Existence.20of.20Conditions.html#231503248">(Mar 23 2021 at 16:46)</a>:</h4>
+<p>Hey Chris, yes you got the right idea. So this seems like the right nugget, but the thing I'm stuggling with is turning this into a population context, I only want to find the Patients that do not match this exclusion. Maybe another definition like this</p>
+<div class="codehilite"><pre><span></span><code>context Patient
+
+define &quot;exclusionexists&quot;:
+  exists(
+    [Condition: &quot;ConditionCodesA&quot;] conditionA
+      without [Condition: &quot;ConditionCodesB&quot;] conditionB
+      such that
+        (conditionB.onset.value as DateTime) occurs 30 days or more before (conditionA.onset.value as DateTime)
+  )
+
+define &quot;PatientResourceMaybe&quot;:
+    if exclusionexists
+    then
+        return null
+    else
+        return [Patient]
+````
+
+Now moving this into a population context seems tricky.
+</code></pre></div>
+
+
+
+<a name="231504063"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Exclusion%20of%20Patients%20Based%20on%20Existence%20of%20Conditions/near/231504063" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Exclusion.20of.20Patients.20Based.20on.20Existence.20of.20Conditions.html#231504063">(Mar 23 2021 at 16:50)</a>:</h4>
+<p>For quality measures specifically, the Quality Measure IG (and HQMF that it's based on, really) define a set of population criteria to standardize the expression of quality measures and facilitate evaluation. For each type of measure calculation, the IG provides the population level expression in CQL: <a href="http://build.fhir.org/ig/HL7/cqf-measures/measure-conformance.html#342-measure-population-semantics">http://build.fhir.org/ig/HL7/cqf-measures/measure-conformance.html#342-measure-population-semantics</a></p>
+
+
+
+<a name="231506477"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Exclusion%20of%20Patients%20Based%20on%20Existence%20of%20Conditions/near/231506477" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Exclusion.20of.20Patients.20Based.20on.20Existence.20of.20Conditions.html#231506477">(Mar 23 2021 at 17:04)</a>:</h4>
+<p>Ty Bryn so I think I got it. So I have a target condition, and a set of target exclusion conditions. In a population context, I could collect the exclusionary conditions if they exist, otherwise they would not exist.</p>
+<p>If the exclusionary condition exists, return that one. Otherwise return the original condition. Then I could get metrics by checking the number of original conditions, vs the number of exclusionary conditions. So I would know what percentage of the population had an exclusion, and which exclusions were most prevalent.</p>
+
+
+
+<a name="231634154"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Exclusion%20of%20Patients%20Based%20on%20Existence%20of%20Conditions/near/231634154" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Kiel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Exclusion.20of.20Patients.20Based.20on.20Existence.20of.20Conditions.html#231634154">(Mar 24 2021 at 13:35)</a>:</h4>
+<p><span class="user-mention" data-user-id="194612">@Michael Riley</span> Do you use a server that supports <a href="https://www.hl7.org/fhir/operation-measure-evaluate-measure.html">$evaluate-measure</a>? If so you can stay in the Patient context and the server will return a MeasureReport containing the counts of the populations Bryn described.</p>
+
+
+
+<a name="231828269"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Exclusion%20of%20Patients%20Based%20on%20Existence%20of%20Conditions/near/231828269" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Exclusion.20of.20Patients.20Based.20on.20Existence.20of.20Conditions.html#231828269">(Mar 25 2021 at 16:01)</a>:</h4>
+<p><span class="user-mention" data-user-id="197470">@Alexander Kiel</span> No unfortunately, it's going to be a standalone cql-engine-fhir instance to talk to FHIR servers that just support clinical resources like Conditions and Procedures. There won't be any measure support in the EHR. But yeah that's a great solution.</p>
+
+
+
+<a name="231829269"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Exclusion%20of%20Patients%20Based%20on%20Existence%20of%20Conditions/near/231829269" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Kiel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Exclusion.20of.20Patients.20Based.20on.20Existence.20of.20Conditions.html#231829269">(Mar 25 2021 at 16:06)</a>:</h4>
+<p><span class="user-mention" data-user-id="194612">@Michael Riley</span> I'm the lead developer of the open source FHIR Server <a href="https://github.com/samply/blaze">Blaze</a> which implements $evalueate-measure. Because I like to compile a list of other CQL engines, do you have a link to the solution you use?</p>
+
+
+
+<a name="233385185"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Exclusion%20of%20Patients%20Based%20on%20Existence%20of%20Conditions/near/233385185" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Exclusion.20of.20Patients.20Based.20on.20Existence.20of.20Conditions.html#233385185">(Apr 06 2021 at 20:43)</a>:</h4>
+<p><span class="user-mention" data-user-id="197470">@Alexander Kiel</span> sorry for the late response, we use a modified DBCG web service to run fhir based cql. <a href="https://github.com/DBCG/cql_execution_service">https://github.com/DBCG/cql_execution_service</a></p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

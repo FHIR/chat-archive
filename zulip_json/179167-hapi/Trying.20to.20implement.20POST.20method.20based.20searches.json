@@ -1,0 +1,68 @@
+[
+    {
+        "content": "<p>According to FHIR, \"Because of the way that some user agents and proxies treat GET and POST requests, in addition to the get based search method above, servers that support search SHALL also support a POST based search:\"</p>\n<p>My code accepts the GET method currently. But when I change the request to a POST, HAPI responds:<br>\n'{<br>\n  \"resourceType\": \"OperationOutcome\",<br>\n  \"issue\": [<br>\n    {<br>\n      \"severity\": \"error\",<br>\n      \"code\": \"processing\",<br>\n      \"diagnostics\": \"Invalid request: The FHIR endpoint on this server does not know how to handle POST operation[Observation] with parameters [[]]\"<br>\n    }<br>\n  ]<br>\n}'</p>\n<p>What do I have to change in order to accept POST requests? Is it a configuration change or do I need another annotation (Java) on my method handler?</p>",
+        "id": 213084485,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1602535327
+    },
+    {
+        "content": "<p>It seems that we might have similiar questions.</p>",
+        "id": 213266329,
+        "sender_full_name": "Lin Zhang",
+        "timestamp": 1602668957
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"335936\">@Daniel Venton</span>  Are you doing something like this: <code>POST [base]/Observation</code>? Because it needs to be <code>POST [base]/Observation/_search</code>, i.e., the URL is different for GET vs POST.</p>",
+        "id": 213333032,
+        "sender_full_name": "Ian Bacher",
+        "timestamp": 1602700363
+    },
+    {
+        "content": "<p>Thanks much! That was the secret sauce I need to get POST to activate my code, but now why isn't my parameter being passed in?<br>\ncurl --location --request POST '<a href=\"http://localhost:8083/R4/Observation/_search\">http://localhost:8083/R4/Observation/_search</a>' \\<br>\n--header 'Accept: application/fhir+json' \\<br>\n--header 'Authorization: Bearer **' \\<br>\n--header 'Content-Type: application/x-www-form-urlencoded' \\<br>\n--data-urlencode 'patient=ZZZZZZ'</p>\n<div class=\"codehilite\"><pre><span></span><code>@Search()\npublic Bundle searchByIdentifier(\n        @OptionalParam(name = Observation.SP_PATIENT) TokenParam thePatient) {\n</code></pre></div>\n\n\n<p>When I get into my method the \"thePatient\" parameter is null.</p>",
+        "id": 213338519,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1602703177
+    },
+    {
+        "content": "<p>The <code>patient</code> search parameter for Observation is supposed to be a <code>reference</code> rather than a <code>token</code> so the corresponding variable should be a <code>ReferenceParam</code> rather than a <code>TokenParam</code>. At least that'd be my guess.</p>",
+        "id": 213429852,
+        "sender_full_name": "Ian Bacher",
+        "timestamp": 1602770588
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> Can you explain this to me? I'm looking at RestfulServer code, particularly the param processing portion starting at line 913 of v5.1.0. The 1st line says, must have a querystring.  but inside that if there is processing of the POST body params. Making the Restful server require AT LEAST one query string parameter in order to process POST body parameters. Should it not always (GET/POST) use any of query string parameters specified AND when the method is POST use values specified in the body? Meaning that a request can be processed where all of the params are in the body?</p>\n<div class=\"codehilite\"><pre><span></span><code>        if (isNotBlank(theRequest.getQueryString())) {\n            completeUrl = requestUrl + &quot;?&quot; + theRequest.getQueryString();\n            if (isIgnoreServerParsedRequestParameters()) {\n                String contentType = theRequest.getHeader(Constants.HEADER_CONTENT_TYPE);\n                if (theRequestType == RequestTypeEnum.POST &amp;&amp; isNotBlank(contentType) &amp;&amp; contentType.startsWith(Constants.CT_X_FORM_URLENCODED)) {\n                    String requestBody = toUtf8String(requestDetails.loadRequestContents());\n                    params = UrlUtil.parseQueryStrings(theRequest.getQueryString(), requestBody);\n                } else if (theRequestType == RequestTypeEnum.GET) {\n                    params = UrlUtil.parseQueryString(theRequest.getQueryString());\n                }\n            }\n        } else {\n            completeUrl = requestUrl.toString();\n        }\n</code></pre></div>",
+        "id": 214085296,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1603301136
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"335936\">@Daniel Venton</span> </p>\n<p>You can definitely perform POST based searches with no URL based parameters in HAPI. No special coding is required, it should just work automatically.</p>\n<p><code>theRequest.getQueryString()</code> should return null if no URL params are present, and HAPI handles that. We do still check in case someone is using both (which I have absolutely seen people do).</p>",
+        "id": 214091105,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1603303675
+    },
+    {
+        "content": "<p>When I don't have any query string parameters specified then HAPI doesn't process the POST body parameters at all.</p>",
+        "id": 214093880,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1603304984
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"335936\">@Daniel Venton</span>  Hmm.. This test is verifying that exact scenario and is passing: <a href=\"https://github.com/jamesagnew/hapi-fhir/blob/master/hapi-fhir-structures-dstu3/src/test/java/ca/uhn/fhir/rest/server/SearchPostDstu3Test.java#L110\">https://github.com/jamesagnew/hapi-fhir/blob/master/hapi-fhir-structures-dstu3/src/test/java/ca/uhn/fhir/rest/server/SearchPostDstu3Test.java#L110</a></p>\n<p>Are you able to see any differerence between what it's doing and what you're doing? Could you attach a debugger to the method you quoted for each and see what is happening differently?</p>",
+        "id": 214179344,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1603369791
+    },
+    {
+        "content": "<p>Ok, I've isolated the difference. This line of code which calls upon the httpServletRequet interface:<br>\n                if (params == null) {<br>\n                    params = new HashMap&lt;&gt;(theRequest.getParameterMap());<br>\n                }<br>\nIn my apache environment that resolves (eventually) to:<br>\npackage org.apache.catalina.connector;<br>\npublic class Request implements HttpServletRequest { </p>\n<p>Doesn't return any values. </p>\n<p>HAPI unit test appears to resolve to: <br>\npackage org.eclipse.jetty.server;<br>\npublic class Request implements HttpServletRequest {</p>\n<p>Which does return values.</p>\n<p>Meaning that it isn't HAPI's fault, BUT it does provide a suggestion. Since HAPI is capable of decoding the POST body params itself, as illustrated by this line \"params = UrlUtil.parseQueryStrings(theRequest.getQueryString(), requestBody);\". Perhaps it would be better if HAPI always decoded the post body params instead of relying on other (apparently flawed) implementations. Next step for me will be to see about upgrading the internal tomcat server inside of IDEA IDE to see if it's resolved by apache. </p>\n<p>For any other person having the same problem Adding an ignorable query string parameter will at least let you test \"/Observation/_search?_fake\". This instructs HAPI to decode the POST parameters itself and since it starts with an \"_\" HAPI doesn't require that parameter to exist in the method signature.</p>",
+        "id": 214184795,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1603372530
+    },
+    {
+        "content": "<p>TBH I'm not 100% sure I understand - But if this is something you could replicate in a unit test (even just with a mock HttpServletRequest object passed directly into SearchMethodBinding or whatever, we'd gladly accept a PR with a fix</p>",
+        "id": 214250695,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1603402215
+    }
+]

@@ -1,0 +1,110 @@
+[
+    {
+        "content": "<p>Hi All,</p>\n<p>I'm learning how to use FHIR and I came across the <a href=\"https://github.com/smart-on-fhir/\">smart-on-fhir client library</a>. I would like to know if there are any tutorials on how to post data to a FHIR server. For example, what I would like to do is create a new patient on the FHIR server and then add a PDF file associated with that patient. I'm using a local docker container running <a href=\"https://hub.docker.com/r/conceptant/hapi-fhir/dockerfile\">this image</a>.</p>\n<p>Any suggestions much appreciated. I've had some success doing basic operations but I'm struggling to understand more complex tasks and how the FHIR resources are related to each other and used - like uploading the PDF described above.</p>",
+        "id": 219390224,
+        "sender_full_name": "Matt Antalek",
+        "timestamp": 1607544193
+    },
+    {
+        "content": "<p>What is the PDF association with the patient? That is where FHIR starts: with defining what information is. Is this a \"additional information about the patient\"? or is this a discharge letter? Or a patient signed consent?... All those things have different places in FHIR.</p>",
+        "id": 219398052,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1607548102
+    },
+    {
+        "content": "<p>But generally the process would be:</p>\n<ol>\n<li>If that information is intrinsic part of the \"Patient\" object, then you can create an extension on the patient. If it's something else, you can surely find another FHIR resource that has a similar intent.</li>\n<li>Whether as an extension or part of a resource, the PDF would be base-64 encoded and submitted as a Binary resource, or in an Attachment data type (for examlpe in DocumentReference resource)</li>\n</ol>",
+        "id": 219398526,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1607548351
+    },
+    {
+        "content": "<p>Then you POST the patient, with the encoded PDF as an extension , or you POST the PDF later as part of the other resource</p>",
+        "id": 219398632,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1607548406
+    },
+    {
+        "content": "<p>(is this helpful)?</p>",
+        "id": 219398645,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1607548412
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191832\">@Jose Costa Teixeira</span> - thanks! Yes, it's helpful. </p>\n<p>For what I'm working on, this PDF would be a clinic note, so something that I wouldn't consider to be part of the patient object directly, but should be associated to it. Here is a bit of example code for what I'm trying to do where I create a DocumentReference object to hold the PDF data:</p>\n<div class=\"codehilite\"><pre><span></span><code>from fhirclient.models.attachment import Attachment\nfrom fhirclient.models.binary import Binary\nfrom fhirclient import client\nimport base64\n\n# client to local HAPI FHIR server\nsmart = client.FHIRClient({&#39;api_base&#39;:&#39;http://localhost:8080/baseDtsu3&#39;, &#39;app_id&#39;:&#39;&#39;})\n\nsmart.prepare()\n\n# get a patient\npatient = Patient.read(&#39;1&#39;, smart.server)\n\n# make a document reference\ndr = DocumentReference()\ndr.subject = patient\n\n# make attachment\na = Attachment()\na.contentType = &#39;application/pdf&#39;\n# read in pdf file\npdf_file = ....\npdf_data = None\nwith open(pdf_file, &#39;rb&#39;) as f:\n  pdf_data = f.read()\n  pdf_64 = base64.b64encode(pdf_data)\n  pdf_64m = pdf_64.decode(&#39;utf-8&#39;)\n\na.data = pdf_64m\ndr.attachment = a\ndr.create(smart.server)\n</code></pre></div>\n<p>Where I'm getting hung up is that the <code>dr.subject = patient</code> throws an error, saying the object should be a <code>FHIRReference</code> object. However in the documentation I haven't been able to find the proper method of creating these references to each other. Example code in other languages (like Java) seems to be a bit more straightforward. There may be other python libraries that are easier to use, but this was one of the first I came across. Any suggestions appreciated.</p>",
+        "id": 219399687,
+        "sender_full_name": "Matt Antalek",
+        "timestamp": 1607548855
+    },
+    {
+        "content": "<p>Also of note - tried setting the attachment as a <code>Binary</code> object, but that threw an error in the attachment stating that the <code>Attachment.data</code> attribute should be a python string.</p>",
+        "id": 219399868,
+        "sender_full_name": "Matt Antalek",
+        "timestamp": 1607548924
+    },
+    {
+        "content": "<p><a href=\"http://build.fhir.org/references.html#Reference\">http://build.fhir.org/references.html#Reference</a></p>",
+        "id": 219402657,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1607550155
+    },
+    {
+        "content": "<p>Reference is a data type, not a pointer to an object</p>",
+        "id": 219402698,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1607550183
+    },
+    {
+        "content": "<p><code>dr.subject.reference= &lt;URL of your patient&gt;)</code><br>\nwhere the url of the patient is [server]/Patient/&lt;your <a href=\"http://patient.id\">patient.id</a>&gt;</p>",
+        "id": 219403038,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1607550336
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191832\">@Jose Costa Teixeira</span> - have you used the smart-on-fhir/client-py library before? Is there a way I can easily find the url for the patient object after I've read the object from the server?</p>",
+        "id": 219505272,
+        "sender_full_name": "Matt Antalek",
+        "timestamp": 1607621147
+    },
+    {
+        "content": "<p>I haven't used the Library so I don't know if there is a short way to get that.</p>",
+        "id": 219505448,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1607621219
+    },
+    {
+        "content": "<blockquote>\n<p>have you used the smart-on-fhir/client-py library before? Is there a way I can easily find the url for the patient object after I've read the object from the server?</p>\n</blockquote>\n<p>I don't understand your question,  how can you read  a patient without knowing its URL</p>\n<p>here is what I do using the requests library....</p>",
+        "id": 219522550,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1607628816
+    },
+    {
+        "content": "<h1>Get patient and use client_py model</h1>\n<div class=\"codehilite\" data-code-language=\"Python\"><pre><span></span><code><span class=\"kn\">from</span> <span class=\"nn\">requests</span> <span class=\"kn\">import</span> <span class=\"n\">get</span>\n<span class=\"kn\">from</span> <span class=\"nn\">json</span> <span class=\"kn\">import</span> <span class=\"n\">loads</span><span class=\"p\">,</span> <span class=\"n\">dumps</span>\n<span class=\"kn\">from</span> <span class=\"nn\">fhirclient.r4models</span> <span class=\"kn\">import</span> <span class=\"n\">patient</span> <span class=\"k\">as</span> <span class=\"n\">P</span>\n</code></pre></div>\n<h2>some global variables...</h2>\n<div class=\"codehilite\" data-code-language=\"Python\"><pre><span></span><code><span class=\"n\">base</span> <span class=\"o\">=</span> <span class=\"s1\">'http://test.fhir.org/r4'</span>\n<span class=\"c1\">#base = 'http://hapi.fhir.org/baseR4'</span>\n<span class=\"c1\">#base = 'http://wildfhir4.aegis.net/fhir4-0-1'</span>\n\n<span class=\"n\">headers</span> <span class=\"o\">=</span> <span class=\"p\">{</span>\n        <span class=\"s1\">'Accept'</span><span class=\"p\">:</span><span class=\"s1\">'application/fhir+json'</span><span class=\"p\">,</span>\n        <span class=\"s1\">'Content-Type'</span><span class=\"p\">:</span><span class=\"s1\">'application/fhir+json'</span>\n        <span class=\"p\">}</span>\n\n<span class=\"n\">p_id</span>  <span class=\"o\">=</span> <span class=\"s1\">''</span>\n</code></pre></div>\n<h2>Read Patient using requests package</h2>\n<div class=\"codehilite\" data-code-language=\"Python\"><pre><span></span><code><span class=\"k\">def</span> <span class=\"nf\">get_patients</span><span class=\"p\">():</span>\n\n    <span class=\"n\">r</span> <span class=\"o\">=</span> <span class=\"n\">get</span><span class=\"p\">(</span><span class=\"sa\">f</span><span class=\"s1\">'</span><span class=\"si\">{</span><span class=\"n\">base</span><span class=\"si\">}</span><span class=\"s1\">/Patient'</span><span class=\"p\">,</span> <span class=\"n\">headers</span> <span class=\"o\">=</span> <span class=\"n\">headers</span><span class=\"p\">)</span>\n    <span class=\"c1\">#print(r.json()['entry'])</span>\n    <span class=\"k\">try</span><span class=\"p\">:</span>\n        <span class=\"n\">ids</span> <span class=\"o\">=</span> <span class=\"p\">[</span><span class=\"n\">i</span><span class=\"p\">[</span><span class=\"s1\">'resource'</span><span class=\"p\">][</span><span class=\"s1\">'id'</span><span class=\"p\">]</span> <span class=\"k\">for</span> <span class=\"n\">i</span> <span class=\"ow\">in</span> <span class=\"n\">r</span><span class=\"o\">.</span><span class=\"n\">json</span><span class=\"p\">()[</span><span class=\"s1\">'entry'</span><span class=\"p\">]</span> <span class=\"k\">if</span> <span class=\"n\">i</span><span class=\"p\">[</span><span class=\"s1\">'resource'</span><span class=\"p\">][</span><span class=\"s1\">'resourceType'</span><span class=\"p\">]</span><span class=\"o\">==</span><span class=\"s1\">'Patient'</span><span class=\"p\">]</span>\n    <span class=\"k\">except</span> <span class=\"ne\">Exception</span> <span class=\"k\">as</span> <span class=\"n\">e</span><span class=\"p\">:</span>\n        <span class=\"k\">pass</span>\n        <span class=\"c1\">#print(f'Error: {e}')</span>\n    <span class=\"k\">else</span><span class=\"p\">:</span>\n        <span class=\"nb\">print</span><span class=\"p\">(</span><span class=\"n\">ids</span><span class=\"p\">)</span>\n    <span class=\"k\">return</span> <span class=\"n\">ids</span><span class=\"p\">[</span><span class=\"mi\">0</span><span class=\"p\">]</span>\n\n\n<span class=\"k\">def</span> <span class=\"nf\">get_patient</span><span class=\"p\">(</span><span class=\"n\">p_id</span><span class=\"p\">):</span>\n\n    <span class=\"n\">r</span> <span class=\"o\">=</span> <span class=\"n\">get</span><span class=\"p\">(</span><span class=\"sa\">f</span><span class=\"s1\">'</span><span class=\"si\">{</span><span class=\"n\">base</span><span class=\"si\">}</span><span class=\"s1\">/Patient/</span><span class=\"si\">{</span><span class=\"n\">p_id</span><span class=\"si\">}</span><span class=\"s1\">'</span><span class=\"p\">,</span> <span class=\"n\">headers</span> <span class=\"o\">=</span> <span class=\"n\">headers</span><span class=\"p\">)</span>\n\n    <span class=\"k\">try</span><span class=\"p\">:</span>\n        <span class=\"n\">pyfhir_patient</span> <span class=\"o\">=</span> <span class=\"n\">P</span><span class=\"o\">.</span><span class=\"n\">Patient</span><span class=\"p\">(</span><span class=\"n\">r</span><span class=\"o\">.</span><span class=\"n\">json</span><span class=\"p\">())</span>\n    <span class=\"k\">except</span> <span class=\"ne\">Exception</span> <span class=\"k\">as</span> <span class=\"n\">e</span><span class=\"p\">:</span>\n        <span class=\"k\">pass</span>\n        <span class=\"c1\">#print(f'Error: {e}')</span>\n    <span class=\"k\">else</span><span class=\"p\">:</span>\n        <span class=\"nb\">print</span><span class=\"p\">(</span><span class=\"n\">pyfhir_patient</span><span class=\"p\">)</span>\n        <span class=\"nb\">print</span><span class=\"p\">(</span><span class=\"sa\">f</span><span class=\"s1\">'pyfhir_patient.id = </span><span class=\"si\">{</span><span class=\"n\">pyfhir_patient</span><span class=\"o\">.</span><span class=\"n\">id</span><span class=\"si\">}</span><span class=\"s1\">'</span><span class=\"p\">)</span>\n        <span class=\"nb\">print</span><span class=\"p\">(</span><span class=\"sa\">f</span><span class=\"s1\">'pyfhir_patient.name.family.given = </span><span class=\"si\">{</span><span class=\"n\">pyfhir_patient</span><span class=\"o\">.</span><span class=\"n\">name</span><span class=\"p\">[</span><span class=\"mi\">0</span><span class=\"p\">]</span><span class=\"o\">.</span><span class=\"n\">given</span><span class=\"p\">[</span><span class=\"mi\">0</span><span class=\"p\">]</span><span class=\"si\">}</span><span class=\"s1\">'</span><span class=\"p\">)</span>\n        <span class=\"nb\">print</span><span class=\"p\">(</span><span class=\"sa\">f</span><span class=\"s1\">'pyfhir_patient.name.family = </span><span class=\"si\">{</span><span class=\"n\">pyfhir_patient</span><span class=\"o\">.</span><span class=\"n\">name</span><span class=\"p\">[</span><span class=\"mi\">0</span><span class=\"p\">]</span><span class=\"o\">.</span><span class=\"n\">family</span><span class=\"si\">}</span><span class=\"s1\">'</span><span class=\"p\">)</span>\n\n<span class=\"n\">p_id</span> <span class=\"o\">=</span> <span class=\"n\">get_patients</span><span class=\"p\">()</span>\n<span class=\"n\">get_patient</span><span class=\"p\">(</span><span class=\"n\">p_id</span><span class=\"p\">)</span>\n</code></pre></div>\n<div class=\"codehilite\"><pre><span></span><code>[&#39;0b327bc5-13e5-4510-8a17-91bc0bf081&#39;, &#39;0ecdf6ab-a506-4c44-8b70-b413274c4e&#39;, &#39;1&#39;, &#39;20217344&#39;, &#39;20217345&#39;, &#39;20217346&#39;, &#39;20217347&#39;, &#39;20217348&#39;, &#39;20217349&#39;, &#39;20217351&#39;, &#39;20217352&#39;, &#39;20217353&#39;, &#39;20217354&#39;, &#39;20217355&#39;, &#39;20217356&#39;, &#39;20217357&#39;, &#39;20217358&#39;, &#39;20217359&#39;, &#39;20217360&#39;, &#39;20217361&#39;, &#39;20217362&#39;, &#39;20217363&#39;, &#39;20217364&#39;, &#39;20217365&#39;, &#39;20217366&#39;, &#39;20217367&#39;, &#39;20217368&#39;, &#39;20217369&#39;, &#39;20217382&#39;, &#39;20217383&#39;, &#39;20217395&#39;, &#39;20217412&#39;, &#39;20217416&#39;, &#39;20217417&#39;, &#39;20217419&#39;, &#39;20217425&#39;, &#39;20217433&#39;, &#39;20217435&#39;, &#39;20217437&#39;, &#39;20217438&#39;, &#39;20217439&#39;, &#39;20217440&#39;, &#39;20217441&#39;, &#39;20217442&#39;, &#39;20217468&#39;, &#39;20217501&#39;, &#39;20217530&#39;, &#39;20217531&#39;, &#39;20217532&#39;, &#39;20217533&#39;]\n&lt;fhirclient.r4models.patient.Patient object at 0x1031a74e0&gt;\npyfhir_patient.id = 0b327bc5-13e5-4510-8a17-91bc0bf081\npyfhir_patient.name.family.given = Jason\npyfhir_patient.name.family = Lee\n</code></pre></div>\n\n<div class=\"codehilite\" data-code-language=\"Python\"><pre><span></span><code>\n</code></pre></div>",
+        "id": 219523871,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1607629486
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191401\">@Eric Haas</span> so the <code>client-py</code> library has some built in methods that allow you to query the patient object without explicitly typing the url. for example:</p>\n<div class=\"codehilite\" data-code-language=\"Python\"><pre><span></span><code><span class=\"kn\">from</span> <span class=\"nn\">fhirclient.client</span> <span class=\"kn\">import</span> <span class=\"n\">FHIRClient</span>\n<span class=\"kn\">from</span> <span class=\"nn\">fhirclient.models.patient</span> <span class=\"kn\">import</span> <span class=\"n\">Patient</span>\n\n<span class=\"n\">smart</span> <span class=\"o\">=</span> <span class=\"n\">FHIRClient</span><span class=\"p\">({</span><span class=\"s1\">'api_base'</span><span class=\"p\">:</span><span class=\"s1\">'http://localhost:8080/baseDtsu3'</span><span class=\"p\">,</span> <span class=\"s1\">'app_id'</span><span class=\"p\">:</span><span class=\"s1\">''</span><span class=\"p\">})</span>\n<span class=\"n\">smart</span><span class=\"o\">.</span><span class=\"n\">prepare</span><span class=\"p\">()</span>\n\n<span class=\"n\">p</span> <span class=\"o\">=</span> <span class=\"n\">Patient</span><span class=\"o\">.</span><span class=\"n\">read</span><span class=\"p\">(</span><span class=\"s2\">\"&lt;id-of-patient&gt;\"</span><span class=\"p\">,</span> <span class=\"n\">smart</span><span class=\"o\">.</span><span class=\"n\">server</span><span class=\"p\">)</span>\n</code></pre></div>\n<p>So, you could get the url of <code>p</code> by combining the strings of <code>p.relativePath()</code> and <code>p.server.base_uri</code> but its a bit clunky. I didnt know if there was an object somewhere in the library that implemented some convenience methods.</p>",
+        "id": 219609350,
+        "sender_full_name": "Matt Antalek",
+        "timestamp": 1607695543
+    },
+    {
+        "content": "<p>Yes I never used any of those methods,  stuck to requests</p>",
+        "id": 219656104,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1607717585
+    },
+    {
+        "content": "<p>Man <span class=\"user-mention\" data-user-id=\"191401\">@Eric Haas</span> , those methods use <code>requests</code> underneath. ;)</p>",
+        "id": 220129368,
+        "sender_full_name": "Pascal Pfiffner",
+        "timestamp": 1608132442
+    },
+    {
+        "content": "<p>I knew that,  I never bothered to use them since I was used to using requests directly</p>",
+        "id": 220144609,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1608139178
+    }
+]

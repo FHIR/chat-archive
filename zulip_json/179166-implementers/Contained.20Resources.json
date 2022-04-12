@@ -1,0 +1,212 @@
+[
+    {
+        "content": "<p>We are using transaction bundles to persist medicationDispense resources and all associated resources - organization, patient, dispenser. We'd like to link the MedicationDispense to the AuthorisingPrescription (MedicationOrder) if it exists. However if it doesn't exist we'd need to store the prescribing data somewhere but we wouldn't have enough information to create independent resources so I was thinking of using 'contained' resources. How would I put this logic in the transaction e.g. if AuthorisingPrescription exist then link else use contained resources</p>",
+        "id": 153829694,
+        "sender_full_name": "Paul Barry",
+        "timestamp": 1464129382
+    },
+    {
+        "content": "<p>We have since found in the spec the following statement on contained resources:<br>\n<strong>*Contained resources SHALL NOT contain additional contained resources</strong>*<br>\nThis means we wouldn't be able to 'contain' the Prescriber within the MedicationOrder that is contained within the MedicationDispense. So we have a problem. How will we store the following data against our MedicationDispense resource?<br>\nPrescriber number<br>\nprescriber first name<br>\nprescriber last name<br>\npractice name<br>\npractice address<br>\npractice phone number<br>\nCreating a profile doesn't feel right?</p>",
+        "id": 153829708,
+        "sender_full_name": "Paul Barry",
+        "timestamp": 1464146229
+    },
+    {
+        "content": "<p>Next you have a rule that says:</p>",
+        "id": 153829724,
+        "sender_full_name": "Gaute Brakstad",
+        "timestamp": 1464159722
+    },
+    {
+        "content": "<p>A contained resource SHALL only be included in a resource if something in that resource (potentially another contained resource) has a reference to it</p>",
+        "id": 153829725,
+        "sender_full_name": "Gaute Brakstad",
+        "timestamp": 1464159723
+    },
+    {
+        "content": "<p>we had some discussion internally in our company around this in a similar case. What we ended up with was following is not allowed:<br>\n &lt;Composition xmlns=\"<a href=\"http://hl7.org/fhir\" target=\"_blank\" title=\"http://hl7.org/fhir\">http://hl7.org/fhir</a>\"&gt;<br>\n  &lt;extension&gt;...&lt;/extension&gt;<br>\n  &lt;text&gt;...&lt;/text&gt;<br>\n  &lt;contained&gt;<br>\n    &lt;Organization&gt;<br>\n        &lt;contained&gt;<br>\n         &lt;Organization&gt;<br>\n             &lt;id value=\"org2\"/&gt;<br>\n             &lt;/Organization&gt;<br>\n        &lt;/contained&gt;<br>\n      &lt;id value=\"org1\"/&gt;<br>\n      &lt;partOf&gt; <br>\n           &lt;reference value=\"#org2\" /&gt;<br>\n      &lt;/partOf&gt;<br>\n    &lt;/Organization&gt;<br>\n  &lt;/contained&gt;<br>\n  &lt;information&gt;<br>\n    &lt;custodian&gt;<br>\n      &lt;reference value=\"#org1\" /&gt;<br>\n    &lt;/custodian&gt;<br>\n  &lt;information&gt;<br>\n &lt;/Composition&gt;</p>\n<p>While following is correct:<br>\n &lt;Composition xmlns=\"<a href=\"http://hl7.org/fhir\" target=\"_blank\" title=\"http://hl7.org/fhir\">http://hl7.org/fhir</a>\"&gt;<br>\n  &lt;extension&gt;...&lt;/extension&gt;<br>\n  &lt;text&gt;...&lt;/text&gt;<br>\n  &lt;contained&gt;<br>\n    &lt;Organization&gt;      <br>\n      &lt;id value=\"org1\"/&gt;<br>\n      &lt;partOf&gt; <br>\n           &lt;reference value=\"#org2\" /&gt;<br>\n      &lt;/partOf&gt;<br>\n    &lt;/Organization&gt;¨<br>\n&lt;/contained&gt;<br>\n &lt;contained&gt;<br>\n    &lt;Organization&gt;<br>\n       &lt;id value=\"org2\"/&gt;<br>\n    &lt;/Organization&gt; <br>\n  &lt;/contained&gt;<br>\n  &lt;information&gt;<br>\n    &lt;custodian&gt;<br>\n      &lt;reference value=\"#org1\" /&gt;<br>\n    &lt;/custodian&gt;<br>\n  &lt;information&gt;<br>\n &lt;/Composition&gt;</p>\n<p>This is to make sure you only have to look one place for your contained resources. Basicly its the \"master\" resource that have all the contain</p>",
+        "id": 153829727,
+        "sender_full_name": "Gaute Brakstad",
+        "timestamp": 1464160407
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191394\">@Gaute Brakstad</span> Thanks for your response. I am not sure your solution works for my scenario. The organisation is only referenced by the prescriber and the prescriber can only be referenced by medicationOrder so how can I not go two deep?</p>",
+        "id": 153829738,
+        "sender_full_name": "Paul Barry",
+        "timestamp": 1464172421
+    },
+    {
+        "content": "<p>&lt;MedicationDispense xmlns=\"<a href=\"http://hl7.org/fhir\" target=\"_blank\" title=\"http://hl7.org/fhir\">http://hl7.org/fhir</a>\"&gt;<br>\n    &lt;contained&gt;<br>\n     &lt;MedicationOrder&gt;<br>\n         &lt;id&gt;order1&lt;/id&gt;<br>\n         &lt;prescriber&gt;<br>\n            &lt;reference value=\"#practitioner1\" /&gt;<br>\n         &lt;/prescriber&gt;<br>\n     &lt;/MedicationOrder&gt;<br>\n    &lt;/contained&gt;<br>\n    &lt;contained&gt;<br>\n     &lt;Practitioner&gt;<br>\n         &lt;id&gt;practitioner1&lt;/id&gt; <br>\n     &lt;/Practitioner&gt;<br>\n    &lt;/contained&gt;<br>\n &lt;authorizingPrescription&gt;<br>\n     &lt;reference value=\"#order1\" /&gt;<br>\n &lt;/authorizingPrescription&gt;</p>\n<p>&lt;/MedicationDispense&gt;</p>",
+        "id": 153829747,
+        "sender_full_name": "Gaute Brakstad",
+        "timestamp": 1464177831
+    },
+    {
+        "content": "<p>Is it something like this you want to achive?</p>",
+        "id": 153829748,
+        "sender_full_name": "Gaute Brakstad",
+        "timestamp": 1464177849
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191949\">@Paul Barry</span>  Just for curiosity, in which situation you have a MedicalDispense instance w/o MedicationOrder (so you have to create contained resource)?</p>",
+        "id": 153829768,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1464186190
+    },
+    {
+        "content": "<p>We used the same solution as Gaute did: have all the contained resources under the MedicationDispense. Then each of these contained resources can reference any other contained resource</p>",
+        "id": 153829800,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1464191630
+    },
+    {
+        "content": "<p>yes that's the intent </p>",
+        "id": 153829842,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1464212041
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191506\">@Yunwei Wang</span> Sometimes Pharmacies are connected to the system but the Prescribing systems are not. If the patient presents at the pharmacy they will submit details about the prescriber as well as their own dispensing information</p>",
+        "id": 153829846,
+        "sender_full_name": "Paul Barry",
+        "timestamp": 1464214798
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191394\">@Gaute Brakstad</span> yes this is what we are trying to achieve. I see you have put the contained Practitioner inline with the contained MedicationOrder even though it is reference by the MedicationOrder (as opposed to the MedicationDispense). I wasn't sure if this was correct. Thanks for clarifying</p>",
+        "id": 153829848,
+        "sender_full_name": "Paul Barry",
+        "timestamp": 1464215199
+    },
+    {
+        "content": "<p>A <code>Bundle</code> is not allowed to have contained resources, right?</p>",
+        "id": 153831581,
+        "sender_full_name": "Andrew Ross",
+        "timestamp": 1464965141
+    },
+    {
+        "content": "<p>because it inherits from <code>Resource</code> as opposed to <code>DomainResource</code></p>",
+        "id": 153831582,
+        "sender_full_name": "Andrew Ross",
+        "timestamp": 1464965153
+    },
+    {
+        "content": "<p>but the resources referenced in <code>Bundle.entry</code> each *can* have their own contained resources, right?</p>",
+        "id": 153831583,
+        "sender_full_name": "Andrew Ross",
+        "timestamp": 1464965171
+    },
+    {
+        "content": "<p>(but it wouldn't be possible for a resource in one <code>entry</code> to reference something contained in another)</p>",
+        "id": 153831584,
+        "sender_full_name": "Andrew Ross",
+        "timestamp": 1464965218
+    },
+    {
+        "content": "<p>we're building a FHIR client library that might encapsulate looking up contained resources and we just want to make sure we're looking in the right place</p>",
+        "id": 153831585,
+        "sender_full_name": "Andrew Ross",
+        "timestamp": 1464965253
+    },
+    {
+        "content": "<p>Correct.<br>\nFor which language/platform are you building the library?</p>",
+        "id": 153831587,
+        "sender_full_name": "Mirjam Baltus",
+        "timestamp": 1464966319
+    },
+    {
+        "content": "<p>Ruby</p>",
+        "id": 153831590,
+        "sender_full_name": "Andrew Ross",
+        "timestamp": 1464966749
+    },
+    {
+        "content": "<p>we're working with MITRE / FHIR crucible</p>",
+        "id": 153831591,
+        "sender_full_name": "Andrew Ross",
+        "timestamp": 1464966767
+    },
+    {
+        "content": "<p>they already have them published open source, we're just working on extending it to handle more use-cases</p>",
+        "id": 153831592,
+        "sender_full_name": "Andrew Ross",
+        "timestamp": 1464966805
+    },
+    {
+        "content": "<p>I've just found that if I try to validate a bundle with resources, which have contained resources on Grahame's server at <a href=\"http://fhir3.healthintersections.com.au/open/\" target=\"_blank\" title=\"http://fhir3.healthintersections.com.au/open/\">fhir3.healthintersections.com.au/open/</a>, I get an error that local references have to start with \"#\", but actually, all my local references start with \"#\". If I extract any resources from this bundle and try to validate on the same server , it passes the validation. <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>, could you please look at this issue when you have time?</p>",
+        "id": 153831613,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1464986600
+    },
+    {
+        "content": "<p>Igor, can you send me the bundle please</p>",
+        "id": 153831715,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1465128061
+    },
+    {
+        "content": "<p><a href=\"/user_uploads/10155/bWnfb06n75HErTdcsDkHu38F/medicationdispensebundle.json\" target=\"_blank\" title=\"/user_uploads/10155/bWnfb06n75HErTdcsDkHu38F/medicationdispensebundle.json\">medicationdispensebundle.json</a> </p>",
+        "id": 153831832,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1465223565
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> , the bundle is attached above. I've simplified it, so it has only one MedicationDispense resource in it with a few data elements and a few references to contained resources.</p>",
+        "id": 153831833,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1465223704
+    },
+    {
+        "content": "<p>The errors I get are of type: \"SHALL have a local reference if the resource is provided inline (url: Medication561127; ids: ) () reference.startsWith('#').not() or (reference.substring(1).trace('url') in %resource.contained.id.trace('ids'))\"</p>\n<p>If I run the same resource with all its contained resources spearately (not part of a bundle), I get \"All OK\".</p>",
+        "id": 153831834,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1465223893
+    },
+    {
+        "content": "<p>ok I'll look</p>",
+        "id": 153831868,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1465260136
+    },
+    {
+        "content": "<p>Thank you <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> </p>",
+        "id": 153832202,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1465499201
+    },
+    {
+        "content": "<p>Can a contained resource claim conformance to a profile? I don't see why not...</p>",
+        "id": 153971672,
+        "sender_full_name": "David Hay",
+        "timestamp": 1529965447
+    },
+    {
+        "content": "<p>yes</p>",
+        "id": 153971702,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1529983328
+    },
+    {
+        "content": "<p>I have a similar question about contained resources, related to <code>QuestionnaireResponse</code> and <code>Questionnaire</code>. </p>\n<p>1. Questionnaire is unique enough to exist as a contained resource in <code>QuestionnaireResponse</code>. </p>\n<p>2. Questionnaire has a contained resource <code>ValueSet</code>, that <code>Quesionnaire.item.options</code> references. </p>\n<p>So: QuestionnaireResponse <strong>contains</strong> Questionnaire <strong> contains</strong> ValueSet </p>\n<p>However, when the resource is created: all contained resources are within the parent resource<br>\n<code>QuestionnaireResponse</code>.contained: [ <br>\n     1. <code>Questionnaire</code><br>\n     2. <code>ValueSet</code><br>\n] </p>\n<p>Is this an expected behavior? The Questionnaire.item.options have to be redirected to the <code>contained</code> of parent resource and not its own <code>contained</code> set?</p>\n<p>example: <a href=\"https://raw.githubusercontent.com/raheelsayeed/fhirpromis/master/QuestionnaireResponse_contained.json\" target=\"_blank\" title=\"https://raw.githubusercontent.com/raheelsayeed/fhirpromis/master/QuestionnaireResponse_contained.json\">https://raw.githubusercontent.com/raheelsayeed/fhirpromis/master/QuestionnaireResponse_contained.json</a></p>",
+        "id": 153976367,
+        "sender_full_name": "Raheel Sayeed",
+        "timestamp": 1532015068
+    },
+    {
+        "content": "<p>Contained resources cannot themselves contain resources, see <a href=\"http://build.fhir.org/references.html#contained\" target=\"_blank\" title=\"http://build.fhir.org/references.html#contained\">http://build.fhir.org/references.html#contained</a><br>\nYou simply stick them all in the parent resource and reference them with \"#id\", as you're already doing.</p>",
+        "id": 153976376,
+        "sender_full_name": "Pascal Pfiffner",
+        "timestamp": 1532015922
+    },
+    {
+        "content": "<blockquote>\n<p>Contained resources cannot themselves contain resources, see <a href=\"http://build.fhir.org/references.html#contained\" target=\"_blank\" title=\"http://build.fhir.org/references.html#contained\">http://build.fhir.org/references.html#contained</a><br>\nYou simply stick them all in the parent resource and reference them with \"#id\", as you're already doing.</p>\n</blockquote>\n<p>Yep, thats what I figured, this is corrected at the server! Nice.</p>",
+        "id": 153976380,
+        "sender_full_name": "Raheel Sayeed",
+        "timestamp": 1532016435
+    },
+    {
+        "content": "<p>Corrected at the server?  If you found a server that accepts a contained resource within a contained resource and fixes it for you, you're very lucky - as your inbound instance wasn't conformant and (in most environments) would have been rejected.</p>",
+        "id": 153976392,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1532021700
+    }
+]

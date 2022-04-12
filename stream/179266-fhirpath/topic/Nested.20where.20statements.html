@@ -1,0 +1,89 @@
+---
+layout: page
+title: "FHIR Chat  · Nested where statements · fhirpath"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/index.html">fhirpath</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Nested.20where.20statements.html">Nested where statements</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="175923829"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Nested%20where%20statements/near/175923829" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Simone Heckmann <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Nested.20where.20statements.html#175923829">(Sep 17 2019 at 16:33)</a>:</h4>
+<p>...are they allowed, and if they are, how can the expression in the inner statement refer to the current element of the outer statement?</p>
+
+
+
+<a name="175927750"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Nested%20where%20statements/near/175927750" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Nested.20where.20statements.html#175927750">(Sep 17 2019 at 17:17)</a>:</h4>
+<p>Can you provide a more concrete example of what you're trying to do (e.g., demonstrating what you mean by "nested" where statements)?</p>
+
+
+
+<a name="175932668"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Nested%20where%20statements/near/175932668" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Simone Heckmann <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Nested.20where.20statements.html#175932668">(Sep 17 2019 at 18:05)</a>:</h4>
+<p>I stumbled over it by trying to get a list of all mustSupport Elements on a Profile, which was quite straight-forward:<br>
+<code>StructureDefinition.snapshot.element.where(mustSupport = true).path</code><br>
+which gave me a collection like this:</p>
+<div class="codehilite"><pre><span></span>- Claim.status
+- Claim.subType
+- Claim.patient
+- Claim.created
+- Claim.insurer
+- Claim.insurer.identifier
+- Claim.organization
+- Claim.organization.identifier
+- Claim.related
+</pre></div>
+
+
+<p>But the purpose of the list was to estimate the complexity of implementation and for that, I'd want to get rid of the duplicates, like <br>
+- Claim.insurer<br>
+- Claim.insurer.identifier<br>
+means youactually only have to implement Claim.insurer.identifier, whereas Claim.insurer is just a bit higher up in the hierarchy.</p>
+<p>Of course that could be easily accomplished outside FHIRPath, but I got curious about whether it was possible to do with a FHIRPath statement by testing for each element in the Collection whether it was a substring of any other element of the collection, and the only way I could come up with to do that was with a nested <code>where</code>...</p>
+
+
+
+<a name="175933404"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Nested%20where%20statements/near/175933404" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Simone Heckmann <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Nested.20where.20statements.html#175933404">(Sep 17 2019 at 18:13)</a>:</h4>
+<p>it would have been something like </p>
+<div class="codehilite"><pre><span></span>StructureDefinition.snapshot.element.where(
+    mustSupport = true
+    and StructureDefinition.snapshot.element.where(
+           mustSupport=true and path.startsWith($this)).exists().not())
+</pre></div>
+
+
+<p>...except this could only work if I could somehow make $this resolve to the current element of the outer loop...<br>
+I admit, that this use case is weird and could be easily solved outside FHIRPath, but I got curious because the spec doesn't say anything about nesting...</p>
+<p>edit: sorry, took a couple of edits for this expression to reflect what I'm trying to do</p>
+
+
+
+<a name="175943617"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Nested%20where%20statements/near/175943617" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ewout Kramer <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Nested.20where.20statements.html#175943617">(Sep 17 2019 at 20:05)</a>:</h4>
+<p>To make this work, we'd need to introduce lambda syntax.  We've so far avoided that, since it would add complexity to the grammar and type system. E.g. when we added the aggregate function.  Anyway, if we would add lambda's it could look like:</p>
+<p><code>......where( $outer -&gt; mustSupport = true and ...... part.startsWith($outer)....</code></p>
+<p>This would be a natural extension, though, since internally, my parser is treating the current where in FHIR path as</p>
+<p><code>....where ( $this -&gt; .....) </code></p>
+
+
+
+<a name="175945348"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Nested%20where%20statements/near/175945348" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Nested.20where.20statements.html#175945348">(Sep 17 2019 at 20:26)</a>:</h4>
+<p>To add to <span class="user-mention" data-user-id="191328">@Ewout Kramer</span>'s comments, this is supported in CQL queries and the underlying ELM -- so it seems there should be a way forward (given the relationship between CQL/ELM and FHIRPath). I like Ewout's syntax.</p>
+
+
+
+<a name="175987424"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Nested%20where%20statements/near/175987424" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Nested.20where.20statements.html#175987424">(Sep 18 2019 at 09:38)</a>:</h4>
+<p>and you can't implement without having stack of contexts, so this doesn't seem radical to name them</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

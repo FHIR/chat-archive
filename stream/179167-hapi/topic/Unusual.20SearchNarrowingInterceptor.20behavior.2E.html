@@ -1,0 +1,144 @@
+---
+layout: page
+title: "FHIR Chat  · Unusual SearchNarrowingInterceptor behavior. · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html">Unusual SearchNarrowingInterceptor behavior.</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="212242635"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unusual%20SearchNarrowingInterceptor%20behavior./near/212242635" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Fadeley <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html#212242635">(Oct 04 2020 at 21:30)</a>:</h4>
+<p>So I'm tracking what maybe a bug inside of SearchNarrowingInterceptor. Correct me if I'm wrong or have overlooked something.</p>
+<p>As behavior goes, a call to a @Search endpoint hits SearchNarrowingInterceptor before the AuthorizationInterceptor. There, an AuthorizedList is assembled of compartments. Like... </p>
+<div class="codehilite"><pre><span></span><code>            for (IdType patientId : patientIds) {
+                cascadingList.addCompartment(patientId.getValue());
+            }
+</code></pre></div>
+
+
+<p>This appends a fresh parameter onto the request, like <a href="http://X/fhir/ExplanationOfBenefit">http://X/fhir/ExplanationOfBenefit</a> would suddenly become <a href="http://X/fhir/ExplanationOfBenefit?patient=Patient/998,Patient/999">http://X/fhir/ExplanationOfBenefit?patient=Patient/998,Patient/999</a>, just as the documentation says.</p>
+<p>Thereafter, the thread visits AuthorizationInterceptor. There I couldn't get...</p>
+<div class="codehilite"><pre><span></span><code>           .allow().read().resourcesOfType(ExplanationOfBenefits.class).inCompartment(&quot;Patient&quot;, patientIds);
+</code></pre></div>
+
+
+<p>...to work. Basically, the request was stopped before the search was executed. Based on input from <span class="user-mention" data-user-id="191427">@Jens Villadsen</span>, I've set up my own IAuthRuleTester.matchesOutput() to use a custom IAuthRuleTester to verify post-search compartmental values of the outgoing resources. </p>
+<div class="codehilite"><pre><span></span><code>           .allow().read().resourcesOfType(ExplanationOfBenefit.class).withAnyId().withTester(myTester);
+</code></pre></div>
+
+
+<p>That approach works great but this struck me as weird, and I did further digging. All along, I've been sending multiple compartmental parameters as a list, either in my manual request or from what the SearchNarrowingInterceptor provides, ie patient=Patient/998,Patient/999. When I tried the approach with just a <em>single</em> value, it works just fine using the ".inCompartment" approach. So it seems something about giving a list of compartment values to SearchNarrowingInterceptor doesn't get past the ".inCompartment" rule?</p>
+<p>P.S., the Provider endpoint is setup to accept multiple values for the compartmental value:</p>
+<div class="codehilite"><pre><span></span><code>    @Search
+    public Bundle searchExplanationOfBenefitBySearchParameters(
+        @OptionalParam(name=ExplanationOfBenefit.SP_PATIENT) StringAndListParam patientParam,
+</code></pre></div>
+
+
+
+<a name="212331812"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unusual%20SearchNarrowingInterceptor%20behavior./near/212331812" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Fadeley <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html#212331812">(Oct 05 2020 at 17:35)</a>:</h4>
+<p>After some discussion and reading with colleagues, it maybe a situation where HAPI can return multiple patients but that's against FHIR specifications?</p>
+
+
+
+<a name="212333319"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unusual%20SearchNarrowingInterceptor%20behavior./near/212333319" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html#212333319">(Oct 05 2020 at 17:48)</a>:</h4>
+<p>Nop - that is entirely legal</p>
+
+
+
+<a name="212418486"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unusual%20SearchNarrowingInterceptor%20behavior./near/212418486" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html#212418486">(Oct 06 2020 at 12:17)</a>:</h4>
+<p><span class="user-mention" data-user-id="348029">@James Fadeley</span> I would suspect that you should build up the chain with allow() .... inCompartment("Patient", patientId).andThen() for each patientID in the list</p>
+
+
+
+<a name="212418525"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unusual%20SearchNarrowingInterceptor%20behavior./near/212418525" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html#212418525">(Oct 06 2020 at 12:17)</a>:</h4>
+<p>There's nothing in the spec that stops you from returning multiple patients AFAIK</p>
+
+
+
+<a name="212425871"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unusual%20SearchNarrowingInterceptor%20behavior./near/212425871" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html#212425871">(Oct 06 2020 at 13:19)</a>:</h4>
+<p>There's nothing against that from a pure FHIR perspective. You may wish to apply some access control rules to filter the result set, but what filters to apply, and when to apply them, depends on a specific context.</p>
+
+
+
+<a name="212429416"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unusual%20SearchNarrowingInterceptor%20behavior./near/212429416" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Fadeley <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html#212429416">(Oct 06 2020 at 13:45)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191427">Jens Villadsen</span> <a href="#narrow/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E/near/212418486">said</a>:</p>
+<blockquote>
+<p><span class="user-mention silent" data-user-id="348029">James Fadeley</span> I would suspect that you should build up the chain with allow() .... inCompartment("Patient", patientId).andThen() for each patientID in the list</p>
+</blockquote>
+<p>Hmmm. I was trying to use the collection method with<br>
+<code>Collection &lt;IdType&gt; patientIds = new ArrayList&lt;IdType&gt;();</code><br>
+...and then spooling through, adding each IdType and giving that to the inCompartment chain. It didn't seem to allow the search through when I thought it should. I could try individuals, but shouldn't the Collection approach work?</p>
+
+
+
+<a name="212432027"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unusual%20SearchNarrowingInterceptor%20behavior./near/212432027" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Fadeley <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html#212432027">(Oct 06 2020 at 14:04)</a>:</h4>
+<p>I ask because the length of the IdTypes list will vary. So either adding a collection or looping through the list is what I'll need.</p>
+
+
+
+<a name="212435112"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unusual%20SearchNarrowingInterceptor%20behavior./near/212435112" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html#212435112">(Oct 06 2020 at 14:25)</a>:</h4>
+<p>hmmm ... had forgotten that inCompartnent can take a list - so both approaches should be valid</p>
+
+
+
+<a name="212435160"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unusual%20SearchNarrowingInterceptor%20behavior./near/212435160" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html#212435160">(Oct 06 2020 at 14:26)</a>:</h4>
+<p>maybe <span class="user-mention" data-user-id="191319">@James Agnew</span> can weigh in on this</p>
+
+
+
+<a name="214632594"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unusual%20SearchNarrowingInterceptor%20behavior./near/214632594" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Fadeley <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html#214632594">(Oct 26 2020 at 21:01)</a>:</h4>
+<p>Any updates on this?</p>
+
+
+
+<a name="214635344"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unusual%20SearchNarrowingInterceptor%20behavior./near/214635344" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Fadeley <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html#214635344">(Oct 26 2020 at 21:26)</a>:</h4>
+<p>To explain a TL;DR, I think the Search Narrowing providing a list of Patient ids, (id patient=Patient/100,Patient/101) is getting stopped by InCompartment in Authorization Interceptor because it thinks there's no match.</p>
+
+
+
+<a name="222341701"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unusual%20SearchNarrowingInterceptor%20behavior./near/222341701" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Fadeley <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html#222341701">(Jan 11 2021 at 19:00)</a>:</h4>
+<p>Ummm, any news? Luck?</p>
+
+
+
+<a name="250719222"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unusual%20SearchNarrowingInterceptor%20behavior./near/250719222" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Victor Saad <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unusual.20SearchNarrowingInterceptor.20behavior.2E.html#250719222">(Aug 26 2021 at 04:25)</a>:</h4>
+<p>I have implemented the SearchNarrowingInterceptor,  AuthorizationInterceptor &amp; ConsentInterceptor in my project as per the limited documentation available.</p>
+<p>In the SearchNarrowingInterceptor, I am creating an AuthorizedList with one compartment for the patient that is sending the request to limit his access to records related to his patient Id only. So when I search for any other patient ID he gets an access denied message.</p>
+<p>In the scenario when I am logged in as Patient 0987654321 and try to search for a Patient 1234567890 using the below URL:</p>
+<p><a href="http://baseurl/Patient?_id=1234567890">http://baseurl/Patient?_id=1234567890</a></p>
+<p>the SearchNarrowingInterceptor in the background is adding both patient IDs to the values Array of the _id param and since this is not acceptable I am getting the below error message </p>
+<p>HTTP 400 Bad Request</p>
+<p>Response Body</p>
+<p>{</p>
+<p>"resourceType": "OperationOutcome",</p>
+<p>"issue": [ {</p>
+<p>"severity": "error",</p>
+<p>"code": "processing",</p>
+<p>"diagnostics": "Multiple values detected for non-repeatable parameter '_id'. This server is not configured to allow multiple (AND/OR) values for this param."</p>
+<p>} ]</p>
+<p>}</p>
+<p>How can I restrict the _id values to the one in the search request only, or is this a bug?</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,116 @@
+[
+    {
+        "content": "<p>I'm creating examples of Observations for values in a valueset in our IG.<br>\nThe valueset contains (among other things) LOINC codes that have the pattern of \"Pure [something] fraction\". For example  <a href=\"https://loinc.org/71831-2/\">71831-2</a> has a name of \"Hematocrit [Pure volume fraction] of Capillary blood\". The description of all of these kinds of codes is </p>\n<blockquote>\n<p>Because of the confusion that occurs in countries that report results as both decimal fraction and percent, this property was created to represent decimal fractions that are reported without units.</p>\n</blockquote>\n<p>I'm thinking that these might be represented in an observation as valueQuantity.value but without valueQuantity.code or valueQuantity.system since they are unitless. Or I can use the the ucum code <code>{ratio}</code>, but without valueQuantity.unit. Is there a best practice?</p>\n<div class=\"codehilite\"><pre><span></span><code>&quot;valueQuantity&quot;: {\n    &quot;value&quot;: 0.01\n    },\n</code></pre></div>\n<p>vs</p>\n<div class=\"codehilite\"><pre><span></span><code>&quot;valueQuantity&quot;: {\n    &quot;value&quot;: 0.01,\n    &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,\n    &quot;code&quot;: &quot;{ratio}&quot;\n    }\n</code></pre></div>\n<p>Codes in our valueset following this pattern:<br>\n<a href=\"https://loinc.org/71865-0/\">71865-0</a><br>\n<a href=\"https://loinc.org/71864-3/\">71864-3</a><br>\n<a href=\"https://loinc.org/71863-5/\">71863-5</a><br>\n<a href=\"https://loinc.org/71833-8/\">71833-8</a><br>\n<a href=\"https://loinc.org/71831-2/\">71831-2</a><br>\n<a href=\"https://loinc.org/71829-6/\">71829-6</a><br>\n<a href=\"https://loinc.org/71668-8/\">71668-8</a><br>\n<a href=\"https://loinc.org/71667-0/\">71667-0</a><br>\n<a href=\"https://loinc.org/71666-2/\">71666-2</a></p>",
+        "id": 245723147,
+        "sender_full_name": " Bob Milius",
+        "timestamp": 1626112709
+    },
+    {
+        "content": "<p>These values aren't actually \"unitless\". They have a unit of \"1\" (the unity), but because units in quantities are multiplicative, and multiplying by 1 means \"no change\" it is convention that the unit of 1 can be omitted. A unit of \"1\" is implied by the absence of a unit expression, at least when the value is displayed. That's the situation in maths and the SI unit system, I don't know if the FHIR community has embraced the same convention.</p>\n<p>Given that, an alternative form for your example would be-</p>\n<div class=\"codehilite\"><pre><span></span><code>&quot;valueQuantity&quot;: {\n    &quot;value&quot;: 0.01,\n    &quot;unit&quot;: &quot;&quot;,\n    &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,\n    &quot;code&quot;: &quot;1&quot;\n    }\n</code></pre></div>\n<p>This would mean the unit is explicit in the message, but also defined as blank (the empty string) for display. However i'm no FHIR expert so there may be rules about transmitting null values or empty strings that this would fall foul of, so I can't claim it as \"best practice\" without comments from other more knowledgable contributors.</p>\n<p>It's a weakness of unit-based systems that so many distinct concepts end up overlayed onto that value of one, which is a sort of singularity (no pun intended) where the maths rather gives up. UCUM makes this worse by allowing arbitrary comments (annotations) in curly braces, and giving any such element the value of \"1\" as well. I suspect it would be much more useful to have \"real\", defined expression atoms in UCUM (or a sucessor) for different \"flavours\" of the value 1, for example to distingish quantities that are always Integers [1] from those that are representing real numbers [1.0], but at the moment an unlimited number of unit expressions in UCUM resolve down to the same indistinguishable value of \"1\".</p>",
+        "id": 245958564,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1626269105
+    },
+    {
+        "content": "<p>Values cannot be null. The Regex for all of the primitive elements requite at least some content: <a href=\"http://hl7.org/fhir/R4/datatypes.html#primitive\">http://hl7.org/fhir/R4/datatypes.html#primitive</a></p>",
+        "id": 246049984,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1626321978
+    },
+    {
+        "content": "<p>Since unit cannot be null, but it is optional, would this be an acceptable and perhaps preferred way of representing it?</p>\n<div class=\"codehilite\" data-code-language=\"JSON\"><pre><span></span><code><span class=\"nt\">\"valueQuantity\"</span><span class=\"p\">:</span> <span class=\"p\">{</span>\n    <span class=\"nt\">\"value\"</span><span class=\"p\">:</span> <span class=\"mf\">0.01</span><span class=\"p\">,</span>\n    <span class=\"nt\">\"system\"</span><span class=\"p\">:</span> <span class=\"s2\">\"http://unitsofmeasure.org\"</span><span class=\"p\">,</span>\n    <span class=\"nt\">\"code\"</span><span class=\"p\">:</span> <span class=\"s2\">\"1\"</span>\n    <span class=\"p\">}</span>\n</code></pre></div>",
+        "id": 246124628,
+        "sender_full_name": " Bob Milius",
+        "timestamp": 1626368574
+    },
+    {
+        "content": "<p>That's fine.  But that means there's nothing for the user so see in terms of unit</p>",
+        "id": 246125399,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1626368958
+    },
+    {
+        "content": "<p><a href=\"https://ucum.org/ucum.html\">https://ucum.org/ucum.html</a> addresses this -- indeed you can write <code>\"1\"</code> or noting:</p>\n<blockquote>\n<p>An annotation without a leading symbol implies the default unit 1 </p>\n</blockquote>\n<p>Annotations in UCUM are strings within curly braces, so you can equivalently write something like: </p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;value&quot;: 0.01,\n  &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,\n  &quot;code&quot;: &quot;{volume fraction}&quot;\n}\n</code></pre></div>",
+        "id": 246125433,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1626368975
+    },
+    {
+        "content": "<p>You can, though we strongly discourage the use of curly-brackets in UCUM codes in FHIR - because they tend to break interoperability.  Many implementations will treat codes with different curly-brace values as being different rather than equivalent.  With FHIR, we have \"unit\" to put the human-readable piece.</p>",
+        "id": 246125763,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1626369109
+    },
+    {
+        "content": "<p>I had no idea the annotation on code was possible. Is that a common thing? I would never have expected that.</p>",
+        "id": 246129980,
+        "sender_full_name": "Eric Whitley",
+        "timestamp": 1626370872
+    },
+    {
+        "content": "<p>it is a UCUM thing and not a FHIR code thing</p>",
+        "id": 246132595,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1626372082
+    },
+    {
+        "content": "<p>And UCUM injected it specifically to accommodate those who wanted to differentiate \"units\" which, from a mathematical perspective aren't units.  So if you want to say 5 \"{oranges}\" and 3 \"{apples}\" you can, even though internally UCUM treats both of those as having a unit of \"1\".</p>",
+        "id": 246132862,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1626372212
+    },
+    {
+        "content": "<blockquote>\n<p>we strongly discourage the use of curly-brackets in UCUM codes in FHIR </p>\n</blockquote>\n<p>\"we\" don't mention it here: <a href=\"http://build.fhir.org/ucum.html\">http://build.fhir.org/ucum.html</a></p>",
+        "id": 246133002,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1626372265
+    },
+    {
+        "content": "<p>I always thought it was because the curly braces had to be escaped a lot  and that was a nuisance.  I personally enver understood the opposition to using them - they seemed handy to have.</p>",
+        "id": 246133504,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1626372484
+    },
+    {
+        "content": "<p>OK, so that makes me feel better. I didn't know if that would be a common thing where someone would send an annotation in place of the coded form. Thank you <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> , <span class=\"user-mention\" data-user-id=\"191401\">@Eric Haas</span> , <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> for the info and education. :)</p>",
+        "id": 246141832,
+        "sender_full_name": "Eric Whitley",
+        "timestamp": 1626376476
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191401\">Eric Haas</span> <a href=\"#narrow/stream/179166-implementers/topic/valueQuantity.20for.20pure.20fractions/near/246133002\">said</a>:</p>\n<blockquote>\n<blockquote>\n<p>we strongly discourage the use of curly-brackets in UCUM codes in FHIR </p>\n</blockquote>\n<p>\"we\" don't mention it here: <a href=\"http://build.fhir.org/ucum.html\">http://build.fhir.org/ucum.html</a></p>\n</blockquote>\n<p>and curly-brackets are found in common ucum codes in the FHIR <a href=\"https://www.hl7.org/fhir/valueset-ucum-units.html\">ucum-units valueset</a></p>",
+        "id": 246152339,
+        "sender_full_name": " Bob Milius",
+        "timestamp": 1626381738
+    },
+    {
+        "content": "<p>And even though they're allowed for UCUM, they're strongly discouraged in FHIR given that FHIR provides a better alternative.</p>",
+        "id": 246235001,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1626447680
+    },
+    {
+        "content": "<p>you keep saying that they're strongly discouraged but, like Eric, I don't see where we say that anywhere in the specification.  I looked at the ucum code system and at the Quantity datatype and we say nothing about the curly-brackets.</p>",
+        "id": 246238208,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1626449265
+    },
+    {
+        "content": "<p>You're right. <a href=\"http://jira.hl7.org/browse/FHIR-33063\">FHIR#33063</a> submitted to address.</p>",
+        "id": 246246559,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1626453064
+    },
+    {
+        "content": "<blockquote>\n<p>and curly-brackets are found in common ucum codes in the FHIR ucum-units valueset</p>\n</blockquote>\n<p>That's true, annotated units are very common in a lot of published lists, the ucum-units valueset (from memory) comprises 40-50% codes that are differentiated from other codes only by what is in the annotations, but that doesn't mean that's a good thing.</p>\n<p>UCUM is a mini programming language (a DSL) for units, and annotations are effectively comments in the code. They have no functional value. If someone told you they had written over 1300 programs, but it turned out 600-ish of them were identical in function AND TEXT to other programs, just with different comments, would you still believe they'd written 1300 programs?</p>\n<p>As <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> has pointed out, some systems may accept UCUM code strings but not implement \"deep knowledge\" of the UCUM semantics. They will just compare units as strings, so the only way they can \"canonify\" a UoM code is to strip out the annotations first, to have the best chance of finding a match in their own UoM list, or when the code is sent to another system.</p>\n<p>The value in having a system like UCUM in place is to allow machine-readable semantics of units to be exchanged between systems. Annotations are, by definition, non-semantic elements. As far as any computation with those units is concerned, they don't exist, which makes one wonder why so much time and effort has been spent crafting (say) over 20 differnt annotated versions of the unit \"%\", when the machine will just (in a computation) say \"== 1/100\" if required and move on.</p>\n<p>The authors of UCUM knew the inclusion of annotations was controversial (this is documented) but felt they had to do it to appease the body of users who see the units field as the place to have a conversation with the recipient, vs. a place to do maths. It's not my place to tell those users they are wrong (what do I know, i'm an engineer...) but I can say that in FHIR the unit code is there for the machine to interpret, and that's not great a place for confusing narrative.</p>",
+        "id": 247240360,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1627323097
+    },
+    {
+        "content": "<p>The purpose of <a href=\"http://jira.hl7.org/browse/FHIR-33063\">FHIR#33063</a> is to give guidance to implementers that - in FHIR - there are alternative places to put that user-facing text that don't interfere with the computability and that therefore, those alternative mechanisms are preferred.</p>",
+        "id": 247253354,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1627329489
+    }
+]

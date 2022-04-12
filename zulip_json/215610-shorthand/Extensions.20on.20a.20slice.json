@@ -1,0 +1,62 @@
+[
+    {
+        "content": "<p>I'm trying to add an extension only to a specific slice of a coding:</p>\n<div class=\"codehilite\"><pre><span></span>//Set and define icd-10-gm slice\n* code.coding contains icd-10-gm 1..*\n* code.coding[icd-10-gm].extension contains HauptKreuzCode 0..*\n</pre></div>\n\n\n<p>When I try to run SUSHI on this file I get </p>\n<div class=\"codehilite\"><pre><span></span>error: No element found at path code.coding[icd-10-gm].extension for MIRACUMCondition, skipping rule\n  File: C:\\Users\\deppenni\\MII\\fhir-igs\\miracum-core-ig\\fsh-files\\Condition.fsh\n  Line: 34\nerror: No element found at path code.coding[icd-10-gm].extension[HauptKreuzCode] for MIRACUMCondition, skipping rule\n  File: C:\\Users\\deppenni\\MII\\fhir-igs\\miracum-core-ig\\fsh-files\\Condition.fsh\n  Line: 34\n</pre></div>\n\n\n<p>So, how can I access the extension array of a slice?</p>",
+        "id": 187084963,
+        "sender_full_name": "Noemi Deppenwiese",
+        "timestamp": 1580478794
+    },
+    {
+        "content": "<p>Have you setup the discriminator before declaring the slice?  If so, then I would expect this <em>should</em> work (so then maybe you discovered a bug).  If not, try setting up the discriminator on <code>code.coding</code> first, and then try again.  (You can use the <code>^</code> syntax to setup the discriminator, as shown <a href=\"http://build.fhir.org/ig/HL7/fhir-shorthand/#step-3-providing-the-slicing-logic\" target=\"_blank\" title=\"http://build.fhir.org/ig/HL7/fhir-shorthand/#step-3-providing-the-slicing-logic\">here</a>).</p>",
+        "id": 187086672,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1580479975
+    },
+    {
+        "content": "<p>Thanks for your respone! I set up the slicing discriminator to use value on system.<br>\nI believe now the error is caused by me setting a (non-resolvable) slice profile between the two lines I posted earlier:</p>\n<div class=\"codehilite\"><pre><span></span>//Set and define icd-10-gm slice\n* code.coding contains icd-10-gm 1..*\n* code.coding[icd-10-gm] ^type.profile = &quot;http://fhir.de/StructureDefinition/CodingICD10GM&quot;\n* code.coding[icd-10-gm].extension contains HauptKreuzCode 0..*\n</pre></div>\n\n\n<p>(I omitted that before since I did not think it was relevant. I also modify some other ^attributes, but the profile line breaks it. Without it runs fine.)</p>",
+        "id": 187087724,
+        "sender_full_name": "Noemi Deppenwiese",
+        "timestamp": 1580480673
+    },
+    {
+        "content": "<p>There are a few possible things going on here.</p>\n<p>First, is the <code>http://fhir.de/StructureDefinition/CodingICD10GM</code> profile accessible to SUSHI?  Is it defined in the same SUSHI project and/or included in one of the dependencies listed in the package.json?</p>\n<p>Second, if the answer to the first is <em>yes</em>, then does the <code>http://fhir.de/StructureDefinition/CodingICD10GM</code> zero out <code>extension</code> on the coding?</p>",
+        "id": 187093808,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1580485014
+    },
+    {
+        "content": "<p>The profile is not accessible. Does it have to be?<br>\n(It is a draft on Simplifier <a href=\"https://simplifier.net/Basisprofil-DE-R4/CodingICD10GM\" target=\"_blank\" title=\"https://simplifier.net/Basisprofil-DE-R4/CodingICD10GM\">https://simplifier.net/Basisprofil-DE-R4/CodingICD10GM</a>)</p>",
+        "id": 187094178,
+        "sender_full_name": "Noemi Deppenwiese",
+        "timestamp": 1580485246
+    },
+    {
+        "content": "<p>In order for SUSHI to properly validate that what you're doing is allowed, it probably should be accessible.  Otherwise SUSHI doesn't know about any of the constraints the profile introduces.  It also causes a problem if a path goes into the profiled things sub-elements, because it needs to then get the sub-elements from the profile to properly create the diffs.  I'm guessing that's what is happening here -- it can't find the definition of that profile, so it can't locate the snapshot elements to generate a diff from.  (Just a guess without actually debugging it).</p>",
+        "id": 187094738,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1580485648
+    },
+    {
+        "content": "<p>Sounds reasonable. Are there any other ways of providing an \"external\" profile than using packages (Since SUSHI seems to be ignoring the newly added dependency... Or would I get an error if a dependency could not be resolved?)? E.g. just dumping the json file into the folder?</p>",
+        "id": 187095892,
+        "sender_full_name": "Noemi Deppenwiese",
+        "timestamp": 1580486412
+    },
+    {
+        "content": "<p>I feel like we <em>should</em> be reporting when a dependency can't be resolved (I mean, when you add a dependency into the package.json that can't be resolved).  We probably also should be reporting if we can't resolve a profile URL when we need it.  If we're not reporting either of those, it may be a bug.</p>\n<p>We are planning to add support for bring-your-own-JSON, but I think even then we'll require that whatever you bring in have the same canonical root as your FSH project.  Supporting truly _external_ profiles (e.g., from another package) without declaring them as a package dependency isn't on our radar, but maybe it should be.</p>",
+        "id": 187111580,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1580496621
+    },
+    {
+        "content": "<p>You could <em>try</em> a workaround that <em>might</em> work.  What if you flip the order?</p>\n<div class=\"codehilite\"><pre><span></span>//Set and define icd-10-gm slice\n* code.coding contains icd-10-gm 1..*\n* code.coding[icd-10-gm].extension contains HauptKreuzCode 0..*\n* code.coding[icd-10-gm] ^type.profile = &quot;http://fhir.de/StructureDefinition/CodingICD10GM&quot;\n</pre></div>\n\n\n<p>Technically that shouldn't make a difference, but I bet it just might.  This will make it so that when SUSHI processes the extension, it doesn't yet know you're trying to profile the type.  Then it will apply the profile _after_ it's done that.  Again, not sure, but it just might work for now.</p>",
+        "id": 187111759,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1580496734
+    },
+    {
+        "content": "<p>Thanks for your help! Now I get a proper <em>404- the package was not found</em> error.  And setting the extension works!</p>",
+        "id": 187245644,
+        "sender_full_name": "Noemi Deppenwiese",
+        "timestamp": 1580722158
+    }
+]

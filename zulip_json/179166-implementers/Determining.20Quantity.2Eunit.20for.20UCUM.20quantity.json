@@ -1,0 +1,266 @@
+[
+    {
+        "content": "<p>Is there a recommended or best practice method to determine what value to use as unit in a Quantity specified using UCUM? This given that the proper UCUM code has been established.</p>\n<p>It appears from e.g. <a href=\"https://www.hl7.org/fhir/observation-example-bloodpressure.json.html\">https://www.hl7.org/fhir/observation-example-bloodpressure.json.html</a> and other examples that the unit is not simply the UCUM code but rather the printSymbol from <a href=\"http://unitsofmeasure.org/ucum-essence.xml\">http://unitsofmeasure.org/ucum-essence.xml</a>. One could parse that file using <a href=\"https://github.com/FHIR/Ucum-java\">https://github.com/FHIR/Ucum-java</a> and get the printSymbol that way, say, client-side, but is there a more centralized way, perhaps from a FHIR terminology service?</p>\n<p>If provided through a FHIR terminology service, would a property or designation returned through a $lookup be one, standard FHIR way to obtain it?</p>\n<p>(Incidentally, shouldn't the <a href=\"#narrow/stream/179166-implementers/topic/Quantity.20search.20and.20display.20units/near/164556273\">https://chat.fhir.org/#narrow/stream/179166-implementers/topic/Quantity.20search.20and.20display.20units/near/164556273</a> example really be unit \"a\" instead of \"yrs\" as in:<br>\n \"valueQuantity\": {<br>\n    \"value\": 7,<br>\n    \"unit\": \"a\",<br>\n    \"system\": \"<a href=\"http://unitsofmeasure.org\">http://unitsofmeasure.org</a>\",<br>\n    \"code\": \"a\"<br>\n  })</p>",
+        "id": 204903821,
+        "sender_full_name": "Erik Nielsen",
+        "timestamp": 1595589317
+    },
+    {
+        "content": "<p>'unit' is the display value - it can be anything.  I don't believe there's a formal algorithm for determining a 'display' value for UCUM units (as in most cases, the code and desired display value are the same - 'a' is an exception).</p>",
+        "id": 204906282,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595591178
+    },
+    {
+        "content": "<p>even if the 'unit' is just a display value in Quantity, at some point you might want to present the Quantity content to a user. At this point, would you not expect the displayed unit to be accurate and completely correspond to the code so that e.g. blood pressure is presented as mmHg instead of what might or might not be available in unit?</p>\n<p>Although presentation could be (maybe should be) solved client-side, the centralized FHIR terminology service solution also has its benefits.</p>",
+        "id": 204910328,
+        "sender_full_name": "Erik Nielsen",
+        "timestamp": 1595594648
+    },
+    {
+        "content": "<p>Absolutely - but that doesn't mean that UCUM defines a standard display value.  A system might choose to display \"cubic centimeters\" or \"cc\" or <br>\n\"cm^3\" or \"centimètres cubes\" or any other string that the user would be expected to recognize.  And 'unit' might not even be chosen by a computer - it could be the value a human filled in and the code came along later via a post-coding process.  From a computability perspective, Quantity.unit is equivalent to CodeableConcept.text.</p>",
+        "id": 204910578,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595594866
+    },
+    {
+        "content": "<p>i.e. while a correlation is expected, pretty much anything goes...</p>",
+        "id": 204910653,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595594894
+    },
+    {
+        "content": "<p>Interesting - I can appreciate how that allows for a wide variety of applications. It also dawns on me that I am trying to solve presentation issues with a definition-oriented or API framework (which is awesome btw). The CodeSystem designation just seemed like an intriguing way to solve challenges in consistent presentation.</p>\n<p>Are there better ways to solve this, say, if there were an international or a number of national \"proper\" or agreed unit corresponding to each UCUM code such as e.g. \"centimètres cubes\"?</p>",
+        "id": 204914361,
+        "sender_full_name": "Erik Nielsen",
+        "timestamp": 1595597088
+    },
+    {
+        "content": "<p>If there's an agreed display available in your terminology service, you can use that to populate 'unit' if you don't have something direct from the user.</p>",
+        "id": 204923528,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595601546
+    },
+    {
+        "content": "<p>The ucum tests in the java code imply a standard presentation, but it's not actually standardised. There are print symbols in ucum-essence.xml, but how to  combine them to reflect the grammar is not specified</p>\n<p>note that there are other rules applying to Quantity.unit - for instance, due to historical handwriting concerns, it is not unusual to encounter a rule that the symbol µ cannot be used, and \"mc\" must be used instead. Professional societies, slow moving and dominated by pre-digital thinking are quite often still firmly attached to these rules, but any generated display based on ucum codes will lead to \"µ\". </p>\n<p>And more generally, must systems will serve up a manually configured unit that may be mapped to UCUM. The older they are, the more likely that is true. But it's not reason that a new system has to</p>",
+        "id": 204965334,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1595623895
+    },
+    {
+        "content": "<p>I am looking at this subject at the moment. UCUM is designed solely for machine communication, as stated in the spec. If a UCUM code string happens to be readable by a human being that is a happy accident, not a design requirement.</p>\n<p>It is easy to construct, accidentally or by design, valid UCUM codes that would be dangerously confusing or misleading to a human reader (such as a clinician). This has clinical safety implications, so just using the UCUM code as a display format is not an acceptable option.</p>\n<p>The \"print format\" capability in UCUM is incomplete, as <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> has stated. It also seems to be a problem for implementers, and seems to be either buggy, thinly-tested, or simply not present in some UCUM implementations (not sure about the FHIR implementation?), so it is not a suitable basis for the human display requirement.</p>\n<p>That leaves a major gap to be filled. Ideally there would be a fully readable (usability tested) display formatting translation available for UCUM with it's own set of display \"atoms\" and syntax. I could see the potential for at least two rendering styles- (1) a \"Single Line\" style could be implemented quite easily using just Unicode characters and basic HTML for superscripts+subscripts. This would render in any modern web browser; (2) a block or \"maths book\" style (multi-line) would need to be defined in something like LaTeX or MathML. Unfortunately MathML support in browsers is patchy at the moment and many clinical systems are far from leading-edge in terms of platform technology, so this one might be a step too far for today's systems.</p>\n<p>In the absence of such a solution I am considering the option of having to have a predefined + curated set of approved UCUM codes mapped to an (also equally manually maintained) set of human display forms. That loses one of the key benefits of UCUM (unlimited expressivity) and is going to be slow and costly to maintain.</p>\n<p>If there are better options out there, and/or if people have experience of implementing either the manually curated approach or another option, I wold be very interested to hear about it.</p>",
+        "id": 206849038,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1597341880
+    },
+    {
+        "content": "<p>We rely on the display value, if that's not present usually the code is pretty reasonable (_if_ your have a UCUM unit to begin with...)</p>",
+        "id": 206849934,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1597342369
+    },
+    {
+        "content": "<p>have you looked at the predefined curated set in the standard itself?</p>",
+        "id": 206863442,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1597349047
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179166-implementers/topic/Determining.20Quantity.2Eunit.20for.20UCUM.20quantity/near/206863442\">said</a>:</p>\n<blockquote>\n<p>have you looked at the predefined curated set in the standard itself?</p>\n</blockquote>\n<p>Good question. I have looked at a couple of curated UCUM value sets, including the \"Common UCUM Units\" list from the LOINC site, and another from the HL7 organisation in Germany (<a href=\"http://hl7.de\">hl7.de</a>). There seem to be some inconsistences between these (beyond just being different selections of units that is),  although I can't claim to have run every list through a UCUM parser or checker to see whether things that look odd to me are actually incorrect usage or not.</p>\n<p>I found the FHIR info harder to folow. The description at <a href=\"https://www.hl7.org/fhir/valueset-ucum-units.html\">https://www.hl7.org/fhir/valueset-ucum-units.html</a> says the valueset includes \"All codes from system <a href=\"http://unitsofmeasure.org\">http://unitsofmeasure.org</a>\", but as UCUM is a non-finite expression language, that implies that the valueset is infinite. That could be true if the \"valueset\" is not actually a set of values, but instead a validation function (the UCUM parser), and the \"expansion\" is only a curated subset, but the documentation leaves it unclear whether the list of ~1000 units shown is __THE__ FHIR list, or whether there is another larger and more definitive list somewhere else but the link to it is missing.</p>\n<p>All of these lists lean heavily on the use of annotations (the curly bracket syntax) which seems to me one of the more problematic aspects of UCUM. For example a quick count in excel indicates that 402 of the 1000 UoM in the FHIR list of UCUM codes contain annotations. Given that (a) UCUM is designed for calculation/computation with units; and (b) annotations are non-semantic items in the UCUM syntax, it seems worth asking why so much effort is being put into information that the machine processing will specifically ignore.</p>\n<p>My guess is that most of these comments (which is effect what they are) are there to make human readers happier reading the units, but then as discussed above UCUM is not designed for humans to read, so that seems like an attempt to make it do something it's not designed to do.</p>",
+        "id": 206878164,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1597356885
+    },
+    {
+        "content": "<p>My concern with institutionalising the use of annotations, if raw UCUM is ever shown to users, is that you are effectively training users to believe and rely on the information in the curly brackets.</p>\n<p>One of the major uses of annotations seems to be to inject names for countable entities (white blood cells, red blood cells, bottles, bowls, base pairs etc.) into a system where the maths doesn't need them (the unit of a countable item is \"1\") but the users want to have them (again, UCUM isn't for users...). This usage at least doesn't raise obvious safety concerns as anything in curly braces in UCUM is equivalent to \"1\" by definition .</p>\n<p>What is more concerning is the prospect of, say- \"(ng/g)\" being transmitted (or read) as \"{ng/g}\", or vice-versa, and the machine and the human interpretations being different by a factor of a million.</p>\n<p>Annotations also seem to be being used as a sticking plaster solution for the fact that the UCUM standard itself has not changed in several years, and it appears some things are needed but not present. For example a \"Mac Lagan Unit\" [mclg'U] is a real unit in UCUM, with a definition in the unit system. It is a procedurally defined unit (arbitrary in UCUM terms), so it won't take part in unit conversions, but it will be preserved in calculations. Conversely an Erlich Unit {Ehrlich'U} is a comment, and can be lost in a calculation at any point. Note- some UCUM implementations seem to drop annotations whenever a calculation is done, I don't know whether the FHIR implementation preserves them by default, but I assume it will happily convert \"{Ehrlich'U}/s\" to \"s-1\" when asked, as the demonstrator at <a href=\"https://ucum.nlm.nih.gov/ucum-lhc/demo.html\">https://ucum.nlm.nih.gov/ucum-lhc/demo.html</a> does.</p>",
+        "id": 206881065,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1597359291
+    },
+    {
+        "content": "<ul>\n<li>the value set is infinite. </li>\n<li>what is unclear about \"only a selection (1000 codes) of the whole set of codes is shown\"?</li>\n<li>I agree about annotations. I think it shows that people are confused by the way CDA didn't have a display for the units (mea culpa)</li>\n<li>the value set I was actually referring to is <a href=\"https://www.hl7.org/fhir/valueset-ucum-common.html\">https://www.hl7.org/fhir/valueset-ucum-common.html</a></li>\n<li>I'm not sure about 'the FHIR implementation', since there isn't one</li>\n</ul>",
+        "id": 206881180,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1597359365
+    },
+    {
+        "content": "<blockquote>\n<blockquote>\n<ul>\n<li>the value set is infinite</li>\n</ul>\n</blockquote>\n</blockquote>\n<p>Thanks for the confirmation. That was my guess but I wasn't sure.</p>\n<blockquote>\n<blockquote>\n<ul>\n<li>what is unclear about \"only a selection (1000 codes) of the whole set of codes is shown\"?</li>\n</ul>\n</blockquote>\n</blockquote>\n<p>The implication that there is a \"whole set\" somewhere, that could potentially be available but it's just too large to display. I accept that mathematically the idea of an infinite set is not a problem, but my first reaction to that description was to think of a set as a list- a finite thing, and not a validation function with unlimited input and output domains.</p>\n<blockquote>\n<blockquote>\n<ul>\n<li>I agree about annotations. I think it shows that people are confused by the way CDA didn't have a display for the units (mea culpa)</li>\n</ul>\n</blockquote>\n</blockquote>\n<p>I don't have the history/background to comment i'm afraid. I came to this relatively recently and I am doing my best to make sense of it, and steer a path that allows machine processing to add value without compromising usability of the data for clinicians and patients</p>\n<p>I do note that the full FHIR common units list contains both-</p>\n<p>a) mg/d/(173.10*-2.m2)<br>\nb) mg/d/{1.73_m2}</p>\n<p>I would say most human readers are liable to see these as describing the same unit, in both magnitude and dimensionality. To the computer they are completely different. The second version (b) not only wraps the numeric factor of \"1.73\" in a comment meaning it actually evaluates to \"1\", but also manages to lose the \"per metre squared\" component of the dimension inside the annotation as well. Version (b) means \"mg/d\" to UCUM.</p>\n<p>That is apart from the fact that UCUM doesn't deal with decimal numbers (not in the units field). The decimal point always indicates multiplication in UCUM syntax, so that seductive-looking \"1.73\" number (which is what is actually what the author was trying to convey, that number is used in UK clinical practice) means \"1\" to UCUM when it is inside curly braces, and \"1x73\" == \"73\" anywhere else. The one thing it NEVER means to UCUM is 1.73!</p>\n<p>This seems to me to be a problem, and a source of clinical risk. I would be interested in other views.</p>\n<blockquote>\n<blockquote>\n<ul>\n<li>the value set I was actually referring to is <a href=\"https://www.hl7.org/fhir/valueset-ucum-common.html\">https://www.hl7.org/fhir/valueset-ucum-common.html</a></li>\n</ul>\n</blockquote>\n</blockquote>\n<p>Is there a reason why there are two pages, <a href=\"http://hl7.org/fhir/ValueSet/ucum-units\">http://hl7.org/fhir/ValueSet/ucum-units</a> and <a href=\"https://www.hl7.org/fhir/valueset-ucum-common.html\">https://www.hl7.org/fhir/valueset-ucum-common.html</a> that are similar but not the same, and don't appear to link to each other?</p>\n<p>It looks like I picked up the shorter of the two (the subset), which comes up first on a site search for \"ucum valueset\", but they are very similar so the comments on principles would be the same. The specific differences are interesting though, I can't help wondering what clinical environments would have identified British long tons [lton_av] and links for Gunter's chain [lk_br] as essential to their work. Is there an audit or governance trail for the common units that would show how items came to be identified as \"common\"?</p>\n<blockquote>\n<blockquote>\n<ul>\n<li>I'm not sure about 'the FHIR implementation', since there isn't one</li>\n</ul>\n</blockquote>\n</blockquote>\n<p>Hmm that's interesting. It's been roughly two years since I last looked at this area, and back then I formed the impression that there was a UCUM implementation in Java, and possibly also one in .Net that was distributed through or somehow supported by HL7. Looking back through my notes I can't see exactly how I came to that conclusion, which is annoying. There is a link on the UCUM web site (at the bottom of <a href=\"https://unitsofmeasure.org/trac\">https://unitsofmeasure.org/trac</a>) that refers to an \"HL7Connect\" implementation, but that links to a holding page (dead site) so i'm not sure whether that that would have been the original source of that idea.</p>\n<p>The original implementation of UCUM was written in Java (per the original paper by Gunther Schadow, Clement McDFonald et. al.) and according to that that paper it was open source. I have tried to trace what happened to that original source package. I wondered whether it was in the ancestry of any of the current implementations, including the \"HL7 FHIR\" implementation that it now seems I may have invented out of thin air...</p>\n<div class=\"codehilite\"><pre><span></span><code>\n</code></pre></div>",
+        "id": 206888554,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1597366375
+    },
+    {
+        "content": "<p>there is a package in maven: <a href=\"https://mvnrepository.com/artifact/org.fhir/ucum\">https://mvnrepository.com/artifact/org.fhir/ucum</a>. I did write it. And I did the UCUM tests as part of writing it. And I still maintain it. But it's not (in spite of having FHIR in it's org name), an official FHIR UCUM implementation</p>",
+        "id": 206890534,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1597368985
+    },
+    {
+        "content": "<p>I don't know about a .net implementation</p>",
+        "id": 206890544,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1597369003
+    },
+    {
+        "content": "<p>we have 2 value sets for UCUM:</p>\n<ul>\n<li><a href=\"http://hl7.org/fhir/ValueSet/ucum-units\">http://hl7.org/fhir/ValueSet/ucum-units</a> - includes any ucum unit that is valid.</li>\n<li><a href=\"https://www.hl7.org/fhir/valueset-ucum-common.html\">https://www.hl7.org/fhir/valueset-ucum-common.html</a> - I made this by merging the valuesets from the LOINC common units, the Canadian health infoway unit value set, and 2 unpublished sources: Intermountain, and Google. Then I removed the 10% of codes that weren't actually valid. It's defined in order to be a relatively comprehensive enumerated list of units people use, to serve systems that can't deal with the infinite list that the first value set represents. If you want to propose improvements to it, feel free. </li>\n<li>I guess that part of the language that implies the value set isn't infinite could be improved. Do you know how to make a FHIR change proposal?</li>\n</ul>",
+        "id": 206890754,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1597369279
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179166-implementers/topic/Determining.20Quantity.2Eunit.20for.20UCUM.20quantity/near/206890534\">said</a>:</p>\n<blockquote>\n<p>there is a package in maven: <a href=\"https://mvnrepository.com/artifact/org.fhir/ucum\">https://mvnrepository.com/artifact/org.fhir/ucum</a>. I did write it. And I did the UCUM tests as part of writing it. And I still maintain it. But it's not (in spite of having FHIR in it's org name), an official FHIR UCUM implementation</p>\n</blockquote>\n<p>I was probably thinking of the FHIR/UCUM-Java package on GitHub <a href=\"https://github.com/FHIR/Ucum-java\">https://github.com/FHIR/Ucum-java</a>. Is that the same thing? (You are listed as a contributor)</p>\n<p>If yes, was this written from scratch directly from the UCUM spec, and is the same true for any validation code? As noted, I'm curious to know if any of the current implementations are derived from the original source, including the validation suite the UCUM paper references, or whether all the current implementations are effectively \"clean sheet\" designs.</p>",
+        "id": 206913081,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1597398290
+    },
+    {
+        "content": "<p>I think I have made one documentation change request before, I'll see if I can remember the process.</p>\n<p>I would be happy to recommend some updates to the common units list. Initially that would be informal, but if we do go down the curated list route, that data would be public and it would be desirable to closer to the default FHIR valueset instead of further apart.</p>\n<p>My first inclination would be to delete all the annotations, which would probably be a bit extreme for existing users, even though it would make no difference to the actual meaning of the content to UCUM.</p>\n<p>As an aside, implementing a validation rule that says that the content of a UCUM annotation cannot itself be a valid UCUM expression would seem reasonably easy to implement.</p>\n<p>However, removing annotations that LOOK like valid UCUM syntax to humans, or are otherwise confusing, would still need to be done manually. There probably aren't many of those in the common list, so it sounds like a reasonable aim.</p>\n<p>I'm about to take a week's holiday. When I get back I will see if I can put some time into coming up with a set of recommended changes, and submit that for consideration.</p>",
+        "id": 206914421,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1597399422
+    },
+    {
+        "content": "<p>yes, that's the one I meant. mine was written from scratch. there was a .Net translation of it, but I don't know whether that was the heritage for the current .net one</p>",
+        "id": 206976575,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1597436008
+    },
+    {
+        "content": "<p>what's the logic for saying annotations shouldn't be valid UCUM syntax? (because as you pointed out above, the syntax might be correct, but the semantics very different)</p>",
+        "id": 206976643,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1597436043
+    },
+    {
+        "content": "<p>The current .Net implementation can be found here: <a href=\"https://github.com/FirelyTeam/Fhir.Metrics\">https://github.com/FirelyTeam/Fhir.Metrics</a></p>\n<p>It’s also a written from scratch. It shares a set of common tests with the Java implementation, so it should behave the same. And yes, annotations are not retained in the canonicalization process.</p>",
+        "id": 207011321,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1597479568
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179166-implementers/topic/Determining.20Quantity.2Eunit.20for.20UCUM.20quantity/near/206976643\">said</a>:</p>\n<blockquote>\n<p>what's the logic for saying annotations shouldn't be valid UCUM syntax? (because as you pointed out above, the syntax might be correct, but the semantics very different)</p>\n</blockquote>\n<p>Because annotations are \"non semantic\" to UCUM, or rather any text in an annotation always has exactly the same meaning, i.e. \"1\" (the Unity). So annotations that communicate non unit information (i.e. actual comments) are just \"line noise\" and maybe a visual distraction, but not actually harmful.</p>\n<p>Similarly, referring to countable items, e.g. {RBC}, {CFU} might be unnecessary for the maths, but the unit of a countable entity is \"1\", so it resolves to the right answer, even if by almost acccident.</p>\n<p>However, if I send <code>37.2{mg/g}</code> when I should have sent <code>37.2(mg/g)</code> a machine will happily process the second version as being 1000x smaller than the first, but my guess is a busy clinician might not.</p>\n<p>At the moment i'm not aware of a valid use case that requires the content of the annotation braces to be itself a valid UCUM unit code, and the downsides are potentially serious. Having an editorial rule that says \"an annotation string should never represent, or appear to represent, a valid UCUM unit expression\" seems one of the few ways to easily define what NOT to do in annotations, which are otherwise freeform and therefore wide open to error and/or abuse.</p>",
+        "id": 209142573,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1599254678
+    },
+    {
+        "content": "<p>Looking at ways to implement a solution based on looking up a display form for a UCUM code I can see two places where we would need to publish a relationship mapping between code sets.</p>\n<p>The first, and hopefully simplest, is a mapping from a UCUM unit expression in machine readable (MR) form to a corresponding human-readable (HR) display form. The \"to\" side of the mapping could be a reference to a SNOMED term, but that is TBC depending on whether SNOMED can accommodate the definition of the display form. This mapping would probably be defining a 1:1 synonym relationship, at least initially. I think this could potentially be done either in SNOMED, maybe as a SimpleMap, or as a ConceptMap in FHIR.</p>\n<p>The second map would define relationships between SNOMED codes for test results (either Observable Entity or Procedure codes), and corresponding \"recognised\" units of measure. This second map would need to-</p>\n<ol>\n<li>Support many to many relationships (each UoM is used for many tests, and each test may allow for more than one valid UoM)</li>\n<li>Support metadata / properties on the relationship, e.g. allowing us to define a unit as <em>Preferred</em>, <em>Allowed</em> or <em>Deprecated</em> when applied to a specific test</li>\n</ol>\n<p>SNOMED doesn't handle many-to-many relationships it seems, so I had originally thought this looked like a ConceptMap as well, although there are a couple of areas of uncertainty-</p>\n<ul>\n<li>\n<p>The ConceptMap page mostly talks about defining mappings between items of similar meanings (synonym-ish) rather than \"item A when has applicability X when performing a function on item B\", but it's not clear the latter use is disallowed either.</p>\n</li>\n<li>\n<p>The question of many to many relationships isn't directly addressed either, but the ConceptMap itself looks like a joining table, with attributes, so it seems to be the right shape for the job.</p>\n</li>\n</ul>\n<p>However, I was advised by a 3rd party that <em>ConceptMap</em> is not the appropriate solution, and to look at a <em>CodeSystem Supplement</em> instead.</p>\n<p>Having looked at the guidance on the *CodeSystem *page-</p>\n<p><code>Both Code System supplements and Concept Maps may be used to define relationships between concepts in different systems. ConceptMaps are assertions of the relationships between different concepts that are associated with particular contexts of use, while CodeSystem supplements are used to define inherent properties and semantics of the concepts in the code system</code></p>\n<p>I'm still inclined to say this application would fall into the ConceptMap space, as a Pathology report (our use case) is a \"context of use\" that defines the preference for a specific limited choice of UoM for a certain test type. There are \"inherent properties\" of tests and UoMs, around the associated Kinds-of-Quantity and Scale types, but that not what we are aiming to describe in this case.</p>\n<p>Does that sound like a reasonable rationale, or am I missing some other key factor in this?</p>",
+        "id": 209144016,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1599255978
+    },
+    {
+        "content": "<p>The bracketed content is more problematic than just line noise.  Most systems that deal with codes don't necessarily have any knowledge of the underlying code systems.  As a result, \"1\", \"1 {dose}\", \"1 {tab}\" and \"1 {tablet}\" are all going to be treated as distinct units, rather than as equivalent from a computable perspective - and will result in errors when checking against value sets, etc.  Stripping such comments from the 'computable' code is best practice.  There's a separate element to capture the human-readable view of the unit.</p>",
+        "id": 209156075,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1599271240
+    },
+    {
+        "content": "<p>What you say makes perfect sense Lloyd, but it does beg the question, if the annotations are problematic for machine processing and best removed, and the UCUM code isn't the thing we want to put in front of human users, then what exactly IS the purpose of all those bracketed annotations in most of the published unit lists?</p>\n<p>There does seem to be a cultural inclination in the Chemistry (and maybe Biology?) disciplines to treat the units field as a place to put additional non-unit info. Often this is data that ought to be part of the \"what is being measured and how\" field. IMHO if a result description contains, say \"Concentration of Red Blood Cells in whole blood\" then the units are a number per Litre (L^-1), not something containing \"red blood cells\" or \"RBC\" in any form. The same applies to \"spillover\" of other aspects like the method, {fasting} etc. If these things are significant enough to note, they need to be in the procedure or observation where they will be visible and persist.</p>",
+        "id": 209166338,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1599291379
+    },
+    {
+        "content": "<p>By the way, much of my concern over some of the thornier aspects of UCUM are because if a suspicion / guess, that in the absence of a widely accepted alternate syntax for human display that can be produced by either an algorithmic transform of UCUM or a code lookup, implementers are likely to just put the same UCUM code in both the code and display fields. I don't have any evidence for that view, and I see in other comments a different assumption, that the display will default to a manually entered display form for the unit.</p>\n<p>Is that second view based on experience? Are implementers seeing live systems running, at least in the design stage, where hand-cranked (and locally entered) readable forms for units will be flowing beside UCUM in the code field?</p>",
+        "id": 209166870,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1599292545
+    },
+    {
+        "content": "<p>diagnostic labs in melbourne are quite familiar with this issue and won't just default. They pay a great deal of attention to these things. I'm not sure about other contents</p>",
+        "id": 209170556,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1599299335
+    },
+    {
+        "content": "<p>UCUM long precedes FHIR and historically, many systems had no ability to capture both human-readable and computable units.  UCUM's design tries to span both spaces, with the cost of imposing additional expectations on the computability side of things.  With FHIR, we have the flexibility to separate computable and display and that changes 'best practice' around what should go in the computable unit.  That <em>doesn't</em>mean that you can't use bracketed content with UCUM and FHIR, just that it's better to avoid if possible.  I can't speak to what's typical in terms of rendering units - there are many options.  The most common would likely be that internally units are something other than UCUM and get mapped for exchange</p>",
+        "id": 209179294,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1599314309
+    },
+    {
+        "content": "<p>If anyone is, or has, looked at options for rendering units for human interpretation I would like to hear about it. Any kind of reference link or contact point would be appreciated.</p>",
+        "id": 209243158,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1599429078
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179166-implementers/topic/Determining.20Quantity.2Eunit.20for.20UCUM.20quantity/near/209179294\">said</a>:</p>\n<blockquote>\n<p>...With FHIR, we have the flexibility to separate computable and display...</p>\n</blockquote>\n<p>True. What we don't appear to be able to do is provide two or more separately identified coded units, e.g. a UCUM one for the machine readable side and a SNOMED code (or some other reference) for the human-readable.</p>\n<p>This is unlike a CodeableConcept where-</p>\n<ol>\n<li>There can be any number of \"translations\" of the same concept</li>\n<li>Each translation is a first class citizen, with a coded reference and a display form</li>\n</ol>\n<p>In the case of UoM, as I read the spec., there can be only two representations, and the human-readable one is a second class citizen with a display form but no coded reference. This does seem limiting.</p>\n<p>For example if this time around we decide on a human-readable representation that is not that different from UCUM, i.e. still something largely text based that fits in a single line on a display, maybe in future we might work on a more advanced \"maths book style\" display form using something like MathML. If UoM were CodeableConcepts we could just add the new form as a third translation beside the existing two, and give implementers the option to display it if they can. As it is I presume this would require a FHIR extension.</p>",
+        "id": 209244108,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1599430793
+    },
+    {
+        "content": "<p>yes extension for sure. I certainly would not recommend using a Snomed unit; I can only imagine that being an idea in UK, though I suppose I'm about to be proven wrong. </p>\n<p>What I have done is added a best-practice check to the validator when it sees annotations in UCUM codes</p>",
+        "id": 209244517,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1599431507
+    },
+    {
+        "content": "<p>Would UK do anything different???? <a href=\"https://simplifier.net/guide/DigitalMedicines/DM-Medication-Units\">https://simplifier.net/guide/DigitalMedicines/DM-Medication-Units</a><br>\n(note simplifier displays the excluded codes before the expansion)</p>",
+        "id": 209265976,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1599464498
+    },
+    {
+        "content": "<p>^^ Is also draft</p>",
+        "id": 209265994,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1599464516
+    },
+    {
+        "content": "<p>yes see. I mean, why? I don't see snomed bringing value right here.</p>",
+        "id": 209266904,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1599465301
+    },
+    {
+        "content": "<p>I'm not wedded to the idea of using SNOMED for the display form, but that does seem to be an option. Is that a \"UK thing\"?</p>\n<p>Some possible arguments for-</p>\n<ul>\n<li>It's an existing tool we're working with. With FHIR, ucum and snomed already in the mix, not sure we want to add another one.</li>\n<li>Display forms could be overlayed on existing concepts as snomed synonyms</li>\n<li>In the future, it might be possible to use snomed structures to fill out more of a measurement model, e.g. a property hiearchy.</li>\n</ul>\n<p>On the other hand, I have been told (but I don't know) that the snomed unit data is something of a mess, and there may be an existing property (kind of quantity) hierarchy in there that doesn't fit with the need to support mathematical processing. I don't know enough about the snomed content yet.</p>\n<p>If there's a better option out there, I'd like to hear about it.</p>",
+        "id": 209328063,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1599513329
+    },
+    {
+        "content": "<p>tbh, I'm not sure why unit has any value coming from a code system. It's a human display. The thing worth making computable is the system/code, and that is the infrastructure. It's true we didn't cater for more than one code, since that's very unusual. There's always extensions. </p>\n<p>As for SNOMED units... I've always thought that fits into the category of a hammer looking for a nail. It's just a list of possible units, with no structure or semantics. </p>\n<p>The semantics of a measurement, otoh, seems like a more worthy investment, but that's really a mix of terminology and information models</p>",
+        "id": 209328819,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1599514445
+    },
+    {
+        "content": "<blockquote>\n<p>As for SNOMED units... I've always thought that fits into the category of a hammer looking for a nail. It's just a list of possible units, with no structure or semantics.</p>\n<p>I'm not wedded to the idea of using SNOMED for the display form, but that does seem to be an option. Is that a \"UK thing\"?</p>\n</blockquote>\n<p>Yes - very much so ... <span aria-label=\"unamused\" class=\"emoji emoji-1f612\" role=\"img\" title=\"unamused\">:unamused:</span></p>",
+        "id": 209331463,
+        "sender_full_name": "Richard Kavanagh",
+        "timestamp": 1599518032
+    },
+    {
+        "content": "<p>There's been quite a bit of discussion on this thread on the content of a UoM display value (which has been very useful and illuminating BTW), but my other question above-</p>\n<p><a href=\"#narrow/stream/179166-implementers/topic/Determining.20Quantity.2Eunit.20for.20UCUM.20quantity/near/209144016\">https://chat.fhir.org/#narrow/stream/179166-implementers/topic/Determining.20Quantity.2Eunit.20for.20UCUM.20quantity/near/209144016</a></p>\n<p>on how to do the associated mappings, especially when one should use ConceptMaps vs. Codesystem Supplements, has seen no responses. I'm not sure if I have tripped over board protocol by introducing another thorny (but related!) question into an existing thread. If so I'm happy to start a new topic, but I also as a newbie don't want to offend by double-posting, which is frowned upon in many groups.</p>\n<p>So, I would appreciate a steer by the 'gods' of the board on how best to present the question.</p>\n<p>I don't think it has an obvious answer, because the use case seems to sit awkwardly across the boundary between the intended use of these two as described in the documentation. I can read the docs and try to make sense of them, however I am not a FHIR developer myself so it is very hard for me to judge how using the API might differ if we chose one construct over the other.</p>",
+        "id": 209496047,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1599648886
+    },
+    {
+        "content": "<p>it's probably a <a class=\"stream\" data-stream-id=\"179202\" href=\"/#narrow/stream/179202-terminology\">#terminology</a> question.</p>",
+        "id": 209501977,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1599653294
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179166-implementers/topic/Determining.20Quantity.2Eunit.20for.20UCUM.20quantity/near/209501977\">said</a>:</p>\n<blockquote>\n<p>it's probably a <a class=\"stream\" data-stream-id=\"179202\" href=\"/#narrow/stream/179202-terminology\">#terminology</a> question.</p>\n</blockquote>\n<p>I wondered about that, but again wary of double-posting as that is a major faux-pas on many boards. Thanks, i'll try on the Terminology stream.</p>",
+        "id": 209521570,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1599663041
+    },
+    {
+        "content": "<p>agree that it's a faux-pas but we also know that there's lots of places to ask questions, so we don't mind if it's done for that reason and with awareness</p>",
+        "id": 209542526,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1599672588
+    },
+    {
+        "content": "<p>Best practice is that if you're not sure where to ask is to pick one and ask if it's better covered elsewhere or raise in more than one, but include a reference to the other discussion locations - and once one kicks off, note in the other that primary discussion is happening in the other place.</p>",
+        "id": 209572617,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1599687858
+    }
+]

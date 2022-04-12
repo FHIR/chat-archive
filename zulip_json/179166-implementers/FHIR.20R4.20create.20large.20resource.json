@@ -1,0 +1,32 @@
+[
+    {
+        "content": "<p>Hello,<br>\nwe are struggling with large payloads in FHIR resource update. One of our codesystems has roughly 200MB in size and although we updated settings on ES side as well as FHIR server and DB side, we still cannot create the resource.<br>\nCurrently it fails between ES, FHIR server and DB probably on another timeout.</p>\n<p>[Hibernate Search: Elasticsearch transport thread-2] ERROR o.h.s.exception.impl.LogErrorHandler [LogErrorHandler.java:71] HSEARCH000058: Exception occurred org.hibernate.search.exception.SearchException: HSEARCH400007: Elasticsearch request failed.<br>\nRequest: PUT /ca.uhn.fhir.jpa.model.entity.resourcetable/ca.uhn.fhir.jpa.model.entity.ResourceTable/3102 with parameters {}<br>\nResponse: null<br>\n...<br>\nat org.apache.http.impl.nio.reactor.AbstractMultiworkerIOReactor$Worker.run(AbstractMultiworkerIOReactor.java:588)<br>\nat java.lang.Thread.run(Thread.java:748)<br>\nCaused by: java.io.IOException: Connection reset by peer</p>\n<p>We are using hapi fhir r4 5.1 version and the FHIR client update method to create a resource. Our solution is deployed in AWS. We are using RDS for the database.</p>\n<p>Are there any guidelines for creating such a large resource (CodeSystem) in FHIR server?<br>\nThanks</p>",
+        "id": 248342474,
+        "sender_full_name": "Pavel Pilar",
+        "timestamp": 1628079943
+    },
+    {
+        "content": "<p>Such big resources are rather unusual in FHIR. You may need a terminology server that has special support for this CodeSystem in order to not needing it in literal form. What CodeSystem is it?</p>\n<p>Nevertheless, although I can't help you with HAPI, I would be pleased if you give <a href=\"https://github.com/samply/blaze\">Blaze</a> a try. Blaze uses an embedded RocksDB Database with a focus on performance.</p>\n<p>I generated a Codesystem using this Clojure code:</p>\n<div class=\"codehilite\"><pre><span></span><code>(require &#39;[jsonista.core :as j])\n\n  (-&gt;&gt; {:resourceType &quot;CodeSystem&quot;\n        :concept\n        (for [i (range 500000)]\n          {:code (format &quot;code-%d&quot; i)\n           :property\n           (for [i (range 10)]\n             {:code (format &quot;property-code-%d&quot; i)\n              :valueString (format &quot;property-value-%d&quot; i)})})}\n       (j/write-value-as-string)\n       (spit &quot;test.json&quot;))\n</code></pre></div>\n<p>started Blaze with:</p>\n<div class=\"codehilite\"><pre><span></span><code>docker run -p 8080:8080 -v blaze-data:/app/data --rm -e JAVA_TOOL_OPTIONS=-Xmx4g samply/blaze:0.11.0\n</code></pre></div>\n<p>on a Linux desktop machine with 32 GB RAM and quite slow SSD. Uploaded the CodeSystem using:</p>\n<div class=\"codehilite\"><pre><span></span><code>% curl -d @test.json -H &#39;content-type:application/json&#39; http://localhost:8080/fhir/CodeSystem &gt; response.json\n  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current\n                                 Dload  Upload   Total   Spent    Left  Speed\n100  606M  100  303M  100  303M  4684k  4684k  0:01:06  0:01:06 --:--:-- 56.4M\n</code></pre></div>\n<p>from my Mac over LAN. As you can see, my CodeSystem is 303 MB in size and the upload incl. complete download from the response took about 1 minute.</p>",
+        "id": 248375890,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1628095621
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"421061\">@Pavel Pilar</span> - Are you trying to upload SNOMED or LOINC ?   We had trouble trying to load these LARGE CodeSystems to HAPI (earlier version though).   I seem to remember <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> mentioning that there is (or will be) support for some of these large CodeSystems already being loaded (or loaded in some way to get around their large size and network timeouts).    Probably good to ask this question in the <a class=\"stream\" data-stream-id=\"179167\" href=\"/#narrow/stream/179167-hapi\">#hapi</a>  channel.</p>",
+        "id": 248390319,
+        "sender_full_name": "John Silva",
+        "timestamp": 1628102405
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"298707\">@John Silva</span> - most of the FHIR Terminology Servers don't place all the concepts from large Code Systems (e.g. SNOMED CT and LOINC) in CodeSystem resources - i.e. they set the value of CodeSystem.content to <code>not-present</code>.  In these cases, the content is provided via ValueSets and, even then, some of the Servers impose restrictions on the number of concepts that can be returned from any given request, even allowing for paging. My approach is to persist SNOMED CT, LOINC, and others in a database and use 'standard' multi-layered architecture to service requests; others might use the file system or even place the entire code system in memory.</p>",
+        "id": 248417037,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1628116000
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"298707\">@John Silva</span> - We are trying to upload part of HMDB. About 120000 concepts. Thanks <span class=\"user-mention\" data-user-id=\"197470\">@Alexander Kiel</span> for hints with Blaze, I'll give it a try. I'll also ask question on <a class=\"stream\" data-stream-id=\"179167\" href=\"/#narrow/stream/179167-hapi\">#hapi</a> channel.</p>",
+        "id": 248446155,
+        "sender_full_name": "Pavel Pilar",
+        "timestamp": 1628148503
+    }
+]

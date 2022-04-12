@@ -1,0 +1,122 @@
+[
+    {
+        "content": "<p>Hi all,<br>\nWe are running into an execution issue when attempting to pass value sets into functions, and would like to see if anyone has any input on our current predicament. </p>\n<p>I've attached a Word document with screenshots; references below.<br>\n<a href=\"/user_uploads/10155/6y7u5c2hKNKl6RRUb1_vjAwg/Value-Set-Testing-Examples.pdf\">Value-Set-Testing-Examples.pdf</a></p>\n<p>Current specs:<br>\n    cql-execution v2.1.0<br>\n    cql-exex-fhir v1.5.0<br>\n    cql v1.4.9</p>\n<p>Intellisense seems to think that the return of a value set should be a List&lt;System.Code&gt;, see Figures 1 &amp; 2.</p>\n<p>However, when executing the same CQL from Figure 1, we are left with a return consisting of an array of \"oid\", \"version\", and \"codes\". See Figure 3.</p>\n<p>This is causing issues when calling value sets from functions where the value set is a parameter with a type of List&lt;System.Code&gt;, as seen in Figure 4.</p>\n<p>The elm builds just fine for the code found in Figure 4, but will not execute.</p>\n<p>However, the same code but with an explicit call to “URI”, runs just fine and as expected. Refer to Figure 5.</p>\n<p>So, it seems that there’s a discrepancy with typing for both IntelliSense and cql-to-elm 1.4.9, as compared to v2.1.0 of the engine.</p>\n<p>Is there a suggested workaround or solution that would allow us to pass value sets as function parameters?</p>\n<p>Also tagging in <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> . </p>\n<p>Thanks in advance,<br>\nMichael</p>",
+        "id": 224387596,
+        "sender_full_name": "Michael Ryan",
+        "timestamp": 1611865516
+    },
+    {
+        "content": "<p>Hmm.... that seems like it should work, but I'm more familiar with the Java-based engine than with the JavaScript one. Have you tried a focused repro in the Atom plugin?</p>",
+        "id": 224594921,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1612026769
+    },
+    {
+        "content": "<p>Bryn - problems actually start with ELM generation and proceed from there.  Here's a minimal example:</p>\n<p>CQL:<br>\n<a href=\"/user_uploads/10155/IGnw6yxAdaGMWnSdv2pi8ONa/image.png\">image.png</a> </p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/IGnw6yxAdaGMWnSdv2pi8ONa/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/IGnw6yxAdaGMWnSdv2pi8ONa/image.png\"></a></div><p>ELM generated for \"Test1\" -- notice the \"InValueSet\" type:<br>\n<a href=\"/user_uploads/10155/UwzOMCkdyZM7VdxMvMhcGPyX/image.png\">image.png</a> </p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/UwzOMCkdyZM7VdxMvMhcGPyX/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/UwzOMCkdyZM7VdxMvMhcGPyX/image.png\"></a></div><p>ELM generated for \"Test2\" -- notice the \"In\" type<br>\n<a href=\"/user_uploads/10155/tVXMEqOpNdDh5eJSP-2omFJc/image.png\">image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/tVXMEqOpNdDh5eJSP-2omFJc/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/tVXMEqOpNdDh5eJSP-2omFJc/image.png\"></a></div>",
+        "id": 226845250,
+        "sender_full_name": "Brian",
+        "timestamp": 1613668259
+    },
+    {
+        "content": "<p>That's the correct ELM generation for that pattern in CQL 1.4. The translator explicitly detects ValueSetRef when used with In to output an InValueSet, this is to ensure that the engines understand when they're being asked to do value set membership so they can pass it to a terminology service to perform.</p>",
+        "id": 226851104,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1613670770
+    },
+    {
+        "content": "<p>Calling it in a function like that results in a direct evaluation of a ValueSetRef, which my guess is that is not supported by the JavaScript engine. Tagging <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> for thoughts here?</p>",
+        "id": 226851202,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1613670825
+    },
+    {
+        "content": "<p>Correct -- that JavaScript engine does not yet support that.  In fact, I thought that the ability to pass value set references around as function arguments wasn't introduced until CQL 1.5.  Was it actually introduced in CQL 1.4?  Is it normative?</p>",
+        "id": 226854331,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1613672059
+    },
+    {
+        "content": "<p>Also, sorry I did not notice this thread until now...</p>",
+        "id": 226854640,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1613672179
+    },
+    {
+        "content": "<p>Passing ValueSetRefs as arguments is allowed in 1.4 (and all versions, really, it's always been a possibility), but it is discouraged since it is effectively asking the engine to perform a value set expansion at that point.</p>",
+        "id": 226857459,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1613673187
+    },
+    {
+        "content": "<p>In 1.5 we introduced ValueSet as a first class type (along with CodeSystem) so that you could pass them by reference and avoid the expansion.</p>",
+        "id": 226857537,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1613673216
+    },
+    {
+        "content": "<p>It still has the significant downside that it inhibits static analysis of data requirements though.</p>",
+        "id": 226857655,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1613673246
+    },
+    {
+        "content": "<p>Ah right.  That's what I was thinking of in 1.5. (\"ValueSet as a first class type\").  As for supporting <code>ValueSetRef</code>s as arguments to functions (requiring expansion), I'd have to look at that more closely to determine how difficult (or not) it would be to support it in the JS engine.</p>",
+        "id": 226858040,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1613673372
+    },
+    {
+        "content": "<p>Seems worthy of a specific CQL capability: <a href=\"https://github.com/cqframework/clinical_quality_language/issues/602\">https://github.com/cqframework/clinical_quality_language/issues/602</a></p>",
+        "id": 226859430,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1613673883
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> so Test1 is correct in ELM, but Test2 in the example is using the \"In\" type so it is interpreted as a List In(<a href=\"https://cql.hl7.org/09-b-cqlreference.html#in-1\">https://cql.hl7.org/09-b-cqlreference.html#in-1</a>) rather than a ValueSet \"In\"(<a href=\"https://cql.hl7.org/09-b-cqlreference.html#in-valueset\">https://cql.hl7.org/09-b-cqlreference.html#in-valueset</a>).  Consequently in Test2, care has to be made to normalize valueset comparisons as list comparisons.</p>\n<p>Provided the ELM is changed to be \"InValueSet\" for both Test1 and Test2, the change in the CQL engine is straightforward.  Just need a check for OperandRef and an exec to resolve.  I thought about doing a pull request, but prob not worthwhile because of the CQL 1.5 changes coming.</p>\n<p>It's also worth mentioning that since the v1.5.1 cql-to-elm transpiler already implements System.Valueset, but the engine doesn't, this scenario simply doesn't work on latest releases.  Should the v1.5.0 and v1.5.1 cql-to-elm and corresponding packages be marked as betas?</p>",
+        "id": 226865250,
+        "sender_full_name": "Brian",
+        "timestamp": 1613676150
+    },
+    {
+        "content": "<p>There is a 1.5.1 translator release, but it is not a complete implementation of 1.5 support (specifically, support for trial-use capabilities is still being finalized)</p>",
+        "id": 226865600,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1613676289
+    },
+    {
+        "content": "<p>Right.  Folks may not realize this is a breaking change from v1.4 to v1.5, the Atom extension is already using it, and CQL written in Atom against it won't run in the engine.</p>\n<p><a href=\"https://github.com/cqframework/atom_cql_support/blob/master/package.json\">https://github.com/cqframework/atom_cql_support/blob/master/package.json</a><br>\n<a href=\"/user_uploads/10155/n8dEDsekRmY-jgmm2T5eX-Xr/image.png\">image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/n8dEDsekRmY-jgmm2T5eX-Xr/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/n8dEDsekRmY-jgmm2T5eX-Xr/image.png\"></a></div>",
+        "id": 226866825,
+        "sender_full_name": "Brian",
+        "timestamp": 1613676728
+    },
+    {
+        "content": "<p>I don't see that as a breaking change from the perspective of the language. To get the new capability you have to use the newly defined terminology types, so the library as written would still translate the same way (using a ValueSetRef) in 1.5. That particular capability of 1.4 is not supported by the JavaScript engine, but it's not a breaking change in the language, right?</p>",
+        "id": 226872509,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1613679055
+    },
+    {
+        "content": "<p>Tagging <span class=\"user-mention\" data-user-id=\"372239\">@Michael Ryan</span>  </p>\n<p>I'm still stuck on a solution.  I have this code:</p>\n<p>define function \"VS Cast Function\"(VSet List&lt;System.Code&gt;):<br>\n  ( ( cast { \"VSet\", 1 }[0]as Tuple {<br>\n      codes List&lt;System.Code&gt;,<br>\n      oid System.String,<br>\n      version System.String<br>\n    }<br>\n  ).codes ) VSetCodes<br>\n    return System.Code { code: VSetCodes.code, system: VSetCodes.system }</p>\n<p>And we've revised it to this:</p>\n<p>define function \"VS Cast Function\"(VSet System.ValueSet):<br>\n  ( ( cast { \"VSet\", 1 }[0]as Tuple {<br>\n      codes System.ValueSet,<br>\n      oid System.String,<br>\n      version System.String<br>\n    }<br>\n  ).codes ) VSetCodes<br>\n    return System.Code { code: VSetCodes.code, system: VSetCodes.system }</p>\n<p>The fellow next to me gets now errors but I am stuck with this message: Member code not found for type System.ValueSet. We're both using Atom, CQL 1.5 and FHIR 4.0.1 and the code came from <a href=\"https://github.com/cqframework/ecqm-content-r4-2021\">https://github.com/cqframework/ecqm-content-r4-2021</a>.  The solution suggested here is to change the ELM to InValueSet?</p>",
+        "id": 242091501,
+        "sender_full_name": "Bill Baar",
+        "timestamp": 1623255349
+    },
+    {
+        "content": "<p>Bill,</p>\n<p>I tried to mock up what I think should be your solution, it requires the below modification to the Claims library function \"Medical Claims With Diagnosis\":<br>\n<a href=\"user_uploads/10155/b4gKZfvOj_UaM7y_LiQrfSsY/image.png\">image.png</a> </p>\n<div class=\"message_inline_image\"><a href=\"user_uploads/10155/b4gKZfvOj_UaM7y_LiQrfSsY/image.png\" title=\"image.png\"><img src=\"user_uploads/10155/b4gKZfvOj_UaM7y_LiQrfSsY/image.png\"></a></div><p>A caveat being that I cannot test this in my environment, which is why we created the \"VS Cast Function\" in the first place.</p>\n<p>You should also modify NCQA_AdvancedIllnessandFrailty to:</p>\n<ol>\n<li>\n<p>Comment out \"Advanced Illness ValueSet\" definition.</p>\n</li>\n<li>\n<p>Replace all instances of \"Advanced Illness ValueSet\" with \"Advanced Illness\".</p>\n</li>\n</ol>\n<p>I <strong>think</strong> that would work, but again I cannot verify.</p>\n<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> and <span class=\"user-mention\" data-user-id=\"390592\">@Brian</span>  feel free to weigh in or correct my response.</p>\n<p>Thanks,<br>\nMichael</p>",
+        "id": 242105475,
+        "sender_full_name": "Michael Ryan",
+        "timestamp": 1623261485
+    },
+    {
+        "content": "<p>Hi, <span class=\"user-mention\" data-user-id=\"372239\">@Michael Ryan</span> <br>\nI did modification to the Claims library \"Medical Claims With Diagnosis\" as you are suggesting:<br>\n<a href=\"/user_uploads/10155/gnPQQA1UiseRdr1hO9i_eq-G/image.png\">image.png</a> <br>\nThen modified NCQA_AdvencedIllnessandFrailty. Unfortunately it doesn't work:<br>\n<a href=\"/user_uploads/10155/o9TGFwh23HSbatbirQH4KyB0/image.png\">image.png</a> <br>\nI have got an <code>Could not resolve call to operator Medical Claims With Diagnosis with signature (list&lt;FHIR.Claim&gt;,System.ValueSet).</code></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/gnPQQA1UiseRdr1hO9i_eq-G/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/gnPQQA1UiseRdr1hO9i_eq-G/image.png\"></a></div><div class=\"message_inline_image\"><a href=\"/user_uploads/10155/o9TGFwh23HSbatbirQH4KyB0/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/o9TGFwh23HSbatbirQH4KyB0/image.png\"></a></div>",
+        "id": 243053564,
+        "sender_full_name": "Vasyl Herman",
+        "timestamp": 1623950857
+    },
+    {
+        "content": "<p>Still no support for JS Engine? or should work now?</p>",
+        "id": 243054882,
+        "sender_full_name": "Vasyl Herman",
+        "timestamp": 1623951401
+    }
+]

@@ -1,0 +1,152 @@
+[
+    {
+        "content": "<p>date    date    A date within the period the Encounter lasted   Encounter.period<br>\nhere if i am using date search parameter which is of period type, <br>\ndate=2020-06-17<br>\nexample structure of period:<br>\n\"period\": {<br>\n                \"start\": \"2015-01-15\",<br>\n                \"end\":2016-02-15<br>\n            },<br>\nthen it will check with which date as period structure has two dates (start, end)<br>\nand how prefixes (eq,ge,le,gt,lt) will work with period types</p>",
+        "id": 201125930,
+        "sender_full_name": "Shubham Singhal",
+        "timestamp": 1592391180
+    },
+    {
+        "content": "<p>Even stand-alone dates are treated as intervals.  So 2020-06-17 is treated as the interval from midnight at the start of the day to one second before midnight at the end of the day.  When you have a period, the range just shifts such that the start and end are explicitly stated rather than being determined solely by the precision of the date value.  All of the comparison operations are expressed in terms of range overlaps.  (The same also holds for numbers.)</p>",
+        "id": 201156433,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1592407154
+    },
+    {
+        "content": "<p>EncounterA (document 1)<br>\n\"period\": {<br>\n                \"start\": \"2020-06-14\",<br>\n                \"end\":\"2020-06-15\"<br>\n            },</p>\n<p>EncounterB (document 2)<br>\n\"period\": {<br>\n                \"start\": \"2020-06-13\",<br>\n                \"end\":\"2020-06-14\"<br>\n            },          </p>\n<p>EncounterC (document 3)<br>\n\"period\": {<br>\n                \"start\": \"2020-06-12\",<br>\n                \"end\":\"2020-06-16\"<br>\n            },          </p>\n<p>request 1: Encounter?date=2020-06-15<br>\nrequest 2: Encounter?date=eq2020-06-15<br>\nrequest 3: Encounter?date=gt2020-06-15<br>\nrequest 4: Encounter?date=ge2020-06-14<br>\nrequest 5: Encounter?date=lt2020-06-13<br>\nrequest 6: Encounter?date=le2020-06-13<br>\nrequest 7: Encounter?date=ge2020-06-14&amp;date=le2020-06-15<br>\nrequest 8: Encounter?date=gt2020-06-13&amp;date=lt2020-06-15</p>\n<p>can you provide the search result for each request above that which documents (Encounters mentioned) will be returned</p>",
+        "id": 201270214,
+        "sender_full_name": "Shubham Singhal",
+        "timestamp": 1592488283
+    },
+    {
+        "content": "<p>The full set of rules are here: <a href=\"http://build.fhir.org/search.html#prefix\">http://build.fhir.org/search.html#prefix</a>.  You need to turn each search expression into a period range and convert each date in a period into its full timestamp equivalent.  E.g. 2020-06-14 as start becomes 2020-06-14T00:00:00.0000 while 2020-06-15 as high becomes 2020-06-14T23:59:59.9999 and in search, a date of 2020-06-15 becomes a period of 2020-06-15T00:00:00.0000 to 2020-06-15T23:59:59.9999.  Once you've done that, you then evaluate the range overlaps as per the rules tated.</p>\n<p>1: nothing.  no operation is same as eq<br>\n2: nothing.  range of search (midnight on the 15 to 11:59pm on the 15 doesn't fully encompass any of the encounter periods)</p>\n<ol start=\"3\">\n<li>C - that's the only one where the range over the search value (2020-06-16T00:00:00.0000 and higher) overlaps</li>\n<li>A, C - both overlap on the range above - so 2020-06-15T00:00:00.0000 and higher</li>\n<li>C - that's the only one that overlaps with 2020-06-12:59:59.9999 and below</li>\n<li>C - as for #5 and none of the periods are fully encompassed by 2020-06-13T00:00:00.0000 to 2020-06-13T23:59:59.9999</li>\n<li>A and C satisfy the lower bound (with gt).  A, B and C satisfy the upper bound (with lt).  So final answer would be A, C</li>\n<li>A and C satisfy the lower bound (with gt).  A, B, C satisfy the upper bound (with lt).  So the final answer would be A, C</li>\n</ol>\n<p>A more fun one is if you introduce request 9: Encounter?date=gt2020-06-15&amp;date=lt2020-05-13, which would match on C</p>\n<p>Please consider submitting a change request for us to include these examples in the space.  Hope that helps</p>",
+        "id": 201277368,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1592491449
+    },
+    {
+        "content": "<p>request 7: Encounter?date=ge2020-06-14&amp;date=le2020-06-15<br>\nhere you haven't added EncounterB <br>\nEncounterB (document 2)<br>\n\"period\": {<br>\n                \"start\": \"2020-06-13\",<br>\n                \"end\":\"2020-06-14\"<br>\n            },<br>\nit satisfies the lower bound (start) as well as upper bound (end)</p>\n<p>request 8: Encounter?date=gt2020-06-13&amp;date=lt2020-06-15<br>\nsame with request 8 <br>\nEncounterB should be returned<br>\nas it satisfies the lower bound (start) as well as upper bound (end)</p>\n<p>in   request 4: Encounter?date=ge2020-06-14<br>\n(ge means greater than and equals to) so it overlaps with  upper bound (end date) of EncounterB<br>\nEncounterB (document 2)<br>\n\"period\": {<br>\n                \"start\": \"2020-06-13\",<br>\n                \"end\":\"2020-06-14\"<br>\n            },<br>\nSo, EncounterB should also be there</p>",
+        "id": 201294880,
+        "sender_full_name": "Shubham Singhal",
+        "timestamp": 1592498747
+    },
+    {
+        "content": "<p>request 7 - It's not greater than 2020-06-14 (the upperbounds are identical, so it can't be and it's not equal to 2020-06-14 (the full boundaries would have to fall within 2020-06-14). <br>\nrequest 8: You are correct.  The lower bound does overlap with gt 06-13<br>\nrequest 4 - it's not greater - the upper bounds are identical.  And it's not equal - the range doesn't fully encompass the search value.  (Overlap doesn't matter.  Equal means fully encompass).  So there's no match.</p>",
+        "id": 201296809,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1592499549
+    },
+    {
+        "content": "<p>Equal means fully encompass can you explain with an example of ge or le prefix with period</p>\n<p>so, according to you if EncounterB has time also <br>\nand in request 4: Encounter?date=ge2020-06-14T00:00<br>\nEncounterB (document 2)<br>\n\"period\": {<br>\n\"start\": \"2020-06-13T00:00\",<br>\n\"end\":\"2020-06-14T00:00\"<br>\n},<br>\nhere upper bound overlaps with given date including time.  so EncounterB will be returned?</p>",
+        "id": 201300628,
+        "sender_full_name": "Shubham Singhal",
+        "timestamp": 1592501403
+    },
+    {
+        "content": "<p>Lloyd, is there a reason why request 6 would find resource C but not resource B? I understand how the math you are describing would not match B, but is there a business reason why it shouldn't?</p>",
+        "id": 201347210,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1592534524
+    },
+    {
+        "content": "<p>I had assumed that le would work equivalent to a lt search but from the end point of the search parameter rather than the start of the search parameter. Why would le explicitly ignore values that have start points inside of the search parameter but end points after the search parameter?</p>",
+        "id": 201347234,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1592534636
+    },
+    {
+        "content": "<p>The search parameters are based on the math - they have to be consistent in behavior, even if the result isn't necessarily what you might always expect.  And at this point, given that the search part of the spec is normative, it's not really something we can change.</p>",
+        "id": 201403931,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1592579850
+    },
+    {
+        "content": "<p>based on the math how? the only instance of your description of 'the math' for le/ge that I've ever seen is in this one chat. And the only text in the spec I see to back it up is a strangely literal interpretation of the prefix descriptors. <br>\nI'm trying to figure out what reason there is to have that interpretation (that le is exactly equal to lt OR eq) which in my opinion seems a lot less consistent in behavior than just an inclusive less than.</p>",
+        "id": 201618453,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1592838901
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"237342\">@ryan moehrke</span> For period comparison, \"eq\" is defined as \"the range of the search value fully contains the range of the target value\" So the criteria date=eq2020-06-13 returns the the target period falling inside the range [2020-06-13T00:00:00, 2020-06-14T00:00:00), meaning both period.start and period.end need to be inside that search range.<br>\n\"le\" means \"lt\" or \"eq\". <br>\nSo the search criteria date=le2020-06-13 returns two sets of period: <br>\n1) the target period having intersections with (-infinite, 2020-06-13T00:00:00) <br>\n2) the target period falling inside [2020-06-13T00:00:00, 2020-06-14T00:00:00)</p>",
+        "id": 201628485,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1592843257
+    },
+    {
+        "content": "<p>Yunwei, I understand and follow every part of your explanation except the line: \"le\" means \"lt\" or \"eq\".<br>\nand that is what I'm trying to contest. I don't see any part of the spec that requires that interpretation of le, nor do I see any use for it to be that way. Why would someone want to search for le2020-06-13 and not have it return a target period with a start of 2020-06-13T12:00:00Z without an end date (which is not lt2020-06-13 OR eq2020-06-13)<br>\nSo my question is yet again, <em>why</em> is this the tried and true definition of le</p>",
+        "id": 201629247,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1592843622
+    },
+    {
+        "content": "<p>I understand your use case. The range in your use case is actually \"lt2020-06-13 OR gt2020-06-13\". Mathematically, \"lt\" is \"lt or eq\". Unless we redefine \"eq\" for period, to adopting that use case, we have \"le\" is \"lt or gt\". Then we have \"lt or eq\" == \"lt or gt\". And finally, we will get \"eq\" == \"gt\". That is not mathematically correct .</p>",
+        "id": 201631599,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1592844729
+    },
+    {
+        "content": "<blockquote>\n<p>\"lt2020-06-13 OR gt2020-06-13\"</p>\n</blockquote>\n<p>what? when did I ever say I wanted this??<br>\nand yes, out of context le is less than or equal to, but in the context of fhir date searches, we have such a restricted definition of eq that I don't think that simplification is applicable.</p>",
+        "id": 201632030,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1592844909
+    },
+    {
+        "content": "<p>\"Why would someone want to search for le2020-06-13 and not have it return a target period with a start of 2020-06-13T12:00:00Z without an end date\" If my understanding correctly, you would like le2020-06-13 to include target period [2020-06-13T00:00:00, infinite). That falls into the criteria gt2020-06-13.</p>",
+        "id": 201634054,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1592845922
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"237342\">ryan moehrke</span> <a href=\"#narrow/stream/179166-implementers/topic/Period/near/201629247\">said</a>:</p>\n<blockquote>\n<p>Yunwei, I understand and follow every part of your explanation except the line: \"le\" means \"lt\" or \"eq\".<br>\nand that is what I'm trying to contest. I don't see any part of the spec that requires that interpretation of le, nor do I see any use for it to be that way. Why would someone want to search for le2020-06-13 and not have it return a target period with a start of 2020-06-13T12:00:00Z without an end date (which is not lt2020-06-13 OR eq2020-06-13)<br>\nSo my question is yet again, <em>why</em> is this the tried and true definition of le</p>\n</blockquote>\n<p>Ryan, I'm not sure why you think 'le' doesnt mean 'lt' or 'eq'.  It seems quite specific in the spec:<br>\nPrefix | Value | Range<br>\neq | the value for the parameter in the resource is equal to the provided value | the range of the search value fully contains the range of the target value<br>\nlt | the value for the parameter in the resource is less than the provided value | the range below the search value intersects (i.e. overlaps) with the range of the target value<br>\nle | the value for the parameter in the resource is less or equal to the provided value | the range below the search value intersects (i.e. overlaps) with the range of the target value or the range of the search value fully contains the range of the target value</p>\n<p>Seems pretty clear to me that le is lt or eq.</p>",
+        "id": 201634468,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1592846119
+    },
+    {
+        "content": "<p>And since [2020-06-13T00:00:00.0000, 2020-06-13T23:59:59.9999] is not lt and not eq to [2020-06-13T00:00:00.000, 2020-06-14T23:59:59.9999], it is not returned in the search</p>",
+        "id": 201634747,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1592846268
+    },
+    {
+        "content": "<p>Yunwei, yes I want  2020-06-13T12:00:00Z - infinite to be in le2020-06-13 but I wouldn't want 2020-07 - infinite to be in the same search, that would be nonsensical. And if your only way of describing a search param is by equivilance with others, then that search parameter is quite useless, no? why have a search parameter that does not have a unique use?<br>\nJean, I see where you're pointing to in the spec, and it does have more specifics than I remembered it having. So I'll concede that point. But that still doesn't answer my overarching question of why. I see no usecase where a user would <em>want</em> le to have this strange interaction where le2020-06-13 would match 2020-05 - 2020-07 but not  2020-06-13T12:00:00Z - 2020-06-14T12:00:00Z</p>",
+        "id": 201636436,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1592847109
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"237342\">ryan moehrke</span> <a href=\"#narrow/stream/179166-implementers/topic/Period/near/201636436\">said</a>:</p>\n<blockquote>\n<p>Jean, I see where you're pointing to in the spec, and it does have more specifics than I remembered it having. So I'll concede that point. But that still doesn't answer my overarching question of why. I see no usecase where a user would <em>want</em> le to have this strange interaction where le2020-06-13 would match 2020-05 - 2020-07 but not  2020-06-13T12:00:00Z - 2020-06-14T12:00:00Z</p>\n</blockquote>\n<p>so 2020-05 is less than 2020-06-13 so that makes sense.  2020-06-13T12:00 is not less than 2020-06-13T00:00:00 so it's lt and it's obviously not equal, so those do make sense.  NOTE: le2020-06-13 does match [2020-06-13T12:00:00Z, 2020-06-13T14:00:00Z] as an example (due to the equal part).</p>\n<p>the problem with date range math is that it very often doesn't give you the response you think it should, but, like Lloyd said earlier, we had to define them according to the math to be consistent.</p>",
+        "id": 201637218,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1592847508
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"237342\">ryan moehrke</span> <a href=\"#narrow/stream/179166-implementers/topic/Period/near/201636436\">said</a>:</p>\n<blockquote>\n<p>I want  2020-06-13T12:00:00Z - infinite to be in le2020-06-13 </p>\n</blockquote>\n<p>Why do you want that?  It's not less than and it's definitely not equal, so why would it match?  It would match [2020-06-12T12:00:00Z, infinite] since it is less than.</p>",
+        "id": 201637388,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1592847612
+    },
+    {
+        "content": "<p>I don't need 12 different explanation of <em>how</em> my examples don't match under yalls definition of le. I get that. I have asked multiple times I want to know the 'why'<br>\nBut if your 'why' is just \"dates are too complicated to make anything intuitive\" then I guess I have nothing more to say.</p>",
+        "id": 201637777,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1592847842
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"237342\">ryan moehrke</span> <a href=\"#narrow/stream/179166-implementers/topic/Period/near/201637777\">said</a>:</p>\n<blockquote>\n<p>I don't need 12 different explanation of <em>how</em> my examples don't match under yalls definition of le. I get that. I have asked multiple times I want to know the 'why'<br>\nBut if your 'why' is just \"dates are too complicated to make anything intuitive\" then I guess I have nothing more to say.</p>\n</blockquote>\n<p>Lloyd and I have given you the why - we need the math to be consistent.  I'll push this back on you to explain why you want a period that is obviously not less than to match a less than or equal?</p>",
+        "id": 201644452,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1592851201
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"237342\">ryan moehrke</span> <a href=\"#narrow/stream/179166-implementers/topic/Period/near/201637777\">said</a>:</p>\n<blockquote>\n<p>I don't need 12 different explanation of <em>how</em> my examples don't match under yalls definition of le. I get that. I have asked multiple times I want to know the 'why'<br>\nBut if your 'why' is just \"dates are too complicated to make anything intuitive\" then I guess I have nothing more to say.</p>\n</blockquote>\n<p>And I thought I was giving you the why, but I guess you think it is more how?  The why is because the math needs to be consistent and date ranges when you apply that consistent math don't always give us the intuitive answers.  But like I said in my last response, I don't understand how the periods you are providing would match intuitively.</p>",
+        "id": 201644832,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1592851374
+    },
+    {
+        "content": "<p>I am confused what the \"why\" is in reference to:</p>\n<ol>\n<li>Why is the definition of eq what it is?</li>\n<li>Why is the definition of lt what it is?</li>\n<li>Why is the definition of le what it is?</li>\n</ol>\n<p>If it is only the last question, then the answer, I think, is simple - less than or equal means exactly what it says it is. Anything else would be beyond un-intuitive.</p>\n<p>If it is the definition of eq or lt, I can see a question of whether the \"mid-point\" of the value range (of the source or target) needs to be used in some way. It is obviously used with numbers: value range of 2.0 is 1.95 to 2.05, but the range below the value is everything less than 2, the midpoint of the value range. How would the math work if the range below 2020-06-13 is everything before 2020-06-13T12:00:00Z? Or did I misunderstood,and that is exactly how it works already?</p>",
+        "id": 201646939,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1592852418
+    }
+]

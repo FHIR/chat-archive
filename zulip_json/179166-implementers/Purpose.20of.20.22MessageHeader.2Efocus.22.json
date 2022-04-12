@@ -1,0 +1,104 @@
+[
+    {
+        "content": "<p>I'm trying to understand the specific intent behind MessageHeader.focus, to prevent myself from using it improperly.</p>\n<p>I have a Messaging paradigm for submitting a ServiceRequest. In it, I send a ServiceRequest + a half dozen other related referenced resources like Patient, Practitioner, etc... (the event is called \"add-service-request\")</p>\n<p>Now, it's clear from the event \"add-service-request\" that the message is primarily focused on the ServiceRequest. None the less, should I be using the MessageHeader.focus to reference the ServiceRequest bundle (and ONLY that resource)?</p>",
+        "id": 159800663,
+        "sender_full_name": "Tim Berezny",
+        "timestamp": 1551538408
+    },
+    {
+        "content": "<p>Also, in words that are different than what is published on <a href=\"http://build.fhir.org/messageHeader.html\" target=\"_blank\" title=\"http://build.fhir.org/messageHeader.html\">build.fhir.org/messageHeader.html</a>, what is the main purpose of messageHeader.focus (I'm having a hard time understanding exactly from the wording that is there)?</p>",
+        "id": 159800821,
+        "sender_full_name": "Tim Berezny",
+        "timestamp": 1551538677
+    },
+    {
+        "content": "<p>Messaging is all about events.  The MessageHeader.focus points to the focus of the event.  Typically there will only be one focus.  However, for some events (e.g. a merge) there can be more than one.  Everything else in the message needs to connect to the focus resource(s) through some pathway of forward and/or backward links.</p>",
+        "id": 159803252,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1551541906
+    },
+    {
+        "content": "<p>Great thanks, that's pretty clear and leads to my next question:</p>\n<p>Let's say I make updates to my ServiceRequest and want to communicate that to others via messages. These updates might be to the ServiceRequest resource, or to an associated appointment, or to the Patient resource, or task etc...</p>\n<p>TYPICALLY the workflow is that these resources are updated one at a time (i just added updated the ServiceRequest.status, or I just moved the appointment timeslot, etc...)</p>\n<p>I have two architectures in mind for how to deal with sending these update messages out</p>\n<p>ARCHITECTURE 1:<br>\n- Create a message event for each thing that can happen (e.g., add-appointment, update-appointment, update-service-request, update-status, add-document, etc...). Each of these events is essentially about a single resource in the ServiceRequest.</p>\n<p>ARCHITECTURE 2:<br>\n- Create just one or two events (just update-service-request and possibly add-to-service-requeset ... or something along those lines) where the messageHeader.focus points to the resource of interest in that particular update. (this is kind of mimicking a more RESTful pub/sub architecture)</p>\n<p>Is there a preferred/more common approach to this?</p>",
+        "id": 159803694,
+        "sender_full_name": "Tim Berezny",
+        "timestamp": 1551542597
+    },
+    {
+        "content": "<p>The most common approach is not to use messaging at all and to use something similar to architecture 1 and just RESTfully create/update/delete resources as needed.  Messaging is, by nature, a custom solution where all the participants need to customize their solutions to work with an agreed set of message events, agreed structures for payloads and agreed sets of responses to received messages.  With REST on the other hand, the possible events (create/read/update/delete), payloads and responses are already pre-defined.  That makes it a more open interface and more useable for alternate purposes.  So if you don't <em>need</em> to use messaging, don't.</p>\n<p>However, in some cases, REST won't meet requirements.  REST doesn't provide context about what's happening or why.  For example, a RESTful Encounter update could represent a bed transfer, a change to planned discharge date, an actual discharge, etc.  It might be possible to infer what's going on by comparing previous data to new data, but it's not always obvious and sometimes multiple things will happen at once.  If you have business rules that enforce different access privileges based on specific types of updates, you may need the \"event code\" that messaging provides.  The other reason for messaging is if the systems involved don't support any query ability to retrieve contextual resources.  For example, if you send a \"create Encounter\" REST call, the patient, admitting practitioner, reason for admission, etc. will all be references to other resources.  If there's no ability for someone to retrieve those references, then you may need to pass everything together in one package.</p>\n<p>In terms of the appropriate boundaries for events, there's no particular rules as it'll be driven by business requirements.  If there are distinct rules, access privileges or responses for \"add appointment, update appointment, update status, add document\", then they may need to be distinct events.  If you don't have a need to make them separate, then the only benefit would be slightly lighter-weight messages with a cost of considerably more development effort and testing.</p>",
+        "id": 159811808,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1551555947
+    },
+    {
+        "content": "<p>Thanks, that's extremly helpful. </p>\n<p>We initially went with messaging due to routing via HIAL needs, which is no longer a need so we are re-evaluating our approach.</p>\n<p>1. Is it ok to have an implementation with mixed paradigms, where some business functions are solved with a restful paradigm and others with Messaging? or is it supposed to be an all or nothing thing into either camp?</p>\n<p>2. When it comes to letting other systems know about changes to a resource in a restful paradigm, are subscriptions the way to go?</p>",
+        "id": 159812838,
+        "sender_full_name": "Tim Berezny",
+        "timestamp": 1551557580
+    },
+    {
+        "content": "<p>1. FHIR was very  much designed to support/enable mixed modes and to ease conversion between the different paradigms.  Use REST where you can, but where the need dictates that a document approach or a messaging approach is going to better fit the use-case, then use those.  The resource instances should end up looking the same regardless.</p>",
+        "id": 159816504,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1551563505
+    },
+    {
+        "content": "<p>2. Subscriptions and polling are the two primary mechanisms.  Subscriptions means you'll get pushed a notification if something of interest has changed.  With polling, you can do a query of records of interest, filtered by _lastupdated and see if there's anything new.  Which approach makes sense depends on whether the system that needs to be notified is capable of receiving pushes.</p>",
+        "id": 159816590,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1551563588
+    },
+    {
+        "content": "<p>Perfect, that's incredibly clear and helpful, thanks <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> !</p>",
+        "id": 159817492,
+        "sender_full_name": "Tim Berezny",
+        "timestamp": 1551564944
+    },
+    {
+        "content": "<p>For what its worth we struggled with the same issues with the \"proper\" use of message header for the Bidirectional Services electronic Referral project (BSeR). We considered the use of three elements in the message header: event, reason, and response. We use the MessageHeader.event to indicate the message type - referral request or referral request feedback. A referral request message is always sent by the referral initiator and a referral request feedback message is always sent by the referral recipient. We use the MessageHeader.reason to identify what triggered the sending of the request or feedback message. We developed a state machine for the referral (aka service request) and used the codes for each state as the value for MessageHeader.reason. We use the same message header structure for acknowledgment messages in which case we use the MessageHeader.response to indicate success, failure, or fatal failure of message receipt. </p>\n<p>This approach is not novel, it mimics the message type/message trigger event model of HL7 v2. It works, we implemented for use in the HIMSS Interoperability Showcase along with Chicago Health System ACO, YMCA of America, and the Centers for Disease Control and Prevention. Whether or not this is an acceptable, flawed, or ideal approach is beyond my expertise. However, it is what we did and we describe our approach in our ballot. <a href=\"http://bit.ly/2tMX3s8\" target=\"_blank\" title=\"http://bit.ly/2tMX3s8\">http://bit.ly/2tMX3s8</a>  We will hear what the community thinks of our solution and react to ballot comments in May.</p>",
+        "id": 159872778,
+        "sender_full_name": "AbdulMalik Shakir",
+        "timestamp": 1551660640
+    },
+    {
+        "content": "<p>I think that's pretty much the intent</p>",
+        "id": 159872993,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1551660998
+    },
+    {
+        "content": "<p>Polling is an anti-pattern and I recommend RESTful PUT/POST, Messaging, or Subscriptions, especially if you're starting from scratch. In polling, the client is solely responsible for making sure they get all the updates. The other methods offer some form of acknowledgement so that the server knows the ServiceRequest made it downstream.</p>",
+        "id": 160104489,
+        "sender_full_name": "Nick Hatt",
+        "timestamp": 1551885656
+    },
+    {
+        "content": "<p>I think Zapier did some research on their own internal data and found that some crazy high &gt; 95% of polling cycles were wasted. I can't find that blog but they have some notes on polling and deduplication here: <a href=\"https://zapier.com/developer/documentation/v2/polling/\" target=\"_blank\" title=\"https://zapier.com/developer/documentation/v2/polling/\">https://zapier.com/developer/documentation/v2/polling/</a></p>",
+        "id": 160105019,
+        "sender_full_name": "Nick Hatt",
+        "timestamp": 1551885970
+    },
+    {
+        "content": "<p>We poll something like 10 different EHR vendors proprietary APIs so we can turn it into FHIR or whatnot and broadcast stuff out. As soon as the EHRs can support webhooks we convert things as soon as we can because of the consistency guarantees.</p>",
+        "id": 160105267,
+        "sender_full_name": "Nick Hatt",
+        "timestamp": 1551886131
+    },
+    {
+        "content": "<p>Polling is an anti-pattern in some environments.  Polling can be quite light-weight and can have variable frequency.  The benefit is that it often doesn't require any customization of client or server.  It works \"out of the box\".  Messaging, on the other hand, generally only works in a closed community where the participants have all been adapted to support a specific message flow.  Certainly if the systems involved can support subscriptions, it makes no sense to use polling.</p>",
+        "id": 160109253,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1551888743
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"196402\">@AbdulMalik Shakir</span> I just clicked the link in your message to see your state pattern for eReferral (<a href=\"http://bit.ly/2tMX3s8\" target=\"_blank\" title=\"http://bit.ly/2tMX3s8\">http://bit.ly/2tMX3s8</a>  ) and it doesn't work anymore. Where might I be able to find it now?</p>",
+        "id": 190855094,
+        "sender_full_name": "Tim Berezny",
+        "timestamp": 1584455406
+    },
+    {
+        "content": "<p>Maybe it is in the <a href=\"http://hl7.org/fhir/us/bser/\" target=\"_blank\" title=\"http://hl7.org/fhir/us/bser/\">BSeR IG</a>?</p>",
+        "id": 190873788,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1584462315
+    }
+]

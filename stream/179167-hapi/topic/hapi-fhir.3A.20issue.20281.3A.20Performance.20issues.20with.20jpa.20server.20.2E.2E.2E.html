@@ -1,0 +1,99 @@
+---
+layout: page
+title: "FHIR Chat  · hapi-fhir: issue 281: Performance issues with jpa server ... · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi-fhir.3A.20issue.20281.3A.20Performance.20issues.20with.20jpa.20server.20.2E.2E.2E.html">hapi-fhir: issue 281: Performance issues with jpa server ...</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153812036"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi-fhir%3A%20issue%20281%3A%20Performance%20issues%20with%20jpa%20server%20.../near/153812036" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Zulip HAPI Bot <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi-fhir.3A.20issue.20281.3A.20Performance.20issues.20with.20jpa.20server.20.2E.2E.2E.html#153812036">(Jan 12 2016 at 12:02)</a>:</h4>
+<p>ftprod opened <a href="https://github.com/jamesagnew/hapi-fhir/issues/281" target="_blank" title="https://github.com/jamesagnew/hapi-fhir/issues/281">issue 281</a></p>
+<blockquote>
+<p>I encounter performance issues with the 1.3 version of the jpa server. </p>
+<p>## Use case: <br>
+I create or update Patient (for example). Patients contain only some data (name, birthdate, gender...) and often a link to an existing practitioner. <br>
+I use an "api transaction" to insert 50 Patients at a time.</p>
+<p>## Single Patient insert time : <br>
+- <strong>v1.3</strong>: 160ms<br>
+- <strong>v1.2</strong>:   6ms</p>
+<p>## Environment : <br>
+Apache Tomcat 8<br>
+Mysql server 5.6<br>
+Java jdk oracle 8</p>
+<p>We tested that on 10k entries with the same result. <br>
+So we have to rollback to v1.2.</p>
+</blockquote>
+
+
+
+<a name="153812037"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi-fhir%3A%20issue%20281%3A%20Performance%20issues%20with%20jpa%20server%20.../near/153812037" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Zulip HAPI Bot <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi-fhir.3A.20issue.20281.3A.20Performance.20issues.20with.20jpa.20server.20.2E.2E.2E.html#153812037">(Jan 12 2016 at 12:26)</a>:</h4>
+<p>jamesagnew <a href="https://github.com/jamesagnew/hapi-fhir/issues/281#issuecomment-170895909" target="_blank" title="https://github.com/jamesagnew/hapi-fhir/issues/281#issuecomment-170895909">commented</a> on <a href="https://github.com/jamesagnew/hapi-fhir/issues/281" target="_blank" title="https://github.com/jamesagnew/hapi-fhir/issues/281">issue 281</a></p>
+<blockquote>
+<p>Hi @ftprod,</p>
+<p>This is interesting, thanks for providing numbers. The main difference between 1.2 and 1.3 is the addition of Hibernate Search (lucene) indexing for fulltext search. I wonder if this is the culprit.</p>
+<p>Can you try re-running your tests with hibernate search disabled? You can accomplish this by setting the property <code>hibernate.search.autoregister_listeners</code> to <code>false</code>. If you're using Spring Java configuration, you can set this in your jpaProperties() method, e.g.</p>
+<div class="codehilite"><pre>    <span class="kd">private</span> <span class="n">Properties</span> <span class="nf">jpaProperties</span><span class="o">()</span> <span class="o">{</span>
+        <span class="n">Properties</span> <span class="n">extraProperties</span> <span class="o">=</span> <span class="k">new</span> <span class="n">Properties</span><span class="o">();</span>
+        <span class="n">extraProperties</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">&quot;hibernate.dialect&quot;</span><span class="o">,</span> <span class="n">org</span><span class="o">.</span><span class="na">hibernate</span><span class="o">.</span><span class="na">dialect</span><span class="o">.</span><span class="na">DerbyTenSevenDialect</span><span class="o">.</span><span class="na">class</span><span class="o">.</span><span class="na">getName</span><span class="o">());</span>
+        <span class="n">extraProperties</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">&quot;hibernate.format_sql&quot;</span><span class="o">,</span> <span class="s">&quot;true&quot;</span><span class="o">);</span>
+        <span class="n">extraProperties</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">&quot;hibernate.show_sql&quot;</span><span class="o">,</span> <span class="s">&quot;false&quot;</span><span class="o">);</span>
+        <span class="n">extraProperties</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">&quot;hibernate.hbm2ddl.auto&quot;</span><span class="o">,</span> <span class="s">&quot;update&quot;</span><span class="o">);</span>
+        <span class="n">extraProperties</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">&quot;hibernate.jdbc.batch_size&quot;</span><span class="o">,</span> <span class="s">&quot;20&quot;</span><span class="o">);</span>
+        <span class="n">extraProperties</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">&quot;hibernate.cache.use_query_cache&quot;</span><span class="o">,</span> <span class="s">&quot;false&quot;</span><span class="o">);</span>
+        <span class="n">extraProperties</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">&quot;hibernate.cache.use_second_level_cache&quot;</span><span class="o">,</span> <span class="s">&quot;false&quot;</span><span class="o">);</span>
+        <span class="n">extraProperties</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">&quot;hibernate.cache.use_structured_entries&quot;</span><span class="o">,</span> <span class="s">&quot;false&quot;</span><span class="o">);</span>
+        <span class="n">extraProperties</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">&quot;hibernate.cache.use_minimal_puts&quot;</span><span class="o">,</span> <span class="s">&quot;false&quot;</span><span class="o">);</span>
+        <span class="n">extraProperties</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">&quot;hibernate.search.default.directory_provider&quot;</span><span class="o">,</span> <span class="s">&quot;filesystem&quot;</span><span class="o">);</span>
+        <span class="n">extraProperties</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">&quot;hibernate.search.default.indexBase&quot;</span><span class="o">,</span> <span class="s">&quot;target/lucenefiles&quot;</span><span class="o">);</span>
+        <span class="n">extraProperties</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">&quot;hibernate.search.lucene_version&quot;</span><span class="o">,</span> <span class="s">&quot;LUCENE_CURRENT&quot;</span><span class="o">);</span>
+        <span class="n">extraProperties</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">&quot;hibernate.search.autoregister_listeners&quot;</span><span class="o">,</span> <span class="s">&quot;false&quot;</span><span class="o">);</span> <span class="c1">// set to false to disable lucene</span>
+        <span class="k">return</span> <span class="n">extraProperties</span><span class="o">;</span>
+    <span class="o">}</span>
+</pre></div>
+
+
+</blockquote>
+
+
+
+<a name="153812099"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi-fhir%3A%20issue%20281%3A%20Performance%20issues%20with%20jpa%20server%20.../near/153812099" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Zulip HAPI Bot <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi-fhir.3A.20issue.20281.3A.20Performance.20issues.20with.20jpa.20server.20.2E.2E.2E.html#153812099">(Jan 12 2016 at 16:55)</a>:</h4>
+<p>ftprod <a href="https://github.com/jamesagnew/hapi-fhir/issues/281#issuecomment-170973441" target="_blank" title="https://github.com/jamesagnew/hapi-fhir/issues/281#issuecomment-170973441">commented</a> on <a href="https://github.com/jamesagnew/hapi-fhir/issues/281" target="_blank" title="https://github.com/jamesagnew/hapi-fhir/issues/281">issue 281</a></p>
+<blockquote>
+<p>It is difficult to test in my context because the application makes a search before an insertion (and the search doesn’t work with autoregister_listeners=false).</p>
+<p>But, my first impression is that didn’t change the insertion time (more than 100ms).</p>
+<p>I can make other test / investigation if you want. </p>
+</blockquote>
+
+
+
+<a name="153812114"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi-fhir%3A%20issue%20281%3A%20Performance%20issues%20with%20jpa%20server%20.../near/153812114" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Zulip HAPI Bot <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi-fhir.3A.20issue.20281.3A.20Performance.20issues.20with.20jpa.20server.20.2E.2E.2E.html#153812114">(Jan 12 2016 at 19:53)</a>:</h4>
+<p>jamesagnew <a href="https://github.com/jamesagnew/hapi-fhir/issues/281#issuecomment-171033752" target="_blank" title="https://github.com/jamesagnew/hapi-fhir/issues/281#issuecomment-171033752">commented</a> on <a href="https://github.com/jamesagnew/hapi-fhir/issues/281" target="_blank" title="https://github.com/jamesagnew/hapi-fhir/issues/281">issue 281</a></p>
+<blockquote>
+<p>Hmm, maybe that's not the bext way to disable lucene then..<br>
+Can you try it with:<br>
+<code>extraProperties.put("hibernate.search.indexing_strategy", "manual");</code></p>
+</blockquote>
+
+
+
+<a name="153812481"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi-fhir%3A%20issue%20281%3A%20Performance%20issues%20with%20jpa%20server%20.../near/153812481" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Zulip HAPI Bot <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi-fhir.3A.20issue.20281.3A.20Performance.20issues.20with.20jpa.20server.20.2E.2E.2E.html#153812481">(Jan 29 2016 at 17:11)</a>:</h4>
+<p>ftprod <a href="https://github.com/jamesagnew/hapi-fhir/issues/281#issuecomment-176867319" target="_blank" title="https://github.com/jamesagnew/hapi-fhir/issues/281#issuecomment-176867319">commented</a> on <a href="https://github.com/jamesagnew/hapi-fhir/issues/281" target="_blank" title="https://github.com/jamesagnew/hapi-fhir/issues/281">issue 281</a></p>
+<blockquote>
+<p>Sorry for my late reply. <br>
+I tried this setting , but the result is similar.</p>
+</blockquote>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

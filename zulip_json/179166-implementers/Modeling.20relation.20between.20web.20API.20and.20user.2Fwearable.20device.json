@@ -1,0 +1,80 @@
+[
+    {
+        "content": "<p>I'm looking at a use case where data originally coming from wearable devices are pulled from a centralized Web API offered by a data aggregator, often the device manufacturer itself (such a Web API is offered by e.g. FitBit). It seems clear that one can model the API itself as a Device, as discussed in e.g. <a href=\"#narrow/stream/179166-implementers/topic/Represent.20service.20running.20AI.20Model.20as.20a.20Device.3F\">this recent thread</a>. However, I unsure about two particular details and am looking for existing guidance or experience (apologies in advance for the length! - I wanted to show the options I have considered):</p>\n<p><strong>1. Modeling individual user accounts</strong> The data retrieved from the API for a given patient really comes from a corresponding user account that is accessible via the API. The account would be identified by e.g. a user-id also used when accessing the API. So I am wondering if/how one could use Device to represent a single user account accessed via the API, e.g. by somehow including the user ID or equivalent information. I looked at a few options but did not really find anything that seem solid (short of custom extensions, of course):</p>\n<ul>\n<li><code>Device.patient</code> does not work since it seems to be meant for indicating that a device is <em>attached</em> to a given person.</li>\n<li>Having a hierarchy of devices using <code>Device.parent</code> doesn't seem attractive either, since an account is not really a \"sub-device\" of the API itself. </li>\n<li>The DeviceUse resource does not seem appropriate either since what we want to model is not the usage of the API but rather a particular user account exposed by the API.</li>\n<li>In some cases, the user-ID might appear in a systematic way in such a way that one could put a user-specific URL in <code>Device.URL</code> (<code>[base URL]/[user-id]/someDatatType/1</code> --&gt; user URL = <code>[base URL]/[user-id]</code>). That, however, would be hard to understand for data receivers and depends on the API design.</li>\n<li>The closest match for account information seems to be <code>Device.property</code>, but I cannot really tell from the documentation whether that is appropriate and what one could use as codes/<code>type</code> (For <code>Device.property.type</code>, it  looks like there is a binding, but what appear to be the binding indication - \"DeviceDefinitionPropetyCode (Extensible)\" - is not linked to a value set).</li>\n<li>One could consider making the API itself a DeviceDefinition and letting each user account be represented by a device linking to the DeviceDefinition in <code>Device.definition</code>, but one still has the problem of indicating which account/user is meant. </li>\n</ul>\n<p><strong>2. Modeling physical devices whose data is aggregated by API</strong>: The API might also expose information about the actual physical device the data came from, either at the level of the individual measurement or by indicating which devices are supplying data to the aggregation service. Each such physical Device could also be modelled as a Device. But how can I indicate the link between the device-Device and the API-Device? Again, <code>Device.parent</code> does not seem appropriate, but I see not other way of directly linking two Device resources. Or would one maybe not link them at all but instead just attach both to a given measurement, e.g. point <code>Observation.device</code> to the physical device and use the <a href=\"https://www.hl7.org/fhir/extension-observation-gatewaydevice.html\">gatewayDevice-extension</a> to point to the API? Not sure if the latter is even correct, the extension documentation does not really say what information it carries, only that it can also go in Provenance/AuditEvent.</p>",
+        "id": 245008850,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1625560057
+    },
+    {
+        "content": "<p>The notion of user account has been explicitly defined as outside FHIR's scope as there are other RESTful standards for representing the notion of 'user', 'user account', 'access permission', etc.  (<span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span> I was expecting to see a reference to this standard on the security page but didn't.  Given it's a FAQ, would it be worth including such a reference?)</p>\n<p>Within FHIR, an API is typically represented using EndPoint.  Users authenticate to the API over OAuth.  The API itself doesn't manifest in data except perhaps in Resource.meta.source, though it can also show up in Provenance.  If users manifest in FHIR, they typically show up as Patient, RelatedPerson or Practitioner (if human) or as Device if a system.</p>\n<p>Observation.device is the physical device used to make the measurement.  Observation.meta.source would be the system it came from.</p>",
+        "id": 245055133,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1625585254
+    },
+    {
+        "content": "<p>In cases where users do need to be represented in FHIR, RelatedPerson is one option.  RelatedPerson supports both \"self-access\" users, where the user is the patient, but also delegated access, where a parent might be managing data for a child.</p>",
+        "id": 245055479,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1625585386
+    },
+    {
+        "content": "<p>I do very strongly encourage folks not to mix up the patient and the user.  Those can be two different people, and if you use the same property (e.g. Device.patient) for both, then you are designing yourself into a corner where you don't support any sort of delegated access, which means you basically can't work with pediatric organizations, and can't support a decent amount of complex care scenarios for non-pediatric areas too.</p>",
+        "id": 245055792,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1625585508
+    },
+    {
+        "content": "<p>User account management is something that would span many data domains, where FHIR is just one data domain. For example the other domains might be Human Resources). The main impact of a user to FHIR is by way of the user identifier as a FHIR Identifier (Patient, Practitioner, RelatedPerson, Person, etc). This use of Identifier datatype is  the linkage between the user account management domain and the FHIR domain. The interaction with user authentication would typically be through OAuth, specifically OpenID-Connect.</p>",
+        "id": 245062912,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1625588306
+    },
+    {
+        "content": "<p>There is a RESTful standard api defined -- SCIM -- <a href=\"https://datatracker.ietf.org/doc/html/rfc7644\">https://datatracker.ietf.org/doc/html/rfc7644</a><br>\nThis has not received enough interest to be put into the FHIR security pages as a recommendation. I understand that Grahame has leveraged this in his reference server. <br>\nTypically user management is done by way of a user management platform that is more broadly adopted by an organization, examples would be Active Directory, Apache Directory, Open LDAP, or an external OAuth provider like Google/Facebook etc.</p>",
+        "id": 245063293,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1625588485
+    },
+    {
+        "content": "<p>also, here is Grahame on the topic <a href=\"http://www.healthintersections.com.au/?p=2673\">http://www.healthintersections.com.au/?p=2673</a></p>",
+        "id": 245066220,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1625589889
+    },
+    {
+        "content": "<p>I don't know we want to 'recommend it', but mentioning it as a \"such as\" would be useful/appropriate.  Its existence is one of the main reasons we opted to not take on that use-case to solve in FHIR directly.</p>",
+        "id": 245067903,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1625590725
+    },
+    {
+        "content": "<p>please submit a jira ticket</p>",
+        "id": 245075803,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1625594342
+    },
+    {
+        "content": "<p><a href=\"http://jira.hl7.org/browse/FHIR-33014\">FHIR#33014</a></p>",
+        "id": 245077091,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1625594858
+    },
+    {
+        "content": "<p>Thanks for the feedback! I think my initial questions was not quite clear (despite the length...) so this went in a different direction than I expected.</p>\n<p>First off, I do not want to manage users/user access in any way or link devices to specific patients. I am only interested in account identifiers as a way of identifying \"virtual sub-devices\" accessible via the API, i.e. I see them as \"dumb labels\". The API is just the entrance to a data platform where each user has an account. Actual physical devices are always connected <em>to a specific account</em> and access via the API is always <em>to a specific account</em>. Hence, it seemed to me that the platform is really more like a collection of virtual \"user-specific aggregation devices\" (one per account) and that one should ideally point to such \"sub-device\" as the source of specific data. For instance, doing so makes it (in certain cases) possible to find out which physical devices collected the data. Hence my question about attaching an account identifier to make the Device instance specific to that \"virtual sub-device\".</p>\n<p>Secondly, I think the term \"API\" in my question was perhaps a bit misleading. Really, the entity I meant to model is the <em>software platform</em> behind the API which aggregates data from physical devices on a user-specific basis (and does not use FHIR). I was thinking of this as an active producer of data and hence something that would directly add value to e.g. an Observation when linked via <code>Observation.device</code>. E.g. knowing that the data came from this platform allows me to infer information about the raw format, aggregation modes, and precision of the data, and about what types of physical devices it came from (possibly even a specific set of individual devices). That seems quite similar to the information I would gain if a physical device is linked from an Observation. For those reason, it seemed to me that the Endpoint resource or use of Provenance/<code>meta.source</code> was not appropriate since they seemed more geared towards meta-information/information about \"passive sources\" that do not actually produce the data.</p>\n<p>Looking at this, maybe the key question is really this: Are platforms that aggregate data from wearable devices (e.g. the FitBit platform) correctly modelled as Devices (or multiple device, cf. the first point)? Or should one only fill <code>Observation.device</code> if you can refer to the actual, physical device that collected the data?</p>",
+        "id": 245164690,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1625657277
+    },
+    {
+        "content": "<p>you might want to address this to the <a class=\"stream\" data-stream-id=\"179199\" href=\"/#narrow/stream/179199-devices\">#devices</a> stream. There is efforts in this space jointly by the HL7 Devices workgroup and the IHE Devices Domain. I am not deep in that group, so don;t have the answers.</p>",
+        "id": 245168899,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1625659613
+    },
+    {
+        "content": "<p>I would say that the software is a device.  A user account is not.</p>",
+        "id": 245186430,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1625667259
+    }
+]

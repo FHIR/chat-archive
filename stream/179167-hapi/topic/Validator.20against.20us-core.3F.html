@@ -1,0 +1,253 @@
+---
+layout: page
+title: "FHIR Chat  · Validator against us-core? · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html">Validator against us-core?</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="238369606"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/238369606" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Teunissen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#238369606">(May 11 2021 at 19:35)</a>:</h4>
+<p>When I try to validate the attached <a href="/user_uploads/10155/FicmhJRIIZEGEeI4qnj-7-5Q/provenance.json">provenance.json</a>, with HAPI 5.3.3, the validator reports an error:</p>
+<p>Validation severity ERROR - Location Provenance.agent[1].type.coding[0] - Message Unknown Code System '<a href="http://hl7.org/fhir/us/core/CodeSystem/us-core-provenance-participant-type">http://hl7.org/fhir/us/core/CodeSystem/us-core-provenance-participant-type</a>'</p>
+<p>According to the us-core spec (<a href="https://www.hl7.org/fhir/us/core/StructureDefinition-us-core-provenance.html">https://www.hl7.org/fhir/us/core/StructureDefinition-us-core-provenance.html</a>) it is an allowed coding.</p>
+<p>Here is my code:</p>
+<div class="codehilite"><pre><span></span><code>FhirContext ctx = FhirContext.forR4();
+IParser parser = ctx.newJsonParser();
+FhirValidator validator = ctx.newValidator();
+
+IValidatorModule module = new FhirInstanceValidator(ctx);
+validator.registerValidatorModule(module);
+
+String json = ...(see attachment)...;
+
+Provenance p = parser.parseResource(Provenance.class, json);
+ValidationResult vr = validator.validateWithResult(p);
+
+vr.getMessages()
+    .forEach(singleValidationMessage -&gt; System.out
+        .println(String.format(&quot; Validation severity %s - Location %s - Message %s&quot;,
+            singleValidationMessage.getSeverity(), singleValidationMessage.getLocationString(),
+            singleValidationMessage.getMessage())));
+</code></pre></div>
+
+<p>Is this a bug?</p>
+
+
+
+<a name="238465355"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/238465355" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#238465355">(May 12 2021 at 12:32)</a>:</h4>
+<p>have you loaded US Core into the validator context?</p>
+
+
+
+<a name="238479453"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/238479453" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Teunissen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#238479453">(May 12 2021 at 14:07)</a>:</h4>
+<p>I guess I didn't.... I'm trying to understand the documentation how to do that, but I am not having much luck.<br>
+Whatever I try it seems to pass, even when I butcher the input json, so I think it is not validating at all anymore.</p>
+<div class="codehilite"><pre><span></span><code>FhirContext ctx = FhirContext.forR4();
+IParser parser = ctx.newJsonParser();
+FhirValidator validator = ctx.newValidator();
+
+String json = ...(see attachment)...;
+
+Provenance p = parser.parseResource(Provenance.class, json);
+
+ValidationResult vr = validator.validateWithResult(p, new ValidationOptions()
+    .addProfile(&quot;https://www.hl7.org/fhir/us/core/StructureDefinition-us-core-provenance.xml&quot;));
+
+vr.getMessages()
+    .forEach(singleValidationMessage -&gt; System.out
+        .println(String.format(&quot; Validation severity %s - Location %s - Message %s&quot;,
+            singleValidationMessage.getSeverity(), singleValidationMessage.getLocationString(),
+            singleValidationMessage.getMessage())));
+</code></pre></div>
+
+<p>Is this the right way to do this? What should be the exact url of the profile?</p>
+
+
+
+<a name="238534113"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/238534113" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Teunissen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#238534113">(May 12 2021 at 19:54)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> <br>
+I have been trying some more and when I register the us-core valueset and codeset myself (after downloading the definitions), I can get rid of the ERROR part. But the way I need to code this seems cumbersome. Is there no easier way to load US Core?</p>
+<div class="codehilite"><pre><span></span><code>    FhirContext ctx = FhirContext.forR4();
+    IParser parser = ctx.newJsonParser();
+    IParser xmlParser = ctx.newXmlParser();
+
+    URL url = new URL(&quot;file:///C:\\git_work\\hapi-test\\src\\test\\resources\\provenance.json&quot;);
+    Path resPath = Paths.get(url.toURI());
+    String json = new String(Files.readAllBytes(resPath), &quot;UTF-8&quot;);
+
+    Provenance p = parser.parseResource(Provenance.class, json);
+
+    ValidationSupportChain supportChain = new ValidationSupportChain();
+
+    supportChain.addValidationSupport(new DefaultProfileValidationSupport(ctx));
+    supportChain.addValidationSupport(new CommonCodeSystemsTerminologyService(ctx));
+    supportChain.addValidationSupport(new InMemoryTerminologyServerValidationSupport(ctx));
+
+    PrePopulatedValidationSupport prePopulatedSupport = new PrePopulatedValidationSupport(ctx);
+
+    URL surl = new URL(&quot;file:///C:\\temp\\StructureDefinition-us-core-provenance.xml&quot;);
+    Path sPath = Paths.get(surl.toURI());
+    String sxml = new String(Files.readAllBytes(sPath), &quot;UTF-8&quot;);
+
+    StructureDefinition sdef = xmlParser.parseResource(StructureDefinition.class, sxml);
+
+    prePopulatedSupport.addStructureDefinition(sdef);
+
+    URL vurl = new URL(&quot;file:///C:\\temp\\ValueSet-us-core-provenance-participant-type.xml&quot;);
+    Path vPath = Paths.get(vurl.toURI());
+    String vxml = new String(Files.readAllBytes(vPath), &quot;UTF-8&quot;);
+
+    ValueSet vs = xmlParser.parseResource(ValueSet.class, vxml);
+
+    prePopulatedSupport.addValueSet(vs);
+
+    URL csurl = new URL(&quot;file:///C:\\temp\\CodeSystem-us-core-provenance-participant-type.xml&quot;);
+    Path csPath = Paths.get(csurl.toURI());
+    String csxml = new String(Files.readAllBytes(csPath), &quot;UTF-8&quot;);
+
+    CodeSystem cs = xmlParser.parseResource(CodeSystem.class, csxml);
+    prePopulatedSupport.addCodeSystem(cs);
+
+    supportChain.addValidationSupport(prePopulatedSupport);
+
+    CachingValidationSupport cache = new CachingValidationSupport(supportChain);
+
+    FhirInstanceValidator validatorModule = new FhirInstanceValidator(cache);
+    FhirValidator validator = ctx.newValidator().registerValidatorModule(validatorModule);
+
+    ValidationResult vr = validator.validateWithResult(p);
+
+    vr.getMessages()
+        .forEach(singleValidationMessage -&gt; System.out
+            .println(String.format(&quot; Validation severity %s - Location %s - Message %s&quot;,
+                singleValidationMessage.getSeverity(), singleValidationMessage.getLocationString(),
+                singleValidationMessage.getMessage())));
+</code></pre></div>
+
+
+
+<a name="238563793"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/238563793" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#238563793">(May 13 2021 at 00:24)</a>:</h4>
+<p>well, I would've expected you to do this by package id and just load all of us core</p>
+
+
+
+<a name="238574227"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/238574227" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Teunissen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#238574227">(May 13 2021 at 03:00)</a>:</h4>
+<p>How would I do that?</p>
+
+
+
+<a name="238760144"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/238760144" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Teunissen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#238760144">(May 14 2021 at 12:42)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span>  How would I load all us-core?</p>
+
+
+
+<a name="238828148"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/238828148" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#238828148">(May 14 2021 at 20:53)</a>:</h4>
+<p><span class="user-mention" data-user-id="248736">@Mark Iantorno</span> ?</p>
+
+
+
+<a name="238842341"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/238842341" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#238842341">(May 14 2021 at 23:22)</a>:</h4>
+<p>Hi, I will look at this over the weekend. I was at the community garden and did not see this.</p>
+
+
+
+<a name="239084304"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/239084304" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#239084304">(May 17 2021 at 13:03)</a>:</h4>
+<p>Hey <span class="user-mention" data-user-id="411247">@Peter Teunissen</span>, sorry for the delay in responding.</p>
+
+
+
+<a name="239084355"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/239084355" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#239084355">(May 17 2021 at 13:03)</a>:</h4>
+<p>(deleted)</p>
+
+
+
+<a name="239084547"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/239084547" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#239084547">(May 17 2021 at 13:05)</a>:</h4>
+<p>(deleted)</p>
+
+
+
+<a name="239084549"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/239084549" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#239084549">(May 17 2021 at 13:05)</a>:</h4>
+<p>(deleted)</p>
+
+
+
+<a name="239084616"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/239084616" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#239084616">(May 17 2021 at 13:05)</a>:</h4>
+<p>(deleted)</p>
+
+
+
+<a name="239084646"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/239084646" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#239084646">(May 17 2021 at 13:05)</a>:</h4>
+<p>(deleted)</p>
+
+
+
+<a name="239084800"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/239084800" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#239084800">(May 17 2021 at 13:06)</a>:</h4>
+<p>I misread your initial message give me a second to figure it out for you</p>
+
+
+
+<a name="239084863"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/239084863" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#239084863">(May 17 2021 at 13:07)</a>:</h4>
+<p>(deleted)</p>
+
+
+
+<a name="239090721"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/239090721" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#239090721">(May 17 2021 at 13:42)</a>:</h4>
+<p>Alright, I would start by looking at these tests here: <a href="https://github.com/hapifhir/hapi-fhir/blob/75c74a22dbd1f0dde3631b540d1898eef2a2666f/hapi-fhir-jpaserver-base/src/test/java/ca/uhn/fhir/jpa/packages/NpmR4Test.java">https://github.com/hapifhir/hapi-fhir/blob/75c74a22dbd1f0dde3631b540d1898eef2a2666f/hapi-fhir-jpaserver-base/src/test/java/ca/uhn/fhir/jpa/packages/NpmR4Test.java</a></p>
+
+
+
+<a name="239090863"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/239090863" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#239090863">(May 17 2021 at 13:42)</a>:</h4>
+<p>Which loads us-core into the package cache using the PackageInstallationSpec class</p>
+
+
+
+<a name="239090957"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/239090957" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#239090957">(May 17 2021 at 13:43)</a>:</h4>
+<p>(deleted)</p>
+
+
+
+<a name="239091250"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/239091250" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#239091250">(May 17 2021 at 13:45)</a>:</h4>
+<p>That is probably the best place to start. I haven't actually run a test with it, but it seems like they have an implemented test there that uses US-Core</p>
+
+
+
+<a name="239091293"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/239091293" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#239091293">(May 17 2021 at 13:46)</a>:</h4>
+<p>Let me know if that helps</p>
+
+
+
+<a name="239128340"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Validator%20against%20us-core%3F/near/239128340" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Teunissen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Validator.20against.20us-core.3F.html#239128340">(May 17 2021 at 17:24)</a>:</h4>
+<p><span class="user-mention" data-user-id="248736">@Mark Iantorno</span>  I will have a look at it.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,92 @@
+[
+    {
+        "content": "<p>Does Shorthand have support for the IG Publisher feature of Binary Adjunct files? <a href=\"https://confluence.hl7.org/pages/viewpage.action?pageId=66938614#ImplementationGuideParameters-BinaryAdjunctFiles\">https://confluence.hl7.org/pages/viewpage.action?pageId=66938614#ImplementationGuideParameters-BinaryAdjunctFiles</a></p>",
+        "id": 240087387,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1621879147
+    },
+    {
+        "content": "<p>Since this is a feature of the IG Publisher, I don't think there is anything special that FSH/SUSHI have to do in that case.  You should be able to use FSH to set the attachment id to any arbitrary string, so setting it to <code>\"ig-loader-[filename]\"</code> should work just fine.  And then the IG Publisher picks it up from there.  Is there something special you would expect (or want) FSH/SUSHI to do here?</p>",
+        "id": 240109386,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1621889138
+    },
+    {
+        "content": "<p>Given where the FSH files are, the processing of them by sushi, where they get stuffed, how the IG json gets written, ... I figured I would ask if there was a similar feature, or if I needed to hack my way to using this without making sushi angry.</p>",
+        "id": 240166453,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1621937626
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span>.  Hopefully there is not too much hacking involved!  I just decided to try this myself and got it working with a CQL library.  To do that, I had to:</p>\n<ol>\n<li>Add the following to my <code>sushi-config.yaml</code> to identify where \"binary\" files can be found:</li>\n</ol>\n<div class=\"codehilite\"><pre><span></span><code>parameters:\n  path-binary: input/cql\n</code></pre></div>\n<ol start=\"2\">\n<li>Create the <code>input/cql</code> folder and put my CQL file in it.  For this test, I used a simple CQL file named <code>HelloWorld.cql</code>:</li>\n</ol>\n<div class=\"codehilite\"><pre><span></span><code>library HelloWorld version &#39;0.1.0&#39;\nusing FHIR version &#39;4.0.1&#39;\n\ndefine Message: &#39;Hello World!&#39;\n</code></pre></div>\n<ol start=\"3\">\n<li>Create the following instance in FSH (I put it in <code>input/fsh/libraries.fsh</code> but any file in <code>input/fsh</code> should do):</li>\n</ol>\n<div class=\"codehilite\"><pre><span></span><code>Instance: HelloWorld\nInstanceOf: Library\n* name = &quot;HelloWorld&quot;\n* url = &quot;http://example.org/Library/HelloWorld&quot;\n* status = #draft\n* type = http://terminology.hl7.org/CodeSystem/library-type#logic-library\n* content.id = &quot;ig-loader-HelloWorld.cql&quot;\n</code></pre></div>\n<p>The key is the line w/ <code>content.id</code>.  I also learned (the hard way) that if you define any other properties under <code>content</code> it will not work.  It must have the <code>id</code> <em>only</em>!</p>\n<ol start=\"4\">\n<li>Run SUSHI to ensure I didn't make any mistakes in the FSH.</li>\n<li>Run <code>_genonce.sh</code> to run the IG Publisher.</li>\n</ol>\n<p>That seemed to do the trick!</p>",
+        "id": 240180681,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1621946599
+    },
+    {
+        "content": "<p><strong>BUT</strong>... I also discovered that there <em>is</em> an issue when attempting to do this w/ the <code>Binary</code> resource.  Since the <code>Binary</code> resource doesn't use <code>Attachment</code>, you must set the special string <code>\"ig-loader-[filename]\"</code> directly on the <code>data</code> element.  When you do this, however, SUSHI issues an error because it knows that <code>data</code> should be a base64-encoded string, and it recognizes that <code>\"ig-loader-[filename]\"</code> is not valid base64 content.  So... we'll need to update SUSHI to support this special case for <code>Binary</code>.</p>",
+        "id": 240181067,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1621946761
+    },
+    {
+        "content": "<p>ill try. I need this alot in the IHE MHD profile for the examples.</p>",
+        "id": 240181722,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1621947063
+    },
+    {
+        "content": "<p>Not sure if this is a similar use case ...  We have our Library resources populated by FSH with:</p>\n<p><code> \"content\": [\n    {\n      \"id\": \"ig-loader-FHIRHelpers.cql\",\n      \"contentType\": \"text/cql\"\n    },\n    {\n      \"id\": \"ig-loader-FHIRHelpers.elm\",\n      \"contentType\": \"application/elm+json\"\n </code>  }</p>\n<p>Then we post-process the FSH-generated Library JSON files to add the base64 versions of the referenced files, both CQL and ELM, and add them as the .data element to each entry in the content[] array.   Because of the naming convention pointed out earlier, and the fact that we know where these cql and elm files are located (relative to the FSH output dirs) we can do this in our scripting.   It would be nice to not have to have a separate post-processing script to do this though.  :-)</p>",
+        "id": 240183367,
+        "sender_full_name": "John Silva",
+        "timestamp": 1621947730
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"298707\">@John Silva</span> -- the binary adjunct loading that John M linked to above should take care of these things for you.  You should not need to maintain your own separate script for that.  Try removing the <code>contentType</code> from the FSH for the libraries (so only <code>id</code> remains) and making sure you've appropriately configured the <code>path-binary</code> parameter to point to wherever you have your CQL (inside the IG folder structure).</p>",
+        "id": 240185144,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1621948546
+    },
+    {
+        "content": "<p>Oh.  Also remove the <code>content</code> entry for the <code>.elm</code>.  You should also get that for free from the IG Publisher.  (And do note, these features are provided by the IG Publisher, not SUSHI).</p>",
+        "id": 240185281,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1621948610
+    },
+    {
+        "content": "<p>I've logged the SUSHI issue w/ the <code>Binary</code> resource as <a href=\"https://github.com/FHIR/sushi/issues/819\">SUSHI #819</a>.</p>",
+        "id": 240189467,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1621950382
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span>  - thanks.  We haven't used the IG Publisher though, only SUSHI.   I'll have to look into this more to figure out how to do this or to let IG Publisher do this for us.   (Our CQL execution logic expects the cql+elm base64 encoded content in the Library resources.)</p>",
+        "id": 240193688,
+        "sender_full_name": "John Silva",
+        "timestamp": 1621952083
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> did you get a contentType working? I understand from Grahame that I need to add the <code>implementationguide-resource-format</code> extension to define these.. but I tried to add that in the sushi-config.yaml but it didn't end up in the fsh-generated IG</p>",
+        "id": 266507118,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1640962035
+    },
+    {
+        "content": "<p>this extension is in the sushi release notes associated with a feature for logical models. (I can't find any other mention of this extension, including in the IG documentation)</p>",
+        "id": 266507212,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1640962177
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span> - no, I did not get it working, but I had not tried it any further after that discussion with you.  If you define an extension in the <code>sushi-config.yaml</code>, it <em>should</em> go through to the fsh-generated IG JSON.  I'll have to take a look.</p>",
+        "id": 266692645,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1641220664
+    },
+    {
+        "content": "<p>okay. No hurry. It does fully work fine with DocumentReference, just not with Binary. I think the Binary is the one that needs the extension, but I am not sure.</p>",
+        "id": 266692857,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1641220797
+    }
+]

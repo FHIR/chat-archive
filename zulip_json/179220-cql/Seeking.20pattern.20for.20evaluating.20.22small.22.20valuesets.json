@@ -1,0 +1,146 @@
+[
+    {
+        "content": "<p>Looking for the best practice on how to write an expression such as </p>\n<div class=\"codehilite\"><pre><span></span><code>define &quot;Get Condition from Code Declaration&quot;:\n   [Condition: &quot;Acute Pharyngitis Code&quot;] C where clinicalStatus in &quot;Active and Recurrence and Relapse VS&quot;\n</code></pre></div>\n<p>I don't want to create an external value set  <code>Active and Recurrence and Relapse VS</code>. Seems like overkill .  Is there a better way to write the expression, perhaps using FHIR.ToConcept and checking for membership in a list of Concepts?</p>",
+        "id": 232966755,
+        "sender_full_name": "Aziz Boxwala",
+        "timestamp": 1617408975
+    },
+    {
+        "content": "<p>As I was typing my post, one of my team-mates, provided this solution:</p>\n<div class=\"codehilite\"><pre><span></span><code>codesystem ConditionClinical: &#39;http://terminology.hl7.org/CodeSystem/condition-clinical&#39;\ncode &quot;Active Status&quot; : &#39;active&#39; from ConditionClinical display &#39;Active&#39;\ncode &quot;Recurrent Status&quot;: &#39;recurrence&#39; from ConditionClinical display &#39;Recurrence&#39;\ncode &quot;Relapse Status&quot;: &#39;relapse&#39; from ConditionClinical display &#39;Relapse&#39;\ncontext Patient\ndefine HasAsthma:\n    exists ([Condition: code in &quot;Asthma&quot;] C  where\n       ( (C.clinicalStatus ~ &quot;Active Status&quot;) or\n        (C.clinicalStatus ~ &quot;Recurrent Status&quot;) or\n        (C.clinicalStatus ~ &quot;Relapse Status&quot;) ) )\n</code></pre></div>\n<p>Any feedback on this is welcome too.</p>",
+        "id": 232967106,
+        "sender_full_name": "Aziz Boxwala",
+        "timestamp": 1617409427
+    },
+    {
+        "content": "<p>The logic approach works, clearly, but ultimately a value set may be more maintainable and readable. Especially if all three statuses should be checked when detecting any active condition, which seems like is probably the case.</p>",
+        "id": 233173959,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1617630586
+    },
+    {
+        "content": "<p>I'll note that it's tempting to use <code>in</code> for this (e.g., <code>code in {Code1, Code2, Code3}</code>) but this doesn't really work correctly since <code>in</code> is defined to use <em>equality</em> semantics, which would require code to be <em>exact</em> matches (including display).  So you're stuck with creating a VS or using <code>or</code>.  If you need it in multiple places, you could extract the <code>or</code> into a function though:</p>\n<div class=\"codehilite\"><pre><span></span><code>define HasAsthma:\n    exists ([Condition: code in &quot;Asthma&quot;] C  where IsActiveOrRecurring(C))\n\ndefine function IsActiveOrRecurring(C Condition):\n    C.clinicalStatus ~ &quot;Active Status&quot; or\n    C.clinicalStatus ~ &quot;Recurrent Status&quot; or\n    C.clinicalStatus ~ &quot;Relapse Status&quot;\n</code></pre></div>",
+        "id": 233331450,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1617720633
+    },
+    {
+        "content": "<p>Yes, that's true, and to that end, I've put together some simple value sets in the CQF Common IG: <a href=\"http://build.fhir.org/ig/cqframework/cqf/artifacts.html\">http://build.fhir.org/ig/cqframework/cqf/artifacts.html</a></p>",
+        "id": 233352555,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1617727607
+    },
+    {
+        "content": "<p>Which reminds me Chris, I know there is a CDS Connect Commons, should we try to align these two \"Common\" libraries: <a href=\"http://build.fhir.org/ig/cqframework/cqf/Library-FHIRCommon.html\">http://build.fhir.org/ig/cqframework/cqf/Library-FHIRCommon.html</a></p>",
+        "id": 233352669,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1617727660
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> -- it's probably worth at least reviewing them to see if it makes sense.  One thing about CDS Connect Commons is that it is also used by the CDS Authoring Tool and fairly tightly coupled to it; so I always need to keep that in mind as I consider changes to CDS Connect Commons.</p>",
+        "id": 233363626,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1617732595
+    },
+    {
+        "content": "<p>That makes sense, what process would be best to follow? I'm happy to submit an issue on the CQF Common repository github if that makes sense, but if there's a process supported by CDS Connect, happy to use that as well.</p>",
+        "id": 233364342,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1617732885
+    },
+    {
+        "content": "<p>In the Java engine, a filtered retrieve (e.g. <code>[Condition: MyValueSet]</code>) is likely going to perform better than a retrieve that is filtered using the CQL \"in\" operator (e.g. <code>[Condition] c where c.code in MyValueSet</code>) since the RestFhirRetrieveProvider knows how to pass the filter along to the FHIR server via the <code>:in</code> modifier where the CQL <code>in</code> operator does not. It isn't directly relevant to the OP question about filtering based off clinicalStatus, but I thought it worth mentioning that not all code paths perform the same right now and it is best practice to use \"primary code path\" filters wherever possible.</p>",
+        "id": 233377852,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1617738582
+    },
+    {
+        "content": "<p>That's actually one of the cases where were looking at optimizing the ELM that the cql-translator produces . <code>[Condition] c where c.code in MyValueSet</code> could be emitted as an ELM Retrieve with the codePath set to <code>code</code> as opposed to a filter after the fact.</p>",
+        "id": 233380805,
+        "sender_full_name": "JP",
+        "timestamp": 1617739813
+    },
+    {
+        "content": "<p>(In principle all ELM engines, not just the Java one, would benefit from that optimization)</p>",
+        "id": 233380976,
+        "sender_full_name": "JP",
+        "timestamp": 1617739921
+    },
+    {
+        "content": "<p>Do any of the popular commercial vendors actually support the <code>:in</code> modifier in their FHIR interfaces?  Or is this an optimization that currently only works against some of the open source FHIR servers like HAPI?</p>",
+        "id": 233395463,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1617745287
+    },
+    {
+        "content": "<p>Our experience has been the latter, and so we are currently working on having the planning step take the target system's capability statement into account to determine whether the value set should use the :in modifier, or if it should be in-lined.</p>",
+        "id": 233395687,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1617745407
+    },
+    {
+        "content": "<p>Can a valueset be defined as a literal in CQL? Can be useful for such cases. It may not be practical to have these valuesets be hosted in many a terminology server.</p>",
+        "id": 233415386,
+        "sender_full_name": "Aziz Boxwala",
+        "timestamp": 1617757777
+    },
+    {
+        "content": "<p>I am working with IBM FHIR. It does not currently support the \":in\" modifier, but support is coming in the next release.</p>",
+        "id": 233492738,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1617804153
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"195129\">@Aziz Boxwala</span> CQL has a language feature <code>concept</code> that is similar to an inline value set. You can read about it <a href=\"https://cql.hl7.org/02-authorsguide.html#concept\">here</a>.</p>",
+        "id": 233493298,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1617804342
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"341334\">@Corey Sanders</span> . <code>concept</code> appears to be equivalent to <code>CodeableConcept</code>. Could we use it as a <code>Valueset</code>?</p>",
+        "id": 233494430,
+        "sender_full_name": "Aziz Boxwala",
+        "timestamp": 1617804722
+    },
+    {
+        "content": "<p>You really shouldn't use it that way.  Note that <a href=\"https://cql.hl7.org/02-authorsguide.html#concept\">CQL section 4.2.4</a> explicitly states:</p>\n<blockquote>\n<p>Note that the semantics of Concept are such that the codes within a given concept should all be semantically equivalent at the code level, but CQL itself will make no attempt to ensure that is the case. <strong>Concepts should never be used as a surrogate for proper valueset definition.</strong></p>\n</blockquote>",
+        "id": 233494951,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1617804909
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span>  Related to the \":in\" modifier and availability in FHIR servers, I'd love to be able to use the CapabilityStatement to determine whether that is there or not, but my experience with HAPI and IBM FHIR servers is that it isn't clearly spelled out in the metadata. Taking the Condition resource as an example, <a href=\"http://hapi.fhir.org/baseR4/metadata\">HAPI</a> provides <code>\"definition\": \"http://hapi.fhir.org/baseR4/Condition-code\"</code> for the code search parameter, but it doesn't host that resource at that location, so you can't dig in for further detail. IBM FHIR doesn't even provide the definition attribute. I ended up just hard-wiring the Java engine to expand value sets in the term provider vs. letting it try use the \":in\" modifier. The <a href=\"https://github.com/DBCG/cql_engine/blob/8a11ef270d9f54b74d9996441ce76572fe1374ef/engine/src/main/java/org/opencds/cqf/cql/engine/retrieve/TerminologyAwareRetrieveProvider.java#L13\">default behavior of the RestFhirRetrieveProvider</a>, though, is to try to use the \":in\" modifier (e.g. not expand value sets).</p>",
+        "id": 233495367,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1617805057
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span>  another challenge with using the \":in\" operator is how the FHIR server resolves the valueset. Should we expect that the FHIR server will have every valueset that I want to use in my CQL expression? Or should it resolve to the URL of the valueset (which is not necessarily a physical address)?</p>",
+        "id": 233495879,
+        "sender_full_name": "Aziz Boxwala",
+        "timestamp": 1617805220
+    },
+    {
+        "content": "<p>That is definitely a challenge if the server doesn't advertise it's search parameter modifier support, sounds like we will need to be able to override that definition in some cases.</p>",
+        "id": 233505595,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1617808010
+    },
+    {
+        "content": "<p>As far as versioning of value sets, we are working on an \"artifact manifest\" definition:<br>\n<a href=\"http://build.fhir.org/ig/HL7/cqf-measures/measure-terminology-service.html\">http://build.fhir.org/ig/HL7/cqf-measures/measure-terminology-service.html</a></p>",
+        "id": 233506017,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1617808103
+    },
+    {
+        "content": "<p>That would you allow you to author artifacts without references to value set versions, but then deploy artifacts that would be specifically bound to particular versions of code systems and value sets. The $package operation would let you build bundles that contain all the required dependencies and deploy those to a target system.</p>",
+        "id": 233506366,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1617808182
+    },
+    {
+        "content": "<p>Though it's not yet supported by hapi AFAIK, the <code>TerminologyCapabilities</code> resource is where that could be advertised:</p>\n<p><a href=\"http://www.hl7.org/fhir/terminologycapabilities.html\">http://www.hl7.org/fhir/terminologycapabilities.html</a></p>\n<p>The cql-engine actually handles that with a property called <code>isExpandValueSets</code> that is set depending on whether or not it's known that the ValueSets and clinical data resources are co-located on the same server:</p>\n<p><a href=\"https://github.com/DBCG/cql_engine/blob/8a11ef270d9f54b74d9996441ce76572fe1374ef/engine.fhir/src/main/java/org/opencds/cqf/cql/engine/fhir/retrieve/SearchParamFhirRetrieveProvider.java#L155\">https://github.com/DBCG/cql_engine/blob/8a11ef270d9f54b74d9996441ce76572fe1374ef/engine.fhir/src/main/java/org/opencds/cqf/cql/engine/fhir/retrieve/SearchParamFhirRetrieveProvider.java#L155</a></p>",
+        "id": 233535735,
+        "sender_full_name": "JP",
+        "timestamp": 1617818749
+    }
+]

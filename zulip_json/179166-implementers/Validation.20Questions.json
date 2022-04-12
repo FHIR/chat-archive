@@ -1,0 +1,56 @@
+[
+    {
+        "content": "<p>Hi y'all, I'm new to FHIR and am currently looking into using the FHIR validator in a process. My issue is that running (what I think is) the same validation using the ValidationEngine vs using the command line jar gives me two different results.</p>\n<p>For context, I want to validate: </p>\n<ul>\n<li>this resource - <a href=\"https://www.hl7.org/fhir/us/core/Patient-example.html\">https://www.hl7.org/fhir/us/core/Patient-example.html</a>  (downloaded as an XML file)</li>\n<li>against - <a href=\"https://www.hl7.org/fhir/us/core/index.html\">https://www.hl7.org/fhir/us/core/index.html</a> </li>\n</ul>\n<p>I'm using the ValidationEngine like so (validating against r4 base spec, so want to use that as an IG):</p>\n<div class=\"codehilite\"><pre><span></span><code>           ValidationEngine validator = null;\n           try {\n               validator = new ValidationEngine(&quot;hl7.fhir.r4.core&quot;);\n               validator.connectToTSServer(&quot;http://tx.fhir.org&quot;, null, FhirPublication.fromCode(&quot;4.0&quot;));\n               validator.loadIg(&quot;hl7.fhir.r4.core&quot;, true);\n               OperationOutcome o = validator.validate(Manager.FhirFormat.XML, this.getClass().getClassLoader().getResourceAsStream(&quot;fhir-us-core/patient/validResource.xml&quot;), null);\n               List&lt;OperationOutcome.OperationOutcomeIssueComponent&gt; issues = o.getIssue();\n               issues.forEach((issue) -&gt; {\n                   if (issue.getSeverity() == OperationOutcome.IssueSeverity.ERROR || issue.getSeverity() == OperationOutcome.IssueSeverity.FATAL) {\n                         System.out.println(issue.getDetails().getText());\n                   }\n               });\n           } catch (IOException | URISyntaxException | EOperationOutcome e) {\n               e.printStackTrace();\n           }\n\n           ....\n</code></pre></div>\n\n\n<p>This is an error that gets outputted: \"URL value '<a href=\"http://hospital.smarthealthit.org\">http://hospital.smarthealthit.org</a>' does not resolve \"   </p>\n<p>However it seems to work, with an Informational \"ALL OK\" message when I run the following in my terminal: java -jar /path/to/validator_cli.jar path/to/valid/patientResource.xml -version 4.0 -ig <a href=\"http://hl7.org/fhir/us/core/\">http://hl7.org/fhir/us/core/</a></p>",
+        "id": 214119456,
+        "sender_full_name": "Raghav Rajagopalan",
+        "timestamp": 1603317163
+    },
+    {
+        "content": "<p>this may not be your root issue here but I notice that your terminal command points to the -ig <a href=\"http://hl7.org/fhir/us/core/\">http://hl7.org/fhir/us/core/</a> but your code uses validator.loadIg(\"hl7.fhir.r4.core\", true); <br>\nIf I'm reading this right you are validating against US Core in the terminal but against base FHIR core in the code block. I'm not sure what the package name for us-core is but I'd try using that first.</p>\n<p>and the next question I'd ask if that doesn't work is, what level of error are you seeing in the operationoutcome? is it an error, warning, or informational. I'm not sure but what might be happening is some of the low-severity warning/informationals may be hidden from the terminal call without a specific flag set</p>",
+        "id": 214127377,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1603322914
+    },
+    {
+        "content": "<p>Thanks for your response!</p>\n<p>Sorry the IG I put in the code block was a typo - I did mean to use \"<a href=\"http://hl7.org/fhir/us/core/\">http://hl7.org/fhir/us/core/</a>\" in both places, and when I do that the level of error for the message is either Fatal or Error - whereas the running it in the CLI has no errors or warning level messages.</p>",
+        "id": 214128363,
+        "sender_full_name": "Raghav Rajagopalan",
+        "timestamp": 1603323790
+    },
+    {
+        "content": "<p>it looks to me like you should investigate the validator settings - for instance, validation options relating to unknown references</p>",
+        "id": 214132204,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1603327286
+    },
+    {
+        "content": "<p>Hmm not sure how to allow it to not worry about URLs it can't resolve without changing the resource file itself.</p>\n<p>For reference, the resolveURL code in <a href=\"https://github.com/hapifhir/org.hl7.fhir.core/blob/master/org.hl7.fhir.validation/src/main/java/org/hl7/fhir/validation/ValidationEngine.java#L1763\">https://github.com/hapifhir/org.hl7.fhir.core/blob/master/org.hl7.fhir.validation/src/main/java/org/hl7/fhir/validation/ValidationEngine.java#L1763</a> seems to consider URLs that don't begin with \"http://\" or \"https://\" as valid . </p>\n<p>If it helps, the URL that fails doesn't seem to point to anything now (<a href=\"http://hospital.smarthealthit.org\">http://hospital.smarthealthit.org</a>), so that could be an issue with the example patient resource.</p>",
+        "id": 214231355,
+        "sender_full_name": "Raghav Rajagopalan",
+        "timestamp": 1603392580
+    },
+    {
+        "content": "<p>have you implemented IValidatorResourceFetcher ?</p>",
+        "id": 214247275,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1603400274
+    },
+    {
+        "content": "<p>No, ValidationEngine implements it, and since the CLI was calling it under the hood I was assuming I was doing something wrong there. Can definitely implement it and be less strict when resolving URLs if that's the best course.</p>\n<p>Would using ValidationEngine the same way the CLI does via ValidationService (like <a href=\"https://github.com/hapifhir/org.hl7.fhir.core/blob/master/org.hl7.fhir.validation/src/main/java/org/hl7/fhir/validation/ValidatorCli.java#L159\">https://github.com/hapifhir/org.hl7.fhir.core/blob/master/org.hl7.fhir.validation/src/main/java/org/hl7/fhir/validation/ValidatorCli.java#L159</a>) be a better way to go about that.</p>\n<p>Are there usage examples or documentation surrounding ValidationEngine besides the comments in the file?</p>",
+        "id": 214249939,
+        "sender_full_name": "Raghav Rajagopalan",
+        "timestamp": 1603401817
+    },
+    {
+        "content": "<p>no the code and comments are what you have.</p>",
+        "id": 214259661,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1603409354
+    },
+    {
+        "content": "<p>I think I may have figured it out! - If InstanceValidator cannot resolve the URL, it tries using a fetcher's (if non null)  resolveURL. By default, the fetcher is null. ValidationService initializes a fetcher (StandAloneValidatorFetcher) and that fetcher is able to resolve the URL. </p>\n<p>When using ValidationEngine and setting the fetcher to the StandAloneValidatorFetcher, the URL is able to be resolved.</p>",
+        "id": 214328951,
+        "sender_full_name": "Raghav Rajagopalan",
+        "timestamp": 1603467458
+    }
+]

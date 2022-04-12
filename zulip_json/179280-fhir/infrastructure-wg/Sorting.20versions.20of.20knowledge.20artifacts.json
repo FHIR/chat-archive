@@ -1,0 +1,98 @@
+[
+    {
+        "content": "<p>Knowledge resources are identified by their cannonical <em>url</em> and the <em>version</em>. The specification states that when the <em>version</em>is not specified, the \"most recent\" version should be used. The specification does not specify how to order the versions.<br>\nThis topic is related to the topic raised in <a href=\"https://jira.hl7.org/browse/FHIR-26370\">https://jira.hl7.org/browse/FHIR-26370</a>. Which was discussed in the FHIR-i telco of 2022-01-10, in which a possible solution was proposed on which we would like to receive feedback.</p>\n<p>FHIR versions use semantic versioning (<a href=\"http://hl7.org/fhir/r4/versions.html#versions\">http://hl7.org/fhir/r4/versions.html#versions</a>) to identify the version of the specification.<br>\nThis would work as well for knowledge resources such as ValueSets, CodeSystems, PlanDefinitions, .... Mandating this would be tricky as some parties are likely to use other versioning mechanisms such as: string sort, numbers, dates, ...</p>\n<p>Yet without knowledge of the sorting algorithm to use, the most recent version cannot be found.</p>\n<p>I propose that we resolve this issues in the following manner:</p>\n<p>Knowledge artifacts will use semantic versioning for their version numbers unless a different algorithm is specified using an extension. </p>\n<p>An initial proposal for such extension could be:</p>\n<p><strong>Extension:</strong> SortAlgorithmExtension<br>\n<strong>Id:</strong> sort-algorithm<br>\n<strong>Title:</strong> Sorting Algorithm Extension<br>\n<strong>Description:</strong> \"\"\"<br>\nThis extension defines the algorithm to be used to determine the most recent version of a knowledge artifact. The algorithm indicates in what manner the version of this knowledge artifact can be compared to previous versions.<br>\nFor default algoritihms, a default set of values have been defined. More advanced use cases can use an fhirpath expression.</p>\n<p>In the case the fhirpath expression is used, the context will be knowledge artifact holding, the extension. The variable %previousVersion refers to the version it is compared to. The FHIRpath expression SHALL evaluate to a boolean. The value true indicates the version of the ValueSet holding the extension is more recent than the ValueSet it compares to.<br>\n\"\"\"</p>\n<ul>\n<li>value[x] only Coding or string</li>\n<li>valueCoding from SortingAlgorithms (extensible)</li>\n</ul>\n<p><strong>ValueSet:</strong> SortingAlgorithms<br>\n<strong>Title:</strong> \"Sorting Algorithms\"<br>\n<strong>Description:</strong> \"Algorithms used for sorting versions\"</p>\n<ul>\n<li>$HL7#integer \"Value represents an integer version.\"</li>\n<li>$HL7#date    \"Value represents an ISO8601 date.\"</li>\n<li>$HL7#string  \"Value represents a string and string sort should be used to order them.\"</li>\n<li>$HL7#integer \"Value represents an integer version.\"</li>\n</ul>",
+        "id": 267550454,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1641889840
+    },
+    {
+        "content": "<p>integer is listed twice?  We should also clarify string sort, as there are multiple string sorting algorithms (e.g. how are accented characters or upper and lower case ordered).   Date should also allow for partial date.  E.g. YYYY or YYYY-MM, but we might want to dictate that different schemes can't intermix.  E.g. you can't use both YYYY-MM and YYYY-DDD or YYYY-MM-DD and YYYYMMDD (all of which are valid 8601 syntaxes)</p>\n<p>Even HL7 is sort of moving away from SEMVER.  We're going to be moving to something like 5.1.0-ballot1 and 5.1.0-draft.  The 'sort' order of those is going to get messy...</p>",
+        "id": 267589674,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1641911807
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179280-fhir.2Finfrastructure-wg/topic/Sorting.20versions.20of.20knowledge.20artifacts/near/267589674\">said</a>:</p>\n<blockquote>\n<p>Even HL7 is sort of moving away from SEMVER.  We're going to be moving to something like 5.1.0-ballot1 and 5.1.0-draft.  The 'sort' order of those is going to get messy...</p>\n</blockquote>\n<p>Actually, I think HL7 is moving <em>closer</em> to SEMVER, as this approach (adding a <code>-label</code> at the end) <em>is</em> the SEMVER way of doing pre-releases (as opposed to what HL7 was doing before, which violated SEMVER).  See: <a href=\"https://semver.org/#spec-item-9\">https://semver.org/#spec-item-9</a>.</p>\n<p>The SEMVER spec does indicate how sorting should happen with pre-releases.  See step 11 <a href=\"https://semver.org/#semantic-versioning-specification-semver\">here</a>.  Now... we've chosen non-standard prerelease identifiers, so... you're right -- sorting might still be messy unless it just sort of works out by chance.</p>",
+        "id": 267591344,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1641912454
+    },
+    {
+        "content": "<p>We haven't talked about what our labels will be, so I guess we could theoretically avoid messing it up...</p>",
+        "id": 267592841,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1641913050
+    },
+    {
+        "content": "<p>I notice that the tracker for the operation to request for this passed (good) but still need answer to this to evaluate.<br>\nI like the valueset proposed.<br>\nAnd wonder where this extension would live, and what would happen if the extension value was different in different versions?</p>",
+        "id": 268778788,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1642725153
+    },
+    {
+        "content": "<p>If it's different in different versions, then I'd probably return an error.  Extension could live at the root or on version.  Preferences?</p>",
+        "id": 268782681,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1642727537
+    },
+    {
+        "content": "<p>Still no detail on how to call the API and request to resolve the latest resource, the disposition only covers the data to store about the algorithm, not how to call it.<br>\nI'm not a fan of the proposal in the tracker, do we need to log another tracker, or is there another already there?<br>\nI like the idea of an operation for this e.g.<br>\n<code>[base]/ValueSet/$resolve?url=http://hl7.org/fhir/ValueSet/marital-status&amp;version=4.0.1&amp;mode=exact&amp;status=active,retired</code><br>\nwhere mode could be exact, exactOrCurrent, current, <br>\nversion is optional<br>\nstatus is optional and provides a list of statuses to consider</p>",
+        "id": 269053701,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1642991241
+    },
+    {
+        "content": "<p>If you have version, no need to call an operation - just do a search...</p>",
+        "id": 269054303,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1642991981
+    },
+    {
+        "content": "<p>Don't understand the purpose of mode=exact.</p>",
+        "id": 269054351,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1642992006
+    },
+    {
+        "content": "<p>Searching doesn't help you find the most recent, and doesn't consider statuses in a predictable way.</p>",
+        "id": 269054574,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1642992392
+    },
+    {
+        "content": "<p>And we'd need to change the version search parameter to something different, there is nothing in search-token about text values and modifiers.</p>",
+        "id": 269054672,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1642992520
+    },
+    {
+        "content": "<p>If you're specifying a version, you're not going to find the most recent.<br>\nMy expectation was <code>[base]/ValueSet/$most-recent?url=http//hl7.org/fhir/ValueSet/marital-status&amp;status=active,retired</code>.  I don't see a need for other parameters.  Response would either be a ValueSet instance or an OperationOutcome.</p>",
+        "id": 269054754,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1642992637
+    },
+    {
+        "content": "<p>I didn't see anything about a $most-recent anywhere, have I missed something?</p>",
+        "id": 269054779,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1642992711
+    },
+    {
+        "content": "<p>Actually, I guess the proposed name is $current-canonical.  <a href=\"http://jira.hl7.org/browse/FHIR-35834\">FHIR#35834</a></p>",
+        "id": 269054885,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1642992842
+    },
+    {
+        "content": "<p>Thanks, that's what I was missing, looks ok to me.</p>",
+        "id": 269055032,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1642993074
+    },
+    {
+        "content": "<p>So all resolved and I can implement that and try things out.<br>\nThanks</p>",
+        "id": 269055089,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1642993112
+    }
+]

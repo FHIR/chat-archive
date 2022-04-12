@@ -1,0 +1,140 @@
+[
+    {
+        "content": "<p>How do people perform transactions with very large bundles?  I have data which is reaching into the 10s-100s of gigs, which simply just won't fit into a single bundle, it is however all interdependent, and significantly complex enough that it's non trivial to split into smaller bundles.  How do I upload all this data to a hapi server in a single transaction?</p>\n<p>In a previous system, it was all based on sql, so we could just open a connection, start a transaction, then stream it into the database in whatever sizes where necessary.</p>",
+        "id": 153876193,
+        "sender_full_name": "Andrew Broadbent",
+        "timestamp": 1489416509
+    },
+    {
+        "content": "<p>seems you have a need beyond the scope of hapi. I might though suggest that it is also beyond the scope of the server... You have not provided any hint as to why you need to put so much data into one transaction. Seems you should reassess your transaction. You might be right, but you might be overly stuck in a previous paradigm. </p>",
+        "id": 153876199,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1489417830
+    },
+    {
+        "content": "<p>Ok to give some context: our system consumes csv files, with mappings about how to transform a row of data into one or more fhir objects, those fhir objects can reference one another, and to take advantage of automatic resource reference hookup, they all need to be in the same bundle.</p>\n<p>I have no control over how wide the csv table is, so problem number one is that I need a way of either putting an indefinite number of resources in a single bundle, or I need a way of buffering that bundle to a fhir database.</p>\n<p>The second problem is that; from a user perspective, the csv file is the atomic unit in our system, if one resource generated from the whole file fails, then the whole files fails.  There doesn't seem to be a way to make a transaction span over multiple bundles, so I'm not really sure how I'm supposed to do this.</p>",
+        "id": 153876200,
+        "sender_full_name": "Andrew Broadbent",
+        "timestamp": 1489418265
+    },
+    {
+        "content": "<p>That is similar to what I expected. So, is there a way to change the existing expectation of infinite CSV file? or the transaction nature? These seem to be the root of your current problem, and seem like the most un-natural ... I don't expect a positive answer, just pushing back on deign expectations from the past being applied to a new paradigm. </p>",
+        "id": 153876201,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1489419066
+    },
+    {
+        "content": "<p>There is some leeway to push back on expectations however; it is research data, so everything is collected post humorously and submitted in one go.  From a user experience perspective it's a bit rubbish to say that they have to split up there files to contain a small number of rows.  More what I can't understand is why fhir doesn't specify something like this?  I know it's more complicated to implement than single request transactions, but it seems like pretty important functionality for any form of database, as I don't think you can ever get away from the fact that networks of interlinked resources are arbitrarily sized.</p>",
+        "id": 153876203,
+        "sender_full_name": "Andrew Broadbent",
+        "timestamp": 1489419877
+    },
+    {
+        "content": "<p>Andrew, FHIR has not put any limits on the size of a Transaction. HAPI is a reference implementation, not the same thing as the FHIR specification. http is perfectly capable of streaming infinite sized transactions. I do however expect toolkits, reference implementations, and realistic servers to apply some reasonability to the expectation.  That said, you can also impose design criteria.  I just would not expect an off-the-shelf reference implementation to be able to hold infinite transaction for infinite parallel requests infinitely. The cloud is amazing able to scale, but not truly infinite.</p>",
+        "id": 153876212,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1489420397
+    },
+    {
+        "content": "<p>It sounds like you're doing an ETL task via REST or messaging. You might need to look at writing your own persistence layer for HAPI, so you can go directly to the database. I've done this but it takes longer to do.</p>",
+        "id": 153876213,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1489420557
+    },
+    {
+        "content": "<p>Hey Kevin, that is correct.  I'm currently bound by the maximum size of a http request (which if I'm honest, I'm not sure if that is fixed or configurable).  My worry is that I will have to bundle all my resources into a single request, which means no matter how large that limit is, at some point in time, it will be hit.  I'm guessing using my own persistence layer will be the way to go.  In our previous implementation, we had our own proprietary storage based on SQL, so we could just open a connection, make several updates, then have them all commit when the transaction was completed.  I was just trying to find out if there was an equivalent in hapi/fhir</p>",
+        "id": 153876216,
+        "sender_full_name": "Andrew Broadbent",
+        "timestamp": 1489420829
+    },
+    {
+        "content": "<p>Generally the max size of an HTTP request is configured in the underlying servlet engine (eg tomcat)</p>",
+        "id": 153876328,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1489442755
+    },
+    {
+        "content": "<p>But isn't it still going to be a problem that you can't split your transaction into smaller chunks?  You will always hit a limit at some point in time.</p>",
+        "id": 153876562,
+        "sender_full_name": "Andrew Broadbent",
+        "timestamp": 1489489387
+    },
+    {
+        "content": "<p>You're likely to need to worry about a transaction size limit too.<br>\nBut you should be able to handle the transation directly at the Servlet level (rather than with a HAPI provider) and feed the stream directly from the HttpServletRequest object into the parser's parseResource(Reader) method.<br>\nOut of interest, how big is your Bundle?</p>",
+        "id": 153876576,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1489497699
+    },
+    {
+        "content": "<p>For the example file that I've been given, a 15MB csv file produces about 1.5GB of xml data.</p>",
+        "id": 153876612,
+        "sender_full_name": "Andrew Broadbent",
+        "timestamp": 1489502630
+    },
+    {
+        "content": "<p>That's going to consume quite a lot of server memeory and processing time.<br>\nIncluding the validation that's going to occur on that data.</p>",
+        "id": 153876702,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1489523740
+    },
+    {
+        "content": "<p>To process a large bundle, it might be interesting if the server could persist the bundle to a staging area (e.g. local disk), and then use a streaming API to work its way through the bundle instead of attempting to pull the entire bundle into memory at once.</p>",
+        "id": 153876731,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1489529039
+    },
+    {
+        "content": "<p>Step 1, dont use XML :)  Seriously, you're going to need to ensure that the FHIR parsing library uses a streaming parser for XML of that size.</p>",
+        "id": 153876789,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1489543210
+    },
+    {
+        "content": "<p>this is really out past where we conceived of FHIR going. So there's no good answers I can think of</p>",
+        "id": 153877407,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1489658920
+    },
+    {
+        "content": "<p>Seems best to define it as an operation. In this way you can stream as much as you need to, until the server complains of unprocessed buffer space consumed. I don't think it is a 80% need, certainly not an 80% being widely used today.</p>",
+        "id": 153877444,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1489665496
+    },
+    {
+        "content": "<p>There is an apparent \"opportunity\" to improve the mechanism for loading a large external code system via FHIR.  For example, I have a code system with about 400,000 concepts.  To load a bundle containing this code system into a HAPI server, I had to increase the Java heap size to 2g.  I think the large memory footprint is related to the way FHIR defines a CodeSystem, including all its concepts, as an atomic resource.  HAPI's current workaround for dealing with large external code systems is to implement a custom loader that circumvents FHIR and interacts directly with HAPI's back-end database.</p>",
+        "id": 153877489,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1489677509
+    },
+    {
+        "content": "<p>yes, the CodeSystem resource was never intended to scale up like that. I am amazed you got it to work at all; a general purpose format that's good for all sorts of things will never be as efficient as a specific tailored format, and 400k rows makes for a big difference</p>",
+        "id": 153877520,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1489690359
+    },
+    {
+        "content": "<p>It's a pretty good stress test for the server.  :)</p>",
+        "id": 153877580,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1489710061
+    },
+    {
+        "content": "<p>I've been tesing mine with a 88k concept one, particularly the dotnet validator. Found some performane improvements too.</p>",
+        "id": 153877969,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1489826645
+    },
+    {
+        "content": "<p>(Good thing my server also supports compressed request and response)</p>",
+        "id": 153877970,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1489826682
+    },
+    {
+        "content": "<p>Very very interesting problem domain.  We fought this battle (and kind of reached a detante) on Mirth Results when we added the REST API a couple years back.  Interestingly (or not, haha) our first non-Mirth proprietary API was making Results a Smart container (pre FHIR).  We didn't hit this issue at that point mainly due to the narrow-ish focus of the API implemented at that time.  It was the transactional boundries that were the tricky part, as I recall, and the implicit 'all or nothing' contract that the call was to preserve (say loading an entire code system...).  Anyways, fun to see folks grappling with this issue :)</p>",
+        "id": 153878013,
+        "sender_full_name": "Gary Teichrow",
+        "timestamp": 1489865413
+    }
+]

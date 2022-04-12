@@ -1,0 +1,89 @@
+---
+layout: page
+title: "FHIR Chat  · &#x27;Inline extensions should only be defined in Extensions.&#x27; · shorthand"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/index.html">shorthand</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/&#x27;Inline.20extensions.20should.20only.20be.20defined.20in.20Extensions.2E&#x27;.html">&#x27;Inline extensions should only be defined in Extensions.&#x27;</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="260440239"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/%27Inline%20extensions%20should%20only%20be%20defined%20in%20Extensions.%27/near/260440239" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Yannick Börner <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/&#x27;Inline.20extensions.20should.20only.20be.20defined.20in.20Extensions.2E&#x27;.html#260440239">(Nov 05 2021 at 17:48)</a>:</h4>
+<p>I am running into the 'Inline extensions should only be defined in Extensions.' error and can not figure out how to do the following properly: </p>
+<div class="codehilite"><pre><span></span><code>...
+* address ..*
+  * ^slicing.discriminator.type = #pattern
+  * ^slicing.discriminator.path = &quot;$this&quot;
+  * ^slicing.rules = #open
+* address contains
+    Strassenanschrift 0..* and
+    Postfach 0..1
+* address
+  * type 1..
+  * city 1..
+  * postalCode 1..
+  * country 1..
+  * extension ^slicing.discriminator.type = #value
+    * ^slicing.discriminator.path = &quot;url&quot;
+    * ^slicing.rules = #open
+  * extension contains Stadtteil 0..1 MS // -&gt; ERROR
+  * line 1.. MS
+    * extension ^slicing.discriminator.type = #value
+      * ^slicing.discriminator.path = &quot;url&quot;
+      * ^slicing.rules = #open
+* address[Strassenanschrift] only AddressDeBasis
+  * ^patternAddress.type = #both
+  * type = #both (exactly)
+  * line 1.. MS
+    * extension contains
+        Strasse 0..1 MS and // Cardinalities are different here -&gt; ERROR
+        Hausnummer 0..1 MS and // Cardinalities are different here -&gt; ERROR
+        Adresszusatz 0..1 MS and // Cardinalities are different here -&gt; ERROR
+        Postfach 0..0 // Cardinalities are different here -&gt; ERROR
+* address[Postfach] only AddressDeBasis
+  * ^patternAddress.type = #postal
+  * type = #postal (exactly)
+  * line 1.. MS
+    * extension contains
+        Strasse 0..0 and // Cardinalities are different here
+        Hausnummer 0..0 and // Cardinalities are different here
+        Adresszusatz 0..0 and // Cardinalities are different here
+        Postfach 0..1 MS // Cardinalities are different here
+...
+</code></pre></div>
+<p>What I want to achieve is to have different cardinalities for the extension slices within the different address slices but I receive the aforementioned error for the lines I marked above with ERROR. This is the farthest I've gotten but I can't seem to solve the remaining issues. The way I understand this error (and judging by the way it was answered before) would be to define an extension. But would I need two (or even three) in this case and if so, on what level?</p>
+
+
+
+<a name="260450092"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/%27Inline%20extensions%20should%20only%20be%20defined%20in%20Extensions.%27/near/260450092" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> David Pyke <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/&#x27;Inline.20extensions.20should.20only.20be.20defined.20in.20Extensions.2E&#x27;.html#260450092">(Nov 05 2021 at 19:00)</a>:</h4>
+<p>It's telling you that you need to define this as an external extension with inline extensions added, not just inline with inline extensions.  Are you defining this outside of a profile using the Extension definition:<br>
+Extension: <br>
+Id: <br>
+Title: ""<br>
+Description: ""</p>
+
+
+
+<a name="260799523"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/%27Inline%20extensions%20should%20only%20be%20defined%20in%20Extensions.%27/near/260799523" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/&#x27;Inline.20extensions.20should.20only.20be.20defined.20in.20Extensions.2E&#x27;.html#260799523">(Nov 09 2021 at 13:50)</a>:</h4>
+<p>Right, to further elaborate on <span class="user-mention" data-user-id="192587">@David Pyke</span>'s answer, are <code>Stadtteil</code>, <code>Strasse</code>, <code>Hausnummer</code>, <code>Adresszusatz</code>, and <code>Postfach</code> standalone extensions (either defined by you or in a dependency IG)?  If no, then you need to define them first.</p>
+<p>If those are defined as standalone extensions, then you need to change the syntax of how you include them.  When you include extensions into a profile, you need to also provide a local name for them (which becomes the slice name). For example:</p>
+<div class="codehilite"><pre><span></span><code>* extension contains Stadtteil named stadtteil 0..1 MS
+</code></pre></div>
+<p>See: <a href="https://build.fhir.org/ig/HL7/fhir-shorthand/reference.html#contains-rules-for-extensions">https://build.fhir.org/ig/HL7/fhir-shorthand/reference.html#contains-rules-for-extensions</a></p>
+
+
+
+<a name="261121530"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/%27Inline%20extensions%20should%20only%20be%20defined%20in%20Extensions.%27/near/261121530" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Yannick Börner <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/&#x27;Inline.20extensions.20should.20only.20be.20defined.20in.20Extensions.2E&#x27;.html#261121530">(Nov 11 2021 at 11:30)</a>:</h4>
+<p>Thanks <span class="user-mention" data-user-id="191469">@Chris Moesel</span>, that cleared up things quite a lot. Previously, I got slightly confused on how to express these three in shorthand: inline extensions, standalone extensions, inherited slices. However, it is now clear where I need to use which and I was able to solve all errors, thank you!</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

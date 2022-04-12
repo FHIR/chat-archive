@@ -1,0 +1,236 @@
+[
+    {
+        "content": "<p>Am I mistaken to believe that Displays in a ValueSet are supposed to show in the expansion as first priority over the CodeSystem display? In two different implementations I've tested ValueSet expansion I have not observed the behavior I was expecting. If you go here: <a href=\"http://clinfhir.com/valuesetCreator.html\" target=\"_blank\" title=\"http://clinfhir.com/valuesetCreator.html\">http://clinfhir.com/valuesetCreator.html</a> and search for <code>mfOverride</code> and expand the valueset it shows Male and Female when it should show Girl and Boy. (This terminology server is Ontoserver). When the server expands it is using the CodeSystem display and not the ValueSet display.<br>\nI've also observed the same behavior in hapi fhir server (although inconsistent, this only happens with uploaded codesystems, not manually created ones - which do exhibit the behavior I expect). So it seems like I am misunderstanding, or it is really just implemented incorrectly in multiple projects.</p>\n<p>I was under the impression ValueSet display overrides the CodeSystem display based on the docs. I did find however, at the bottom of <a href=\"https://www.hl7.org/fhir/valueset.html#compositions\" target=\"_blank\" title=\"https://www.hl7.org/fhir/valueset.html#compositions\">https://www.hl7.org/fhir/valueset.html#compositions</a>, that it says the display should be in an alternate location like text. But I don't seem to see anyone implementing the alternate display in text or any other field within the expansion array. Please advise me on proper usage and where to expect overriden displays. Am I intended in a front end application to call expand and then further have to parse and search the composed concepts for proper displays? Or should the expanded set have their displays be the expected UI display?</p>",
+        "id": 153928619,
+        "sender_full_name": "Joshua Bell",
+        "timestamp": 1515748399
+    },
+    {
+        "content": "<p>Thanks, <span class=\"user-mention\" data-user-id=\"194330\">@Joshua Bell</span>, for continuing to push on this.  As you've been observing, this behavior has been pretty inconsistentlyy implemented and we haven't really paid a whole lot of attention to it before.  I think we need to do some testing for it in the Connectathon Terminology Services track, and I'll see about adding something for that.  <span class=\"user-mention\" data-user-id=\"191370\">@Richard Ettema</span> and <span class=\"user-mention\" data-user-id=\"191364\">@Peter Jordan</span> and I have been discussing the updates for testing.  If you have something that you would like to contribute for it (I'll look back through this and the \"synonyms\" topics for a start), that would be great.</p>",
+        "id": 153928640,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1515764074
+    },
+    {
+        "content": "<p>It's worth considering the differing displays returned in SNOMED-based implicit ValueSets generated from text filters by using Ontoserver's comparison tool <a href=\"http://ontoserver.csiro.au/vstool/\" target=\"_blank\" title=\"http://ontoserver.csiro.au/vstool/\">http://ontoserver.csiro.au/vstool/</a>. Select the OntoServer, Health Intersections and Terminz servers and search for 'Heart attack'.  Then, maybe, search for that term in the SNOMED International Browser. Of course, text/type ahead type searching via UIs is a distinct use case - but it's an important one that needs to satisfy the requirements of end users as well as those of terminologists.</p>",
+        "id": 153928665,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1515789042
+    },
+    {
+        "content": "<p>I suppose the best contribution to this from me right now would to be outlining what I am expecting to be able to do with it in my use case. In our UI we want users to be able to search for a term that they see in some medical document. Let's go with some drug ingredient, in this case, \"mercaptopurine\" which is also known as \"6-MP\". It is possible for the document the user is reading to show either of those names, so we've prepared a valueset of ingredients that contain two of the same concept but each with the different display name. In order for the UI to work the expanded set the UI is supposed to call needs to contain the concept more than once, one for each display name. (See the properly representing synonyms chat where Graham has implemented this on his test server). Furthermore, we have a filtered dropdown so the filter param should be able to search and filter on both displays as well (it does not need to show both when one is present, just clarifying that it shouldn't skip any). The user clicks their choice and the UI simply saves the concept (we don't actually care which display they click in our use case).</p>\n<p>Later on we may display this information later, and so we would like a way to flag one of the concepts as the preferred way to display it in said valueset. We don't want to use the CodeSystem endpoint as our final display is also usually different than the one in the CodeSystem as well (like we want \"Male\" instead of \"Male (finding)\"). So we want to validate the code on the valueset to retrieve the display of some concept, but if there are two concepts in there one needs to be flagged as the primary one to return when given just the code/system. So if 6-MP is the primary, a user selects mercaptopurine and then later we display it by validating the system/code pair which would return the concept with a display 6-MP.</p>\n<ul>\n<li>Display synonyms</li>\n<li>Primary display flag</li>\n<li>Expansion and validation on these by system/code pairing</li>\n</ul>",
+        "id": 153928667,
+        "sender_full_name": "Joshua Bell",
+        "timestamp": 1515793054
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194330\">@Joshua Bell</span> and <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> What I'd like to see us do is expect that an expansion profile (not sure how...) would be why an expansion generates multiple display values like you demonstrated for administrative gender (<a href=\"#narrow/stream/terminology/subject/How.20to.20properly.20represent.20Synonyms/near/118029\" title=\"#narrow/stream/terminology/subject/How.20to.20properly.20represent.20Synonyms/near/118029\">https://chat.fhir.org/#narrow/stream/terminology/subject/How.20to.20properly.20represent.20Synonyms/near/118029</a>). I didn't follow Graham how you are suggesting the expansion include the additional synonymous descriptions but I'd rather see that based on an expansion profile when the additional descriptions are in the code system already. If they are not, then I'd prefer that they be added via code system supplement this is referenced in an expansion profile to bring in the supplement to provide the additional descriptions. </p>\n<p>I suspect you may think that pedantic, but the supplement would then be shareable, reusable, and maintainable. What Joshua wants will not be unique so it would be better if it was not done inside a value set. That said, I'm open to learning how we do this simply inside a value set too for situations that are very unique.</p>",
+        "id": 153928890,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1516034808
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> So what you are suggesting is that all display synonyms should be in the CodeSystem and the expansion profile elects to show them or not?<br>\nI think this could present problems, because the display synonym may have nothing to do with the CodeSystem but rather on an application level. I could be making a space game powered by FHIR and am using Male/Female but want it to show up as some weird alien synonym like Malla/Felle but still be using a snomed codesystem underneath. Because my app wants the display \"Malla\" for male doesn't mean that malla should be added to the base CodeSystem as a synonym, and probably shouldn't be added at that level. CodeSystem should be the \"purest\" form and only have what is officially put into it by its maintainers correct? If that's so then the Malla/Felle would need to live on the ValueSet how we've already proposed in the synonyms chat. -&gt; and now sort of off topic for here, but rather synonyms discussion. It leads to the question of concept synonyms, defined synonyms in a system, and then now the added layer of application specific synonyms. How are these all to be handled?</p>",
+        "id": 153928895,
+        "sender_full_name": "Joshua Bell",
+        "timestamp": 1516037503
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194330\">@Joshua Bell</span> No, that is not what I am saying. I suspect you don't know what I mean by \"code system supplement.\" This would be an artifact that you can create, and then directly reference, that supplements the code system information with additional information for concepts identified in the code system. So your game -focused supplement would provide your own synonyms to the concepts. Of course, you must respect the intent of the code system. Yes, we agree about not putting your synonyms into the \"base\" code system, but no, your synonyms do not need to live in the value set, and IMO should not be there. BTW, synonyms seem to be what you mean by \"displays in expansions\" so synonyms are not off topic, they _are_ the topic.</p>",
+        "id": 153928911,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1516045420
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194330\">@Joshua Bell</span> This behaviour with displays in ValueSets is on our roadmap for Ontoserver, but requires quite significant internal changes to the implementation mechanisms.  Because of this we've been waiting for our customers to provide feedback indicating they need/want this capability.  To date we've only had one, and it was an inquiry about whether the capability existed rather than a request for it.</p>",
+        "id": 153928929,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1516051437
+    },
+    {
+        "content": "<p>I note that <span class=\"user-mention\" data-user-id=\"194330\">@Joshua Bell</span> 's use case of Malla/Felle is exactly what the ValueSet-provided display text would be used for.  CodeSystem.supplement would be a terrible way to do this because it would affect every ValueSet using the code system, not just those for the game.</p>\n<p>However, most cases we've seen have been more like the \"mercaptopurine\" which is also known as \"6-MP\", in which case the CodeSystem itself is really missing a synonym.  Using CodeSystem.supplement is one way around this, but actually updating the source CodeSystem itself is better and helps everyone. (Having an NRC that does monthly SNOMED updates also helps :-)</p>",
+        "id": 153928932,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1516052094
+    },
+    {
+        "content": "<p>It might be possible to do it as a \"contained\" Code System Supplement - though FHIR hasn't really talked about containing things that are referenced by cannonical URLs...</p>",
+        "id": 153928942,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1516056324
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span>  I am not aware that a code system supplement is something every use of the code system must use. That makes no sense to me at all. I have always considered a supplement an artifact that adds content to the code system for \"local\" use. It can be shared and reused more broadly, but would not affect every value set using the code system - it is a supplement. If you all have something different in mind I'd like to see the use case and am at this point very opposed to such a restriction for supplements. There are good existing usecases for what I have described.  What you are describing is a request to modify the code system itself.</p>",
+        "id": 153928957,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1516061667
+    },
+    {
+        "content": "<p>Supplements are used when updating the code system isn't possible/practical.  I agree that incorporating all needed information in the code system is the preferred approach when it's workable.  However, if you're looking to define Japanese translations of X12 codes, you're not likely to find a lot of energy in X12 to get those in and maintain them :)</p>",
+        "id": 153928975,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1516063950
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> but translations can be done with ValueSets (as described in this thread <a href=\"#narrow/stream/terminology/subject/Code.20System.20Supplements\" title=\"#narrow/stream/terminology/subject/Code.20System.20Supplements\">https://chat.fhir.org/#narrow/stream/terminology/subject/Code.20System.20Supplements</a></p>",
+        "id": 153929066,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1516107689
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> If my terminology server has a code system supplement loaded, how do I know which ValueSets should be affected by it?</p>",
+        "id": 153929067,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1516107863
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span> I've always assumed that code system supplement use had to be evoked specifically. It can be included in the value set CLD as a determinant for member inclusion in an expansion (i.e.: drugs with a cost above $50 as identified in a drug cost supplement), and it can be used in an expansion profile (i.e.: to add in additional descriptions as in Joshua's example). In all these cases it would be explicitly identified, either in the CLD, or in a profile used for the expansion. I don't know of a use case where it would be needed when it was not specifically identified.</p>",
+        "id": 153929094,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1516122636
+    },
+    {
+        "content": "<p>The same issue applies for defining properties (e.g. what LOINC codes are considered to be 'orderable' in Canada isn't something we'd expect Regenstrief to take on the maintenance of - and isn't really something we'd want them to)</p>",
+        "id": 153929112,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1516131990
+    },
+    {
+        "content": "<p>I agree with Rob M. that the way to do this is to specify the code system supplement in the value set definition or in an explansion profile - but it should be explicit.</p>",
+        "id": 153929161,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1516146089
+    },
+    {
+        "content": "<p>I don't agree. With language code supplements, at least, the use case for automatically using them everywhere is obvious - I provide the terminology server with a spanish language supplement, I very much expect that it will be used for any expansion/validation where the language is specified as spanish</p>",
+        "id": 153929588,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1516358448
+    },
+    {
+        "content": "<p>I think it would be stupid to say that the supplement must be referenced explicitly.</p>",
+        "id": 153929589,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1516358486
+    },
+    {
+        "content": "<p>I see two use-cases.  1. If the value set definition is dependent on properties from the supplement, then the supplement must be declared in the value set.  2. If the expansion is going to make use of display names from a supplement then the supplement must be declared in either the value set or the expansion definition</p>",
+        "id": 153929626,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1516377057
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> Stupid huh? Well, us three stupid people don't agree with forcing every terminology service to incorporate every supplement created. If you think Spanish should be included with every expansion of some code system, put it into the code system.</p>",
+        "id": 153929719,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1516386653
+    },
+    {
+        "content": "<p>Putting it into the code system typically isn't possible.</p>",
+        "id": 153929720,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1516387375
+    },
+    {
+        "content": "<p>Then perhaps we can add this to the terminology server capability statement so that it would be clear that a particular server is always including a supplement when operating on a code system? Then any use of the supplement would not need to be explicitly included for use, but could (and I think should) be for interop value.</p>",
+        "id": 153929722,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1516388615
+    },
+    {
+        "content": "<p>Is there a reason why including it in the value set definition or the expansion profile would be inappropriate?</p>",
+        "id": 153929738,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1516397796
+    },
+    {
+        "content": "<p>I don't think it would be inappropriate.  I think Grahame is suggesting using displayLanguage as a surrogate in lieu of having to specify the supplement itself explicitly.  I can see why you would think of doing that, but if you have to specify the language then it's probably not much of a further step to also specify the supplement that should be used.  I think it should be specified explicitly somewhere.  I don't think it would be common, but since code system supplements aren't controlled (or maybe even know about) by the code system publisher, it seems conceiveble to me that there could be more than one supplement available on a server for a given use (e.g. for a particular language) - and then you would need to specify which one should be used in a particular instance.  But if we made a default declaration globally that was reflected in the terminology capability statement, then that would work and would avoid the need to make the explicit reference each time.  You would only need to do it if you wanted to override the default.</p>",
+        "id": 153929749,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1516400319
+    },
+    {
+        "content": "<p>\"but if you have to specify the language then it's probably not much of a further step to also specify the supplement that should be used\" - I think it's a big difference. language specifies an outcome but delegates the implenentation to the server. Choosing a supplement means you get involved in the process</p>",
+        "id": 153929757,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1516425190
+    },
+    {
+        "content": "<p>Yes, that is a good point.  But I think I was reflecting something at least close to that in the latter part of what I said.  Is there a reason that the server can't or shouldn't declare what it will do in this regard in its terminology capability statement (assuming that we provide a means for that and that server providers have time and opportunity to implement it)?  We don't demand that servers document and declare everything that they do, but declaring the behavior and source(s) of additional content being provided beyond the specified code system when a value set is expanded under specific conditions seems like it would be good to support and encourage (even if we don't mandate it)?</p>",
+        "id": 153929769,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1516426972
+    },
+    {
+        "content": "<p>well, let's start with agreeing that it should be possible to determine server behaviour in this respect by asking it.</p>",
+        "id": 153929770,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1516427039
+    },
+    {
+        "content": "<p>I'm not sure that terminology capabilities are the only/correct answer here. A server doesn't list all the code systems it supports in the terminology capabilities - not if you can search for them on the CodeSystem end-point. So shouldn't the same consideration apply?</p>",
+        "id": 153929771,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1516427106
+    },
+    {
+        "content": "<p>Yes, we can start with agreeing that it should be possible to determine the server behavior in regard to code system supplements by asking the server.  And I agree with you that using TerminologyCapabilities isn't necessarily required for that.  Searching the CodeSystem endpoint is a way (and probably the most straightforward way) to do it.</p>",
+        "id": 153929928,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1516626946
+    },
+    {
+        "content": "<p>It seems to be there are just a few dimensions of variability here that we need to look at:<br>\n1. The ability to explicitly control, on a per operation basis, which supplements (if any) are usable<br>\n2. What is the default behaviour in the case that an explicit indication is not provided.</p>\n<p>For 1. I see that there are 3 main cases:<br>\na. don't use any supplements<br>\nb. only use an explicitly specified set/list of supplements (not sure if there's order-dependent semantics here)<br>\nc. use all available supplements<br>\nThere's a fourth case: use all available supplements except those in an explicitly specified set/list, but I'm not sure we need to go there</p>\n<p>For 2. I would argue for (a) don't use any, as this is backward-compatible behaviour.</p>\n<p>The TerminologyCapaility statement can specify which of a, b, and c are supported (and I'd like to suggest a MUST always be supported)</p>",
+        "id": 153933142,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1517267447
+    },
+    {
+        "content": "<p>In cases where a code system has multiple supplements, there may also be a question regarding which supplement takes precedence, possibly depending on other factors.</p>",
+        "id": 153933510,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1517327231
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191926\">@Joel Schneider</span> and <span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span> I think you two are describing uses of supplements that we don't allow. First, take a look at <a href=\"https://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=14645&amp;start=0\" target=\"_blank\" title=\"https://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=14645&amp;start=0\">https://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=14645&amp;start=0</a>. The expectation is that use of a supplement is specified in a very specific place and only one can be specified. If a terminology service decides to pre-apply a supplement to every use of the code system, they get to decide how to address any \"dependencies\" or precedence. They should make this clear in the TS capability statement somehow.</p>",
+        "id": 153934362,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1517430375
+    },
+    {
+        "content": "<p>So then, for example, a terminology server could not host more than one language-specific supplement per code system?  (e.g. English, French, German)</p>",
+        "id": 153934364,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1517430602
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191926\">@Joel Schneider</span> - a terminology server can host more than one language pack. There's nothing stopping that</p>",
+        "id": 153934368,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1517431188
+    },
+    {
+        "content": "<p>Yes, as many as you need. If you want to include multiple supplements in your default use of a code system, you would have to decide precedence.</p>",
+        "id": 153934374,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1517432762
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> Thanks, but that is where I started and what triggered all my questions.  The behaviour described there is very incomplete and seems to be written with an implied use-case / context-of-use.<br>\nSpecifically, if <code>supplements</code> is populated, then what other fields in CodeSystem can / can not be populated?<br>\nIf the intent is only to allow designations and properties to be added, then here's some open (for me) questions:<br>\n1. does this mean only brand new properties, or new values for existing properties?<br>\n2. if it allows defining new properties, then can they also be made available for filters?<br>\n3. is it valid to populate <code>concept.code.display</code>?  perhaps only valid if it is the same as the value for the supplemented CodeSystem?<br>\n4. how do supplements interact with CodeSystem versions?  If my terminology server contains 20+ versions of the SNOMED code system (it does), can I supplement each one separately?</p>",
+        "id": 153934442,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1517441822
+    },
+    {
+        "content": "<p>1. both brand new properties, and new (additional) values for existing properties)<br>\n2. yes<br>\n3. yes<br>\n4. very good question. Version in supplement using | (see canonical URLs)</p>",
+        "id": 153934479,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1517484744
+    },
+    {
+        "content": "<p>1. so they will always be additional, and not replacing (I hope so)<br>\n3. what if it changes from version to version? Is best-practice to leave empty?</p>\n<p>5. must all other CodeSystem fields be empty / same as the supplemented version?  If the latter, then what about changes between versions?  Is best-practice to leave empty?</p>",
+        "id": 153934901,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1517531865
+    }
+]

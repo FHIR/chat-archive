@@ -1,0 +1,20 @@
+[
+    {
+        "content": "<blockquote>\n<p>The Reference Implementation of FHIRPath that Grahame developed provides support for custom functions, but unfortunately, custom functions don't have access (yet) to the left has side (the focus) of the expression</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191387\">@Keith Boone</span> I don't know what this means</p>",
+        "id": 210765712,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1600705600
+    },
+    {
+        "content": "<p>more generally... I think you should propose a standard server API to FHIR-I rather than just ad-hocing a bunch of custom functions</p>",
+        "id": 210765837,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1600705656
+    },
+    {
+        "content": "<p>this is how the memberOf() function gets called by FHIRPathEngine<br>\ncase MemberOf : return funcMemberOf(context, focus, exp);</p>\n<p>this is how a custom function gets called by FHIRPathEngine<br>\nhostServices.executeFunction(context.appInfo, exp.getName(), params);</p>\n<p>This is what funcMemberOf can do:<br>\n  private List&lt;Base&gt; funcMemberOf(ExecutionContext context, List&lt;Base&gt; focus, ExpressionNode exp) {<br>\n    List&lt;Base&gt; valueSet = execute(context, focus, exp.getParameters().get(0), false);<br>\n    Set&lt;String&gt; vs = resolveAndInitialize(context, valueSet.get(0).primitiveValue());<br>\n    return Collections.singletonList(new BooleanType(doMemberOf(<strong>focus</strong>, vs)));<br>\n  }</p>\n<p>NOTE: It knows the collection being iterated over, and can thus determine if any in the collection ARE a member of the value set.</p>\n<p>If I were to define a MyMemberOf function to do the same thing as memberOf(), it would NOT be able to do the same, because it doesn't have access to the focus.</p>\n<p>instead of writing this:   code.memberOf(\"MyValueSetURL\"), I have to write THIS: memberOf(code, \"MyValueSetURL\"), otherwise it doesn't and can't do its work.</p>\n<p>What I did to fix this in my fork of FHIRPathEngine was change this:<br>\n      return hostServices.executeFunction(context.appInfo, exp.getName(), params);<br>\nto this:<br>\n       return hostServices instanceof IEvaluationContext2 ?<br>\n              ((IEvaluationContext2) hostServices).executeFunction2(context.appInfo, exp.getName(), focus, params) :<br>\n              hostServices.executeFunction(context.appInfo, exp.getName(), params);</p>\n<p>Where IEvaluationContext2 extends IEvaluationContext and has an executeFunction2 method that accepts a parameter List&lt;Base&gt; focus which is the list of elements to evaluate the function against from the \"left hand side\" of the expression.</p>\n<p>The IEvaluationContext2 interface is needed to ensure that existing implementations implementing custom functions continue to work properly, while allowing others which know about IEvaluationContext2 to get the enhanced support.</p>",
+        "id": 210771024,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1600708238
+    }
+]

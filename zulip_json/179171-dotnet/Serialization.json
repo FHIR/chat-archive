@@ -1,0 +1,194 @@
+[
+    {
+        "content": "<p>[deleted]</p>",
+        "id": 209381661,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1599569839
+    },
+    {
+        "content": "<p>Hey all, some of us are working on several Serialization Implementations and considering what a sensible way of making this capability switchable.<br>\nThis is one of my thoughts to have an interface, along with a default implementation.</p>\n<div class=\"codehilite\"><pre><span></span><code>    public interface IFhirXmlSerialization : IFhirSerialization\n    {\n\n    }\n\n    public interface IFhirJsonSerialization : IFhirSerialization\n    {\n\n    }\n\n    public interface IFhirSerialization\n    {\n        Task Serialize(Stream stream, Base resource, SummaryType summary = SummaryType.False, string[] elements = null);\n        Task&lt;T&gt; Deserialize&lt;T&gt;(Stream stream, OperationOutcome parsingResults) where T : Base;\n    }\n\n    public class DefaultFhirXmlSerialization : IFhirXmlSerialization\n    {\n        public Task&lt;T&gt; Deserialize&lt;T&gt;(Stream stream, OperationOutcome parsingResults)\n            where T : Base\n        {\n            using (XmlReader reader = Utility.SerializationUtil.XmlReaderFromStream(stream))\n            {\n                return Task.FromResult&lt;T&gt;(new Hl7.Fhir.Serialization.FhirXmlParser().Parse&lt;T&gt;(reader));\n            }\n        }\n\n        public Task Serialize(Stream stream, Base resource, SummaryType summary = SummaryType.False, string[] elements = null)\n        {\n            var serializer = new Hl7.Fhir.Serialization.FhirXmlSerializer();\n            using (var writer = new XmlTextWriter(stream, System.Text.Encoding.UTF8))\n            {\n                serializer.Serialize(resource, writer, summary, elements: elements);\n                return Task.CompletedTask;\n            }\n        }\n    }\n\n    public class DefaultFhirJsonSerialization : IFhirJsonSerialization\n    {\n        public Task&lt;T&gt; Deserialize&lt;T&gt;(Stream stream, OperationOutcome parsingResults)\n            where T : Base\n        {\n            using (JsonReader reader = Utility.SerializationUtil.JsonReaderFromStream(stream))\n            {\n                return Task.FromResult&lt;T&gt;(new Hl7.Fhir.Serialization.FhirJsonParser().Parse&lt;T&gt;(reader));\n            }\n        }\n\n        public Task Serialize(Stream stream, Base resource, SummaryType summary = SummaryType.False, string[] elements = null)\n        {\n            var serializer = new Hl7.Fhir.Serialization.FhirJsonSerializer();\n            using (StreamWriter sw = new StreamWriter(stream))\n            {\n                using (JsonWriter writer = Utility.SerializationUtil.CreateJsonTextWriter(sw))\n                {\n                    serializer.Serialize(resource, writer, summary, elements);\n                    return Task.CompletedTask;\n                }\n            }\n        }\n    }\n</code></pre></div>",
+        "id": 234304518,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1618311332
+    },
+    {
+        "content": "<p>Then should this be a singleton?<br>\nHow can DI work around the place?<br>\nWith the FhirClient?</p>",
+        "id": 234304634,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1618311386
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span> <span class=\"user-mention\" data-user-id=\"193551\">@Marco Visser</span></p>",
+        "id": 234304667,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1618311404
+    },
+    {
+        "content": "<p>And should we include the ability to have them run as async over the content?<br>\nOr have a sync/async version of each?</p>",
+        "id": 234304891,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1618311529
+    },
+    {
+        "content": "<p>What is meant by switchable? A common interface shared between several implementations of the serializers? <br>\nIf I am interpreting your post and code correctly a marker interface would not help me much in that direction</p>\n<p>I think the people using your interface/implementation should decide if they want it to be scoped as a singleton or not.</p>\n<p>If you want to support both sync/async I think the recommended approach is to have truly sync methods alongside the async methods, not sync methods calling your async methods. So you would have to implement them both separately. But only the part that touches IO needs to be async, so possibly most of your implementation would not need to be async?</p>",
+        "id": 234386902,
+        "sender_full_name": "Kenneth Myhra",
+        "timestamp": 1618342327
+    },
+    {
+        "content": "<p>Hi Brian, this had fallen a bit back on my list so I'm in the process of loading it all back into memory  =)</p>\n<p>Kenneth, what we are discussing is setting up an interface so that users can load different serializers and parsers without recompiling the core libraries.  For example, if you have areas of the code where you know you have 'clean' data, you may want something with high performance and no validation.  On the other hand, something parsing incoming data will likely need to have a lot of validation, but can tolerate the performance penalty of it.  Additionally, developers have libraries of choice (e.g., System.Text.Json vs. Newtonsoft.Json), and it would be great if the FHIR libraries could use the same ones without adding additional dependencies.</p>\n<p>As to sync/async - I think it's probably a good idea, but would want to see how much complexity it adds before committing to a side.  Assuming the interfaces include IO and/or validation, those operations can take some time.</p>",
+        "id": 234389614,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1618343508
+    },
+    {
+        "content": "<p>Yup, what Gino said. And not sure on async/sync - but know it's an issue to discuss.</p>",
+        "id": 234391860,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1618344269
+    },
+    {
+        "content": "<p>I've done a separate Async Xml parser too - to see how that works and how they perform. Turns out the MS async XmlReader is slightly slower, and has at least 1 bug in it (non Async) that I've worked around.</p>",
+        "id": 234392783,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1618344679
+    },
+    {
+        "content": "<p>Interesting.  Also, I'm glad you're working on XML since I haven't at all  =)</p>",
+        "id": 234393220,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1618344888
+    },
+    {
+        "content": "<p>And also why I'm glad you've been doing the Json one <span aria-label=\"wink\" class=\"emoji emoji-1f609\" role=\"img\" title=\"wink\">:wink:</span><br>\nI have whitespace issues with Narratives and Markdown to resolve and a final quality check before I'm happy it's done.<br>\n(It's using the raw XmlReader class - no Document based processing)</p>",
+        "id": 234395158,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1618345749
+    },
+    {
+        "content": "<p>Amazing how that works out  <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span> <br>\nI believe you may be ahead of me in getting it completed, but I ended up doing the same on my side (e.g., using the lowest level JSON processor available).  That said, I'm jealous of your 'fixed order of elements in XML', since I need to handle cases like not knowing the resource type until the last element of an object.  :-/</p>",
+        "id": 234396201,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1618346171
+    },
+    {
+        "content": "<p>Yes, I do need to review it one last time, as it's not fussy on ordering right now. (big switch statements)<br>\nAnd considering how to redo that part.</p>",
+        "id": 234397466,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1618346692
+    },
+    {
+        "content": "<p>Interesting approach, I like it</p>\n<blockquote>\n<p>Additionally, developers have libraries of choice (e.g., System.Text.Json vs. Newtonsoft.Json), and it would be great if the FHIR libraries could use the same ones without adding additional dependencies.</p>\n</blockquote>\n<p>Would like to learn more about the approach to solving this part</p>",
+        "id": 234398908,
+        "sender_full_name": "Kenneth Myhra",
+        "timestamp": 1618347310
+    },
+    {
+        "content": "<p>Would even like to consider a way like is done with the HttpClientFactory where you can have \"named\" serializer uses - so in libs you can switch in/out various ones as the user desires (not an all or nothing situation).</p>",
+        "id": 234402139,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1618348163
+    },
+    {
+        "content": "<p>Unfortunately, I think the goals are still a bit ahead of the solutions  =).</p>\n<p>Given that it looks as though there could be multiple options for each supported format, I would <em>guess</em> that the best experience would be something like a default implementation (hopefully with few dependencies, but that's only one metric that needs to be considered) and then additional packages available for other use cases.</p>\n<p>That said, I've been focused on a different area (seeing what's worthwhile / possible on the JSON side), so I haven't given much thought to what packaging would look like.  I assume there are people who know more about the packaging process and have thoughts on it.</p>",
+        "id": 234406725,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1618350074
+    },
+    {
+        "content": "<p>And for now, that default implementation is the existing well worn serializers.</p>",
+        "id": 234424094,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1618360873
+    },
+    {
+        "content": "<p>Read through your code again, Brian. And I see that you indeed have the interface IFhirSerialization with the necessary defined methods. So disregard my comment about marker interfaces</p>",
+        "id": 234462503,
+        "sender_full_name": "Kenneth Myhra",
+        "timestamp": 1618389767
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span><code>&lt;OperationOutcome xmlns=&quot;http://hl7.org/fhir&quot;&gt;\n  &lt;issue&gt;\n    &lt;severity value=&quot;error&quot; /&gt;\n    &lt;code value=&quot;structure&quot; /&gt;\n    &lt;details&gt;\n      &lt;text value=&quot;Unexpected element found chicken&quot; /&gt;\n    &lt;/details&gt;\n    &lt;location value=&quot;Patient.contained[0].chicken&quot; /&gt;\n    &lt;location value=&quot;xml position: 12,8&quot; /&gt;\n  &lt;/issue&gt;\n  &lt;issue&gt;\n    &lt;severity value=&quot;error&quot; /&gt;\n    &lt;code value=&quot;structure&quot; /&gt;\n    &lt;details&gt;\n      &lt;text value=&quot;Unexpected element found chicken&quot; /&gt;\n    &lt;/details&gt;\n    &lt;diagnostics value=&quot;&amp;lt;chicken value=&amp;quot;brrrk&amp;quot; xmlns=&amp;quot;http://hl7.org/fhir&amp;quot;&amp;gt;&amp;lt;turkey xmlns=&amp;quot;http://somethingelse&amp;quot;&amp;gt;slime&amp;lt;/turkey&amp;gt;&amp;lt;/chicken&amp;gt;&quot; /&gt;\n    &lt;location value=&quot;Patient.extension[0].value.chicken&quot; /&gt;\n    &lt;location value=&quot;xml position: 25,8 to 27,9&quot; /&gt;\n  &lt;/issue&gt;\n  &lt;issue&gt;\n    &lt;severity value=&quot;error&quot; /&gt;\n    &lt;code value=&quot;value&quot; /&gt;\n    &lt;details&gt;\n      &lt;text value=&quot;Invalid decimal value &#39;chicken&#39;&quot; /&gt;\n    &lt;/details&gt;\n    &lt;diagnostics value=&quot;Content cannot be converted to the type Decimal. Line 34, position 19.&quot; /&gt;\n    &lt;location value=&quot;Patient.extension[2].value&quot; /&gt;\n    &lt;location value=&quot;xml position: 34,19&quot; /&gt;\n  &lt;/issue&gt;\n  &lt;issue&gt;\n    &lt;severity value=&quot;error&quot; /&gt;\n    &lt;code value=&quot;structure&quot; /&gt;\n    &lt;details&gt;\n      &lt;text value=&quot;Unexpected element found chicken&quot; /&gt;\n    &lt;/details&gt;\n    &lt;location value=&quot;Patient.telecom[1].chicken&quot; /&gt;\n    &lt;location value=&quot;xml position: 59,6&quot; /&gt;\n  &lt;/issue&gt;\n  &lt;issue&gt;\n    &lt;severity value=&quot;error&quot; /&gt;\n    &lt;code value=&quot;value&quot; /&gt;\n    &lt;details&gt;\n      &lt;text value=&quot;Invalid positiveint value &#39;5.0&#39;&quot; /&gt;\n    &lt;/details&gt;\n    &lt;diagnostics value=&quot;Content cannot be converted to the type Int. Line 61, position 11.&quot; /&gt;\n    &lt;location value=&quot;Patient.telecom[1].rank&quot; /&gt;\n    &lt;location value=&quot;xml position: 61,11&quot; /&gt;\n  &lt;/issue&gt;\n  &lt;issue&gt;\n    &lt;severity value=&quot;error&quot; /&gt;\n    &lt;code value=&quot;structure&quot; /&gt;\n    &lt;details&gt;\n      &lt;text value=&quot;Unexpected element found chicken&quot; /&gt;\n    &lt;/details&gt;\n    &lt;location value=&quot;Patient.chicken&quot; /&gt;\n    &lt;location value=&quot;xml position: 64,4&quot; /&gt;\n  &lt;/issue&gt;\n&lt;/OperationOutcome&gt;\n</code></pre></div>",
+        "id": 234582917,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1618437342
+    },
+    {
+        "content": "<p>Nice!</p>",
+        "id": 234635796,
+        "sender_full_name": "Kenneth Myhra",
+        "timestamp": 1618474785
+    },
+    {
+        "content": "<p>Isn't location deprecated?</p>",
+        "id": 234645126,
+        "sender_full_name": "Johannes Höhn",
+        "timestamp": 1618479466
+    },
+    {
+        "content": "<p>Yes, Ewout pointed that out yesterday...</p>",
+        "id": 234763051,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1618525058
+    },
+    {
+        "content": "<p>Just to resurrect an old thread =).</p>\n<p>Finally got time to come back to this - I still have an open question about proper serialization (in <a class=\"stream\" data-stream-id=\"179177\" href=\"/#narrow/stream/179177-conformance\">#conformance</a> - about arrays and nulls), but otherwise just have some cleaning to do.</p>\n<p>The benchmark below is for serializing and parsing two examples (Observation-2minute-apgar-score.json and Patient-example.json from the R4 example package), after they have been read and loaded into memory.</p>\n<p>Tags for the people we've been discussing this with: <span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span> <span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span> <span class=\"user-mention\" data-user-id=\"193551\">@Marco Visser</span> </p>\n<p>Cheers!</p>\n<div class=\"codehilite\" data-code-language=\"INI\"><pre><span></span><code><span class=\"na\">BenchmarkDotNet</span><span class=\"o\">=</span><span class=\"s\">v0.12.1, OS=Windows 10.0.19043</span>\n<span class=\"na\">Intel Xeon W-2255 CPU 3.70GHz, 1 CPU, 20 logical and 10 physical cores</span>\n<span class=\"na\">.NET Core SDK</span><span class=\"o\">=</span><span class=\"s\">5.0.203</span>\n  <span class=\"na\">[Host]     : .NET Core 5.0.6 (CoreCLR 5.0.621.22011, CoreFX 5.0.621.22011), X64 RyuJIT</span>\n  <span class=\"na\">DefaultJob : .NET Core 5.0.6 (CoreCLR 5.0.621.22011, CoreFX 5.0.621.22011), X64 RyuJIT</span>\n</code></pre></div>\n<table>\n<thead>\n<tr>\n<th>Method</th>\n<th>Categories</th>\n<th>Filename</th>\n<th align=\"right\">Mean</th>\n<th align=\"right\">Error</th>\n<th align=\"right\">StdDev</th>\n<th align=\"right\">Ratio</th>\n<th align=\"right\">Gen 0</th>\n<th align=\"right\">Gen 1</th>\n<th align=\"right\">Gen 2</th>\n<th align=\"right\">Allocated</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><strong>FirelyParse</strong></td>\n<td><strong>Parse</strong></td>\n<td><strong>Obser(...).json [36]</strong></td>\n<td align=\"right\"><strong>533.16 μs</strong></td>\n<td align=\"right\"><strong>10.336 μs</strong></td>\n<td align=\"right\"><strong>10.152 μs</strong></td>\n<td align=\"right\"><strong>1.00</strong></td>\n<td align=\"right\"><strong>51.7578</strong></td>\n<td align=\"right\"><strong>13.6719</strong></td>\n<td align=\"right\"><strong>-</strong></td>\n<td align=\"right\"><strong>513.62 KB</strong></td>\n</tr>\n<tr>\n<td>FirelyExtParse</td>\n<td>Parse</td>\n<td>Obser(...).json [36]</td>\n<td align=\"right\">37.96 μs</td>\n<td align=\"right\">0.698 μs</td>\n<td align=\"right\">0.618 μs</td>\n<td align=\"right\">0.07</td>\n<td align=\"right\">2.8687</td>\n<td align=\"right\">0.3052</td>\n<td align=\"right\">-</td>\n<td align=\"right\">28.4 KB</td>\n</tr>\n<tr>\n<td></td>\n<td></td>\n<td></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n</tr>\n<tr>\n<td>FirelySerialize</td>\n<td>Serialize</td>\n<td>Obser(...).json [36]</td>\n<td align=\"right\">309.68 μs</td>\n<td align=\"right\">5.339 μs</td>\n<td align=\"right\">4.994 μs</td>\n<td align=\"right\">1.00</td>\n<td align=\"right\">34.1797</td>\n<td align=\"right\">6.8359</td>\n<td align=\"right\">-</td>\n<td align=\"right\">338.05 KB</td>\n</tr>\n<tr>\n<td>FirelyExtSerialize</td>\n<td>Serialize</td>\n<td>Obser(...).json [36]</td>\n<td align=\"right\">28.03 μs</td>\n<td align=\"right\">0.495 μs</td>\n<td align=\"right\">0.463 μs</td>\n<td align=\"right\">0.09</td>\n<td align=\"right\">3.5706</td>\n<td align=\"right\">0.3357</td>\n<td align=\"right\">-</td>\n<td align=\"right\">35.23 KB</td>\n</tr>\n<tr>\n<td></td>\n<td></td>\n<td></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n</tr>\n<tr>\n<td><strong>FirelyParse</strong></td>\n<td><strong>Parse</strong></td>\n<td><strong>Patient-example.json</strong></td>\n<td align=\"right\"><strong>384.19 μs</strong></td>\n<td align=\"right\"><strong>6.220 μs</strong></td>\n<td align=\"right\"><strong>5.818 μs</strong></td>\n<td align=\"right\"><strong>1.00</strong></td>\n<td align=\"right\"><strong>35.6445</strong></td>\n<td align=\"right\"><strong>7.3242</strong></td>\n<td align=\"right\"><strong>-</strong></td>\n<td align=\"right\"><strong>353 KB</strong></td>\n</tr>\n<tr>\n<td>FirelyExtParse</td>\n<td>Parse</td>\n<td>Patient-example.json</td>\n<td align=\"right\">27.69 μs</td>\n<td align=\"right\">0.547 μs</td>\n<td align=\"right\">0.586 μs</td>\n<td align=\"right\">0.07</td>\n<td align=\"right\">2.2278</td>\n<td align=\"right\">0.2441</td>\n<td align=\"right\">-</td>\n<td align=\"right\">21.98 KB</td>\n</tr>\n<tr>\n<td></td>\n<td></td>\n<td></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n<td align=\"right\"></td>\n</tr>\n<tr>\n<td>FirelySerialize</td>\n<td>Serialize</td>\n<td>Patient-example.json</td>\n<td align=\"right\">226.42 μs</td>\n<td align=\"right\">2.187 μs</td>\n<td align=\"right\">1.826 μs</td>\n<td align=\"right\">1.00</td>\n<td align=\"right\">22.4609</td>\n<td align=\"right\">3.4180</td>\n<td align=\"right\">-</td>\n<td align=\"right\">221.55 KB</td>\n</tr>\n<tr>\n<td>FirelyExtSerialize</td>\n<td>Serialize</td>\n<td>Patient-example.json</td>\n<td align=\"right\">16.25 μs</td>\n<td align=\"right\">0.259 μs</td>\n<td align=\"right\">0.243 μs</td>\n<td align=\"right\">0.07</td>\n<td align=\"right\">1.2512</td>\n<td align=\"right\">0.0305</td>\n<td align=\"right\">-</td>\n<td align=\"right\">12.55 KB</td>\n</tr>\n</tbody>\n</table>",
+        "id": 240222404,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1621963780
+    },
+    {
+        "content": "<p>Keen to grab your test so I can compare apples to apples.</p>",
+        "id": 240223419,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1621964173
+    },
+    {
+        "content": "<p>What's the Error column?</p>",
+        "id": 240223548,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1621964248
+    },
+    {
+        "content": "<p>Wondering how it would go with the json version of this...<br>\n<a href=\"https://github.com/brianpos/fhir-net-web-api/blob/feature/r4-xml-performance/src/Test.WebApi.AspNetCore/TestPatientWithErrors.xml\">https://github.com/brianpos/fhir-net-web-api/blob/feature/r4-xml-performance/src/Test.WebApi.AspNetCore/TestPatientWithErrors.xml</a><br>\nI'll re-try mine with the xml versions of those 2 files.</p>",
+        "id": 240223929,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1621964409
+    },
+    {
+        "content": "<p>It's the statistical analysis of the benchmark timings - I'll post a link to to the code once I commit this last change, I believe that will leave everything in the examples properly round-tripping.</p>",
+        "id": 240225667,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1621965169
+    },
+    {
+        "content": "<p>The two I'm happiest about right now are the Ratio (new version is 90%+ faster) and allocated memory (10-15x less memory activity).</p>",
+        "id": 240225859,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1621965258
+    },
+    {
+        "content": "<p>Ok, so I've posted everything and I'm happy with it, except for one remaining issue.  The new serializer escapes a few Unicode characters that the Newtonsoft one doesn't.  The most common case is replacing a no-break-space with \\u00A0 (e.g., in narrative div content).</p>\n<p>Theoritically those are the same - so I'm not sure it's worth the performance hit of undoing it or not.  Any thoughts would be appreciated.</p>\n<p>So, the output is a set of extensions that work with the stock Hl7.Fhir.R4 package.  The serializer and parser are interoperable with the stock ones, e.g., you can parse with one and serialize with the other.</p>\n<p>I still have some additions I want to make to the exception handling (if you are curious you can compare areas that throw JsonException without params vs. the ones that make a nice message for what I'm thinking). I want to take a look at Brian's XML ones at some point to see if I could generate a matching OperationOutcome like his code does, but I have so far been focused on performance and correctness.</p>\n<p>So, the preview code is in the <a href=\"https://github.com/microsoft/fhir-codegen/tree/dev\">dev branch</a>.  Of interest:</p>\n<ul>\n<li>src/Microsoft.Health.Fhir.SpecManager/Language/CSharpFirely2JsonExt.cs<ul>\n<li>Contains the language processor to export the extensions.</li>\n<li>I have some cleanup yet to do, but it isn't terrible =)</li>\n</ul>\n</li>\n<li>generated/SystemTextJsonExt_R4<ul>\n<li>Contains the exported R4 files.</li>\n<li>These are extensions on the standard Hl7.Fhir.R4 package.</li>\n</ul>\n</li>\n<li>test/perfTestCS<ul>\n<li>Benchmarking project</li>\n<li>Everything interesting is in Benchmark/SerializationBenchmarks.cs</li>\n<li>Can see snippets to Serialize and Parse in FirelyExtSerialize() and FirelyExtParse()</li>\n</ul>\n</li>\n<li>test/JsonRoundtrip<ul>\n<li>Note this is <em>rough</em> because I wasn't even generally planning on checking it in =)</li>\n<li>Contains the working code I use to check round-trips of the parser/serializer.</li>\n<li>Really, it's painful to read.</li>\n</ul>\n</li>\n</ul>\n<p>Cheers!</p>",
+        "id": 240494546,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1622132880
+    },
+    {
+        "content": "<p>Awesome, I have the same issues with xml and whitespace/newlines.<br>\nI'll see if I can get a look into it soon.</p>",
+        "id": 240555800,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1622169687
+    },
+    {
+        "content": "<p>This is one of the functions that does the OperationOutcome for parsing issues</p>\n<p><a href=\"https://github.com/brianpos/fhir-net-web-api/blob/94f812011298bdade71846bdc43b9103b01c122f/src/Hl7.Fhir.Custom.Serializers/FhirCustomXmlReader.core.cs#L55\">https://github.com/brianpos/fhir-net-web-api/blob/94f812011298bdade71846bdc43b9103b01c122f/src/Hl7.Fhir.Custom.Serializers/FhirCustomXmlReader.core.cs#L55</a></p>",
+        "id": 242107075,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1623262195
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span> this is the workaround for the bug in the Microsoft XML Async Parser core code...<br>\nDon't know if that's something you can pass onto relevant folks for a future version...<br>\n<a href=\"https://github.com/brianpos/fhir-net-web-api/blob/e324bb3a6f9a2cc98b63be6c187deb4d868e097d/src/Hl7.Fhir.Custom.Serializers/FhirCustomXmlReader.core.cs#L318\">https://github.com/brianpos/fhir-net-web-api/blob/e324bb3a6f9a2cc98b63be6c187deb4d868e097d/src/Hl7.Fhir.Custom.Serializers/FhirCustomXmlReader.core.cs#L318</a></p>",
+        "id": 243879403,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1624601827
+    }
+]

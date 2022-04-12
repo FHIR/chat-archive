@@ -1,0 +1,356 @@
+[
+    {
+        "content": "<p>Has anybody worked on Android ports of the <a href=\"https://github.com/DBCG/cql_engine\">https://github.com/DBCG/cql_engine</a> and <a href=\"https://github.com/DBCG/cql-evaluator\">https://github.com/DBCG/cql-evaluator</a> libs? </p>\n<p>It feels like the project could benefit from a pure Android-based dependency stack to reduce the chance of runtime errors between the multiple versions of Android out there. I saw the SampleApp from the DBCG team and even that Sample code is not that stable on multiple android devices. :(</p>",
+        "id": 263485935,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638471975
+    },
+    {
+        "content": "<p>For additional information, Moxy has a dependency on <code>java.awt.Image</code> which is not part of Java anymore and if an Android project is compiled with the latest Android Studio, which Java 11 is used by default, it causes a RuntimeError when trying to unmarshal an XML Library because <code>java.awt</code> is not there. (Don't ask why an XML lib needs AWT... )</p>",
+        "id": 263486311,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638472155
+    },
+    {
+        "content": "<p>At the same time, Context has a dependency on ZonedDateTime, which is not included in some Android &lt;=7.0 devices which are still widely used :(</p>",
+        "id": 263486701,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638472327
+    },
+    {
+        "content": "<p>Since the CQL evaluator and engine don't actually need <code>java.awt</code> and the <code>ZonedDateTime evaluationDateTime</code> field on Context doesn't seem to be that useful, a dependency clean up + field deletion could improve the stability of the lib without affecting it's utility.</p>",
+        "id": 263488106,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638473006
+    },
+    {
+        "content": "<p>the main is the use of JAXB for serialization and serialization of ELM, and of the ModelInfo in the cql-translator. There are a few issues tracking that, such as these:</p>\n<p><a href=\"https://github.com/cqframework/clinical_quality_language/issues/640\">https://github.com/cqframework/clinical_quality_language/issues/640</a><br>\n<a href=\"https://github.com/DBCG/cql_engine/issues/405\">https://github.com/DBCG/cql_engine/issues/405</a></p>",
+        "id": 263488702,
+        "sender_full_name": "JP",
+        "timestamp": 1638473270
+    },
+    {
+        "content": "<p>Short version is that running on Android is a goal, but there's some legwork to do before we can get there.</p>",
+        "id": 263488823,
+        "sender_full_name": "JP",
+        "timestamp": 1638473296
+    },
+    {
+        "content": "<p>Nice! Sorry, what's the difference between the XML from the cql-translator and the XML from the engine? Issue 405 speaks about both as if they were different, but they seem to be calling the same JAXB processor. Are they the same?</p>",
+        "id": 263491082,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638474391
+    },
+    {
+        "content": "<p>The XML content itself is identical, but the two projects are independent so both implement JAXB serialization / deserialization separately. There are a couple cases where the behavior isn't consistent between the two.</p>",
+        "id": 263500610,
+        "sender_full_name": "JP",
+        "timestamp": 1638479293
+    },
+    {
+        "content": "<p>If we could put some resources to help you out on this process, where or which tasks would you ask us to look into first? :)</p>",
+        "id": 263580768,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638538834
+    },
+    {
+        "content": "<p>I'll try to give an overview here but I'm happy to jump on a call with you and your team to talk through some considerations if that's helpful. Also, <span class=\"user-mention\" data-user-id=\"366686\">@Jing Tang</span> is working on an Android SDK so he may also be interested in this.</p>\n<p>A a high level, CQL (human-readable) is translated by the cql-translator to produce ELM, which is machine-readable. The ELM is the executable code. Technically, the cql-engine and cql-evaluator do not need CQL at all. They can run directly on ELM assuming that ELM is available in the execution environment (the cql-evaluator will do CQL translation on the fly if CQL is available and the execution environment supports it).</p>\n<p>ELM has a number of different serialization formats, which are what are being discussed in this issue:</p>\n<p><a href=\"https://github.com/DBCG/cql_engine/issues/405\">https://github.com/DBCG/cql_engine/issues/405</a></p>\n<p>JSON = JSON serializaed by JAXB<br>\nXML = XML serialized by JAXB<br>\nJXSON = JSON serialized by Jackson</p>\n<p>JAXB is (generally) unsupported by Android, so only the JXSON format can be used. </p>\n<p>The CPG IG defines a few profiles that constrain Clinical Reasoning resources such that ELM is always present, such as CPGExecutableLibrary. An overview of that is here:</p>\n<p><a href=\"https://build.fhir.org/ig/HL7/cqf-recommendations/profiles.html#artifact-profiles\">https://build.fhir.org/ig/HL7/cqf-recommendations/profiles.html#artifact-profiles</a></p>\n<p>So, if you generate ELM ahead of time, and if you serialize it as JXSON, and it you attach that to your FHIR resources (or provide some other means of loading it), and if you have a fairly recent version of Android, the cql-engine will work. That's a lot of ifs, but some of that is already automated by the IG publisher tooling or cqf-tooling projects.</p>\n<p>On issue #405, we've come to the consensus that we can phase out JSON/XML support in the cql-engine and support only the JXSON format. So, the work to do there is create a PR that removes JAXB and the associated dependencies entirely. You'll still have to pregenerate the ELM, and you'll still have to serialize it as JXSON, but at least it should work on more versions of Android.</p>",
+        "id": 263638405,
+        "sender_full_name": "JP",
+        "timestamp": 1638565492
+    },
+    {
+        "content": "<p>An approach I'd actually prefer is to provide some mechanism such that the JAXB-related dependencies can be loaded dynamically, such as putting them in their own module, marking them \"optional\" in the pom.xml, and providing some way to detect those on the classpath. The core HAPI libraries use such an approach to support Android:</p>\n<p><a href=\"https://github.com/hapifhir/hapi-fhir/tree/d1c2d839d187b0820e3c38658a2fef889a908dd3/hapi-fhir-android\">https://github.com/hapifhir/hapi-fhir/tree/d1c2d839d187b0820e3c38658a2fef889a908dd3/hapi-fhir-android</a></p>\n<p>(they swap-out HTTP client implementations)</p>\n<p>I haven't sat down and thought through exactly what the design for this should be, or sketched out what the interface for a serialization format \"module\" would look like. If you or your team wanted to take a stab at that, it'd be helpful and probably pay dividends on the cql-translator side as well.</p>",
+        "id": 263653621,
+        "sender_full_name": "JP",
+        "timestamp": 1638565903
+    },
+    {
+        "content": "<p>That gets us running ELM consistently across most versions of Android, I think.</p>",
+        "id": 263653755,
+        "sender_full_name": "JP",
+        "timestamp": 1638565980
+    },
+    {
+        "content": "<p>The next step is to be able to do CQL translation on Android so that you don't necessarily have to pregenerate the ELM. There are a couple of related issues on the cql-translator side that need to be addressed to make that possible. First, the serialization of the translated ELM which effectively needs the same \"optional JAXB modules\" solution.</p>\n<p>Second, the cql-translator internally uses a \"ModelInfo\" to store meta-data about the data model. It loads these whenever it encounters a \"using\" statement in CQL:</p>\n<div class=\"codehilite\"><pre><span></span><code>library Test\n\nusing FHIR version 3.0.0\n</code></pre></div>\n<p>or </p>\n<div class=\"codehilite\"><pre><span></span><code>using QDM version 5.6\n</code></pre></div>\n<p>or whatever.</p>",
+        "id": 263654381,
+        "sender_full_name": "JP",
+        "timestamp": 1638566358
+    },
+    {
+        "content": "<p>The structure of the ModelInfo is documented here:<br>\n<a href=\"https://cql.hl7.org/elm.html\">https://cql.hl7.org/elm.html</a></p>\n<p>And there are a number of examples here:<br>\n<a href=\"https://github.com/cqframework/clinical_quality_language/tree/master/Src/java/quick/src/main/resources/org/hl7/fhir\">https://github.com/cqframework/clinical_quality_language/tree/master/Src/java/quick/src/main/resources/org/hl7/fhir</a></p>\n<p>You'll notice they are all XML. This is because the cql-translator uses JAXB to read those. We need the equivalent of JXSON-based serialization for those ModelInfos in order to be able to use them on Android.</p>",
+        "id": 263654757,
+        "sender_full_name": "JP",
+        "timestamp": 1638566544
+    },
+    {
+        "content": "<p>The FHIR ModelInfos are generated based on the StructureDefintions, so they are pretty easily recreated. The generation tooling will need to write those out as JXSON (or whatever) and then the cql-translator will need to be able to load those. The code that currently does that is here:<br>\n<a href=\"https://github.com/cqframework/clinical_quality_language/blob/68e6861b38603e6d87d822b938cc1a5ed354d7a7/Src/java/cql-to-elm/src/main/java/org/cqframework/cql/cql2elm/FhirModelInfoProvider.java\">https://github.com/cqframework/clinical_quality_language/blob/68e6861b38603e6d87d822b938cc1a5ed354d7a7/Src/java/cql-to-elm/src/main/java/org/cqframework/cql/cql2elm/FhirModelInfoProvider.java</a></p>",
+        "id": 263655093,
+        "sender_full_name": "JP",
+        "timestamp": 1638566763
+    },
+    {
+        "content": "<p>To summarize, full CQL to ELM to execution support on Android needs:</p>\n<ol>\n<li>The ELM JAXB dependencies removed (or made optional) in the cql-engine</li>\n<li>The ELM JAXB dependencies removed (or made optional)  in the cql-translator</li>\n<li>The ModelInfo JXSON format added to the ModelInfo generation tooling</li>\n<li>The ModelInfo JAXB dependencies removed (or made optional) in the cql-translator</li>\n<li>The ModelInfo JXSON format added to the cql-translator</li>\n</ol>",
+        "id": 263655739,
+        "sender_full_name": "JP",
+        "timestamp": 1638567126
+    },
+    {
+        "content": "<p>It's not a <em>ton</em> of work but it requires digging around in the internals of those projects a bit.</p>",
+        "id": 263655835,
+        "sender_full_name": "JP",
+        "timestamp": 1638567189
+    },
+    {
+        "content": "<p>Wow! Thank you so much for this detailed description. How confident are we to use the current translator to produce the Jackson files correctly? I saw some fears of incorrectly translating it on the referred issue links. Do you think this XML to Jackson conversion will be a one and done event or something that we will need to keep updating as an upstream updates itself?</p>",
+        "id": 263660033,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638569472
+    },
+    {
+        "content": "<p>Flagging for <span class=\"user-mention\" data-user-id=\"191604\">@Carl Leitner</span></p>",
+        "id": 263660167,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638569552
+    },
+    {
+        "content": "<p>For a target here, do we have a minimum Android version we want to make sure we support? I see <code>&lt;= 7.0</code> above, but does that really mean all the way back to 1.0?</p>",
+        "id": 263660973,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1638569904
+    },
+    {
+        "content": "<p>My initial goal was to go down to Android 5.0, but any gains are welcome.</p>",
+        "id": 263662362,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638570739
+    },
+    {
+        "content": "<p>For the project, the goal has to be a clear definition of which versions of Android the lib would work with a single line to be added to the gradle file (no gradle setup shenanigans).</p>",
+        "id": 263662607,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638570935
+    },
+    {
+        "content": "<p>For context on the issues with translation, they are all around the \"annotations\" which we use to include debug/source information in the output ELM. The core ELM translation is fine, and we have an issue to change how we do annotations so that it's not an issue going forward. Ultimately, we want to be able to remove the JAXB dependencies entirely.</p>",
+        "id": 263662866,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1638571103
+    },
+    {
+        "content": "<p>Right, we are fairly confident in JXSON overall with the exception of the annotations. We've used the JXSON pretty extensively at this point. We are tracking of couple issues to improve the test coverage but I don't foresee any real changes with respect to the actual executable content.</p>",
+        "id": 263666214,
+        "sender_full_name": "JP",
+        "timestamp": 1638573554
+    },
+    {
+        "content": "<p>As far as the minimum Android version supported... I'll have to go back and figure out what's possible. I did some testing last year and as I recall there were some other issues that prevented supporting an API level below ~24, which is ~75% of Android devices. Apparently I didn't write it down in my notes though. Getting down to 20 would give us ~98% of the Android ecosystem.</p>",
+        "id": 263666637,
+        "sender_full_name": "JP",
+        "timestamp": 1638573922
+    },
+    {
+        "content": "<p>Note that CQL to ELM translations can use cql-options.json so any on-the-fly translation of CQL to ELM needs to consider those options.<br>\nfor example <a href=\"https://github.com/cqframework/ecqm-content-r4/blob/master/input/cql/cql-options.json\">https://github.com/cqframework/ecqm-content-r4/blob/master/input/cql/cql-options.json</a></p>\n<p>Also tools which expect JAXB ELM to do CQL highlighting may break if given JXSON</p>",
+        "id": 263856049,
+        "sender_full_name": "Paul Denning",
+        "timestamp": 1638800434
+    },
+    {
+        "content": "<p>Quick report on how this is going. I was able to remove most of the JAXB dependencies (Moxy is not there anymore) and change the source and test cases to save and load JXSON. There are some failing tests remaining (20 or so) but we should be able to get it ready soon.</p>",
+        "id": 263943139,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638836017
+    },
+    {
+        "content": "<p>Code is here: <a href=\"https://github.com/Path-Check/cql_engine\">https://github.com/Path-Check/cql_engine</a> I will do a PR a soon as we feel comfortable with these changes</p>",
+        "id": 263943213,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638836054
+    },
+    {
+        "content": "<p>FYI, I had to force </p>\n<p><code>CqlTranslator.getJxsonMapper().setSerializationInclusion(Include.NON_NULL);</code></p>\n<p>before calling <code>translator.toJxson</code> everywhere because the JXSON translator ignores empty ('') strings in the default <code>CqlTranslator.getJxsonMapper()</code> behavior.</p>",
+        "id": 264024552,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638893908
+    },
+    {
+        "content": "<p>Other than that, all tests pass with the JXSON conversion instead of the old XML/JAXB methods</p>",
+        "id": 264024753,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638893990
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194178\">@JP</span> do we like big PRs or small PRs? I think I am ready to do the first one that addresses your first point: <br>\n<code>1. The ELM JAXB dependencies removed (or made optional) in the cql-engine</code></p>",
+        "id": 264068920,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638909931
+    },
+    {
+        "content": "<p>Smaller is better.</p>",
+        "id": 264068971,
+        "sender_full_name": "JP",
+        "timestamp": 1638909957
+    },
+    {
+        "content": "<p>Ok, PR up: <a href=\"https://github.com/DBCG/cql_engine/pull/518\">https://github.com/DBCG/cql_engine/pull/518</a></p>",
+        "id": 264072366,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638911529
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194178\">@JP</span> <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> I am assuming the next step is to move the XML files <a href=\"https://github.com/cqframework/clinical_quality_language/tree/master/Src/java/quick/src/main/resources/org/hl7/fhir\">here</a> to JSON. Were these XML files manually generated or is there a tool doing it inside the repo?  (I can't find it)</p>",
+        "id": 264099574,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1638926764
+    },
+    {
+        "content": "<p>The code for the FHIR ModelInfo generation is in the cqf-tooling project:<br>\n<a href=\"https://github.com/cqframework/cqf-tooling/blob/002fbccbd76e0f9d4c7a871173829cb80d25e5c9/src/main/java/org/opencds/cqf/tooling/modelinfo/StructureDefinitionToModelInfo.java#L45\">https://github.com/cqframework/cqf-tooling/blob/002fbccbd76e0f9d4c7a871173829cb80d25e5c9/src/main/java/org/opencds/cqf/tooling/modelinfo/StructureDefinitionToModelInfo.java#L45</a></p>\n<p>We've thought about moving that to the cql-translator project to keep them collocated. I don't think I've made an issue for that yet though, so I'll do that (and it doesn't need to be done as part of this effort, IMO, unless that's an easier approach for you).</p>",
+        "id": 264192652,
+        "sender_full_name": "JP",
+        "timestamp": 1638985652
+    },
+    {
+        "content": "<p>The QDM ModelInfoes are created separately. As long as we retain the ability to load those as XML I don't think you need to worry about them for your current use case:<br>\n<a href=\"https://github.com/cqframework/clinical_quality_language/tree/master/Src/java/qdm/src/main/resources/gov/healthit/qdm\">https://github.com/cqframework/clinical_quality_language/tree/master/Src/java/qdm/src/main/resources/gov/healthit/qdm</a></p>",
+        "id": 264192972,
+        "sender_full_name": "JP",
+        "timestamp": 1638985789
+    },
+    {
+        "content": "<p>As far as your engine PR, thanks for the contribution! I'll review it as soon as I can. It might take me a couple days to get started on it. Unless <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> can jump on it first... <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span></p>",
+        "id": 264193227,
+        "sender_full_name": "JP",
+        "timestamp": 1638985903
+    },
+    {
+        "content": "<p>Nice! Do you mind sharing what is on your FHIR-Spec folder? I don't know how to download all specs for all versions easily.</p>",
+        "id": 264227712,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639001172
+    },
+    {
+        "content": "<p>Unfortunately there's not a way to easily download all the specs or every version including US/QICore, but here's a link to my FHIR-Spec folder:<br>\n<a href=\"https://drive.google.com/file/d/1YsJd2AIg1DijCQTtmsqN592JcdQjb2S9/view?usp=sharing\">https://drive.google.com/file/d/1YsJd2AIg1DijCQTtmsqN592JcdQjb2S9/view?usp=sharing</a></p>",
+        "id": 264231287,
+        "sender_full_name": "JP",
+        "timestamp": 1639003074
+    },
+    {
+        "content": "<p>(collected from downloads like this one: <a href=\"https://www.hl7.org/fhir/downloads.html\">https://www.hl7.org/fhir/downloads.html</a>)</p>",
+        "id": 264231412,
+        "sender_full_name": "JP",
+        "timestamp": 1639003148
+    },
+    {
+        "content": "<p>Há! Thank you <span class=\"user-mention\" data-user-id=\"194178\">@JP</span></p>",
+        "id": 264233520,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639004410
+    },
+    {
+        "content": "<p>Beyond the above discussion, how much is left to do to get $apply fully working on android?  Is that spec'ed out anywhere?  I didn't see it on the kanban.   <span class=\"user-mention\" data-user-id=\"194178\">@JP</span>  <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span></p>",
+        "id": 264478262,
+        "sender_full_name": "Carl Leitner",
+        "timestamp": 1639156642
+    },
+    {
+        "content": "<p>There’s a some work in progress here:</p>\n<p><a href=\"https://github.com/DBCG/cql-evaluator/pull/42\">https://github.com/DBCG/cql-evaluator/pull/42</a></p>\n<p>It’s probably 3/4 complete. The caveats due to the JAXB issues means it only works for a very narrow range of content and Android devices.</p>",
+        "id": 264480102,
+        "sender_full_name": "JP",
+        "timestamp": 1639157451
+    },
+    {
+        "content": "<p>OK.  So if combined with <a href=\"https://github.com/DBCG/cql_engine/pull/518\">https://github.com/DBCG/cql_engine/pull/518</a> does that get us most of the way there?   Is the other 1/4 something someone can pick-up?</p>",
+        "id": 264481668,
+        "sender_full_name": "Carl Leitner",
+        "timestamp": 1639158192
+    },
+    {
+        "content": "<p>There’s feedback on the PR that needs to be addressed. Specifically, the operation API is not aligned correctly with the CPG $apply specification. It’d be easiest for the original dev to make those changes and address any bit rot, but they are currently occupied with some other work. If you want to jump in there or know someone that can you are welcome to. If not, I’ll get to it “soon”.</p>",
+        "id": 264482377,
+        "sender_full_name": "JP",
+        "timestamp": 1639158520
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"194178\">JP</span> <a href=\"#narrow/stream/179220-cql/topic/Android.20Versions.20of.20DBCG.20libs/near/264482377\">said</a>:</p>\n<blockquote>\n<p>There’s feedback on the PR that needs to be addressed. Specifically, the operation API is not aligned correctly with the CPG $apply specification. It’d be easiest for the original dev to make those changes and address any bit rot, but they are currently occupied with some other work. If you want to jump in there or know someone that can you are welcome to. If not, I’ll get to it “soon”.</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"458846\">@Vitor Pamplona</span> ?</p>",
+        "id": 264482608,
+        "sender_full_name": "Carl Leitner",
+        "timestamp": 1639158617
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"458846\">@Vitor Pamplona</span> - Bryn’s working on some translator changes that should clean up the engine PR a bit:</p>\n<p><a href=\"https://github.com/cqframework/clinical_quality_language/issues/702\">https://github.com/cqframework/clinical_quality_language/issues/702</a></p>",
+        "id": 264482642,
+        "sender_full_name": "JP",
+        "timestamp": 1639158634
+    },
+    {
+        "content": "<p>Nice! I was going to do a PR on the cqframework/clinical_quality_language but that project is way too crazy for me :)</p>",
+        "id": 264494049,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639163334
+    },
+    {
+        "content": "<p>But I am getting ready to open a PR for the CQL-Evaluator to remove JAXB-based things from the <code>evaluator.engine</code> and <code>evaluator.fhir</code></p>",
+        "id": 264494358,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639163479
+    },
+    {
+        "content": "<p>After changes to the engine and evaluator, I was able to successfully open a JSON CQL on Android</p>",
+        "id": 264494404,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639163507
+    },
+    {
+        "content": "<p>App is here if anyone wants to see how it worked: <a href=\"https://github.com/Path-Check/who-verifier-app\">https://github.com/Path-Check/who-verifier-app</a></p>",
+        "id": 264598556,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639276411
+    },
+    {
+        "content": "<p>Next up, we will be investigating why it takes so long to load and run Jackson-based CQL on Android (4-5 seconds).</p>",
+        "id": 264600487,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639279871
+    },
+    {
+        "content": "<p>There’s a few places that benefit from caching, if you’ve not already done so:</p>\n<p><a href=\"https://github.com/DBCG/cql-evaluator/blob/master/evaluator.cql2elm/src/main/java/org/opencds/cqf/cql/evaluator/cql2elm/model/CacheAwareModelManager.java\">https://github.com/DBCG/cql-evaluator/blob/master/evaluator.cql2elm/src/main/java/org/opencds/cqf/cql/evaluator/cql2elm/model/CacheAwareModelManager.java</a></p>\n<p><a href=\"https://github.com/DBCG/cql-evaluator/blob/master/evaluator.engine/src/main/java/org/opencds/cqf/cql/evaluator/engine/model/CachingModelResolverDecorator.java\">https://github.com/DBCG/cql-evaluator/blob/master/evaluator.engine/src/main/java/org/opencds/cqf/cql/evaluator/engine/model/CachingModelResolverDecorator.java</a></p>\n<p>In particular the ModelResolvers use quite a bit of reflection. I think the ideal end goal for these is a code gen step in the cql-engine build, but in the meantime this may help.</p>",
+        "id": 264715563,
+        "sender_full_name": "JP",
+        "timestamp": 1639406651
+    },
+    {
+        "content": "<p><a href=\"https://github.com/Path-Check/who-verifier-app/blob/main/app/src/main/java/org/who/ddccverifier/services/CQLEvaluator.kt#L26\">https://github.com/Path-Check/who-verifier-app/blob/main/app/src/main/java/org/who/ddccverifier/services/CQLEvaluator.kt#L26</a></p>\n<p>There’s where you’d use the caching decorator.</p>",
+        "id": 264715734,
+        "sender_full_name": "JP",
+        "timestamp": 1639406728
+    },
+    {
+        "content": "<p>Any strong feelings about the SLF4J dependency? It's quite useless for Android.</p>",
+        "id": 264755016,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639422538
+    },
+    {
+        "content": "<p>The api or the simple-logger? No opinion on the simple-logger and it should be marked as optional.</p>\n<p>For the api, we're supporting a number of platforms besides Android and the slf4j-api allows us to use whatever logging implementation is available on the platform. If slf4j-api is not supported on Android we need _some_ logging solution that works \"everywhere\". What's the recommended approach on Android?</p>\n<p>A quick google search suggests there are slf4j binding available for android. I have no idea how mature they might be though:</p>\n<p><a href=\"https://github.com/nomis/slf4j-android\">https://github.com/nomis/slf4j-android</a><br>\n<a href=\"https://github.com/tony19/logback-android\">https://github.com/tony19/logback-android</a></p>",
+        "id": 264757440,
+        "sender_full_name": "JP",
+        "timestamp": 1639423718
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194178\">@JP</span> <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span>  I just opened another PR to update the Branch of the previous PlanDefinition/$apply PR: <a href=\"https://github.com/DBCG/cql-evaluator/pull/74\">https://github.com/DBCG/cql-evaluator/pull/74</a></p>",
+        "id": 265239808,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639701108
+    },
+    {
+        "content": "<p>This solves most of the easy requests by @JP. However, the test suite is not complete and the code is still quite verbose/ugly.</p>",
+        "id": 265239881,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639701161
+    },
+    {
+        "content": "<p>I recommend merging PR 74 with PR 42 and merging PR 42 into master nevertheless. With the code on master, we can start to improve both the tests and the current implementation with new PRs.</p>",
+        "id": 265239989,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639701244
+    }
+]

@@ -1,0 +1,146 @@
+---
+layout: page
+title: "FHIR Chat  · DocumentReference Multiple Pages · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html">DocumentReference Multiple Pages</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153971043"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/153971043" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Riehm <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#153971043">(Jun 22 2018 at 02:21)</a>:</h4>
+<p>I am attempting to implement a FHIR client-server interaction such that clients can store a variety of document and image files (PDFs, JPGs, DOCs, etc.) in the server using the DocumentReference resource, the purpose of which is to make those documents available in a central place for other clients.</p>
+<p>Currently, I have clients providing base64 file data in the DocumentReference.content.attachment.data element. This works for the majority of cases. However, I have a case where the client's documents have multiple pages, and each of those pages are stored in separate files. I would like to upload these files grouped as one DocumentReference.</p>
+<p>The option that currently looks best to me would be to send each page as a separate content element within a single DocumentReference, since the DocumentReference.content element has a cardinality of 0..*. However, the documentation for DocumentReference.content says "There may be multiple content element repetitions, each with a different format," but providing different "repetitions" in different formats is not my use case, so my initial reaction is that my proposed usage would be an abuse of the spec. However, maybe I am misinterpreting the spec and that comment is only making clear the possibility that each content element might be in a different format, not mandating that different content elements represent the same underlying data and only differ in the format by which they present it.</p>
+<p>Does anyone have opinions about using multiple DocumentReference.content elements in the same DocumentReference to represent the multiple pages of a single document?</p>
+<p>Also, here are other options considered:<br>
+-Have the client combine the files into a single multi-page PDF or TIFF document before uploading. This option may seem ideal, but this client is actually a local repository that has clients of its own, and one of the goals is that this local repository does not keep storage of local copies of files that it has uploaded to the FHIR server. Also, this local repository must maintain the ability to provide the original, unmodified files back to its own clients, which it would not be able to do if it deleted its local copies and only a multi-page PDF existed in the FHIR server.</p>
+<p>-POST separate DocumentReference resources for each page of the document. Then, one option to logically group them to together would be to assign them a common DocumentReference.identifier, but that doesn't provide the page order information to other clients. One idea to solve that would be to have a DocumentReference.relatesTo of 'appends' that points to the DocumentReference of the previous page. However, I'm not sure that is the intended purpose of the 'appends' relationship, and in general it feels wrong to me to be using multiple DocumentReferences for one document. For instance, all of the other context elements would need to be duplicated and kept in sync between each of the resources.</p>
+<p>Have I missed any other options? Is one of the above options preferable?</p>
+
+
+
+<a name="153971107"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/153971107" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#153971107">(Jun 22 2018 at 13:33)</a>:</h4>
+<p>DocumentReference is designed with the presumption that whatever document/artifact/whatever you're pointing to can be expressed with a single binary file.  It sounds like your source system is treating each page as an independent artifact, but you're wanting to consolidate them.  The cleanest way to do that, given your constraints, is to combine the files at query time and/or to maintain a local cached copy .  The other possibility would be to have a modifier extension that allows you to convey the additional cached pages.  Using the existing repeating element would not be adviseable because the expectation is that a receiving system would look for the first syntax they recognize or prefer and display that.  Some might keep looking and would error out at seeing multiple repetitions with the same mime type.  But others would happily just display the first page they encountered.  Neither behavior would be desirable in your environment.</p>
+
+
+
+<a name="173663087"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/173663087" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#173663087">(Aug 20 2019 at 14:31)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>, I came across a similar use-case and was delighted to find a ready-to-go answer <span aria-label="slight smile" class="emoji emoji-1f642" role="img" title="slight smile">:slight_smile:</span> However, I was wondering if you could say smt. about the problems with the last possible option suggested in the question, i.e. linking separate DocumentReference instances using <code>relatesTo = "appends"</code>. There is clearly the problem that a client reading a given instance would not be able to tell if there is more information (a further page) appended, but is that not always an issues when appending information to an existing document? Or are there special rules for what kind of information can be appended to a DocumentReferences using <code>relatesTo</code>, e.g. that it cannot change the interpretation of the target (appended-to) document in any clinically significant way?</p>
+
+
+
+<a name="173676781"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/173676781" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#173676781">(Aug 20 2019 at 17:17)</a>:</h4>
+<p>Any rules that exist would be by business convention.  Typically "appends" would add to, but not change.  If that weren't the case, then the correct action would be to replace the document, not append to it.  However, that's not the sort of thing that could be enforced by an instance validator - or even (in many cases) by an interface.  It's the sort of thing that needs to be enforced by convention/the community.</p>
+
+
+
+<a name="173771528"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/173771528" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#173771528">(Aug 21 2019 at 07:42)</a>:</h4>
+<p>OK, thanks Lloyd!</p>
+
+
+
+<a name="174222464"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/174222464" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#174222464">(Aug 27 2019 at 12:16)</a>:</h4>
+<p>Put in an issue to reflect the above more clearly in the spec: <a href="https://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=23732&amp;start=0" target="_blank" title="https://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=23732&amp;start=0">GForge #23732</a></p>
+
+
+
+<a name="178976559"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/178976559" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#178976559">(Oct 24 2019 at 17:33)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="191404">@John Moehrke</span> I just saw the resolution to the GForge issue mentioned above  and have some questions about it for my understanding. - I'm sending them your way since the change commit was from you but feel free to forward!</p>
+<p>The new explanatory text for <code>DoukumentReference.content</code> now states:</p>
+<blockquote>
+<p>If there are multiple content element repetitions, these must all represent the same document in different format, or attachment metadata.</p>
+</blockquote>
+<p>which leaves me with these questions:</p>
+<ol>
+<li>What would be an example of attachment metadata, and would <code>content</code> it be allowed to include both metadata and the doc itself ?</li>
+<li>If I understood Lloyd correctly in the thread above, it seems that one of the problems with having multiple elements that do not represent the same thing (viz. the document itself) would be that systems could mistake one of these non-doc entries for the doc itself. That seems to still be a potential danger here unless there is a defined way of telling meta-data and doc apart - is there such a mechanism?</li>
+<li>Is there the implicit expectation that the different representations of a doc (in different formats) are equivalent for use in some sense? E.g. I could add a thumbnail of a scanned document (in a different format than the scan itself) which represents the same thing but which cannot possibly be read and hence can only be used instead of the full-sized image in a very limited set of cases.</li>
+</ol>
+
+
+
+<a name="178977876"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/178977876" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#178977876">(Oct 24 2019 at 17:46)</a>:</h4>
+<p>the expectation that I have is that any repetitions of DocumentReference.content all must be renderings of the blob defined in DocumentReference (i.e. metadata). That any repetitions of .attachment.url or .attachment.data must be effectively the same content with only encoding differences (e.g. CDA, vs FHIR, vs PDF, vs TIFF, vs TEXT, etc...). So there will be other elements in each instance of .content that will explain the difference (mimetype, formatCode); clearly different values of size and hash would result, etc...</p>
+
+
+
+<a name="178977958"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/178977958" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#178977958">(Oct 24 2019 at 17:47)</a>:</h4>
+<p>what we wanted to prevent is that someone thinks that they can render different pages of a larger document with each page in a different instance of the .content element. This was proposed, but rejected.</p>
+
+
+
+<a name="178977980"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/178977980" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#178977980">(Oct 24 2019 at 17:47)</a>:</h4>
+<p>Note that in IHE use of DocumentReference in the MHD profile; the .content element is restricted to (1..1)</p>
+
+
+
+<a name="178978080"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/178978080" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#178978080">(Oct 24 2019 at 17:48)</a>:</h4>
+<p>as IHE deals with multiple renderings with multiple DocumentReference, each pointing at each-other with a .relatesTo "transforms".</p>
+
+
+
+<a name="179086331"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/179086331" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#179086331">(Oct 25 2019 at 20:29)</a>:</h4>
+<p>Thanks for the clarification! Out of curiosity: does IHE have a way of dealing with a single document that is scattered across multiple files (as in the case of scanned pages of a multiple-page document)?</p>
+
+
+
+<a name="179229702"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/179229702" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#179229702">(Oct 28 2019 at 13:23)</a>:</h4>
+<p>There are document scanning services, most of the time they scan multiple pages into one document, but it is possible they do it all as independent files as you mention. In that case they would make multiple DocumentReference--&gt;Binary for each page. Have each successive page with a DocumetReference.relatesTo relationship to the predecessor DocumentReference page and indicate the relatesTo.code as 'appends'.</p>
+
+
+
+<a name="180211465"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/180211465" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#180211465">(Nov 08 2019 at 08:38)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="191404">@John Moehrke</span>, thanks for the reply! - somehow only noticed it today. I was considering that solution as well., My (possibly misguided) understanding, however, was that this would be problematic for clinical safety because a receiver holding only the DocumentReference for the first page would not be able to tell if there is a second page (given only this resource instance). Would the partners exchanging data then have a strictly enforced convention to e.g. always search for relatesTo link pointing to a given doc when retrieving it?</p>
+
+
+
+<a name="180231935"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/180231935" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#180231935">(Nov 08 2019 at 14:04)</a>:</h4>
+<p>good question. In XDS the pointers are both directions (OASIS eb-Registry standard), so if you have page 1 or page N you know if there are more before or after. In FHIR the tendency is to have single direction pointers, so you know if there was a previous page, and you can discover if there is a next page. So yes you need to be a bit more active to discover next page. It is knowable, just a bit more work.</p>
+
+
+
+<a name="180423605"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/180423605" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#180423605">(Nov 11 2019 at 13:34)</a>:</h4>
+<p>OK, interesting contrast  For this context, two-way pointers are certainly quite helpful <span aria-label="slight smile" class="emoji emoji-1f642" role="img" title="slight smile">:slight_smile:</span></p>
+
+
+
+<a name="180426029"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/180426029" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#180426029">(Nov 11 2019 at 14:09)</a>:</h4>
+<p>Two-way pointers tend not to work well in a RESTful space because they make creation and updates hard.</p>
+
+
+
+<a name="180491321"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/180491321" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#180491321">(Nov 12 2019 at 08:07)</a>:</h4>
+<p>Right, fair point - just meant to say it makes this particular case harder to handle.</p>
+
+
+
+<a name="180584827"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/DocumentReference%20Multiple%20Pages/near/180584827" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/DocumentReference.20Multiple.20Pages.html#180584827">(Nov 13 2019 at 02:43)</a>:</h4>
+<p>that might be a way to look at it... but another way to look at it is that this kind of pointer is the way of REST, so everything is done this way in REST.. Thus it may seem harder to you, but others would see bi-directional pointers as harder for them and in some cases impossible for them.,</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

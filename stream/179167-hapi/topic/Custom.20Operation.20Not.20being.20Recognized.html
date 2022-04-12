@@ -1,0 +1,85 @@
+---
+layout: page
+title: "FHIR Chat  · Custom Operation Not being Recognized · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Custom.20Operation.20Not.20being.20Recognized.html">Custom Operation Not being Recognized</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="221177982"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Custom%20Operation%20Not%20being%20Recognized/near/221177982" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Neil Lott <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Custom.20Operation.20Not.20being.20Recognized.html#221177982">(Dec 29 2020 at 23:57)</a>:</h4>
+<p>So starting from hapi-fhir-jpaserver-starter-5.2.0 I've added my custom operations.  Everything starts fine and I'm able to execute this for example </p>
+<p>curl--location --request GET '<a href="http://localhost:9027/fhir/Person?identifier=http://intellicentrics.com/alternateIdentifier/wso2Username%7CPatientqa22,http://intellicentrics.com/alternateIdentifier/wso2Username%7CPatientqa24">http://localhost:9027/fhir/Person?identifier=http://intellicentrics.com/alternateIdentifier/wso2Username%7CPatientqa22,http://intellicentrics.com/alternateIdentifier/wso2Username%7CPatientqa24</a>'</p>
+<p>However if I execute a curl with my custom operation </p>
+<p>curl '<a href="http://localhost:9027/fhir/Observation/$lastn">http://localhost:9027/fhir/Observation/$lastn</a>'</p>
+<p>I get this error</p>
+<p>}~ $ curl '<a href="http://localhost:9027/fhir/Observation/$lastn">http://localhost:9027/fhir/Observation/$lastn</a>'<br>
+{<br>
+  "resourceType": "OperationOutcome",<br>
+  "text": {<br>
+    "status": "generated",<br>
+    "div": "&lt;div xmlns=\"http://www.w3.org/1999/xhtml\"&gt;&lt;h1&gt;Operation Outcome&lt;/h1&gt;&lt;table border=\"0\"&gt;&lt;tr&gt;&lt;td style=\"font-weight: bold;\"&gt;ERROR&lt;/td&gt;&lt;td&gt;[]&lt;/td&gt;&lt;td&gt;&lt;pre&gt;LastN operation is not enabled on this service, can not process this request&lt;/pre&gt;&lt;/td&gt;\n\t\t\t\t\t\n\t\t\t\t\n\t\t\t&lt;/tr&gt;\n\t\t&lt;/table&gt;\n\t&lt;/div&gt;"<br>
+  },<br>
+  "issue": [ {<br>
+    "severity": "error",<br>
+    "code": "processing",<br>
+    "diagnostics": "LastN operation is not enabled on this service, can not process this request"<br>
+  } ]<br>
+}</p>
+<p>And on another custom operation I get this error</p>
+<p>curl '<a href="http://localhost:9027/fhir/Observation/$quickStats?careteam-member-identifier=http://intellicentrics.com/alternateIdentifier/wso2Username%7Chcp.camelia.coleman%40yopmail.com&amp;careteam-member-type=Practitioner&amp;statistic=average&amp;date=gt2020-12-02T06:00:00">http://localhost:9027/fhir/Observation/$quickStats?careteam-member-identifier=http://intellicentrics.com/alternateIdentifier/wso2Username%7Chcp.camelia.coleman%40yopmail.com&amp;careteam-member-type=Practitioner&amp;statistic=average&amp;date=gt2020-12-02T06:00:00</a>.</p>
+<div class="codehilite"><pre><span></span><code>&quot;div&quot;: &quot;&lt;div xmlns=\&quot;http://www.w3.org/1999/xhtml\&quot;&gt;&lt;h1&gt;Operation Outcome&lt;/h1&gt;&lt;table border=\&quot;0\&quot;&gt;&lt;tr&gt;&lt;td style=\&quot;font-weight: bold;\&quot;&gt;ERROR&lt;/td&gt;&lt;td&gt;[]&lt;/td&gt;&lt;td&gt;&lt;pre&gt;Invalid request: The FHIR endpoint on this server does not know how to handle GET operation[Observation/$quickStats] with parameters [[date, careteam-member-identifier, statistic, _count, code, filterExpired, careteam-member-type]]&lt;/pre&gt;&lt;/td&gt;\n\t\t\t\t\t\n\t\t\t\t\n\t\t\t&lt;/tr&gt;\n\t\t&lt;/table&gt;\n\t&lt;/div&gt;&quot;
+</code></pre></div>
+
+<p>},<br>
+  "issue": [ {<br>
+    "severity": "error",<br>
+    "code": "processing",<br>
+    "diagnostics": "Invalid request: The FHIR endpoint on this server does not know how to handle GET operation[Observation/$quickStats] with parameters [[date, careteam-member-identifier, statistic, _count, code, filterExpired, careteam-member-type]]"<br>
+  } ]<br>
+}</p>
+<p>What do I need to do to register these custom operations?</p>
+<p>Here's a code sample of the first one "lastN" that's failing</p>
+<p>@Service<br>
+public class ObservationResourceLatestObsProvider implements IResourceProvider {</p>
+<div class="codehilite"><pre><span></span><code>@Autowired
+private ResourceLinkResolverService linkResolverService;
+
+@Autowired
+private ResourceDao resourceDao;
+
+@Autowired
+private ResourceParameterSearchService resourceParameterSearchService;
+
+@Autowired
+private PartitionSettings partitionSettings;
+
+protected static final Logger LOGGER = LoggerFactory.getLogger(ObservationResourceLatestObsProvider.class);
+
+@Operation(name = &quot;$lastn&quot;, idempotent = true)
+public Parameters latestObservationsByPractitioner(
+        javax.servlet.http.HttpServletRequest theServletRequest,
+        javax.servlet.http.HttpServletResponse theServletResponse,
+        ca.uhn.fhir.rest.api.server.RequestDetails theRequestDetails,
+        @Description(shortDefinition = &quot;The code of the observation type&quot;) @OptionalParam(name = &quot;code&quot;) TokenAndListParam code,
+        @Description(shortDefinition = &quot;Patient&#39;s nominated general practitioner, not the organization that manages the record&quot;) @OperationParam(name = &quot;general-practitioner&quot;) TokenParam practitioner,
+        @Description(shortDefinition = &quot;The subject that the observation is about&quot;) @OperationParam(name = &quot;subject-identifier&quot;) TokenParam subjectIdentifier,
+        @Description(shortDefinition = &quot;The maximum number of observations to return&quot;) @OperationParam(name = &quot;max&quot;) NumberParam max) {
+
+    validateParameters(code, practitioner);
+
+    List&lt;TokenParam&gt; codeParams = ParameterUtil.buildObservationCodeParamList(code);
+</code></pre></div>
+
+<p>Thanks,</p>
+<p>Neil</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

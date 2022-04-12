@@ -1,0 +1,50 @@
+---
+layout: page
+title: "FHIR Chat  · Use of subscriptions · subscriptions"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/index.html">subscriptions</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Use.20of.20subscriptions.html">Use of subscriptions</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="214522203"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Use%20of%20subscriptions/near/214522203" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Use.20of.20subscriptions.html#214522203">(Oct 26 2020 at 00:46)</a>:</h4>
+<p>One of the issues that's come up for implemeters trying to use subscriptions is the currency / atomicity issues. </p>
+<p>One use of subscriptions is for database synchronization. A subscription running like this needs to be very correct - can't miss stuff, can't have temporal glitches etc. There's very low tolerance for error.</p>
+<p>An example of this would be with a subscription like 'tell me all the diabetic patients who are admitted to emergency'. </p>
+<p>One approach would be to decide inside the atomic transaction in the EHR whether the patient was diabetic, and whether they were being admitted to ED. The problem with this approach is that as engineers, we put serioues efforts into reducing both transaction scope and transaction work load, since both seriously impact on system scalability etc. </p>
+<p>An alternative, then, is simply to log that there was a change to an encounter, and then, in a retrospective queue running a few seconds later, look back at the system to see whether the patient is diabetic and the change to encounter is an admission to ED. But what happens if a patient is changed from being a diabetic to not (or vice versa) between the transaction and the processing step? </p>
+<p>For database synchronisation, that's a seriously hard question to answer, and we're going to find ourselves one way or another making trade-offs between complexity, system impact, and reliability </p>
+<p>But there's a whole set of different uses for subscriptions where that kind of question doesn't really matter. Or, more correctly, there's no particular answer, but we're not doing synchronization, we're doing some kind of survelliance of one sort or another. (might be called 'public health reporting' for instance). In this case, record keeping uncertainties are inherent in what is going on, and there's less (or no) requirement for synchronization perfection</p>
+<p>This suggests that there's 2 kinds of modes a subscription engine might run in - high sync and low syn or something (transaction vs non-transactional?). In high sync, the kinds of conditions you ask for, and the bundle inclusions you ask for, are limited by the system's willingness to get things a.o.k inside the transaction engine, and in low-sync mode, the system will do more work (not unlimited amounts) to do additional condition checking and related information gathering.</p>
+<p>What do people think? has this come up already in implementations?</p>
+
+
+
+<a name="214576031"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Use%20of%20subscriptions/near/214576031" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vassil Peytchev <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Use.20of.20subscriptions.html#214576031">(Oct 26 2020 at 13:55)</a>:</h4>
+<p>My initial thought is that "database synchronization" to me means exactly that - one database mirrors the other using the same platform on both sides. This is achievable via methods that are best suited for the particular platform (e.g. Replication in PostgreSQL).</p>
+<blockquote>
+<p>An alternative, then, is simply to log that there was a change to an encounter, and then, in a retrospective queue running a few seconds later, look back at the system to see whether the patient is diabetic and the change to encounter is an admission to ED.</p>
+</blockquote>
+<p>If we are talking about keeping the data the same on both sides, then I don't think high sync is necessary in the context of subscription - assuming that reads are much cheaper than writes, I don't see  why you would need anything different from the above.</p>
+<blockquote>
+<p>But what happens if a patient is changed from being a diabetic to not (or vice versa) between the transaction and the processing step?</p>
+</blockquote>
+<p>The processing step must be aware that it is processing the event "Diabetic patient in ED" and verify the data before sending it. I don't see a need to have the processing happen within the original database transaction that made the change.</p>
+
+
+
+<a name="214581374"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Use%20of%20subscriptions/near/214581374" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Use.20of.20subscriptions.html#214581374">(Oct 26 2020 at 14:36)</a>:</h4>
+<p>The Google implementation does something like your alternative case for notifications in general (although we don't support subscriptions yet, it's the same framework). There is a write to a processing queue inside the transaction, which is picked up by async workers later and only removed from the queue once processing succeeds. The workers could fail and retry but this achieves "at least once" processing, and someone gets paged if the queue backs up. The workers have access to the state at the time of the transaction so they can trigger events even if the state has changed after that.</p>
+<p>There are caveats - this achieves high scalability and reliability but notifications could get sent out of order (as there are multiple workers), or more than once (although this is very unlikely), and there is some delay compared to firing the notification directly. We haven't felt much need to have two modes.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

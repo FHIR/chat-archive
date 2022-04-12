@@ -1,0 +1,145 @@
+---
+layout: page
+title: "FHIR Chat  · Exclude inherited array elements · shorthand"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/index.html">shorthand</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Exclude.20inherited.20array.20elements.html">Exclude inherited array elements</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="228432919"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Exclude%20inherited%20array%20elements/near/228432919" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joe Paquette <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Exclude.20inherited.20array.20elements.html#228432919">(Mar 02 2021 at 15:52)</a>:</h4>
+<p><strong>Background: </strong><br>
+I am defining a Patient profile in FSH having the parent =  USCorePatientProfile. I'm defining a slice on the <code>identifier</code> attribute. The slice is working just fine. </p>
+<p>The parent <code>identifier</code> defines an example for <code>identifier.value</code> in its array of examples. Within the slice definition, I want to replace the parent's <code>example</code> array element with my slice-specific <code>example</code>. In my slice definition, I have:</p>
+<div class="codehilite"><pre><span></span><code>* identifier[mrn].value ^example[0].label = &quot;My example Label&quot;
+* identifier[mrn].value ^example[0].valueString = &quot;My example content&quot;
+</code></pre></div>
+<p>This successfully adds my example to the array of examples, but the parent's <code>example</code> element still exists. From the identifier slice element:</p>
+<div class="codehilite"><pre><span></span><code>&quot;example&quot; : [
+  {
+    &quot;label&quot; : &quot;General&quot;,
+    &quot;valueString&quot; : &quot;123456&quot;
+  },
+  {
+    &quot;label&quot; : &quot;My example Label&quot;,
+    &quot;valueString&quot; : &quot;My example content&quot;
+  }
+],
+</code></pre></div>
+<p><strong>Question:</strong><br>
+Within the FSH definition, how can I "remove" the unwanted inherited example?<br>
+In fact, how can I "removed" any inherited non-array ElementDefinition attributes such as <code>comment</code>, <code>requirements</code>, etc. I could override them with my own content, but in some cases, I just don't need or want some of those elements.</p>
+
+
+
+<a name="228503020"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Exclude%20inherited%20array%20elements/near/228503020" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Exclude.20inherited.20array.20elements.html#228503020">(Mar 02 2021 at 23:02)</a>:</h4>
+<p>That is an excellent question, <span class="user-mention" data-user-id="211704">@Joe Paquette</span>.  I've reproduced the situation locally in order to ensure I understand it.  From what I can see, SUSHI properly creates the sliced <code>identifier</code> and the differential contains <em>only</em> the <code>example</code> you provided in the FSH.  So that is good.</p>
+<p>But... when the IG Publisher builds the snapshot for the slice, it "inherits" the US Core <code>example</code> from the base <code>identifier</code> element and <em>appends</em> your <code>example</code> (from the <code>mrn</code> slice element in the differential) to it.  So, the IG Publisher interprets an <code>example</code> array in a slice as being <em>additive</em> to the example array in the base (sliced) element.</p>
+<p>I think this actually leads to three relevant questions:</p>
+<ol>
+<li>
+<p>Is it proper and expected behavior for the IG Publisher to copy examples from a sliced element to each of its slices?  I would propose that it is <em>not</em> proper because there is no guarantee that an example in a sliced element conforms to every defined slice of it. <span class="user-mention" data-user-id="191316">@Grahame Grieve</span>? <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>?  Would you agree?</p>
+</li>
+<li>
+<p>Is there a way in <code>StructureDefinition.differential.element</code> to say "delete this property"?  Omission of a property in a differential element indicates "no change" (i.e., keep the property the same).  Can you simply set it to <code>null</code> to effectively <em>delete</em> it from the snapshot (e.g. <code>"example": null</code>)?  Is that the proper approach?</p>
+</li>
+<li>
+<p>Is there a way in FHIR Shorthand to delete a property (i.e., the corresponding FSH for whatever the solution is in 2 above)?  Currently there is not, but it actually depends on the answer to # 2 above.</p>
+</li>
+</ol>
+
+
+
+<a name="228508108"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Exclude%20inherited%20array%20elements/near/228508108" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Exclude.20inherited.20array.20elements.html#228508108">(Mar 02 2021 at 23:47)</a>:</h4>
+<ol>
+<li>It is proper.  In the snapshot for a slice, it inherits everything from the slicing base, plus changes from the slice differential.  (And the slicing base inherits from the ancestor models.)  It might be noisy, but it's correct.</li>
+<li>There isn't right now, but we could possibly look at a new extension we could put in a differential that allows the removal of certain things.  We'd need to limit it those that are truly safe to remove.  Comments, aliases, mappings, rationale, examples are fair game.  Something like description or binding would not be (though maybe we could do that for example and preferred bindings?)</li>
+<li>FSH could certainly come up with a light-weight way of invoking the extension if we define one.</li>
+</ol>
+<p>Next step would be for someone to write up a change proposal to define the extension I guess and then FHIR-I can take it up.  We'd have to evaluate whether that's a kosher thing from a backward compability/normative perspective, but given that the elements we'd be looking at suppressing are not things that would impact validation or meaning, I think its ok.</p>
+
+
+
+<a name="228613574"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Exclude%20inherited%20array%20elements/near/228613574" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Exclude.20inherited.20array.20elements.html#228613574">(Mar 03 2021 at 15:43)</a>:</h4>
+<p>Thanks, <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>.  Regarding #1 (properness) -- there is still some gray area as it pertains to arrays in differentials.  Sometimes an array in a differential is meant to <em>fully replace</em> the original array in the snapshot (as in <code>ElementDefinition.type</code>), but sometimes it is meant to be <em>additive</em> (as in <code>ElementDefinition.constraint</code>). So it seems to me it is fair to question how the <code>example</code> array should operate -- should it be a replacement or an appendix?</p>
+<p>Even if the spec is clear that differential <code>example</code> entries should be appended to the inherited array, I guess I question if that is the <em>right</em> thing to do.  For example, does it make sense for a slice element representing a MRN (with a specific system) to have an example of a SSN (with a different system) -- just because the slicing base had that example?  I don't think so.  In my opinion, having a SSN example on a MRN element violates the definition of <code>example</code>:</p>
+<blockquote>
+<p>A sample value for this element demonstrating the type of information that would typically be found in the element.</p>
+</blockquote>
+<p>So, I guess I'm changing my question from "is it proper?" (for which the answer is apparently "yes") to "<em>should</em> it be proper?" (which I would suggest the answer is "no"). I think we need to do a better job defining the rules for how differentials work anyway (per a different thread) -- so do you think this is something that could be clarified to work in a more semantically correct way?</p>
+
+
+
+<a name="228618528"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Exclude%20inherited%20array%20elements/near/228618528" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Exclude.20inherited.20array.20elements.html#228618528">(Mar 03 2021 at 16:10)</a>:</h4>
+<p>ElementDefinition.constraint is a sparse override.  If you were to specify the same constraint key, then it would replace the parent.  If you specify something with a new key, it would add.  Constraints can't ever be removed, so "replace" for the whole collection is nonsensical.  On the other hand, examples and aliases can absolutely be removed, so replacement makes sense.  I accept that documentation should be clearer around expected behavior of each element in differential.  It sounds like we need to do two things:</p>
+<ul>
+<li>are differential values replacements, supplements, or 'matched' updates + supplements?</li>
+<li>when doing 'matched' updates, are the updates 'sparse' (only include child elements that change + the key) or 'complete' (any child elements not included in the 'update' differential element are considered removed)</li>
+</ul>
+<p>Care to submit a change request?</p>
+
+
+
+<a name="228629467"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Exclude%20inherited%20array%20elements/near/228629467" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Exclude.20inherited.20array.20elements.html#228629467">(Mar 03 2021 at 17:12)</a>:</h4>
+<p>Sure thing.  Thanks, Lloyd!</p>
+
+
+
+<a name="228676212"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Exclude%20inherited%20array%20elements/near/228676212" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joe Paquette <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Exclude.20inherited.20array.20elements.html#228676212">(Mar 03 2021 at 22:00)</a>:</h4>
+<p><span class="user-mention" data-user-id="191469">@Chris Moesel</span>  <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>  Thanks! Very educational for me! I agree completely that the list of "removal" candidates in a slice is small. From my perspective, the following ElementDefinition attributes are likely candidates:</p>
+<ul>
+<li>comment</li>
+<li>requirements</li>
+<li>alias</li>
+<li>example<br>
+There could/might be others, but I leave that to those who know a lot more than I do!</li>
+</ul>
+<p>Thanks again!</p>
+
+
+
+<a name="228680323"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Exclude%20inherited%20array%20elements/near/228680323" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Exclude.20inherited.20array.20elements.html#228680323">(Mar 03 2021 at 22:28)</a>:</h4>
+<p>OK.  I have created two change requests to cover these topics.</p>
+
+
+
+<a name="228680410"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Exclude%20inherited%20array%20elements/near/228680410" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Exclude.20inherited.20array.20elements.html#228680410">(Mar 03 2021 at 22:29)</a>:</h4>
+<p><span class="user-mention" data-user-id="372944">@Firely Bot</span> issue show <a href="http://jira.hl7.org/browse/FHIR-31405">FHIR-31405</a></p>
+
+
+
+<a name="228680434"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Exclude%20inherited%20array%20elements/near/228680434" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Firely Bot <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Exclude.20inherited.20array.20elements.html#228680434">(Mar 03 2021 at 22:29)</a>:</h4>
+<p><strong><a href="https://jira.hl7.org/browse/FHIR-31405">FHIR-31405 Clarify expected behavior of ElementDefinition properties in differential</a></strong><br>
+Status: <strong>Submitted</strong>, Type: <strong>Change Request</strong></p>
+
+
+
+<a name="228680462"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Exclude%20inherited%20array%20elements/near/228680462" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Exclude.20inherited.20array.20elements.html#228680462">(Mar 03 2021 at 22:30)</a>:</h4>
+<p><span class="user-mention" data-user-id="372944">@Firely Bot</span> issue show <a href="http://jira.hl7.org/browse/FHIR-31406">FHIR-31406</a></p>
+
+
+
+<a name="228680496"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Exclude%20inherited%20array%20elements/near/228680496" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Firely Bot <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Exclude.20inherited.20array.20elements.html#228680496">(Mar 03 2021 at 22:30)</a>:</h4>
+<p><strong><a href="https://jira.hl7.org/browse/FHIR-31406">FHIR-31406 Support "deleting" unwanted inherited properties in profiles</a></strong><br>
+Status: <strong>Submitted</strong>, Type: <strong>Change Request</strong></p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

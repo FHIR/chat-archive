@@ -1,0 +1,208 @@
+---
+layout: page
+title: "FHIR Chat  · Defining Websockets · subscriptions"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/index.html">subscriptions</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html">Defining Websockets</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="212320671"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/212320671" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#212320671">(Oct 05 2020 at 16:03)</a>:</h4>
+<p>Hi all, been discussing and looking at websockets and wanted to ping the channel for some feedback (please!).</p>
+<p>A few people have been asking for alignment with FHIRcast.  As I was documenting / testing, I realized that it won't be possible to align completely - a user may want notifications from 10 different subscriptions, which means the protocol needs to support multiple registrations over a single connection (requires decoupling the socket url from the subscription).</p>
+<p>So, my current proposal is:</p>
+<ul>
+<li>Servers maintain one or more websocket urls for subscriptions (advertised via CapabilityStatement?)</li>
+<li>Clients can connect to the websocket, but will receive no notifications</li>
+<li>Add an operation to subscriptions - something like <code>$getTempToken</code> (?) that clients call via REST to get a short-term use key for binding to that subscription.<ul>
+<li>Could also define a type-level variant that includes multiple id's in one call</li>
+<li>Token/key/whatever should expire no later than the user's token to ensure that notifications are only received while the user is authorized.</li>
+<li>Want to allow things like derived tokens, but also allow things like arbitrary guids that a server is keeping track of.</li>
+</ul>
+</li>
+<li>Clients connected via the websocket send the token/key to the server, which lets the server know which subscriptions the client is authorized for<ul>
+<li>The server SHOULD send a handshake/heartbeat message for each subscription (so the client can verify they are receiving what they think they are).</li>
+<li>The server MAY send a backlog of notifications, per subscription, either in a single notification bundle or as separate notifications.<ul>
+<li>This may include either notifications since the last client was connected, a fixed number of prior notifications (e.g., last 5), or a fixed duration worth of notifications (e.g., last hour).</li>
+<li>It is up to the server to determine if the client should be allowed those messages (if using this behavior).</li>
+<li>These may be duplicates of notifications received.</li>
+<li>These may not cover all notifications - clients are expected to have a REST-based mechanism for determining state while not connected.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Clients need to periodically refresh their token via successive calls to the <code>$getTempToken</code> operation.</li>
+<li>Clients may send 'n' tokens to the server<ul>
+<li>Servers SHOULD only allow a single connection to be active at a given time (e.g., when a new token provided by a client, the server should stop sending notifications to the old one).</li>
+</ul>
+</li>
+<li>Notifications are sent by the server per configuration in the Subscription (e.g., notification bundles of the desired MIME format, payload content level, etc.).</li>
+</ul>
+<p>Key questions:</p>
+<ul>
+<li>Does this proposal/protocol (overall) make sense?<ul>
+<li>If not, what would you like to see?</li>
+</ul>
+</li>
+<li>How should the websocket url/s be advertised?</li>
+<li>Name suggestions for the operation.</li>
+</ul>
+<p>Thanks!</p>
+
+
+
+<a name="212323865"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/212323865" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jenni Syed <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#212323865">(Oct 05 2020 at 16:27)</a>:</h4>
+<p>I think my main concern is that we haven't had a lot of feedback except that webSockets aren't working great on the subscription side</p>
+
+
+
+<a name="212323915"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/212323915" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jenni Syed <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#212323915">(Oct 05 2020 at 16:27)</a>:</h4>
+<p>The FHIRCast protocol is a bit different in number of people connecting/what it's used for.</p>
+
+
+
+<a name="212324238"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/212324238" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jenni Syed <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#212324238">(Oct 05 2020 at 16:30)</a>:</h4>
+<p>IE: having 2 apps connect to a session is more common than 30+ that are listening to subscriptions</p>
+
+
+
+<a name="212328878"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/212328878" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#212328878">(Oct 05 2020 at 17:09)</a>:</h4>
+<p>Yes.  During (in person) connectathons, it has come up several times - the idea of a web-based app using subscriptions for notifications.  But, other than saying people want it (and various opinions on how <em>not</em> to do it), I haven't gotten much back.</p>
+<p>As of now, I'm planning on marking the websocket section <code>Trial Use</code>, so that it doesn't hold up anything else.</p>
+<p>But, with all of that said, what is documented today doesn't align with current needs.  What I've written above is, I believe, in line with what we've tried out + what I've gotten back (<span class="user-mention" data-user-id="191864">@Isaac Vetter</span> <span class="user-mention" data-user-id="192685">@Vassil Peytchev</span>).</p>
+
+
+
+<a name="212328890"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/212328890" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#212328890">(Oct 05 2020 at 17:09)</a>:</h4>
+<p>Re: number of apps and connections, there general expectation for Subscriptions (whether channel == Rest Hook, Web Socket, Email, or other) is that only a single client is receiving notifications for a given Subscription.</p>
+<p>Of course a single client may be receiving notifications for <em>many</em> Subscriptions, which is where multiplexing on a websocket really matters -- because maintaining lots of websockets from a single browser won't work.</p>
+
+
+
+<a name="212329712"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/212329712" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#212329712">(Oct 05 2020 at 17:16)</a>:</h4>
+<p>For Gino's questions above: it'd be good to clearly spell out:</p>
+<ul>
+<li>Naming suggestions. I'd suggest calling these short-lived tokens "Web Socket Binding Tokens", with an op like <code>/Subscription/:id/$wsBindingToken.get</code>. The response to this operation should include a binding token and ideally information about when it expires.</li>
+<li>How to bind a Subscription to a websocket? Right now this is documented as a WS message of <code>:bind $id</code>, but we'd want to switch to something like <code>:bind $wsBindingToken</code> -- the idea being that a binding token conveys the identity of a subscription together with the authorization to bind to it.</li>
+<li>"The server SHOULD send a handshake/heartbeat message for each subscription" -- ideally there'd be a handshake every time the subscription is <em>bound</em> to a websocket.</li>
+<li>"Servers SHOULD only allow a single connection to be active at a given time" -- yes; for clarity of terms, might say something like "For any Subscription with a WS channel, servers SHOULD ensure that the subscription is never bound to more than one WS at a time."</li>
+<li>How should the websocket URL be discovered? <a href="https://www.hl7.org/fhir/extension-capabilitystatement-websocket.html">https://www.hl7.org/fhir/extension-capabilitystatement-websocket.html</a> is what we're using now; is it failing us?</li>
+</ul>
+
+
+
+<a name="212334115"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/212334115" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#212334115">(Oct 05 2020 at 17:55)</a>:</h4>
+<p>Thanks for the feedback!</p>
+<ul>
+<li>Do we want to specifically call out <code>ws</code> in the call, or leave it open in case people want it for other things in the future?</li>
+<li>Do you think it should only be instance level, or are you ok with the complementary <code>/Subscription/$wsBindingToken.get?id=...</code> for multiple subscriptions in a single request?</li>
+<li>I think it would be good to either add some sort of parameter flag (e.g., <code>:bind --token $wsBindingToken</code>) or change the name (e.g., <code>:bind-with-token $wsBindingToken</code>) so it's explicit what we are calling (and to leave options for the future).</li>
+<li>Thanks for clarifying - I did intend a message for each subscription each time it is bound.</li>
+<li>Again, thank you for the clarification (re: single active channel)</li>
+<li>For websocket URL discovery, I don't think it's failing today.  I wanted to open it up in case people felt that it should be handled differently (e.g., as part of the response from getting the binding token).</li>
+</ul>
+
+
+
+<a name="212341802"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/212341802" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#212341802">(Oct 05 2020 at 18:55)</a>:</h4>
+<blockquote>
+<p>Do we want to specifically call out ws in the [operation name]</p>
+</blockquote>
+<p>I like the specificity of including <code>ws</code> in the name; I could imagine that other channels might have different constraints.</p>
+
+
+
+<a name="212341866"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/212341866" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#212341866">(Oct 05 2020 at 18:55)</a>:</h4>
+<blockquote>
+<p>Do you think it should only be instance level</p>
+</blockquote>
+<p>I think instance-level is the most important; I'd be happy to see a multi-cardinality type-level variant too.</p>
+
+
+
+<a name="212341970"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/212341970" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#212341970">(Oct 05 2020 at 18:56)</a>:</h4>
+<blockquote>
+<p>I think it would be good to either add some sort of parameter flag</p>
+</blockquote>
+<p>Agreed! I like the idea of a flat command (<code>:bind-with-token</code>)</p>
+
+
+
+<a name="213780182"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/213780182" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#213780182">(Oct 19 2020 at 12:54)</a>:</h4>
+<p>currently the websocket spec doesn't specify a keepalive Ping/Pong strategy to detect connection losses. I think this needs to be added to the spec. Otherwise i could loose my ws connection without noticing.</p>
+
+
+
+<a name="213785967"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/213785967" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#213785967">(Oct 19 2020 at 13:37)</a>:</h4>
+<p>In the r5 draft, <a href="http://build.fhir.org/subscription-definitions.html#Subscription.heartbeatPeriod">http://build.fhir.org/subscription-definitions.html#Subscription.heartbeatPeriod</a> applies to websockets, right?</p>
+
+
+
+<a name="213794148"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/213794148" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#213794148">(Oct 19 2020 at 14:32)</a>:</h4>
+<p>Josh is correct - in my implementation I set the heartbeat to 60 seconds to keep all the middleware pieces alive.</p>
+
+
+
+<a name="213794384"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/213794384" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#213794384">(Oct 19 2020 at 14:33)</a>:</h4>
+<p>uh nice, sorry only looked at R4 (which was not best idea)</p>
+
+
+
+<a name="213794502"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/213794502" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#213794502">(Oct 19 2020 at 14:34)</a>:</h4>
+<p>No worries!</p>
+
+
+
+<a name="213843649"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/213843649" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#213843649">(Oct 19 2020 at 20:49)</a>:</h4>
+<p>I like the heartbeat in r5, but couldn't find the exact payload which is expected here. Is this to be intended to implemented like: <a href="https://tools.ietf.org/html/rfc6455#section-5.5.2">https://tools.ietf.org/html/rfc6455#section-5.5.2</a> ?</p>
+
+
+
+<a name="213843863"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/213843863" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#213843863">(Oct 19 2020 at 20:51)</a>:</h4>
+<p>Is <code>pinging</code>from the client, with pong responses from the server intended to be supported?<br>
+edit: i don't think so as this is a functionality on a lower layer than FHIR and should be handled by the application server.</p>
+
+
+
+<a name="213845640"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/213845640" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#213845640">(Oct 19 2020 at 21:03)</a>:</h4>
+<p>I'm working on the documentation this week - currently the heartbeat is intended to match the behavior across all the channels - e.g., a notification with no events in it.</p>
+
+
+
+<a name="213846102"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/213846102" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#213846102">(Oct 19 2020 at 21:07)</a>:</h4>
+<p>We haven't discussed the reverse (pinging from a client to a server), but there hasn't been much discussion around websockets in general.  IIRC, the RFC you refer to is at the protocol level, and should be supported by that layer regardless.  The discussion so far has been at the application data level (e.g., textual data sent across the wire)</p>
+
+
+
+<a name="213929620"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Defining%20Websockets/near/213929620" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Defining.20Websockets.html#213929620">(Oct 20 2020 at 14:45)</a>:</h4>
+<p>(deleted)</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

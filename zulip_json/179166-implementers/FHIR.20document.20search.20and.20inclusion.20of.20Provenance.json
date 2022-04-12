@@ -1,0 +1,182 @@
+[
+    {
+        "content": "<p>Hi All,</p>\n<p>I'm working on a custom FHIR view and wondering if the community can provide me a guidance on the following query:<br>\nSummary: <br>\nHow to instruct (url query param) FHIR server to include Provenance resource or not in a FHIR document? <br>\nBackground: <br>\nCurrently I'm working on designing a custom FHIR view which will be used to retrieve summary details from bunch of pre-persisted FHIR documents. as per our design, the custom view has multiple sections and each section contains series of QuestionnaireResponse resources. The QuestionnaireResponse resources are constructed by extracting data from the the source FHIR documents. </p>\n<p>*Please note that the source FHIR documents mostly contains resources like Observation, MedicationStatement, Immunization etc. and they are converted to QuestionnaireResponse while constructing the custom view. Separate APIs are provided on each resource type to perform search if the client choose not to use QuestionnaireResponse based view model.</p>\n<p>We have a requirement that the Client system may request the reference of the source FHIR document corresponds to each section of the Custom View (Composition). Other than extension in the section, we are thinking of including Provenance resource in the Bundle document for that purpose.</p>\n<p>Query: <br>\nIs this a good idea to solve this requirement using Provenance? if yes then can this be achieved using the _include param? for an example, can the url be constructed as follows?</p>\n<p>GET:[base]/fhir/v1.0.0/Composition/$view?patient=1233445&amp;type=LP96944-1&amp;_include=Provenance</p>\n<p>Any suggestion would be greatly helpful</p>\n<p>Looping in <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> , <span class=\"user-mention\" data-user-id=\"191333\">@Reuben Daniels</span> , <span class=\"user-mention\" data-user-id=\"196785\">@Nichol Hill</span> , <span class=\"user-mention\" data-user-id=\"191682\">@Richard Townley-O'Neill</span> , <span class=\"user-mention\" data-user-id=\"191368\">@Brett Esler</span></p>",
+        "id": 165765796,
+        "sender_full_name": "Shovan Roy",
+        "timestamp": 1557964542
+    },
+    {
+        "content": "<p>Note that $view is not a query, it's an operation.  It's also not a standard-defined operation, so it could do a wide variety of things - it all depends on what the operation is defined to do and what parameters it takes.  Note that making <em>any</em> modification to the content of a document (including adding Provenance information) would breaking any digital signatures that existed and, for at least some systems, would cause the returned product to be treated as a distinct document instance with its own identifier.</p>",
+        "id": 165768220,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1557967085
+    },
+    {
+        "content": "<p>Why not use $document per the standard?</p>",
+        "id": 165770853,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1557970256
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  and <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> ,</p>\n<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> , the only reason I didn't choose the $document due to the list of defined input parameter. in our requirement we need to instruct the server about the type of view to be generated/retrieved and for whom (patient) along with mentioning if the source Questionnaire to be included etc. However the standard $document only has 'id', 'persist' and 'graph'. Is it allowed to modify the param list of the default $document? then I'll be happy to extend that. Alternatively, can this GET invocation be controlled using the allowed search parameter of Composition in context? any suggestion ?  </p>\n<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>, thanks for the suggestion. I've included another parameter in the $view OperationDefinition. regarding the signature, in our requirement we don't include the signature on the custom generated view. The sources documents may have signature and they are immutable. The custom view will provide the reference to the source documents.</p>",
+        "id": 165772015,
+        "sender_full_name": "Shovan Roy",
+        "timestamp": 1557971786
+    },
+    {
+        "content": "<p>You can add parameters, though they need to have possible default values, I think</p>",
+        "id": 165772293,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1557972179
+    },
+    {
+        "content": "<p>thanks <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> , if I want to use the custom params in the standard $document, then shall I use the standard document as \"base\" in the OperationDefinition? I tried that and publisher didn't complain about anything. I think I'll not be able to provide any default value for the custom param I've added. <a href=\"/user_uploads/10155/EGM5E3TLp3oFtMuzW0PEkgi_/operationdefinition-ncdhc-composition-document.json\" target=\"_blank\" title=\"operationdefinition-ncdhc-composition-document.json\">operationdefinition-ncdhc-composition-document.json</a></p>",
+        "id": 165777423,
+        "sender_full_name": "Shovan Roy",
+        "timestamp": 1557979455
+    },
+    {
+        "content": "<p>I think that the publisher would not complain about anything related to operation derviation right now - it just doesn't check.</p>",
+        "id": 165804879,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1558009828
+    },
+    {
+        "content": "<p>but it is right to do what you did</p>",
+        "id": 165804890,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1558009842
+    },
+    {
+        "content": "<p>what custom parameters did you add?</p>",
+        "id": 165804911,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1558009864
+    },
+    {
+        "content": "<p>I've included the following custom parameters:</p>\n<p>1. patient (Patient resource): The patient in context<br>\n2. type (Coding): document type<br>\n3. isIncludeSectionSource (boolean, default false): This parameter instruct the FHIR server to include the reference of the source based on which the section/s of the document is built<br>\n4. isSummary (boolean, default true): This parameter instructs the FHIR server to produce a document with minimum details (as defined by server). the default value is true. If client wants full document then the value should be provided as 'false'. In that case the server will provide the referenced resources in the Bundle. For an example if the $document generates a view where each section of the document is based on QuestionnaireResponse then 'false' value of this param will force the server to include the referenced Questionnaire resource in the Bundle document. 'false' will override the value provided in 'isIncludeSectionSource'. <br>\n<a href=\"/user_uploads/10155/-Q4_PEslqkCycd6gUAOAzpa5/operationdefinition-ncdhc-composition-document.json\" target=\"_blank\" title=\"operationdefinition-ncdhc-composition-document.json\">operationdefinition-ncdhc-composition-document.json</a></p>",
+        "id": 165852660,
+        "sender_full_name": "Shovan Roy",
+        "timestamp": 1558043896
+    },
+    {
+        "content": "<p>why add a patient parameter? how can it be different to what is specified in the composition?</p>",
+        "id": 165855155,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1558046121
+    },
+    {
+        "content": "<p>this looks like a different operation, to synthesize a document from scratch. why? Where's the human attestation? I wonder if this is a document? Maybe this is not really document work, and it overlaps with IPS? (<span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> )</p>",
+        "id": 165855224,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1558046166
+    },
+    {
+        "content": "<p>Thanks Grahame, If the search parameter of the $document operation can be controlled by the Composition in context, then we don't need the 'patient' and 'type' input search parameter. I was not sure if that can be used. Though that was my first approach and I was checking if _include can be used as well. Please see the first post in this topic for more details. </p>\n<p>We have the requirement to generate/present a consolidated view to the consumer. <br>\n    The consolidated view is generated taking input from existing multiple FHIR documents.<br>\n    This is a system generated view and attested by Organization and authored by Device<br>\n    The consolidated view consists of multiple sections and each section represents a source FHIR document. Each section contains series of QuestionnaireReponse resources. These QuestionnaireReponse are derived from the resources from the source FHIR documents. <br>\n    The Client system may request to include the reference of the source FHIR documents in the consolidated view. <br>\nWe thought of designing this custom view in the form of FHIR document and proposed a custom operation $view. </p>\n<p>Thoughts ?</p>",
+        "id": 165859208,
+        "sender_full_name": "Shovan Roy",
+        "timestamp": 1558050107
+    },
+    {
+        "content": "<p>well, you are asking the system to synthesize a new compostion, compose a document around it, and return the resulting thing?</p>",
+        "id": 165860406,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1558051555
+    },
+    {
+        "content": "<p>yes, right.. there is a possibility that we will pre-create the  document to optimize read time performance.. but from a Client perspective they are asking the server to generate a new document ( a consolidated view)</p>",
+        "id": 165860512,
+        "sender_full_name": "Shovan Roy",
+        "timestamp": 1558051665
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> has there been any dsicussion in the IPS context of how to ask for an IPS document to be created?</p>",
+        "id": 165860862,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1558052078
+    },
+    {
+        "content": "<p>so, add to $document a FormatCode which indicates the canonical URI of a StructureDefinition of the document you want. would that work?</p>",
+        "id": 165899293,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1558099105
+    },
+    {
+        "content": "<p>This is similar to how OnDemand documents are handled in XDS/XCA; the differences is that the custodian publishes which document types they are capable of creating. In this way the XDS OnDemand document entry is similar to a FHIR CapabilityStatement listing the potential support that custodian FHIR server is able to return.</p>",
+        "id": 165899480,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1558099226
+    },
+    {
+        "content": "<p>$document as it is is defined as packaging a pre-existing Composition. This operation is creating Compositions and then packing them. I think that's a different operation</p>",
+        "id": 165941423,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1558131632
+    },
+    {
+        "content": "<p>and it would be a graph definition, not a structure definition. Though most systems will simple offer a pre-defined selection of the kinds of documents that could be generated</p>",
+        "id": 165941453,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1558131671
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span> Well, if in MHD the document is retrieved using an URL contained in DocumentReference.attachment, then that URL could be of a FHIR operation. Strictly taken (although MHD is probably silent on this) one would have to GET that url as-is, but it's entirely feasible to allow a retrieving-client to add some parameters to that URL, e.g. summary=true or language=spanish (if a document is multi lingual or one has auto-translation features). <br>\nTo specify a document type as part of the URL seems a bit of a stretch (after all, what doc type would the on demand document have in this case?), but it'd be possible. GraphDefinition (as a parameter) allows a retrieving-client to exclude certain parts of the data, whereas it is not the author of the data and as such won't have a clue if its own restrictions are an issue in terms of patient safety. In general it's safer to allow the author/originator of a document to decide what to include in a composition/document. I don't see a problem with things like summary=true, for both the author as well as the retrieving-client both are aware of this very well defined subset. But allowing a client full flexibility to subset a composition seems tricky to me.</p>",
+        "id": 165962191,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1558162495
+    },
+    {
+        "content": "<p>Note, I was not suggesting the historic XDS OnDemand is the solution. Just that the use-case is today satisfied by that solution. And that the XDS OnDemand does enable dynamic discovery of the kinds of documents that could be built -on demand-.  Yes, today this is just a GET on the url found in the DocumentReference, which is unconstrained, and clients are required to simply GET. They can't mess with the URL. They just GET. They can add http negotiate to see if they can get a different mime-type encoding. In this way a medical summary could be retrieved (GET) in PDF, HTML, TEXT, CDA, FHIR XML, or FHIR JSON.  Not as elegant as FHIR will enable, but useful.</p>",
+        "id": 165975523,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1558186981
+    },
+    {
+        "content": "<p>thanks <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> , <span class=\"user-mention\" data-user-id=\"191372\">@René Spronk</span> , <span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span> </p>\n<p>I'm happy to manage using the summary=true/false. </p>\n<p>I've included 'type' in the url param to figure out which view/document needs to be generated.  For an example, we have the business requirement to generate a longitudinal view of a baby patient based on the following events:<br>\n1. Birth<br>\n2. Discharge<br>\n3. Immunization<br>\n4. Bloodshot Screen<br>\n5. Hearing Screen.<br>\nI'm grouping all of them to one view type and calling it as birth(BRTH)..</p>\n<p>Where as the client system can request for another view of the same child which includes details only on 'Health Check Assessments and Examinations'. </p>\n<p>The details that will be provided varies from Consumer accessing the document (view) vs Provider accessing the document (view). </p>\n<p>Initially I though managing this using search by 'section' (Composition.section.code) of the composition (full longitudinal view) . But that may over complicate the servers implementation. So trying to manage it using the 'type' (mandatory element in Composition). The documents will be generated based on the type provided. </p>\n<p>any alternative suggestion?</p>",
+        "id": 166056744,
+        "sender_full_name": "Shovan Roy",
+        "timestamp": 1558328311
+    },
+    {
+        "content": "<p>I like that you are using the word \"View\" for this perspective. In the context of XML based content, it could be seen as technically being implemented by various XML stylesheets that hide (or down-play) some information, while elevating and emphasizing others. Where there is a stylesheet for each of these views. All using the same underlying data bundle. This works nice in XML.  In this way the \"Interoperability\" layer is consistent, while the \"Presentation\" layer is perspective specific. This was also discussed earlier in this zulip thread with having the perspectives as intermediary that apply the view filtering.</p>",
+        "id": 166078256,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1558353167
+    },
+    {
+        "content": "<p>Thanks John, much appreciated..the discussion has been useful and interesting </p>\n<p>lastly, I would like to double confirm with the group if I can use the following url to generate the document that I explained in the post </p>\n<p>GET:[base]/fhir/v1.0.0/Composition/$document?patient=1233445&amp;type=ncdhc-system|BRTH&amp;summary=true</p>\n<p>if yes, then the params like 'patient', 'type' do I have to define them as a part of the OperationDefinition or it can be used directly since these are search params in Composition? in the case the only parm I'll need to define in OperationDefinition is the 'summary'</p>",
+        "id": 166126683,
+        "sender_full_name": "Shovan Roy",
+        "timestamp": 1558392868
+    },
+    {
+        "content": "<p>Hi All,</p>\n<p>First of all I'm sorry for coming back to this again. I'm still undecided how to model this requirement in FHIR. As per our discussion I'm assuming that I can use the url as GET:[base]/fhir/v1.0.0/Composition/$document?patient=1233445&amp;type=ncdhc-system|BRTH&amp;summary=true.. is this correct? </p>\n<p>I was reading the spec for List and not sure if our requirement may best be solved using a FHIR Composition document or a List of List. The advantage of List of List as per my understanding is that I can specify it as a working/snapshot of some existing data which may change over the time ( more may get added).</p>\n<p>To provide the context, I'm summarising the requirement once again</p>\n<p>1. Our System Collects Patient's (baby/child) related details in multiple FHIR documents (Birth, Discharge, Health Check Assessments, Examination, Immunization etc)<br>\n2. We store the incoming FHIR documents as immutable resources as well as discrete resources after extracting them from the Bundle. <br>\n3. We are exposing APIs for each of the resource types mainly with GET operations<br>\n4. We have requirements for our APP to represent few Consolidated Summary from selected FHIR documents.  These are pre-defined.  Example: We have a 'Birth Summary' which contains data from multiple documents like: Birth (Delivery) FHIR document, Discharge FHIR document, Immunization FHIR document and Screening (Bloodspot and Hearing) FHIR document.  We are thinking of exposing an API using QuestionnaireResponse. Where the contents from each of the resources are extracted in the form of QuestionnaireResponse. As mentioned before we are thinking of exposing it as FHIR view using the $document custom operation. Client system may request the source document from which the QuestionnaireResponse is being built.<br>\nAfter looking at the List, I was thinking if it will be a better idea to represent it as List of List since the content may grow over time. For an example there could be more Immunization added in future. </p>\n<p>It will extremely helpful if further guidance is provided. <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>  <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  <span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span>  <span class=\"user-mention\" data-user-id=\"191372\">@René Spronk</span> may I request you to share your thoughts around it?</p>",
+        "id": 166596809,
+        "sender_full_name": "Shovan Roy",
+        "timestamp": 1558912583
+    },
+    {
+        "content": "<p>It would be a different operation than the 'standard' $document, but it could work.</p>\n<p>QuestionnaireResponse is fine if the primary purpose is to support rendering, but it won't really let recipients understand the data.  I'm not totally following the rationale for List of List as opposed to a straight List.  Is it to track what gets added when?  If so, have you considered just including Provenance records in your collection that shows what got contributed at what point?</p>",
+        "id": 166604615,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1558926282
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> ,  Here are my comments<br>\n[LM] QuestionnaireResponse is fine if the primary purpose is to support rendering, but it won't really let recipients understand the data. <br>\n[SR] Yes, the main objective is to provide the support for rendering in a much lighter weight way than providing the actual resource. This gives us an option to control the Questionnaire and changes to it. To make it working with data, along with providing the answer of the question, we are also providing the actual resource reference of the source data as an item in the QuestionnaireResponse. I've attached an sample in-case you are interested to have a look.   </p>\n<p>[LM] I'm not totally following the rationale for List of List as opposed to a straight List. Is it to track what gets added when? If so, have you considered just including Provenance records in your collection that shows what got contributed at what point?<br>\n[SR]  my idea was that each of the inner list will represent content from each type of source document (Birth/Discharge/Immunization etc.). But I can see that there is no need of it since the the whole QuestionnaireResponse represents the document itself. If required, I can add an extension on the List.entry to provide the reference of the source document. </p>\n<p>Out of the two options: Composition document vs List, which model do you suggest is a better FHIR implementation in this context. From APP perspective, implementation is almost similar for both the approaches, however wanted to make sure that we picking a sensible FHIR complaint approach in our FHIR server design.</p>",
+        "id": 166606042,
+        "sender_full_name": "Shovan Roy",
+        "timestamp": 1558928902
+    },
+    {
+        "content": "<p>In general the use of documents only makes sense if there's a reason to persist specific sets/versions of data, and/or if there's narrative that some author wishes to assert. If these factors are not of importance, you should be looking at alternatives.</p>",
+        "id": 166612436,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1558939314
+    },
+    {
+        "content": "<p>If your focus is just delivery, it's probably cleanest to use a 'document' Bundle for each summary and skip List entirely.  However, if you want to curate the contents of the different consolidated summaries and maintain only one copy of the source materials, then List is reasonable (and you'd use that to guide generation of the 'document' when the time came)</p>",
+        "id": 166635927,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1558962753
+    }
+]

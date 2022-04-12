@@ -1,0 +1,555 @@
+---
+layout: page
+title: "FHIR Chat  · Serialization · dotnet"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/index.html">dotnet</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html">Serialization</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="209381661"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/209381661" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Lamb <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#209381661">(Sep 08 2020 at 12:57)</a>:</h4>
+<p>[deleted]</p>
+
+
+
+<a name="234304518"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234304518" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234304518">(Apr 13 2021 at 10:55)</a>:</h4>
+<p>Hey all, some of us are working on several Serialization Implementations and considering what a sensible way of making this capability switchable.<br>
+This is one of my thoughts to have an interface, along with a default implementation.</p>
+<div class="codehilite"><pre><span></span><code>    public interface IFhirXmlSerialization : IFhirSerialization
+    {
+
+    }
+
+    public interface IFhirJsonSerialization : IFhirSerialization
+    {
+
+    }
+
+    public interface IFhirSerialization
+    {
+        Task Serialize(Stream stream, Base resource, SummaryType summary = SummaryType.False, string[] elements = null);
+        Task&lt;T&gt; Deserialize&lt;T&gt;(Stream stream, OperationOutcome parsingResults) where T : Base;
+    }
+
+    public class DefaultFhirXmlSerialization : IFhirXmlSerialization
+    {
+        public Task&lt;T&gt; Deserialize&lt;T&gt;(Stream stream, OperationOutcome parsingResults)
+            where T : Base
+        {
+            using (XmlReader reader = Utility.SerializationUtil.XmlReaderFromStream(stream))
+            {
+                return Task.FromResult&lt;T&gt;(new Hl7.Fhir.Serialization.FhirXmlParser().Parse&lt;T&gt;(reader));
+            }
+        }
+
+        public Task Serialize(Stream stream, Base resource, SummaryType summary = SummaryType.False, string[] elements = null)
+        {
+            var serializer = new Hl7.Fhir.Serialization.FhirXmlSerializer();
+            using (var writer = new XmlTextWriter(stream, System.Text.Encoding.UTF8))
+            {
+                serializer.Serialize(resource, writer, summary, elements: elements);
+                return Task.CompletedTask;
+            }
+        }
+    }
+
+    public class DefaultFhirJsonSerialization : IFhirJsonSerialization
+    {
+        public Task&lt;T&gt; Deserialize&lt;T&gt;(Stream stream, OperationOutcome parsingResults)
+            where T : Base
+        {
+            using (JsonReader reader = Utility.SerializationUtil.JsonReaderFromStream(stream))
+            {
+                return Task.FromResult&lt;T&gt;(new Hl7.Fhir.Serialization.FhirJsonParser().Parse&lt;T&gt;(reader));
+            }
+        }
+
+        public Task Serialize(Stream stream, Base resource, SummaryType summary = SummaryType.False, string[] elements = null)
+        {
+            var serializer = new Hl7.Fhir.Serialization.FhirJsonSerializer();
+            using (StreamWriter sw = new StreamWriter(stream))
+            {
+                using (JsonWriter writer = Utility.SerializationUtil.CreateJsonTextWriter(sw))
+                {
+                    serializer.Serialize(resource, writer, summary, elements);
+                    return Task.CompletedTask;
+                }
+            }
+        }
+    }
+</code></pre></div>
+
+
+
+<a name="234304634"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234304634" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234304634">(Apr 13 2021 at 10:56)</a>:</h4>
+<p>Then should this be a singleton?<br>
+How can DI work around the place?<br>
+With the FhirClient?</p>
+
+
+
+<a name="234304667"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234304667" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234304667">(Apr 13 2021 at 10:56)</a>:</h4>
+<p><span class="user-mention" data-user-id="222054">@Gino Canessa</span> <span class="user-mention" data-user-id="193551">@Marco Visser</span></p>
+
+
+
+<a name="234304891"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234304891" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234304891">(Apr 13 2021 at 10:58)</a>:</h4>
+<p>And should we include the ability to have them run as async over the content?<br>
+Or have a sync/async version of each?</p>
+
+
+
+<a name="234386902"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234386902" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Kenneth Myhra <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234386902">(Apr 13 2021 at 19:32)</a>:</h4>
+<p>What is meant by switchable? A common interface shared between several implementations of the serializers? <br>
+If I am interpreting your post and code correctly a marker interface would not help me much in that direction</p>
+<p>I think the people using your interface/implementation should decide if they want it to be scoped as a singleton or not.</p>
+<p>If you want to support both sync/async I think the recommended approach is to have truly sync methods alongside the async methods, not sync methods calling your async methods. So you would have to implement them both separately. But only the part that touches IO needs to be async, so possibly most of your implementation would not need to be async?</p>
+
+
+
+<a name="234389614"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234389614" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234389614">(Apr 13 2021 at 19:51)</a>:</h4>
+<p>Hi Brian, this had fallen a bit back on my list so I'm in the process of loading it all back into memory  =)</p>
+<p>Kenneth, what we are discussing is setting up an interface so that users can load different serializers and parsers without recompiling the core libraries.  For example, if you have areas of the code where you know you have 'clean' data, you may want something with high performance and no validation.  On the other hand, something parsing incoming data will likely need to have a lot of validation, but can tolerate the performance penalty of it.  Additionally, developers have libraries of choice (e.g., System.Text.Json vs. Newtonsoft.Json), and it would be great if the FHIR libraries could use the same ones without adding additional dependencies.</p>
+<p>As to sync/async - I think it's probably a good idea, but would want to see how much complexity it adds before committing to a side.  Assuming the interfaces include IO and/or validation, those operations can take some time.</p>
+
+
+
+<a name="234391860"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234391860" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234391860">(Apr 13 2021 at 20:04)</a>:</h4>
+<p>Yup, what Gino said. And not sure on async/sync - but know it's an issue to discuss.</p>
+
+
+
+<a name="234392783"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234392783" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234392783">(Apr 13 2021 at 20:11)</a>:</h4>
+<p>I've done a separate Async Xml parser too - to see how that works and how they perform. Turns out the MS async XmlReader is slightly slower, and has at least 1 bug in it (non Async) that I've worked around.</p>
+
+
+
+<a name="234393220"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234393220" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234393220">(Apr 13 2021 at 20:14)</a>:</h4>
+<p>Interesting.  Also, I'm glad you're working on XML since I haven't at all  =)</p>
+
+
+
+<a name="234395158"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234395158" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234395158">(Apr 13 2021 at 20:29)</a>:</h4>
+<p>And also why I'm glad you've been doing the Json one <span aria-label="wink" class="emoji emoji-1f609" role="img" title="wink">:wink:</span><br>
+I have whitespace issues with Narratives and Markdown to resolve and a final quality check before I'm happy it's done.<br>
+(It's using the raw XmlReader class - no Document based processing)</p>
+
+
+
+<a name="234396201"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234396201" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234396201">(Apr 13 2021 at 20:36)</a>:</h4>
+<p>Amazing how that works out  <span aria-label="smile" class="emoji emoji-1f642" role="img" title="smile">:smile:</span> <br>
+I believe you may be ahead of me in getting it completed, but I ended up doing the same on my side (e.g., using the lowest level JSON processor available).  That said, I'm jealous of your 'fixed order of elements in XML', since I need to handle cases like not knowing the resource type until the last element of an object.  :-/</p>
+
+
+
+<a name="234397466"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234397466" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234397466">(Apr 13 2021 at 20:44)</a>:</h4>
+<p>Yes, I do need to review it one last time, as it's not fussy on ordering right now. (big switch statements)<br>
+And considering how to redo that part.</p>
+
+
+
+<a name="234398908"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234398908" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Kenneth Myhra <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234398908">(Apr 13 2021 at 20:55)</a>:</h4>
+<p>Interesting approach, I like it</p>
+<blockquote>
+<p>Additionally, developers have libraries of choice (e.g., System.Text.Json vs. Newtonsoft.Json), and it would be great if the FHIR libraries could use the same ones without adding additional dependencies.</p>
+</blockquote>
+<p>Would like to learn more about the approach to solving this part</p>
+
+
+
+<a name="234402139"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234402139" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234402139">(Apr 13 2021 at 21:09)</a>:</h4>
+<p>Would even like to consider a way like is done with the HttpClientFactory where you can have "named" serializer uses - so in libs you can switch in/out various ones as the user desires (not an all or nothing situation).</p>
+
+
+
+<a name="234406725"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234406725" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234406725">(Apr 13 2021 at 21:41)</a>:</h4>
+<p>Unfortunately, I think the goals are still a bit ahead of the solutions  =).</p>
+<p>Given that it looks as though there could be multiple options for each supported format, I would <em>guess</em> that the best experience would be something like a default implementation (hopefully with few dependencies, but that's only one metric that needs to be considered) and then additional packages available for other use cases.</p>
+<p>That said, I've been focused on a different area (seeing what's worthwhile / possible on the JSON side), so I haven't given much thought to what packaging would look like.  I assume there are people who know more about the packaging process and have thoughts on it.</p>
+
+
+
+<a name="234424094"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234424094" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234424094">(Apr 14 2021 at 00:41)</a>:</h4>
+<p>And for now, that default implementation is the existing well worn serializers.</p>
+
+
+
+<a name="234462503"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234462503" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Kenneth Myhra <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234462503">(Apr 14 2021 at 08:42)</a>:</h4>
+<p>Read through your code again, Brian. And I see that you indeed have the interface IFhirSerialization with the necessary defined methods. So disregard my comment about marker interfaces</p>
+
+
+
+<a name="234582917"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234582917" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234582917">(Apr 14 2021 at 21:55)</a>:</h4>
+<div class="codehilite"><pre><span></span><code>&lt;OperationOutcome xmlns=&quot;http://hl7.org/fhir&quot;&gt;
+  &lt;issue&gt;
+    &lt;severity value=&quot;error&quot; /&gt;
+    &lt;code value=&quot;structure&quot; /&gt;
+    &lt;details&gt;
+      &lt;text value=&quot;Unexpected element found chicken&quot; /&gt;
+    &lt;/details&gt;
+    &lt;location value=&quot;Patient.contained[0].chicken&quot; /&gt;
+    &lt;location value=&quot;xml position: 12,8&quot; /&gt;
+  &lt;/issue&gt;
+  &lt;issue&gt;
+    &lt;severity value=&quot;error&quot; /&gt;
+    &lt;code value=&quot;structure&quot; /&gt;
+    &lt;details&gt;
+      &lt;text value=&quot;Unexpected element found chicken&quot; /&gt;
+    &lt;/details&gt;
+    &lt;diagnostics value=&quot;&amp;lt;chicken value=&amp;quot;brrrk&amp;quot; xmlns=&amp;quot;http://hl7.org/fhir&amp;quot;&amp;gt;&amp;lt;turkey xmlns=&amp;quot;http://somethingelse&amp;quot;&amp;gt;slime&amp;lt;/turkey&amp;gt;&amp;lt;/chicken&amp;gt;&quot; /&gt;
+    &lt;location value=&quot;Patient.extension[0].value.chicken&quot; /&gt;
+    &lt;location value=&quot;xml position: 25,8 to 27,9&quot; /&gt;
+  &lt;/issue&gt;
+  &lt;issue&gt;
+    &lt;severity value=&quot;error&quot; /&gt;
+    &lt;code value=&quot;value&quot; /&gt;
+    &lt;details&gt;
+      &lt;text value=&quot;Invalid decimal value &#39;chicken&#39;&quot; /&gt;
+    &lt;/details&gt;
+    &lt;diagnostics value=&quot;Content cannot be converted to the type Decimal. Line 34, position 19.&quot; /&gt;
+    &lt;location value=&quot;Patient.extension[2].value&quot; /&gt;
+    &lt;location value=&quot;xml position: 34,19&quot; /&gt;
+  &lt;/issue&gt;
+  &lt;issue&gt;
+    &lt;severity value=&quot;error&quot; /&gt;
+    &lt;code value=&quot;structure&quot; /&gt;
+    &lt;details&gt;
+      &lt;text value=&quot;Unexpected element found chicken&quot; /&gt;
+    &lt;/details&gt;
+    &lt;location value=&quot;Patient.telecom[1].chicken&quot; /&gt;
+    &lt;location value=&quot;xml position: 59,6&quot; /&gt;
+  &lt;/issue&gt;
+  &lt;issue&gt;
+    &lt;severity value=&quot;error&quot; /&gt;
+    &lt;code value=&quot;value&quot; /&gt;
+    &lt;details&gt;
+      &lt;text value=&quot;Invalid positiveint value &#39;5.0&#39;&quot; /&gt;
+    &lt;/details&gt;
+    &lt;diagnostics value=&quot;Content cannot be converted to the type Int. Line 61, position 11.&quot; /&gt;
+    &lt;location value=&quot;Patient.telecom[1].rank&quot; /&gt;
+    &lt;location value=&quot;xml position: 61,11&quot; /&gt;
+  &lt;/issue&gt;
+  &lt;issue&gt;
+    &lt;severity value=&quot;error&quot; /&gt;
+    &lt;code value=&quot;structure&quot; /&gt;
+    &lt;details&gt;
+      &lt;text value=&quot;Unexpected element found chicken&quot; /&gt;
+    &lt;/details&gt;
+    &lt;location value=&quot;Patient.chicken&quot; /&gt;
+    &lt;location value=&quot;xml position: 64,4&quot; /&gt;
+  &lt;/issue&gt;
+&lt;/OperationOutcome&gt;
+</code></pre></div>
+
+
+
+<a name="234635796"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234635796" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Kenneth Myhra <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234635796">(Apr 15 2021 at 08:19)</a>:</h4>
+<p>Nice!</p>
+
+
+
+<a name="234645126"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234645126" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Johannes Höhn <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234645126">(Apr 15 2021 at 09:37)</a>:</h4>
+<p>Isn't location deprecated?</p>
+
+
+
+<a name="234763051"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/234763051" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#234763051">(Apr 15 2021 at 22:17)</a>:</h4>
+<p>Yes, Ewout pointed that out yesterday...</p>
+
+
+
+<a name="240222404"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/240222404" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#240222404">(May 25 2021 at 17:29)</a>:</h4>
+<p>Just to resurrect an old thread =).</p>
+<p>Finally got time to come back to this - I still have an open question about proper serialization (in <a class="stream" data-stream-id="179177" href="/#narrow/stream/179177-conformance">#conformance</a> - about arrays and nulls), but otherwise just have some cleaning to do.</p>
+<p>The benchmark below is for serializing and parsing two examples (Observation-2minute-apgar-score.json and Patient-example.json from the R4 example package), after they have been read and loaded into memory.</p>
+<p>Tags for the people we've been discussing this with: <span class="user-mention" data-user-id="191367">@Brian Postlethwaite</span> <span class="user-mention" data-user-id="191328">@Ewout Kramer</span> <span class="user-mention" data-user-id="193551">@Marco Visser</span> </p>
+<p>Cheers!</p>
+<div class="codehilite" data-code-language="INI"><pre><span></span><code><span class="na">BenchmarkDotNet</span><span class="o">=</span><span class="s">v0.12.1, OS=Windows 10.0.19043</span>
+<span class="na">Intel Xeon W-2255 CPU 3.70GHz, 1 CPU, 20 logical and 10 physical cores</span>
+<span class="na">.NET Core SDK</span><span class="o">=</span><span class="s">5.0.203</span>
+  <span class="na">[Host]     : .NET Core 5.0.6 (CoreCLR 5.0.621.22011, CoreFX 5.0.621.22011), X64 RyuJIT</span>
+  <span class="na">DefaultJob : .NET Core 5.0.6 (CoreCLR 5.0.621.22011, CoreFX 5.0.621.22011), X64 RyuJIT</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Categories</th>
+<th>Filename</th>
+<th align="right">Mean</th>
+<th align="right">Error</th>
+<th align="right">StdDev</th>
+<th align="right">Ratio</th>
+<th align="right">Gen 0</th>
+<th align="right">Gen 1</th>
+<th align="right">Gen 2</th>
+<th align="right">Allocated</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>FirelyParse</strong></td>
+<td><strong>Parse</strong></td>
+<td><strong>Obser(...).json [36]</strong></td>
+<td align="right"><strong>533.16 μs</strong></td>
+<td align="right"><strong>10.336 μs</strong></td>
+<td align="right"><strong>10.152 μs</strong></td>
+<td align="right"><strong>1.00</strong></td>
+<td align="right"><strong>51.7578</strong></td>
+<td align="right"><strong>13.6719</strong></td>
+<td align="right"><strong>-</strong></td>
+<td align="right"><strong>513.62 KB</strong></td>
+</tr>
+<tr>
+<td>FirelyExtParse</td>
+<td>Parse</td>
+<td>Obser(...).json [36]</td>
+<td align="right">37.96 μs</td>
+<td align="right">0.698 μs</td>
+<td align="right">0.618 μs</td>
+<td align="right">0.07</td>
+<td align="right">2.8687</td>
+<td align="right">0.3052</td>
+<td align="right">-</td>
+<td align="right">28.4 KB</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+</tr>
+<tr>
+<td>FirelySerialize</td>
+<td>Serialize</td>
+<td>Obser(...).json [36]</td>
+<td align="right">309.68 μs</td>
+<td align="right">5.339 μs</td>
+<td align="right">4.994 μs</td>
+<td align="right">1.00</td>
+<td align="right">34.1797</td>
+<td align="right">6.8359</td>
+<td align="right">-</td>
+<td align="right">338.05 KB</td>
+</tr>
+<tr>
+<td>FirelyExtSerialize</td>
+<td>Serialize</td>
+<td>Obser(...).json [36]</td>
+<td align="right">28.03 μs</td>
+<td align="right">0.495 μs</td>
+<td align="right">0.463 μs</td>
+<td align="right">0.09</td>
+<td align="right">3.5706</td>
+<td align="right">0.3357</td>
+<td align="right">-</td>
+<td align="right">35.23 KB</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+</tr>
+<tr>
+<td><strong>FirelyParse</strong></td>
+<td><strong>Parse</strong></td>
+<td><strong>Patient-example.json</strong></td>
+<td align="right"><strong>384.19 μs</strong></td>
+<td align="right"><strong>6.220 μs</strong></td>
+<td align="right"><strong>5.818 μs</strong></td>
+<td align="right"><strong>1.00</strong></td>
+<td align="right"><strong>35.6445</strong></td>
+<td align="right"><strong>7.3242</strong></td>
+<td align="right"><strong>-</strong></td>
+<td align="right"><strong>353 KB</strong></td>
+</tr>
+<tr>
+<td>FirelyExtParse</td>
+<td>Parse</td>
+<td>Patient-example.json</td>
+<td align="right">27.69 μs</td>
+<td align="right">0.547 μs</td>
+<td align="right">0.586 μs</td>
+<td align="right">0.07</td>
+<td align="right">2.2278</td>
+<td align="right">0.2441</td>
+<td align="right">-</td>
+<td align="right">21.98 KB</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+</tr>
+<tr>
+<td>FirelySerialize</td>
+<td>Serialize</td>
+<td>Patient-example.json</td>
+<td align="right">226.42 μs</td>
+<td align="right">2.187 μs</td>
+<td align="right">1.826 μs</td>
+<td align="right">1.00</td>
+<td align="right">22.4609</td>
+<td align="right">3.4180</td>
+<td align="right">-</td>
+<td align="right">221.55 KB</td>
+</tr>
+<tr>
+<td>FirelyExtSerialize</td>
+<td>Serialize</td>
+<td>Patient-example.json</td>
+<td align="right">16.25 μs</td>
+<td align="right">0.259 μs</td>
+<td align="right">0.243 μs</td>
+<td align="right">0.07</td>
+<td align="right">1.2512</td>
+<td align="right">0.0305</td>
+<td align="right">-</td>
+<td align="right">12.55 KB</td>
+</tr>
+</tbody>
+</table>
+
+
+
+<a name="240223419"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/240223419" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#240223419">(May 25 2021 at 17:36)</a>:</h4>
+<p>Keen to grab your test so I can compare apples to apples.</p>
+
+
+
+<a name="240223548"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/240223548" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#240223548">(May 25 2021 at 17:37)</a>:</h4>
+<p>What's the Error column?</p>
+
+
+
+<a name="240223929"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/240223929" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#240223929">(May 25 2021 at 17:40)</a>:</h4>
+<p>Wondering how it would go with the json version of this...<br>
+<a href="https://github.com/brianpos/fhir-net-web-api/blob/feature/r4-xml-performance/src/Test.WebApi.AspNetCore/TestPatientWithErrors.xml">https://github.com/brianpos/fhir-net-web-api/blob/feature/r4-xml-performance/src/Test.WebApi.AspNetCore/TestPatientWithErrors.xml</a><br>
+I'll re-try mine with the xml versions of those 2 files.</p>
+
+
+
+<a name="240225667"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/240225667" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#240225667">(May 25 2021 at 17:52)</a>:</h4>
+<p>It's the statistical analysis of the benchmark timings - I'll post a link to to the code once I commit this last change, I believe that will leave everything in the examples properly round-tripping.</p>
+
+
+
+<a name="240225859"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/240225859" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#240225859">(May 25 2021 at 17:54)</a>:</h4>
+<p>The two I'm happiest about right now are the Ratio (new version is 90%+ faster) and allocated memory (10-15x less memory activity).</p>
+
+
+
+<a name="240494546"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/240494546" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#240494546">(May 27 2021 at 16:28)</a>:</h4>
+<p>Ok, so I've posted everything and I'm happy with it, except for one remaining issue.  The new serializer escapes a few Unicode characters that the Newtonsoft one doesn't.  The most common case is replacing a no-break-space with \u00A0 (e.g., in narrative div content).</p>
+<p>Theoritically those are the same - so I'm not sure it's worth the performance hit of undoing it or not.  Any thoughts would be appreciated.</p>
+<p>So, the output is a set of extensions that work with the stock Hl7.Fhir.R4 package.  The serializer and parser are interoperable with the stock ones, e.g., you can parse with one and serialize with the other.</p>
+<p>I still have some additions I want to make to the exception handling (if you are curious you can compare areas that throw JsonException without params vs. the ones that make a nice message for what I'm thinking). I want to take a look at Brian's XML ones at some point to see if I could generate a matching OperationOutcome like his code does, but I have so far been focused on performance and correctness.</p>
+<p>So, the preview code is in the <a href="https://github.com/microsoft/fhir-codegen/tree/dev">dev branch</a>.  Of interest:</p>
+<ul>
+<li>src/Microsoft.Health.Fhir.SpecManager/Language/CSharpFirely2JsonExt.cs<ul>
+<li>Contains the language processor to export the extensions.</li>
+<li>I have some cleanup yet to do, but it isn't terrible =)</li>
+</ul>
+</li>
+<li>generated/SystemTextJsonExt_R4<ul>
+<li>Contains the exported R4 files.</li>
+<li>These are extensions on the standard Hl7.Fhir.R4 package.</li>
+</ul>
+</li>
+<li>test/perfTestCS<ul>
+<li>Benchmarking project</li>
+<li>Everything interesting is in Benchmark/SerializationBenchmarks.cs</li>
+<li>Can see snippets to Serialize and Parse in FirelyExtSerialize() and FirelyExtParse()</li>
+</ul>
+</li>
+<li>test/JsonRoundtrip<ul>
+<li>Note this is <em>rough</em> because I wasn't even generally planning on checking it in =)</li>
+<li>Contains the working code I use to check round-trips of the parser/serializer.</li>
+<li>Really, it's painful to read.</li>
+</ul>
+</li>
+</ul>
+<p>Cheers!</p>
+
+
+
+<a name="240555800"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/240555800" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#240555800">(May 28 2021 at 02:41)</a>:</h4>
+<p>Awesome, I have the same issues with xml and whitespace/newlines.<br>
+I'll see if I can get a look into it soon.</p>
+
+
+
+<a name="242107075"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/242107075" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#242107075">(Jun 09 2021 at 18:09)</a>:</h4>
+<p>This is one of the functions that does the OperationOutcome for parsing issues</p>
+<p><a href="https://github.com/brianpos/fhir-net-web-api/blob/94f812011298bdade71846bdc43b9103b01c122f/src/Hl7.Fhir.Custom.Serializers/FhirCustomXmlReader.core.cs#L55">https://github.com/brianpos/fhir-net-web-api/blob/94f812011298bdade71846bdc43b9103b01c122f/src/Hl7.Fhir.Custom.Serializers/FhirCustomXmlReader.core.cs#L55</a></p>
+
+
+
+<a name="243879403"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serialization/near/243879403" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serialization.html#243879403">(Jun 25 2021 at 06:17)</a>:</h4>
+<p><span class="user-mention" data-user-id="222054">@Gino Canessa</span> this is the workaround for the bug in the Microsoft XML Async Parser core code...<br>
+Don't know if that's something you can pass onto relevant folks for a future version...<br>
+<a href="https://github.com/brianpos/fhir-net-web-api/blob/e324bb3a6f9a2cc98b63be6c187deb4d868e097d/src/Hl7.Fhir.Custom.Serializers/FhirCustomXmlReader.core.cs#L318">https://github.com/brianpos/fhir-net-web-api/blob/e324bb3a6f9a2cc98b63be6c187deb4d868e097d/src/Hl7.Fhir.Custom.Serializers/FhirCustomXmlReader.core.cs#L318</a></p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

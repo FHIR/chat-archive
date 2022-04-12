@@ -1,0 +1,566 @@
+[
+    {
+        "content": "<p>Did we really intend to have to support all token searches?<br>\n[parameter]=[code]: the value of [code] matches a Coding.code or Identifier.value irrespective of the value of the system property<br>\n    [parameter]=[system]|[code]: the value of [code] matches a Coding.code or Identifier.value, and the value of [system] matches the system property of the Identifier or Coding<br>\n    [parameter]=|[code]: the value of [code] matches a Coding.code or Identifier.value, and the Coding/Identifier has no system property<br>\n    [parameter]=[system]|: any element where the value of [system] matches the system property of the Identifier or Coding</p>",
+        "id": 202431842,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593522526
+    },
+    {
+        "content": "<p>The one I have an issue with is parameter=system.</p>",
+        "id": 202431862,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593522535
+    },
+    {
+        "content": "<p>We would basically have to support a search that says give me all practitioners with an NPI value... I don't think we intended that.</p>",
+        "id": 202431921,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593522568
+    },
+    {
+        "content": "<p>Is this referring to the US Core IG?</p>",
+        "id": 202432779,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593522980
+    },
+    {
+        "content": "<p>Yes. It links to that for additional information.</p>",
+        "id": 202432821,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593522998
+    },
+    {
+        "content": "<p>US-Core is mostly silent on it.... It shows an example of using system|code only, but then links to the token documentation for additional details.</p>",
+        "id": 202432946,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593523062
+    },
+    {
+        "content": "<p>Inferno is testing all combinations.</p>",
+        "id": 202432959,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593523068
+    },
+    {
+        "content": "<p>Which surprised me because we are only planning on supporting system|code.</p>",
+        "id": 202432990,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593523082
+    },
+    {
+        "content": "<p>Given the prevalence of nonstandard Coding.system values (OIDs, local variation etc) I'd say that searching by code alone can be pretty pragmatic. Searching by system alone... if there's an existing \"get all\" it's less critical, but this is part of the fhir spec for a reason, and if you're already creating the indexes to make the other forms work, is it an additional lift?</p>",
+        "id": 202433564,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593523345
+    },
+    {
+        "content": "<p>We aren't creating indexes to make the others work. Our architecture leverages mappings for codes to internal values.... So a code comes in, we look up all internal codes that map to that, and then begin a query for all codes. To say give me a code with no system is going to slow down performance in a pretty significant way... I am not a huge fan of that query either. The system one just doesn't make sense to me. Why not just use patient and get everything back for that patient in the single patient query? By adding system we will actually make the search slower and cost additional resources to complete the call.</p>",
+        "id": 202434106,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593523594
+    },
+    {
+        "content": "<p>Having built this search against a custom database, YES, it is additional lift.  Not every implementation has a FHIR core storage.  NPI may be field somewhere, and identifier queries may be built on a view that includes that field and others.  BUT, I agree that it's completely worthwhile to support (which is why I built it).  There probably aren't that many normal user use cases for using this query.  However, I can think off a half dozen use cases where IT staff  want it, and have used it, to identify and clean up incomplete records in a system.</p>",
+        "id": 202434368,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1593523703
+    },
+    {
+        "content": "<p>Re: codes alone, does this mean that any local value without a mapping pointing to it is invisible under search? Even if the \"code\" matches, <span class=\"user-mention\" data-user-id=\"191357\">@Drew Torres</span> ? That seems worth addressing.</p>",
+        "id": 202434682,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593523758
+    },
+    {
+        "content": "<p>Correct. If there is an underlying internal code that cannot be mapped, the only way to get to it would be /Observation?patient=12345 and page through the results.</p>",
+        "id": 202434908,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593523853
+    },
+    {
+        "content": "<p>Which we support.</p>",
+        "id": 202434926,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593523865
+    },
+    {
+        "content": "<p>There are just things that health system document as observations that just won't ever have standard terms for.</p>",
+        "id": 202434971,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593523887
+    },
+    {
+        "content": "<p>Oh sure, that is well and good. I just want to make sure that when something is documented with a standard code (but a nonstandard system), it's found by a search when the search specifies exactly the code that was documented.</p>",
+        "id": 202435160,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593523964
+    },
+    {
+        "content": "<p>Like, supporting the <code>&amp;code=|123</code> search helps a lot in that case.</p>",
+        "id": 202435318,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593524027
+    },
+    {
+        "content": "<p>I suppose, but is the consumer just going to blindly query with a code and not know the system? That is what I am struggling with in your example. We do allow searches with our internal codes and code systems. But allowing a consumer to just pass in code without a system will incur that additional lookup cost... Not huge and not as bad as system only. That is why I am not pushing back on that one too hard.</p>",
+        "id": 202435805,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593524213
+    },
+    {
+        "content": "<p>Isn't there also an argument that it is dangerous to do that as well? If the consumer of the API just passes in code=123.... The internal codes and the standard codes may conflict or mean completely different thing. In that case the consumer should understand the variations... If that is the case why not force the consumer to search with system in addition to code?</p>",
+        "id": 202436183,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593524358
+    },
+    {
+        "content": "<p>If the consistency of \"system\" in the source data is low enough, clients will skip it; I'm not saying it's a great practice, but it's pragmatic, and it allows a client to over-fetch by only a little bit rather than having to get everything. The client probably still needs to look at systems it receives, but doesn't need to know ahead of time exactly which systems a given server inexplicably uses OIDs for in order to formulate a special search</p>",
+        "id": 202436431,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593524463
+    },
+    {
+        "content": "<p>(when I say inexplicable here, I don't mean there is no explanation. I just mean that it can be baffling for client developers or try to understand the variations in data conventions across sites)</p>",
+        "id": 202436485,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593524498
+    },
+    {
+        "content": "<p>That makes more sense.... We really don't have that problem because we centralized our content for mappings. There is no variances of systems/OIDs for content. We always return URLs for systems. We only return OIDs for identifiers on patients for non-standard identifiers.</p>",
+        "id": 202436774,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593524607
+    },
+    {
+        "content": "<p>Which is why I struggled with your example, but does make sense for systems that don't have that luxury.</p>",
+        "id": 202436823,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593524623
+    },
+    {
+        "content": "<p>We also document all of our systems supported in our documentation so dev should be aware ahead of time: <a href=\"http://fhir.cerner.com/millennium/r4/diagnostic/observation/#terminology-bindings\">http://fhir.cerner.com/millennium/r4/diagnostic/observation/#terminology-bindings</a> is an example (include local system examples).</p>",
+        "id": 202437395,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593524840
+    },
+    {
+        "content": "<p>I have only heard of administrative reasons to support that query. What end-user use-case(s) drive a demand for support, vs a should or may?</p>",
+        "id": 202450610,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1593530383
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> I think search by code alone is reasonable since the binding value set has contains on what system should/shall be used.</p>",
+        "id": 202463831,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1593535788
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191357\">@Drew Torres</span> -- are you sending resources with Codings with <code>system</code> but no <code>code</code>?  That may cause Inferno to do a search by <code>system</code> only because we formulate searches based on previous results (we are checking now, this could be a bug).  Our intent wasn't to try every option, but just <code>code</code> and <code>system|code</code>. We need consistency from servers (not one or the other, depending on server-specific rules that are not discoverable by clients without trial/error or reading documentation).  (I previously stated that the guide mixes the two forms, I need to verify that)</p>",
+        "id": 202467007,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1593537237
+    },
+    {
+        "content": "<p>I do not know a situation where we return system with no code.</p>",
+        "id": 202468504,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593537902
+    },
+    {
+        "content": "<p>I am going to double check.</p>",
+        "id": 202468529,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593537908
+    },
+    {
+        "content": "<p>Looks like it is technically correct, per <a href=\"https://www.hl7.org/fhir/datatypes.html#Coding\">https://www.hl7.org/fhir/datatypes.html#Coding</a>: <code>If the system is present, and there is no code, then this is understood to mean that there is no suitable code in the system in which to represent the code.</code>.</p>",
+        "id": 202469096,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1593538169
+    },
+    {
+        "content": "<p>Yea it is correct to return a system without a code.</p>",
+        "id": 202469152,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593538196
+    },
+    {
+        "content": "<p>The thing I am challenging is the validity of searching by system without codes.</p>",
+        "id": 202469291,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593538256
+    },
+    {
+        "content": "<p>It is OK to do that in the spec, but all the example that us-core laid out was using system|code.</p>",
+        "id": 202469772,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593538477
+    },
+    {
+        "content": "<p>Understood.</p>",
+        "id": 202469779,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1593538483
+    },
+    {
+        "content": "<p>As an example of the real world impact here: I search for 123456789, no system... I intend to get SSNs and MRNs and .... on an on that match? And I really don't care which?</p>",
+        "id": 202481587,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1593544409
+    },
+    {
+        "content": "<p>Usually even the sys admin use case is \"type\" and value - which isn't allowed in spec today that I know of :)</p>",
+        "id": 202481620,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1593544432
+    },
+    {
+        "content": "<p>no intent to search by only system</p>",
+        "id": 202483358,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593545320
+    },
+    {
+        "content": "<p>we provide the link to the base spec as helpful information for the reader</p>",
+        "id": 202483395,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593545348
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191401\">@Eric Haas</span>  The concern is searching only by code with no system</p>",
+        "id": 202483867,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1593545602
+    },
+    {
+        "content": "<p>And the base spec allows for everything, US core doesn't call out what it specifically requires</p>",
+        "id": 202483896,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1593545620
+    },
+    {
+        "content": "<p>we do in the quick starts.</p>",
+        "id": 202484060,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593545697
+    },
+    {
+        "content": "<p>and searching only by code is meant to be supported for the reason discussed above.</p>",
+        "id": 202484150,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593545742
+    },
+    {
+        "content": "<p>Still from a clarity of expectations perspective: \"Quick start\" doesn't necessarily come across as \"complete and authoritative list of requirements for servers\".</p>",
+        "id": 202484179,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593545759
+    },
+    {
+        "content": "<p>Something <em>in</em> the quick start I'd assume is definitely allowed, maybe required for servers. Something <em>not</em> in the quick start, I don't know that I'd make any assumptions.</p>",
+        "id": 202484261,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593545790
+    },
+    {
+        "content": "<p>it is based on the cap statements and pretty damn thorough</p>",
+        "id": 202484278,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593545796
+    },
+    {
+        "content": "<p>at least tried to be</p>",
+        "id": 202484324,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593545825
+    },
+    {
+        "content": "<p>and yes if not in there then no assumptions made</p>",
+        "id": 202484441,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593545879
+    },
+    {
+        "content": "<p>So <a href=\"http://hl7.org/fhir/us/core/STU3.1/CapabilityStatement-us-core-server.html\">http://hl7.org/fhir/us/core/STU3.1/CapabilityStatement-us-core-server.html</a> should be considered authoritative? Then that outlines the exact behavior for token searches per resource.</p>",
+        "id": 202484747,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593546006
+    },
+    {
+        "content": "<p>Which I don't object to because the areas of concern like observation.code is explicit in requiring system|code</p>",
+        "id": 202484789,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593546027
+    },
+    {
+        "content": "<p>Still a bit of grey area because it is listed under example....</p>",
+        "id": 202484864,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593546077
+    },
+    {
+        "content": "<p>SHALL   patient+code    reference+token GET [base]/Observation?patient=[patient]&amp;code=[system]|[code]</p>",
+        "id": 202484870,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593546079
+    },
+    {
+        "content": "<p><a href=\"http://hl7.org/fhir/us/core/STU3.1/CapabilityStatement-us-core-server.html#observation\">http://hl7.org/fhir/us/core/STU3.1/CapabilityStatement-us-core-server.html#observation</a></p>",
+        "id": 202484903,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593546096
+    },
+    {
+        "content": "<p>Indeed, I don't see a clear statement of whether a server needs to support \"Observation?code=123\".</p>",
+        "id": 202485037,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593546147
+    },
+    {
+        "content": "<p>so one of the dangers of making the capstatement pretty and easy to read is over-interpretation:</p>\n<p><a href=\"/user_uploads/10155/jv9YVMOJv4gb9y6y1HCJh13u/image.png\">image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/jv9YVMOJv4gb9y6y1HCJh13u/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/jv9YVMOJv4gb9y6y1HCJh13u/image.png\"></a></div>",
+        "id": 202485047,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593546153
+    },
+    {
+        "content": "<p>see the table heading says 'examples'</p>",
+        "id": 202485099,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593546177
+    },
+    {
+        "content": "<p>you can't express the nuances of search with the capstatement alone.</p>",
+        "id": 202485168,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593546209
+    },
+    {
+        "content": "<p>Yes. So my question is what is authoritative if these are examples.</p>",
+        "id": 202485174,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593546212
+    },
+    {
+        "content": "<p>Precisely!</p>",
+        "id": 202485179,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593546216
+    },
+    {
+        "content": "<p>so we have a capability statement that doesn't Express the details of what is required (in the computable portions at least it simply can't) and examples that only show a subset of what is required.</p>",
+        "id": 202485207,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593546236
+    },
+    {
+        "content": "<p>Which means it's not obvious whether searching by code without a system is required by this guide.</p>",
+        "id": 202485283,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593546256
+    },
+    {
+        "content": "<p>Unless I'm missing something that clarifies one way or the other.</p>",
+        "id": 202485299,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593546262
+    },
+    {
+        "content": "<p>the quick start contain conformance language on purpose:  </p>\n<p><a href=\"/user_uploads/10155/HQrSt4lhpKEH_C5aj9dSWqlM/image.png\">image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/HQrSt4lhpKEH_C5aj9dSWqlM/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/HQrSt4lhpKEH_C5aj9dSWqlM/image.png\"></a></div>",
+        "id": 202485526,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593546400
+    },
+    {
+        "content": "<p>They fill in the details</p>",
+        "id": 202485610,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593546447
+    },
+    {
+        "content": "<p>This is nothing new so I am surprised these questions are  being asked now....</p>",
+        "id": 202485711,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593546494
+    },
+    {
+        "content": "<p>So it's the curly braces around <code>system</code> that tells you a server must support queries where the client omits a system? I think that's a fine answer, just saying it's not obvious.  Is that curly brace thing a FHIR convention?</p>",
+        "id": 202486072,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593546686
+    },
+    {
+        "content": "<p>(and ... people are paying attention now in a deeperway because they are starting to implement against the onc final rule :-))</p>",
+        "id": 202486120,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593546717
+    },
+    {
+        "content": "<p>Actually I think that Drew's concern about token search by system only was appropriate</p>",
+        "id": 202486167,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593546723
+    },
+    {
+        "content": "<p>So your reading Eric is that a US Core server must support searching by code, as well as system plus code, but need not support searching by system alone?</p>",
+        "id": 202486249,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593546769
+    },
+    {
+        "content": "<p>we discuss the syntax <a href=\"http://hl7.org/fhir/us/core/STU3.1/general-guidance.html#search-syntax\">here</a>... but ought reference it in each quick start - ( it that a technical correction or change request? )</p>",
+        "id": 202486468,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593546883
+    },
+    {
+        "content": "<p>yes</p>",
+        "id": 202486489,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593546894
+    },
+    {
+        "content": "<blockquote>\n<p>Content surrounded by {} is optional</p>\n</blockquote>\n<p>Does this mean mandatory for servers to support queries that omit this this content, and optional for clients to supply?</p>",
+        "id": 202486574,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593546950
+    },
+    {
+        "content": "<p>I'm starting to realize how important it is to spell out these distinctions. We've had a number of corrections in the bulk data specification on this kind of issue.</p>",
+        "id": 202486676,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593546988
+    },
+    {
+        "content": "<p>Yes I seeing that now... smugly reviewing the syntax I realized that it is slightly inconsistent and not explicitly described.</p>\n<p>should be  <code>{system|}[code]</code>   instead of  <code>{[system]}|[code]</code><br>\nand then update the syntax section to call this out and add it to the master example </p>\n<p>I think these are technical corrections... but I don't want to mess up the inferno folks here  <span class=\"user-mention\" data-user-id=\"192576\">@Robert Scanlon</span> , <span class=\"user-mention\" data-user-id=\"191506\">@Yunwei Wang</span>  would this change to the syntax mess things up on your end if the intent was the same.  ( it wasn't intended to be computable but just making sure)</p>",
+        "id": 202488653,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593547960
+    },
+    {
+        "content": "<p>I don't believe we compute off that syntax... where specifically in the artifacts are you going to make that change?</p>",
+        "id": 202488993,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1593548159
+    },
+    {
+        "content": "<p>Inferno's test system is written so both <code>system|code</code> and <code>code</code> are tried for all token search types (if we ever query by just system, its a bug, and we are looking into it).</p>",
+        "id": 202489662,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1593548518
+    },
+    {
+        "content": "<p>Note that there is a similar ambiguity on reference search types, I believe.  ?patient=123 vs ?patient=Patient/123.</p>",
+        "id": 202489994,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1593548698
+    },
+    {
+        "content": "<p>I believe it is this one <a href=\"http://hl7.org/fhir/us/core/STU3.1/StructureDefinition-us-core-observation-lab.html#mandatory-search-parameters\">http://hl7.org/fhir/us/core/STU3.1/StructureDefinition-us-core-observation-lab.html#mandatory-search-parameters</a> item 2<br>\n<code>code={[system]}|[code],{[system]}|[code]</code> should be <code>code={system|}[code],{system|}[code]</code></p>",
+        "id": 202490181,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1593548800
+    },
+    {
+        "content": "<p><em>proposed</em> changes - </p>\n<p>update <a href=\"https://build.fhir.org/ig/HL7/US-Core-R4/general-guidance.html#search-syntax\">syntax</a> to clarify token parameters syntax {system|}[code] where the stuff inside the curly braces are optional</p>\n<p>and then update all the Quick Starts toconsistently use this syntax like Yunwei posted.</p>",
+        "id": 202490247,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593548841
+    },
+    {
+        "content": "<p>If that is heplful can <span class=\"user-mention\" data-user-id=\"191506\">@Yunwei Wang</span> make a tracker?</p>",
+        "id": 202490431,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593548935
+    },
+    {
+        "content": "<blockquote>\n<p>Note that there is a similar ambiguity on reference search types, I believe. ?patient=123 vs ?patient=Patient/123.</p>\n</blockquote>\n<p>Yes the guide is silent on that</p>",
+        "id": 202490983,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593549215
+    },
+    {
+        "content": "<p>\"the stuff inside the curly braces are optional\" -- for the server to support or the client to support?</p>",
+        "id": 202491072,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1593549244
+    },
+    {
+        "content": "<p>Are there client certifications?</p>",
+        "id": 202492057,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1593549751
+    },
+    {
+        "content": "<p>Just to make sure on this change... server would be expected to support only system|code and code only will be a should?</p>",
+        "id": 202492770,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593550105
+    },
+    {
+        "content": "<p>The new ONC certification criteria is not for clients.</p>",
+        "id": 202492805,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1593550129
+    },
+    {
+        "content": "<p>I heard something different <span class=\"user-mention\" data-user-id=\"191357\">@Drew Torres</span>: servers would be required to support queries with <code>?code=123</code> and <code>?code=http://system.example.org|123</code></p>",
+        "id": 202493291,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593550422
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191401\">@Eric Haas</span> does that match your expectation?</p>",
+        "id": 202493313,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593550439
+    },
+    {
+        "content": "<p>I just reread Eric's comments... should be {system|}[code] instead of {[system]}|[code] system is optional to pass in to the server...</p>",
+        "id": 202493415,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593550494
+    },
+    {
+        "content": "<p>Which means we must support a code only search</p>",
+        "id": 202493432,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593550504
+    },
+    {
+        "content": "<p>+1, that's what I'm saying too.</p>",
+        "id": 202493467,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1593550529
+    },
+    {
+        "content": "<p>I am begrudgingly OK with that. <span aria-label=\"rolling on the floor laughing\" class=\"emoji emoji-1f923\" role=\"img\" title=\"rolling on the floor laughing\">:rolling_on_the_floor_laughing:</span> As long as we get rid of system only.</p>",
+        "id": 202493652,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1593550621
+    },
+    {
+        "content": "<p>Definitely meant to support code search</p>",
+        "id": 202494480,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1593551036
+    },
+    {
+        "content": "<p><a href=\"https://jira.hl7.org/browse/FHIR-27897\">https://jira.hl7.org/browse/FHIR-27897</a></p>",
+        "id": 202499463,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1593553678
+    },
+    {
+        "content": "<p>Another question; In CareTeam, Quick Start says: \"SHALL support searching using the combination of the patient and category search parameters:<br>\nGET [base]/CarePlan?patient=[reference]&amp;category=http://hl7.org/fhir/us/core/CodeSystem/careplan-category|assess-plan\" <br>\nI understand that server SHALL support category=http://hl7.org/fhir/us/core/CodeSystem/careplan-category|assess-plan. SHOULD server also support category=assess-plan? Since [system] is not optional, I assume the answer is no.</p>",
+        "id": 203027597,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1594061914
+    },
+    {
+        "content": "<p>I would have assumed there was a uniform expectation in US Core about variations in a token search need to be supported, irrespective of whether a specific example is provided for each query. I kind of thought our discussion above was about all the places where token search is used. But maybe I overgeneralized?</p>",
+        "id": 203106737,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1594130779
+    }
+]

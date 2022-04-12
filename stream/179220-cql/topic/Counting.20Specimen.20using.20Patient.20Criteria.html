@@ -1,0 +1,102 @@
+---
+layout: page
+title: "FHIR Chat  · Counting Specimen using Patient Criteria · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Counting.20Specimen.20using.20Patient.20Criteria.html">Counting Specimen using Patient Criteria</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="175822898"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Counting%20Specimen%20using%20Patient%20Criteria/near/175822898" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Kiel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Counting.20Specimen.20using.20Patient.20Criteria.html#175822898">(Sep 16 2019 at 15:27)</a>:</h4>
+<p>I need to count the number of Specimen were there subjects have a BMI &gt; 30 km/m2. The query I came up with is the following:</p>
+<div class="codehilite"><pre><span></span>library Retrieve
+using FHIR version &#39;4.0.0&#39;
+include FHIRHelpers version &#39;4.0.0&#39;
+
+codesystem loinc: &#39;http://loinc.org&#39;
+
+context Specimen
+
+define Patient:
+  singleton from ([Patient])
+
+define InInitialPopulation:
+  exists(
+    from [Patient -&gt; Observation: Code &#39;39156-5&#39; from loinc] O
+    where (O.value as Quantity) &gt; 30 &#39;kg/m2&#39;)
+</pre></div>
+
+
+<p>I know that there is currently no official Specimen context but I have a ModelInfo in place which allows be to specify one. Both expressions, <code>Patient</code> and <code>InInitialPopulation</code> are in the Specimen context and I use $evaluate-measure with subject Specimen to count all Specimen which qualify through <code>InInitialPopulation</code>. The <code>Observation</code> retrieve expression however is in the context of the single <code>Patient</code> defined above. I took the idea from the Mother example in <a href="https://cql.hl7.org/03-developersguide.html#related-context-retrieves" target="_blank" title="https://cql.hl7.org/03-developersguide.html#related-context-retrieves">Related Context Retrieves</a>. </p>
+<p>cql-to-elm translates the CQL without a problem. <span class="user-mention" data-user-id="191359">@Bryn Rhodes</span> I would just ask if that is supposed to work the way I think, before implementing it in my CQL evaluation engine?</p>
+
+
+
+<a name="176672300"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Counting%20Specimen%20using%20Patient%20Criteria/near/176672300" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Counting.20Specimen.20using.20Patient.20Criteria.html#176672300">(Sep 26 2019 at 16:19)</a>:</h4>
+<p>Apologies for the delay here. I don't think you need to use a Related Context Retrieve, since you are not reaching in to another "specimen's" data, you are only saying "Give me all specimens where the patient has had a BMi observation &gt; 30 kg/m2". So I think you can just do this:</p>
+
+
+
+<a name="176672308"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Counting%20Specimen%20using%20Patient%20Criteria/near/176672308" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Counting.20Specimen.20using.20Patient.20Criteria.html#176672308">(Sep 26 2019 at 16:19)</a>:</h4>
+<div class="codehilite"><pre><span></span>library Retrieve
+using FHIR version &#39;4.0.0&#39;
+include FHIRHelpers version &#39;4.0.0&#39;
+
+codesystem loinc: &#39;http://loinc.org&#39;
+
+code bmi: &#39;39165-5&#39; from loinc
+
+context Specimen
+
+define InitialPopulation:
+  exists (
+        [Patient] P
+          with [Observation: code in bmi] O such that EndsWith(O.subject.reference, P.id)
+                and O.value &gt; 30 &#39;kg/m2&#39;
+    )
+</pre></div>
+
+
+
+<a name="176672331"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Counting%20Specimen%20using%20Patient%20Criteria/near/176672331" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Counting.20Specimen.20using.20Patient.20Criteria.html#176672331">(Sep 26 2019 at 16:19)</a>:</h4>
+<p>I can't translate that because I don't have a Specimen context defined, but if you do in your model info, that ought to work.</p>
+
+
+
+<a name="176673409"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Counting%20Specimen%20using%20Patient%20Criteria/near/176673409" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Kiel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Counting.20Specimen.20using.20Patient.20Criteria.html#176673409">(Sep 26 2019 at 16:32)</a>:</h4>
+<p>Thanks for your answer. I‘ll try to translate later. I have one question: is the Observation retrieve expression supposed to run in the unspecified context? Because in the Specimen context, I have no link to Observations and if I had, that wouldn’t be the Observations of the Patient.</p>
+
+
+
+<a name="176744781"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Counting%20Specimen%20using%20Patient%20Criteria/near/176744781" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Counting.20Specimen.20using.20Patient.20Criteria.html#176744781">(Sep 27 2019 at 13:20)</a>:</h4>
+<p>In the specimen context, it would be observations for the specimen.</p>
+
+
+
+<a name="176745741"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Counting%20Specimen%20using%20Patient%20Criteria/near/176745741" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Counting.20Specimen.20using.20Patient.20Criteria.html#176745741">(Sep 27 2019 at 13:33)</a>:</h4>
+<p>Using the related context retrieve in the way that you have above is an interesting use case, and I can see other potential uses for that approach. So yes, the original use of related context retrieve should work as well, just using a different reference from the Observation to do the search.</p>
+
+
+
+<a name="176913504"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Counting%20Specimen%20using%20Patient%20Criteria/near/176913504" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Kiel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Counting.20Specimen.20using.20Patient.20Criteria.html#176913504">(Sep 30 2019 at 08:50)</a>:</h4>
+<blockquote>
+<p>In the specimen context, it would be observations for the specimen.</p>
+</blockquote>
+<p>Ok that's the same I was expecting. I need the observations of the patient. So as you said already, it might be necessary to use related context here.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

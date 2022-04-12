@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p>Hi <span aria-label=\"wave\" class=\"emoji emoji-1f44b\" role=\"img\" title=\"wave\">:wave:</span>. I'm having a lot of fun working with goFSH &amp; sushi, but have encountered a problem when back-converting &amp; re-generating existing instances with <code>meta.profile</code> entries :</p>\n<ul>\n<li>If goFSH is run on a resource instance that declares a profile in <code>meta.profile</code>, the  canonical URL is inserted in the <code>InstanceOf</code> field in the generated FSH. There is also a warning issued if the profile is not defined locally.</li>\n<li>If multiple profiles are declared in <code>meta.profile</code>, the first entry is used for <code>InstancecOf</code> but the rest are put in explicit <code>* meta.profile = ....</code> entries.</li>\n<li>If sushi is run on the goFSH output like the above (with the profile not locally defined), it throws the errors \"InstanceOf  [canonical URL] not found for [instance ID]\"</li>\n</ul>\n<p>Might it not be better for goFSH  to always convert all <code>meta.profile</code> entries into <code>* meta.profile = ...</code> entries in FSH and let <code>InstanceOf</code> be the base type? That would ensure equal treatment of all profiles and would (I think) also remove the sushi error mentioned above (generation with <code>* meta.profile = ...</code> entries works fine). Also, my (limited) understanding of <code>meta.profile</code> is that it is just a <em>claim</em> that may or may not be true, so it feels like elevating it to an instance type declaration is perhaps too strong (though maybe I'm misunderstanding of that FSH element).</p>",
+        "id": 242034214,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1623228714
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span>.  I think you raise some interesting (and valid) points.  Generally speaking, there are four advantages to using <code>InstanceOf: SomeProfile</code> vs <code>InstanceOf: SomeResource</code>:</p>\n<ol>\n<li>It's a good signal of intent to people reading the code (and more obvious than a rule)</li>\n<li>It tells SUSHI to automatically insert required fixed values from the profile (so you don't have to)</li>\n<li>It tells SUSHI to do <em>basic</em> validation against the profile (e.g., cardinality checks)</li>\n<li>It identifies the instance as an example of the profile in the IG JSON (which comes through in docs)</li>\n</ol>\n<p>I understand your point that <code>meta.profile</code> is just a <em>claim</em> to conform to a profile -- but at the same time, when we're talking about IGs, it seems to me a very bad idea for an IG to have artifacts that claim to conform to a profile but do not actually conform.  That's an unfortunate reality of real-world data, but IG data usually should represent best practice.  So I actually think it is <em>good</em> to attempt to force/validate this conformance in an IG.</p>\n<p>All that said, I don't think GoFSH takes advantage of #2 above (it writes explicit rules for all values, fixed or not) and #4 is only valid if you will later allow SUSHI to create the IG JSON.  Also, when there are multiple profiles, I can see how perhaps #1 is not necessarily what the author wants.</p>\n<p>So in conclusion (long post, sorry), here are my thoughts:</p>\n<ul>\n<li>GoFSH aims to make valid FSH, so it should never declare a profile as Parent if that profile cannot be resolved in the IG or in the IG's dependencies.  For that case, we should use the base resource as Parent w/ a <code>* meta.profile =</code> rule.</li>\n<li>If an instance has multiple <code>meta.profile</code> entries, I agree that a better approach would be to declare the base resource as Parent and list all the profile using <code>*</code> rules.  That's probably better than arbitrarily just choosing the first one.</li>\n<li>If an instance has a single <code>meta.profile</code> entry, and that profile is resolvable (via IG or IG dependencies), I still think it makes sense to explicitly export it as the <code>Parent</code>.  There is no ambiguity there and I think it is <em>good</em> to make the parent more clear and allow for the additional validation and IG documentation that having a profile parent provides.</li>\n</ul>\n<p>What do you think about that?</p>",
+        "id": 242062331,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1623244498
+    },
+    {
+        "content": "<p>Thanks for the long post <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span>, it really made me understand the context much better!</p>\n<ul>\n<li>Those are excellent points about how using the profile in <code>InstanceOf</code> allows SUSHI to leverage the profile information, I was not aware of all that underlying functionality (which sounds great). And I agree that in the context of an IG, it is fair to force authors to supply valid examples.</li>\n<li>That being said, when I discovered these issues, I was actually working <em>outside</em> the context of an IG (for now). I really like FSH as a, well, short-hand, for improved compactness and better organization, even if I am just playing around with a few resources. Hence, from my perspective it would be ideal if there were no fixed choices made that are based on the assumption that we are in the context of a full IG.</li>\n<li>I suspect (without having concrete proof) that even the context of an IG, there may be cases where you want to add more than one profile to an example. For instance in cases where you want to show that the example is also valid against an important parallel or overarching IG (say, IPS). Another scenario is where the use case forces you to make it explicit in the instance whether it is STU3 or R4 - AFAIK, the standard way to do that is to put the canonical for the base resource definition (which contains the FHIR version) in <code>meta.profile</code>.</li>\n</ul>\n<p>So I agree with your suggestions, with one tweak. I think it would be nice if the use of profiles in <code>InstanceOf</code> could be configured with a flag (or a flag passed at runtime). That way, IG authors (and \"non-IG-users\") would still have the option of  keeping the profiles out of <code>InstanceOf</code> (even if resolvable), if their use cases makes that preferable. The flag could theoretically even switch between the different kind of rules you discussed above: \"never\", \"only if single profile\",  and \"always, pick first profile\".  If there are other aspects of SUSHI/goFSH that are specific to the IG context, I wonder if an alternative might be to have a flag to switch off that context (affecting different aspects of the compilation logic).</p>\n<p>Might one of those be viable ways to go?</p>",
+        "id": 242165526,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1623307797
+    },
+    {
+        "content": "<p>I actually second something like this.  I have a desire to create example instances that do NOT have the meta.profile set.  I'd like to declare InstanceOf to get the expressibility of FSH but I don't want the actual instances to have meta.profile set.</p>",
+        "id": 242212579,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1623334292
+    },
+    {
+        "content": "<p>Ah yes, I suppose the question poses itself both for goFSH and SUSHI (I was primarily thinking about the former, but I see it for the latter too).</p>\n<p><strong>For goFSH</strong><br>\nMy proposal would be to allow configuring how <code>meta.profile</code> entries in FHIR instances are mapped to FSH. The options could be </p>\n<ol>\n<li>Never <code>InstanceOf</code>: always put this information in <code>* meta.profile = ...</code> FSH entries, always set <code>InstanceOf</code> to the base type</li>\n<li>Always <code>InstanceOf</code>:  Always put the first <code>meta.profile</code> entry into <code>InstanceOf</code> (if present), second and further entries into <code>* meta.profile = ...</code> FSH entries (this is the current behavior)</li>\n<li><code>InstanceOf</code> if unique: Put the profile in <code>InstanceOf</code> <em>iff</em> there is a single <code>meta.profile</code> entry, otherwise in <code>* meta.profile = ...</code> FSH entries</li>\n</ol>\n<p><strong> For SUSHI</strong><br>\n<span class=\"user-mention\" data-user-id=\"192166\">@Jean Duteau</span> if I understand you right, this is what you are talking about. Is it correct that your suggestion would be to allow a configuration/flag that would control whether <code>InstanceOf: [profile URL]</code> entries in FSH are propagated to <code>meta.profile</code> entries in the output? (I'm actually not sure what the current behavior is here).</p>",
+        "id": 242353771,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1623422057
+    },
+    {
+        "content": "<p>Yep, that is what I'm talking about - for SUSHI, whether InstanceOf propogates to meta.profile.</p>",
+        "id": 242357079,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1623423562
+    },
+    {
+        "content": "<p>What's the benefit of it not propogating?</p>",
+        "id": 242360211,
+        "sender_full_name": "David Pyke",
+        "timestamp": 1623424853
+    },
+    {
+        "content": "<p>i want to have some examples where the meta.profile isn't specified for testing purposes.</p>",
+        "id": 242362939,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1623426043
+    },
+    {
+        "content": "<p>I've logged the GoFSH bit of this as <a href=\"https://github.com/FHIR/GoFSH/issues/136\">GoFSH#136</a></p>",
+        "id": 242951496,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1623882627
+    },
+    {
+        "content": "<p>I've logged the SUSHI bit of this as <a href=\"https://github.com/FHIR/sushi/issues/844\">SUSHI#844</a></p>",
+        "id": 242951741,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1623882817
+    },
+    {
+        "content": "<p>Thanks, <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> (BTW the link to the SUSHI looks incorrect)</p>",
+        "id": 242978615,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1623912156
+    },
+    {
+        "content": "<p>I've corrected the link.  Thanks!</p>",
+        "id": 243007084,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1623931393
+    }
+]

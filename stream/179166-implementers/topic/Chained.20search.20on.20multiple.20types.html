@@ -1,0 +1,148 @@
+---
+layout: page
+title: "FHIR Chat  · Chained search on multiple types · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html">Chained search on multiple types</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="263365971"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/263365971" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#263365971">(Dec 01 2021 at 22:19)</a>:</h4>
+<p>I've been taking a close look at some chained search cases recently. In the search spec there's a section:</p>
+<p>Advanced Search Note: Where a chained parameter searches a resource reference that may have more than one type of resource as its target, the parameter chain may end up referring to search parameters with the same name on more than one kind of resource at once. Servers SHOULD reject a search where the logical id refers to more than one matching resource across different types. For example, the client has to specify the type explicitly using the syntax in the second example above.</p>
+<p>I think what this is saying is that if I search DiagnosticReport?subject.name=Peter, and the inner part of the chain finds matching resources for name=Peter <em>that have colliding IDs</em>, e.g. Patient/123 and Location/123, it SHOULD reject the search.</p>
+<p>But why? It could simply return all DiagnosticReport resources that refer to either of those two distinct resources. What's problematic about this case?</p>
+
+
+
+<a name="263366526"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/263366526" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#263366526">(Dec 01 2021 at 22:24)</a>:</h4>
+<p>Good question. We have similar language earlier on the search page:</p>
+<blockquote>
+<p>servers SHOULD reject a search where the logical id refers to more than one matching resource across different types. In order to allow the client to perform a search in these situations the type is specified explicitly:</p>
+</blockquote>
+<p>which applies even to non-chaining scenarios. I assume you have the same concern with this too?</p>
+
+
+
+<a name="263367003"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/263367003" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#263367003">(Dec 01 2021 at 22:29)</a>:</h4>
+<p>Yes, I assume this must have come from the same motivation - in this case we're telling people not to do ?my-reference-param=123 without specifying either :type=123 or type/123. This query cannot be validated up front - whether there are colliding resource IDs depends on the data. But if we've successfully executed the query to the point of realizing that this is the case, why not return the results?</p>
+
+
+
+<a name="263367327"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/263367327" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#263367327">(Dec 01 2021 at 22:32)</a>:</h4>
+<p>The <a href="https://github.com/HL7/fhir/blob/6bf66c167ce30cc7fe9398849a898c25880cdb92/source/search.html#L375-L382">original language</a> (earliest git history I have on search.html is 2014) was designed to allow static evaluation (not dependent on server state):</p>
+<blockquote>
+<p>Where a chained parameter searches a resource reference that may have more than one <br>
+different type of resource as its target, the parameter chain may end up referring <br>
+to search parameters with the same name on more than one kind of resource at once. <br>
+The parameter names defined in FHIR have consistent types wherever they are used. <br>
+Implementers defining their own names need to be sure that they do not create <br>
+unprocessable combinations. Servers SHOULD reject queries chained queries<br>
+that lead to disjoint types along the path (e.g. the client has to specify<br>
+the type explicitly using the syntax in the second example above).</p>
+</blockquote>
+<p>I'm trying to figure we changed this...</p>
+
+
+
+<a name="263367362"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/263367362" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#263367362">(Dec 01 2021 at 22:33)</a>:</h4>
+<p>or alternately, don't let queries cross resource types like this regardless of whether colliding IDs actually exist - but that ship has presumably sailed long ago</p>
+
+
+
+<a name="263367613"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/263367613" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#263367613">(Dec 01 2021 at 22:35)</a>:</h4>
+<p>Yeah, "regardless of whether colliding IDs exist" was the original language and intent. <a href="https://github.com/HL7/fhir/commit/144919d370f07e3796a40643a18b1c10d029fb0b">https://github.com/HL7/fhir/commit/144919d370f07e3796a40643a18b1c10d029fb0b</a> is where the spec changed, based on...</p>
+
+
+
+<a name="263367640"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/263367640" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#263367640">(Dec 01 2021 at 22:35)</a>:</h4>
+<p><a href="http://jira.hl7.org/browse/FHIR-8370">FHIR-8370</a></p>
+
+
+
+<a name="263367752"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/263367752" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#263367752">(Dec 01 2021 at 22:36)</a>:</h4>
+<p>I don't think the spec updates in <a href="https://github.com/HL7/fhir/commit/144919d370f07e3796a40643a18b1c10d029fb0b">that commit</a> actually reflected the documented resolution in <a href="http://jira.hl7.org/browse/FHIR-8370">FHIR-8370</a>, FWIW.</p>
+
+
+
+<a name="263368390"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/263368390" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#263368390">(Dec 01 2021 at 22:43)</a>:</h4>
+<p>I agree we're in a weird place right now <span class="user-mention" data-user-id="197072">@Paul Church</span>.  Pragmatically I think:</p>
+<ol>
+<li>
+<p>We should allow <code>Observation?subject.lastUpdated=gt2021</code> and stuff like it, no matter what type <code>subject</code> has. There are legit use cases for this.</p>
+</li>
+<li>
+<p>We should disallow <code>Observation?subject=123</code> -- it's not really a coherent query, and likely to cause surprises.</p>
+</li>
+</ol>
+
+
+
+<a name="263368489"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/263368489" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#263368489">(Dec 01 2021 at 22:44)</a>:</h4>
+<p>But extra pragmatically: we should remove both prohibitions, because they're confusing and hard to disentangle.</p>
+
+
+
+<a name="263403027"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/263403027" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#263403027">(Dec 02 2021 at 07:59)</a>:</h4>
+<p>Hmm - I thought the wording was intending to state that one can't assume a parameter (even if it has the same name) to have the same semantics across different resource types. As such referring to e.g. <a href="http://subject.name">subject.name</a> when there are multiple resource types that match subject  is problematic.</p>
+
+
+
+<a name="263482651"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/263482651" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#263482651">(Dec 02 2021 at 18:43)</a>:</h4>
+<p>Searching across multiple types by parameter(s) having the same name is explicitly allowed when using parameters that list multiple types in SearchParameter.base, see <a href="http://hl7.org/fhir/http.html#vsearch">http://hl7.org/fhir/http.html#vsearch</a> - the Google implementation doesn't do this but it's a precedent for why <a href="http://subject.name">subject.name</a> might be allowed.</p>
+<p>I think the most plausible path forward is to remove both prohibitions because they're confusing and not what appears to have been intended (because queries can't be statically validated). Switching to a different set of prohibitions would be nice but potentially breaking.</p>
+
+
+
+<a name="264173609"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/264173609" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Craig McClendon <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#264173609">(Dec 08 2021 at 15:41)</a>:</h4>
+<p>I had long assumed (from the original wording) that the intent was to avoid the potential complexity of dealing with diverging branches for multi-chained queries. You could reach a point where a specified search param is not valid for one branch/path where it is for another.</p>
+
+
+
+<a name="264174114"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/264174114" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#264174114">(Dec 08 2021 at 15:45)</a>:</h4>
+<p>Agree on the problem statement and proposed solution, Paul!  Are you willing to create a Jira issue for this and link back to discussion here?</p>
+
+
+
+<a name="264174974"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/264174974" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Craig McClendon <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#264174974">(Dec 08 2021 at 15:50)</a>:</h4>
+<p>i.e. - what do you do with this? <br>
+Observation.subject.birthdate=2011</p>
+
+
+
+<a name="264209047"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/264209047" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#264209047">(Dec 08 2021 at 19:41)</a>:</h4>
+<p>Assuming you mean <code>Observation?subject.birthdate=2011</code>: With the prohibitions removed, servers would be free to process that and return results for any linked resources with a <code>birthdate</code> search param that matches. (Servers could also refuse, and require clients to ask for something explicit like <code>Observation?subject:Patient.birthdate=2021</code>.)</p>
+
+
+
+<a name="264233111"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Chained%20search%20on%20multiple%20types/near/264233111" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Craig McClendon <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Chained.20search.20on.20multiple.20types.html#264233111">(Dec 08 2021 at 22:56)</a>:</h4>
+<p>Correct, Josh - that's what I meant.  <br>
+Renee has a good point too regarding differing semantics for search parameters with the same name. I don't know if anything like that exists - i.e. two resources have the same search parameter name with a different search parameter type. </p>
+<p>I'm also trying to conceive if there are cases where multi-chained paths/branches could diverge and rejoin (requiring de-duplication), create a loop, or other such things.  Again, not sure if that's possible. </p>
+<p>Anyway, I don't disagree with loosening the language - just thinking out loud where there may be difficult cases which led to the restriction.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

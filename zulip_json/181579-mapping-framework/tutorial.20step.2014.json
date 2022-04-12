@@ -1,0 +1,92 @@
+[
+    {
+        "content": "<p>hi all, i've been playing with the FHIR mapping language (big thanks to <span class=\"user-mention\" data-user-id=\"191478\">@Oliver Egger</span> and <span class=\"user-mention\" data-user-id=\"191321\">@David Hay</span> for their help) and ive quickly found myself in a tricky situation.<br>\ni have two input lists that i'd like to map into one input list<br>\nessentially:</p>\n<div class=\"codehilite\"><pre><span></span>{a, b, c} + {1, 2, 3} -&gt; {a1, b2, c3}\n</pre></div>\n\n\n<p>from the description of tutorial step 14 (<a href=\"https://www.hl7.org/fhir/mapping-tutorial.html\" target=\"_blank\" title=\"https://www.hl7.org/fhir/mapping-tutorial.html\">https://www.hl7.org/fhir/mapping-tutorial.html</a>), i think that should be covered there, but it's marked as to do. does anyone have an example of what the map rules should look like to iterate through two lists simultaneously and accomplish this?</p>",
+        "id": 185246945,
+        "sender_full_name": "Harrison Tarr",
+        "timestamp": 1578598432
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"246988\">@Harrison Tarr</span> challenging task!<br>\nI came up the following for the first element element of the list:</p>\n<div class=\"codehilite\"><pre><span></span>map &quot;http://hl7.org/fhir/StructureMap/unioncollection&quot; = &quot;unioncollection&quot;\n\nuses &quot;http://hl7.org/fhir/StructureDefinition/tutorial-left&quot; alias TLeft as source\nuses &quot;http://hl7.org/fhir/StructureDefinition/tutorial-right&quot; alias TRight as target\n\ngroup combine(source source : TLeft, target target : TRight) {\n    source.a first as a -&gt; target.c = (%source.a[0]+%source.b[0]) &quot;concatenated&quot;;\n//  source.a as a -&gt; target.c as c, c = (%source.a.item($index) + %source.b.item($index)) &quot;concatenate&quot;;\n}\n</pre></div>\n\n\n<p>to run above i need to update the <a href=\"https://github.com/hapifhir/org.hl7.fhir.core/pull/104\" target=\"_blank\" title=\"https://github.com/hapifhir/org.hl7.fhir.core/pull/104\">pull request</a> but no idea how you either a) propagate the index of the list into the target or b) do a recursion of the tail of the two collections. if instead of the target a variable could be assigned in the target which could be reused, then it would be feasable. any other approaches <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191363\">@Vadim Peretokin</span> <span class=\"user-mention\" data-user-id=\"193430\">@Alexander Zautke</span> ?</p>",
+        "id": 185309505,
+        "sender_full_name": "Oliver Egger",
+        "timestamp": 1578662950
+    },
+    {
+        "content": "<p>The rule that for merging the two values should be evaluated by the engine once for every element. Therefore you should not need to have any kind of indices.</p>",
+        "id": 185452273,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1578867021
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span>map &quot;http://hl7.org/fhir/StructureMap/unioncollection&quot; = &quot;unioncollection&quot;\n\nuses &quot;http://hl7.org/fhir/StructureDefinition/tutorial-left&quot; alias TLeft as source\nuses &quot;http://hl7.org/fhir/StructureDefinition/tutorial-right&quot; alias TRight as target\n\ngroup combine(source test : TLeft, target combined : TRight) {\n    test.a as a, test.b as b -&gt; combined.c = evaluate(test, &#39;%a + %b&#39;) collate;\n}\n</pre></div>",
+        "id": 185452280,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1578867050
+    },
+    {
+        "content": "<p>%a and %b should capture the current value for each iteration and collate should re-use the target.</p>",
+        "id": 185452374,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1578867210
+    },
+    {
+        "content": "<p>according to the <a href=\"https://www.hl7.org/fhir/mapping-language.html\" target=\"_blank\" title=\"https://www.hl7.org/fhir/mapping-language.html\">spec</a> this would give a1, a2, a3,  b1,  b2,  b3, c1, c2, c3 and not a1, b2, c3 ?</p>\n<blockquote>\n<p>If there are multiple source statements, the rule applies for the permutation of the source elements from each source statement. E.g. if there are 2 source statements, each with 2 matching elements, the rule applies 4 times, one for each combination. </p>\n</blockquote>",
+        "id": 185470115,
+        "sender_full_name": "Oliver Egger",
+        "timestamp": 1578900080
+    },
+    {
+        "content": "<p>Mhm, right...</p>",
+        "id": 185504694,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1578930120
+    },
+    {
+        "content": "<p>What would be if you nest the second element selection?</p>",
+        "id": 185504880,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1578930230
+    },
+    {
+        "content": "<p>Nevermind, same result...</p>",
+        "id": 185504944,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1578930253
+    },
+    {
+        "content": "<p>Our the .NET implementation doesn’t currently support the external variables in the FHIRPath statement. That’s why I can’t test the statement. I‘m a bit out of ideas</p>",
+        "id": 185515815,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1578936913
+    },
+    {
+        "content": "<p>Are you sure on that?<br>\nYou just need to add them to the symbol table being used by the fhirpath engine (only supports string types at this stage though)<br>\nFor my usage, I provide a new Symbol table with the vars, that wraps the core symbol table and pass that to the execution engine.</p>",
+        "id": 185546188,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1578955448
+    },
+    {
+        "content": "<p>Yes, the mapping engine uses internally already a parser based on Superpower for everything except FHIRPath. Therefore we have separate contexts between the selection of the source and the evaluation function (parsed and executed by the Sprache parser / API FHIRPath compiler). There is no shared symbol table between these two worlds. We have a solution to make it work for where statements but not for the evaluation function.</p>",
+        "id": 185547007,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1578956076
+    },
+    {
+        "content": "<p>Ok</p>",
+        "id": 185557565,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1578966225
+    },
+    {
+        "content": "<p><code>group combine(source source : TLeft, target target : TRight) {\n    let tailA = (%source.a.tail())\n    let tailB = (%source.b.tail())\n    source.a first as a -&gt; target.c = (%source.a[0]+%source.b[0]) \"concatenated\" then combine(tailA, tailB);\n}</code></p>",
+        "id": 185683295,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1579082183
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191478\">@Oliver Egger</span>  and I came up with a solution using let statements (See <a href=\"http://jira.hl7.org/browse/FHIR-21642\" target=\"_blank\" title=\"http://jira.hl7.org/browse/FHIR-21642\">J#21642</a>)</p>",
+        "id": 185683316,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1579082219
+    }
+]

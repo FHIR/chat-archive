@@ -1,0 +1,218 @@
+[
+    {
+        "content": "<p>From discussion here and reviewing our version compatibility rules, I'm concerned about the current approach to considering R4B as a \"technical correction\" and \"minor version update\" to FHIR R4. Why? We say at <a href=\"https://build.fhir.org/versions.html#versions\">https://build.fhir.org/versions.html#versions</a>:</p>\n<ul>\n<li>Major version \"Increments every time a breaking change is made (see below)\"</li>\n<li>Breaking changes \"are changes that mean that previously conformant applications are no longer conformant to the updated specification\"</li>\n</ul>\n<p>I see much potential for \"previously conformant\" (i.e., R4-compatible) applications to break when pointed at an R4B server. For example:</p>\n<ul>\n<li>\n<p>Parsing a code in <code>CapabilityStatement.fhirVersion</code> when discovering a server's capabilities (this element has a required binding to the codes at <a href=\"https://hl7.org/fhir/R4/valueset-FHIR-version.html\">https://hl7.org/fhir/R4/valueset-FHIR-version.html</a> has our published list of codes)</p>\n</li>\n<li>\n<p>Even clients following our <a href=\"https://build.fhir.org/versions.html#change\">rules</a> for \"wishing to maximize backwards compatibility\" (which as worded sounds highly optional, not like a strict requirement for being considered \"conformant\"!) would only have advice about \"dealing with content from a system supporting an unknown normative version\" --- and presumably FHIR R4 is not a \"normative version\"</p>\n<ul>\n<li>\n<p>Querying a FHIR server in ways that could return new R4B resources or datatypes</p>\n<ul>\n<li>e.g. <code>Patient-everything</code> or <code>System-export\" operations, or </code>GET /_history<code> or </code>GET ?<code> or various </code>_include=*` invocations might suddenly return new resource types when submitted to an R4B server</li>\n</ul>\n</li>\n<li>\n<p>Common client libraries are likely to crash when parsing unexpected resource types in response to previously-working queries like</p>\n</li>\n</ul>\n</li>\n</ul>",
+        "id": 269175543,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643059790
+    },
+    {
+        "content": "<p>In our implementation, I'm currently thinking to force clients to request version 4.3.0 (by passing an Accept header with the <code>fhirVersion=4.3</code> mime type parameter) in order to get back the new resource types from whole-system interactions like system-search, system-history, and $export.<br>\nI already implemented something like that for our CapabilityStatement (based on experience at connectathon).<br>\nIf it works the way I expect, that would make the server mostly backwards-compatible.  What it doesn't address is the fact we always apply the updated (4.3.0) constraints for all resource types...that could be \"breaking\" for some resource types, but these are really \"corrections\" and so I'm still hoping we can get R4 users to fix their stuff for these as well.</p>",
+        "id": 269186747,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1643066265
+    },
+    {
+        "content": "<p>90% of implementations will have no use for any of the changed resources.  9.9% will care only about the net new Subscription resources.  Only .1% will care about the medication definition and EBM content.  For systems that don't use anything that's changed, the change should be completely transparent.</p>",
+        "id": 269193200,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1643071147
+    },
+    {
+        "content": "<p>I don't know whether these percentages are accurate, and I am not sure why they're relevant to the design question of what \"compatible\" means.</p>",
+        "id": 269195296,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643072949
+    },
+    {
+        "content": "<p>We don't say \"bump major version when we expect xx% of applications will break\"</p>",
+        "id": 269195381,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643073011
+    },
+    {
+        "content": "<p>The systems that care about the net new things didn't use them in R4, so for them R4B is the only thing they care to implement.  The systems that did implement R4 don't care about the new things in R4B with the possible exception of the Subscription changes.  If introducing the Subscription changes means we can no longer consider R4B substitutable for R4, then we shouldn't have incorporated them...</p>",
+        "id": 269199900,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1643076579
+    },
+    {
+        "content": "<p>My concern is that any new datatypes, new resources, or resources that have seen breaking changes will lead to compatibility problems; it's nothing specific to subscriptions or medications.</p>",
+        "id": 269200706,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643077351
+    },
+    {
+        "content": "<p>The most likely place of breaking is in the enumerations for supported resources and FHIR versions.  Old systems might well choke on those.  Other than that, there should <em>never</em> be an instance of any of the resources shared in R4 that will <em>ever</em> contain one of the new resources defined or renamed in R4B - not as contained, not in an extension.  There is no possible use-case where that would make sense.  (And any system that's using the new resources is, by definition, one that must pre-coordinate with systems to ensure that they support R4B.)  For any system that only cares about the stuff that only existed in R4, they can continue to use that stuff when communicating with an R4B system unchanged - and vice versa.</p>",
+        "id": 269202074,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1643078525
+    },
+    {
+        "content": "<p>Again, there are FHIR operations such as search and history and export that can run at the server level; a client that knows how to parse the results of those operations today (e.g., using existing R4 libraries) is going to suddenly stop working if the server it is talking to suddenly \"upgrades\" to R4B (or a new server that it is introduced to support this new version).</p>",
+        "id": 269203060,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643079483
+    },
+    {
+        "content": "<p>Search is only impacted if you're doing searches at the base resource level - which very few real clients do.  And then, they'd only fail if the servers they were talking to had the new resources, which is also exceptionally unlikely.  If you're talking to a test server, then yes, it's possible.  If you're talking to a real server, the scenario is exceptionally unlikely.  Same is true for export.  If you're doing a full dump of a server, then you already know exactly what the server does before asking for an export.</p>",
+        "id": 269204117,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1643080351
+    },
+    {
+        "content": "<p>I sort of agree with <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> <br>\nI don't think using R4B for Subscription services is much of a technical issue. </p>\n<p>All the resources we would get would 'R4' posted to a R4B endpoint.</p>\n<p>However I'm concerned around the number of meetings this would cause.  We are already seeing fhir versioning becoming a major topic  (.... and the more pressing issue of v2 to FHIR ignored)</p>",
+        "id": 269228327,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1643102242
+    },
+    {
+        "content": "<p>It's possible we just need to update our versioning rules to allow for some kinds of breaking changes within a minor release -- I just don't want our reasoning about what is/isn't \"breaking\" to be based on how <em>many</em> systems will break. Of course, our choices about when to allow breakage could depend on this, but the definition of breakage shouldn't</p>",
+        "id": 269258639,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643118503
+    },
+    {
+        "content": "<p>For example, the fhirVersion ValueSet binding for CapabilityStatement doesn't seem to be a real world issue (presumably because real clients are not depending on receiving a valid capability statement at runtime, perhaps because applications have already developed flexibility here in response to the 4.0.1 release which would have surfaced brittle implementations).</p>",
+        "id": 269258864,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643118647
+    },
+    {
+        "content": "<blockquote>\n<p>real clients are not depending on receiving a valid capability statement at runtime</p>\n</blockquote>\n<p>mhh, our client definitely depends on that</p>",
+        "id": 269259847,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1643119115
+    },
+    {
+        "content": "<p>But do you depend on <code>CapabilityStatement.fhirVersion</code> being drawn from the required binding (<a href=\"https://hl7.org/fhir/R4/valueset-FHIR-version.html\">https://hl7.org/fhir/R4/valueset-FHIR-version.html</a>)?</p>",
+        "id": 269262706,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643120306
+    },
+    {
+        "content": "<p>That is the particular sense of \"valid\" that I had in mind here <span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span>.</p>",
+        "id": 269262746,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643120324
+    },
+    {
+        "content": "<p>The R4 library will not be happy if it sees a value there that it does not recognize, it can be configured to ignore the error and leave fhirVersion empty - that I think would work</p>",
+        "id": 269264093,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1643120945
+    },
+    {
+        "content": "<blockquote>\n<p>it can be configured to ignore the error and leave fhirVersion empty - that I think would work</p>\n</blockquote>\n<p>It would work in the sense of \"your application code used to be conformant to FHIR R4 and interoperate with R4 servers, but after the release of R4B you need to write new code updating library version or library configuration to interoperate with R4B servers.\" That's practically the definition of a breaking change. (To be clear, I'm not against breaking changes. I'm just against including them in a minor release given our current versioning rules.)</p>",
+        "id": 269265651,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643121609
+    },
+    {
+        "content": "<p>Also from <span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span> it looks like R4B has added new options to the choice type for <code>ActivityDefinition.subject[x]</code> (<code>subjectCanonical</code> is new). Is this a known/desired change within our versioning rules?</p>",
+        "id": 269299318,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643134509
+    },
+    {
+        "content": "<p>I think it would work without changes, our code does not depend on having a value in fhirVersion and we set the library to ignore unknown enumeration values.  <br>\nIf either of those things were not true though we would have to change our client code to connect to a R4B server, that would be a huge pain</p>",
+        "id": 269328576,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1643146669
+    },
+    {
+        "content": "<p>I hit an interesting one today and just wanted to capture it here:  DeviceDefinition</p>\n<p>This one breaks due to the change in the underlying ProductShelfLife type.  It was maturity level 0 in R4, so probably fine, but I wanted to be sure to capture/communicate it somewhere in case its an unexpected breakage (because I wasn't sure if its considered part of the \"medication definition or EBM content\")</p>",
+        "id": 269337460,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1643151196
+    },
+    {
+        "content": "<p>Hmm.  That's definitely an issue.  I'll bring it to the FMG</p>",
+        "id": 269339301,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1643152176
+    },
+    {
+        "content": "<p>We may end up requiring the medication resources to use ProductShelfLife2 or something in R4B so that DeviceDefinition is left alone.</p>",
+        "id": 269339390,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1643152211
+    },
+    {
+        "content": "<p>Is it possible to flip DeviceDefinition to an in-line BackboneElement that matches the R4 structure?  That might be slightly cleaner than the ProductShelfLife2 approach given that in R5 you probably want the two aligned on the ProductShelfLife type.</p>",
+        "id": 269352185,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1643161316
+    },
+    {
+        "content": "<p>That's also an option.  Not sure it causes any less or more issue for R4B-&gt;R5 transition though.</p>",
+        "id": 269360236,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1643169904
+    },
+    {
+        "content": "<p>re the change to ProductShelfLife, it was for an R4B ballot comment (Lloyd's) to change a data type from Quantity to Duration - making it clear it is time related. It's a good change. <br>\nBut I wonder if it may be pragmatic to put that change into R5, and back it out of R4B. Then there is no compatibility issue, no need to create a clone of the datatype or create a backbone, and then no need to put things back together again in R5. Otherwise things need to change, and then change again. Delaying the improvement wouldn't seem to hurt.</p>",
+        "id": 269399639,
+        "sender_full_name": "Rik Smithies",
+        "timestamp": 1643198345
+    },
+    {
+        "content": "<p>the other ProductShelfLife change was the removal of ProductShelfLife.identifier</p>",
+        "id": 269408604,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1643203135
+    },
+    {
+        "content": "<p>Since PackagedProductDefinition is a new resource type, I don't think there are any backwards-compatibility concerns for that one, so to me it makes more sense for that to be as close to what its going to be in R5 as possible.</p>",
+        "id": 269408811,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1643203227
+    },
+    {
+        "content": "<blockquote>\n<p>Also from @Gino Canessa it looks like R4B has added new options to the choice type for ActivityDefinition.subject[x] (subjectCanonical is new). Is this a known/desired change within our versioning rules?</p>\n</blockquote>\n<p>Just wanted to mention that this also applies to PlanDefinition.</p>",
+        "id": 269414612,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1643205508
+    },
+    {
+        "content": "<p>Do we want JIRAs for these 2 (the DeviceDefinition one and the ActivityDefinition/PlanDefinition one)?</p>",
+        "id": 269414682,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1643205541
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191676\">@Lee Surprenant</span> edit - yes ProductShelfLife had an identifier in R4, it was long gone by R4B but that is another change.</p>",
+        "id": 269416408,
+        "sender_full_name": "Rik Smithies",
+        "timestamp": 1643206155
+    },
+    {
+        "content": "<p>Thanks to <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> for pointing out where I went wrong: R4B as <code>4.3.0</code> is actually a major updated over <code>4.0.1</code> because the middle segment is the major version number. (\"publication.major.minor[.patch]\" is the format for these version numbers!) Therefore: breaking changes are allowed/expected.</p>",
+        "id": 269493102,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643236370
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179166-implementers/topic/R4B.20compatibilty/near/269339301\">said</a>:</p>\n<blockquote>\n<p>Hmm.  That's definitely an issue.  I'll bring it to the FMG</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> did you ever bring this to FMG?</p>",
+        "id": 270718444,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1643983335
+    },
+    {
+        "content": "<p>Jiras would be helpful, yes.  We did talk about it, but didn't land it.</p>",
+        "id": 270725505,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1643986669
+    },
+    {
+        "content": "<p>opened <a href=\"http://jira.hl7.org/browse/FHIR-35962\">FHIR#35962</a> and <a href=\"http://jira.hl7.org/browse/FHIR-31763\">FHIR#31763</a></p>",
+        "id": 270804164,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1644035631
+    },
+    {
+        "content": "<p>Correction:  the DeviceDefinition-related change request that I opened for R4B is <a href=\"http://jira.hl7.org/browse/FHIR-35961\">FHIR-35961</a>, 31763 was just something related to 35962</p>",
+        "id": 272406000,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1645193524
+    }
+]

@@ -1,0 +1,218 @@
+[
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> <span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> I was  just told something that I hope I'm misunderstanding about HAPI. That HAPI uses the compose element as the list of value set members, i.e.: what I think of as the expansion. I suspect this is a convenience work-around but I find it very concerning if correct because for at least one situation I'm working with they <strong>only</strong> use this functionality to assess value set content within their FHIR service and that means they take every value set no matter how it is defined, and make a copy and actually use an enumerated compose \"because that is how HAPI works.\" I have all sorts of guesses as to what HAPI <em>actually</em> can support - hopefully it can actually use valuesets correctly and looks at the expansion content, and perhaps that only is available if you do more with the terminology server, I'm not sure. </p>\n<p>So can folks explain to me what HAPI can actually do wrt using the value set expansion as the actual list of value set members? But perhaps more importantly, I am very dismayed that it seems (correct me, and others, if this is not correct) that base HAPI uses the compose as <em>the</em> list of value set members. If that is true I'm going to ask that we improve HAPI to make the creation of a value set expansion for any value set resource and then <strong>ALWAYS USE THE EXPANSION</strong> when doing something that requires the value set membership. Therefore remove the hack to looks at the compose as if it's the expansion.  Obviously if the server can not generate a current accurate expansion, then it uses what is in the compose as best it can, but it would always create a resource with an expansion then the value set membership is needed. </p>\n<p>Am I missing something?</p>",
+        "id": 175264087,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1568050350
+    },
+    {
+        "content": "<p>Hi Rob,</p>\n<p>This was the case in earlier versions of HAPI FHIR- Around the time of the CodeSystem/ValueSet split we initially designed the validator to just look at the list of includes and naively trust it.</p>\n<p>At this point that code has mostly been replaced, although it still persists for a few hard-to-expand valuesets (BCP47 and UCUM in particular).</p>\n<p>It's probably worth mentioning that there is a huge rewrite of the entire way we deal with ValueSets working its way through the system (as a result of some awesome work by <span class=\"user-mention\" data-user-id=\"195421\">@Diederik Muylwyk</span> ). It's not yet enabled by default, but should be soon- Diederik's work involves having ValueSet expansions be pre-calculated at the time the VS is uploaded. This allows us to use them for validation without worrying that we're paying a performance penalty on each expansion.</p>",
+        "id": 175265994,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1568051647
+    },
+    {
+        "content": "<p>That sounds good. I'd like to get a better understanding of what this means, and how the \"older HAPI\" functioned while in ATL. Can we set up a time to do that - 30min or so? </p>\n<p>As for dealing with what I take to mean \"older\" versions of HAPI - I'd like there to be something done to clarify and perhaps help users fix/improve/whatever whaat I take to be a very unfortunate hack. Again, perhaps I'm not understanding something here and if it really is not a \"hack\" then help me understand what is happening. But the result of this is exactly what I said in the OP - FHIR devs assume that <strong>proper function</strong> of FHIR servers is to use the compose and that using the expansion is only if it's easy and needed.</p>",
+        "id": 175269369,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1568053632
+    },
+    {
+        "content": "<p>Sure- happy to walk through this as best as I can remember it. Honestly though, there isn't much I can give you in terms of rationale: We got it wrong the first time, and rewrote it later to get it (mostly) right. I'd love it if that never happened, but a codebase the size of HAPI's is always going to have compromises..</p>",
+        "id": 175271438,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1568054976
+    },
+    {
+        "content": "<p>Understood. But I'm surprised and dismayed at the misunderstanding that is creating in the dev/implementer world and I'd like to work together to fix this.</p>",
+        "id": 175273082,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1568056120
+    },
+    {
+        "content": "<p>a few comments: </p>\n<ul>\n<li>I'm not sure about this - are you taking about the Java validator? it's always used expansions</li>\n<li>there is UCUM code available in java - i wrote it - that can serve up the knowledge for a UCUM code system, though many UCUM value sets are not expandable no matter how much you know about UCUM. I wrote code for BCP-47 that is solid, but that's in pascal. But it's not much code - easy for someone to migrate to java</li>\n<li>I don't understand about pre-calculating expansions. I've been ignoring the PR and related communications, but maybe I shouldn't have. there's an infinite number of expansions for each value set, depending on the applicable conditions of expansion</li>\n</ul>",
+        "id": 175276969,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568058998
+    },
+    {
+        "content": "<blockquote>\n<p>I'm surprised and dismayed at the misunderstanding that is creating</p>\n</blockquote>\n<p>hah. it's scary what kind of misunderstandings are out there in implementer land</p>",
+        "id": 175277046,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568059054
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> I'm not sure what HAPI is actually doing, I just know that working with devs on a project, they were taking the expression-based compose I gave them and instead using the expansion list I also gave as an enumerated compose because \"HAPI works with the compose concepts, and we don't need the expansion.\"</p>",
+        "id": 175285869,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1568065315
+    },
+    {
+        "content": "<p>This isn't a validator thing (I think?) so much as an issue with the original way that HAPI's ValueSet expander worked. When you use the HAPI validator it doesn't go out to an external term svc, but rather is performs an expansion locally and uses that to validate against. The original ValueSet expander made some bad assumptions about how expansion should work when codes were explicitly included.</p>\n<p>UCUM and BCP47 are definitely slated to be included in HAPI's term svc soon. For UCUM I'm planning on using your Java implementation Grahame, and for BCP47 it looks like the one that's built into the JDK should suffice (honestly I doubt it's as robust as the pascal implementation, but it's probably good enough for most cases).</p>\n<blockquote>\n<p>I don't understand about pre-calculating expansions. I've been ignoring the PR and related communications,</p>\n</blockquote>\n<p>The general gist of this is: Say I upload a ValueSet to HAPI's terminology service that expands to a very large set of codes (for example, a LOINC ValueSet for all codes with a SCALE=Qn). Currently if you try to expand that or validate a code against it, it has to calculate the whole thing right then and there and that will either run out of memory and abort with an ETooCostlyException, or it'll succeed but take forever.</p>\n<p>What pre-expansion does is kick off a background job that calculates the expansion and keeps it in a dedicated set of database tables, so that it can be instantly expanded by a client on demand, or validated against.</p>",
+        "id": 175290152,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1568068799
+    },
+    {
+        "content": "<p>so I understand the value of precalculating, but what I don't understand is how the challenges are dealt with. Each expansion is different, based on the parameters</p>",
+        "id": 175294837,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568074139
+    },
+    {
+        "content": "<p>Are expansions with parameters are really that important compared to non-parameterized ones? Personally probably 99% of the time that I've seen expansions it's been for the purposes of validation, so no params needed.</p>\n<p>Even then, a few of the params are supported (count, offset, includeDesignations). We're still working out how to incorporate filter into those results too, but that needs a bit more lucene magic to get right.</p>",
+        "id": 175297195,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1568077123
+    },
+    {
+        "content": "<p>important parameters:<br>\n- filter/offset/count/notForUI - for UI work<br>\n- language / designation control - for both UI and validation<br>\n- date - for working with old records</p>\n<p>the others are more edge cased based. <span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span> might have more to say on which parameters matter. </p>\n<p>For me, the germane one here is <em>date</em> since it changes the record set completely, and there's all sorts of clinical use where it matters</p>",
+        "id": 175303933,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568086833
+    },
+    {
+        "content": "<p>The HAPI behaviour is one reason why we went to the trouble of adding dedicated $validate support to Ontoserver :-)</p>\n<p>For us (me), displayLanguage and includeDesignations are important, as is activeOnly, and ability to specify ValueSet version (ie url and valueSetVersion)</p>\n<p>We don't support date because we believe version is the appropriate parameter to be using to talk about historical data (e.g., date doesn't tell you anything about what was actually used / available for use on that date).</p>",
+        "id": 175306349,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1568091054
+    },
+    {
+        "content": "<p>In general, old records need careful handling depending on what it is you're trying to do (validate, query (search), etc)</p>",
+        "id": 175306365,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1568091110
+    },
+    {
+        "content": "<blockquote>\n<p>We don't support date because we believe version is the appropriate parameter </p>\n</blockquote>\n<p>note that this is making resolution the clients problem, not the servers. Why is a client better suited to resolve the date question? (which I agree, it's hard)</p>",
+        "id": 175306443,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568091227
+    },
+    {
+        "content": "<p>because the client is the only one in a position to know what question it has</p>",
+        "id": 175306496,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1568091301
+    },
+    {
+        "content": "<p>eg expand the valueset using the latest valid version of the valueset and codesystem on date X<br>\ncf expand the valueset using the version of the valueset and codesystem that we in the Tx on date X</p>",
+        "id": 175306567,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1568091386
+    },
+    {
+        "content": "<p>As a server, how do I decide which of those semantics to apply?  Whichever I choose is likely to be wrong for some portion of clients</p>",
+        "id": 175306596,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1568091471
+    },
+    {
+        "content": "<p>We take the same approach with measure evaluation, the client specifies the value set version to use, and the value set version definitions capture the code system versions to be used. It happens to line up with a date, but it's explicitly specified as part of a completely separate input to the process (called the binding parameters specification).</p>",
+        "id": 175308849,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1568094884
+    },
+    {
+        "content": "<p>well, that depends on how well informed the server is about the system configuration. Basically, in order to use date, you need to be able to know who the client is, and the past history of value set usage for the application the client is part of. Some terminology servers won't know that (yours) but others - the kind of server that can resolve the context parameter - these are the ones that can use date</p>",
+        "id": 175309867,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568096510
+    },
+    {
+        "content": "<p>I don't follow - Ontoserver can resolve the context parameter (pointing into a profile) but that doesn't really help with resolving a date to a codesystem version (business version cf technical version)</p>",
+        "id": 175310127,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1568096820
+    },
+    {
+        "content": "<p>that implies that you are managing profile versions, which implies.....</p>",
+        "id": 175310214,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568096939
+    },
+    {
+        "content": "<p>This all suggests that version is the next thing we need to get working- although that doesn't seem like an issue as far as precalculation is concerned. Precalculating a finite set of valueset versions won't be a big deal, once our codesystem support is version aware (which it is not yet..)</p>\n<p>Do people really use filter as a part of validation?That seems risky unless you're designing for a specific term server and its implementation of filter...</p>",
+        "id": 175322495,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1568110610
+    },
+    {
+        "content": "<p>Filter is not for validation but for UI where it’s fundamental</p>",
+        "id": 175341501,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568125562
+    },
+    {
+        "content": "<p>Cool ok, that's what I had been assuming.</p>\n<p>I'm less concerned with blazing fast performance where UIs are concerned, kind of paradoxically, so things like filter don't matter if they don't take advantage of the pre-expansion for now since a user can handle a 500ms pause.. it's the validator where a 500ms pause quickly spirals into unacceptable territory.</p>",
+        "id": 175359352,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1568136500
+    },
+    {
+        "content": "<p>so the performance advantage only kicks in for the right parameters? then let's see what parameters the validator uses on $validate-code, which is what is in context here:</p>",
+        "id": 175372919,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568145576
+    },
+    {
+        "content": "<ul>\n<li><code>displayLanguage</code> is critical; this is set in any non-english context, and probably in english contexts over time</li>\n</ul>",
+        "id": 175373085,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568145658
+    },
+    {
+        "content": "<p>that's the only one set by the infrastructure. Otherwise, validator users can provide their own. the most likely parameter to provide is :</p>",
+        "id": 175373294,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568145799
+    },
+    {
+        "content": "<ul>\n<li><code>system-version</code> (or <code>force-system-version</code>) to specify which snomed edition to use  (this is mandatory for the IG publisher context, where it's the only way to tell <a href=\"http://tx.fhir.org\" target=\"_blank\" title=\"http://tx.fhir.org\">tx.fhir.org</a> which snomed version to use)</li>\n</ul>",
+        "id": 175373424,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568145888
+    },
+    {
+        "content": "<p>no - here's another from the infrstructure:</p>\n<ul>\n<li><code>abstract</code> - whether codes that are 'abstract' are allowed in this context</li>\n</ul>",
+        "id": 175373491,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568145939
+    },
+    {
+        "content": "<p>that's the ones that matter for validation</p>",
+        "id": 175373924,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568146256
+    },
+    {
+        "content": "<p>interesting. this is a cool summary.</p>\n<p>So:</p>\n<ul>\n<li>\n<p><code>displayLanguage</code> seems easy enough.. We store the all of the designations in the precalculated expansion already. I'm assuming the expected implementation here is to just grab the appropriate designation and swap out the code.display value with the one from that designation? And... a specific use code maybe?</p>\n</li>\n<li>\n<p><code>systemVersion</code> is a roadmap thing for sure. HAPI's term svc doesn't currently understand the concept of multiple versions of the same codesystem existing in the first place, but that's an obvious next thing for us to address. I don't understand the description of <code>force-system-version</code> at all though. </p>\n</li>\n<li>\n<p><code>abstract</code> probably means we need two indexes on each precalculated expansion.. one with all codes and one with only non-abstract codes</p>\n</li>\n</ul>",
+        "id": 175376598,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1568148234
+    },
+    {
+        "content": "<p>displayLanguage - yes.... for now. we haven't really explored the use code thing yet.</p>",
+        "id": 175383052,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568153360
+    },
+    {
+        "content": "<p>force-system-version: you want to override whatever version is specified in Coding.version or the value set, and use your own specified version</p>",
+        "id": 175383076,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568153391
+    },
+    {
+        "content": "<p>this is about decay and rot in the definitions while the underlying licensed terminology rolls forward (looking at you, snomed)</p>",
+        "id": 175383132,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568153412
+    },
+    {
+        "content": "<p>abstract... not sure whether it's worth it. differentiating isn't something we do in production yet, but it will be coming. Once it comes, we'll generally be specifying it to false - the bulk of records don't use abstract codes, while configuration / decision support records can (and often do) but they get validated rarely, so it might be jsut worth falling back to the slow method in that case</p>",
+        "id": 175383194,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568153495
+    }
+]

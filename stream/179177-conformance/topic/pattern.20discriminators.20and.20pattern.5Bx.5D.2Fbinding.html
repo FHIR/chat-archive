@@ -1,0 +1,199 @@
+---
+layout: page
+title: "FHIR Chat  · pattern discriminators and pattern[x]/binding · conformance"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/index.html">conformance</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding.html">pattern discriminators and pattern[x]/binding</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="203035876"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/pattern%20discriminators%20and%20pattern%5Bx%5D/binding/near/203035876" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding.html#203035876">(Jul 06 2020 at 20:18)</a>:</h4>
+<p>According to the <a href="http://hl7.org/fhir/R4/profiling.html#discriminator">R4 spec for discriminators</a>:</p>
+<blockquote>
+<p>Each slice must use the element definition for the element(s) in the discriminator(s) to ensure that the slices are clearly differentiated by assigning an appropriate value domain, depending on the discriminator type. If the type is value, or pattern, then the element definition must use either:</p>
+<ul>
+<li>ElementDefinition.fixed[x], or</li>
+<li>ElementDefinition.pattern[x], or</li>
+<li>if the element has a terminology binding, a required binding with a Value Set that enumerates the list of possible codes in the value set ("extensional definition")</li>
+</ul>
+</blockquote>
+<p>I take this to mean that if a discriminator type is <code>pattern</code> then the element pointed to by the discriminator <code>path</code> must have either a <code>pattern[x]</code> or <code>binding</code> property directly on it (and <em>maybe</em> a <code>fixed[x]</code> would be OK - not sure).</p>
+<p>But... I've found that the IG Publisher doesn't seem to care.  The following FSH produces <em>no</em> errors or warnings in the IG Publisher:</p>
+<div class="codehilite"><pre><span></span><code>CodeSystem: ExampleComponentCS
+Id: example-component-cs
+* #foo &quot;Foo&quot; &quot;Foo&quot;
+* #bar &quot;Bar&quot; &quot;Bar&quot;
+* #boo &quot;Boo&quot; &quot;Boo&quot;
+* #far &quot;Far&quot; &quot;Far&quot;
+
+ValueSet: BooFarVS
+Id: boo-far-vs
+* ExampleComponentCS#boo &quot;Boo&quot;
+* ExampleComponentCS#far &quot;Far&quot;
+
+Profile: PractitionerBadSlicing
+Parent: Practitioner
+* identifier ^slicing.rules = #open
+* identifier ^slicing.discriminator.type = #pattern
+* identifier ^slicing.discriminator.path = &quot;$this&quot; // &lt;-- $this
+* identifier contains foo 0..1 and bar 0..1 and booFar 0..2
+* identifier[foo].type = ExampleComponentCS#foo    // &lt;-- NOT on $this
+* identifier[bar].type = ExampleComponentCS#bar    // &lt;-- NOT on $this
+* identifier[booFar].type from BooFarVS            // &lt;-- NOT on $this
+</code></pre></div>
+
+
+<p>I expected some flack from the publisher because the <code>identifier</code> discriminator type is <code>pattern</code> and the path is <code>$this</code> -- but the <code>pattern[x]</code> and <code>binding</code> are not on <code>identifier</code> (which is <code>$this</code>), but rather are on <code>identifier.type</code>.</p>
+<p>Am I misunderstanding?  Are patterns and binding on nested elements (below the discriminator path) valid for discrimination on?  Or is the IG Publisher just not flagging this even though it is invalid?</p>
+
+
+
+<a name="203222763"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/pattern%20discriminators%20and%20pattern%5Bx%5D/binding/near/203222763" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding.html#203222763">(Jul 08 2020 at 01:37)</a>:</h4>
+<p>well, I think it looks wrong, and I would've expected an error. how can I reproduce this?</p>
+
+
+
+<a name="203225340"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/pattern%20discriminators%20and%20pattern%5Bx%5D/binding/near/203225340" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding.html#203225340">(Jul 08 2020 at 02:37)</a>:</h4>
+<p>Is a standalone StructureDefinition that demonstrates it good enough?  Or do you prefer a whole buildable IG?  And if you think this is a bug, then I should file it in Jira, right?</p>
+
+
+
+<a name="203230030"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/pattern%20discriminators%20and%20pattern%5Bx%5D/binding/near/203230030" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding.html#203230030">(Jul 08 2020 at 04:22)</a>:</h4>
+<p>filing it with Jira is good. Ideally, I'll a structure definition and a valid and an invalid example. then I can add it to the unit tests</p>
+
+
+
+<a name="203232032"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/pattern%20discriminators%20and%20pattern%5Bx%5D/binding/near/203232032" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Igor Sirkovich <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding.html#203232032">(Jul 08 2020 at 05:10)</a>:</h4>
+<p>I'm just wondering if $this pattern slicing above would work in case slices are defined on different sub-elements of identifier, e.g. the last 3 lines would be:</p>
+<ul>
+<li>identifier[foo].type = ExampleComponentCS#foo</li>
+<li>identifier[bar].system = <a href="http://myidsystem.com/bar">http://myidsystem.com/bar</a></li>
+<li>identifier[booFar].type from BooFarVS</li>
+</ul>
+<p>Alternatively, would this require slicing on discriminator=type and re-slicing on discriminator=system? <br>
+Is this a valid scenario generally speaking?</p>
+
+
+
+<a name="203266511"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/pattern%20discriminators%20and%20pattern%5Bx%5D/binding/near/203266511" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding.html#203266511">(Jul 08 2020 at 13:26)</a>:</h4>
+<p>Issue filed here: <a href="https://jira.hl7.org/browse/FHIR-27927">https://jira.hl7.org/browse/FHIR-27927</a></p>
+
+
+
+<a name="203267026"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/pattern%20discriminators%20and%20pattern%5Bx%5D/binding/near/203267026" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding.html#203267026">(Jul 08 2020 at 13:31)</a>:</h4>
+<p><span class="user-mention" data-user-id="191393">@Igor Sirkovich</span> -- I <em>think</em> there needs to be a constraint on the direct element the discriminator path points to (based on my reading of the spec).  So you would probably need a <code>patternIdentifier</code> that specifies the <code>type</code> and <code>system</code> for that to work.  If constraints on sub-path elements also counted for discrimination then I'm not sure why we would ever discriminate on anything other than <code>$this</code>.</p>
+
+
+
+<a name="203268660"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/pattern%20discriminators%20and%20pattern%5Bx%5D/binding/near/203268660" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Igor Sirkovich <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding.html#203268660">(Jul 08 2020 at 13:45)</a>:</h4>
+<p>Thank you <span class="user-mention" data-user-id="191469">@Chris Moesel</span> </p>
+<p>Would the following definition work in this case? I'm just trying to ensure I understand your explanation.</p>
+<div class="codehilite"><pre><span></span><code>* identifier ^slicing.rules = #open
+* identifier ^slicing.discriminator.type = #pattern
+* identifier ^slicing.discriminator.path = &quot;$this&quot;
+* identifier contains foo 0..1 and bar 0..1 and booFar 0..2
+* identifier[foo].type = ExampleComponentCS#foo
+* identifier[bar].system = http://myidsystem.com/bar
+* identifier[booFar].type from BooFarVS
+</code></pre></div>
+
+
+<p><span class="user-mention silent" data-user-id="191469">Chris Moesel</span> <a href="#narrow/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding/near/203267026">said</a>:</p>
+<blockquote>
+<p><span class="user-mention silent" data-user-id="191393">Igor Sirkovich</span> -- I <em>think</em> there needs to be a constraint on the direct element the discriminator path points to (based on my reading of the spec).  So you would probably need a <code>patternIdentifier</code> that specifies the <code>type</code> and <code>system</code> for that to work.  If constraints on sub-path elements also counted for discrimination then I'm not sure why we would ever discriminate on anything other than <code>$this</code>.</p>
+</blockquote>
+
+
+
+<a name="203270268"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/pattern%20discriminators%20and%20pattern%5Bx%5D/binding/near/203270268" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding.html#203270268">(Jul 08 2020 at 13:58)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="191393">@Igor Sirkovich</span> -- no, I don't think so.  The FSH above says to discriminate by <code>pattern</code> on <code>$this</code> -- which is <code>identifier</code>.  So I think there <em>should</em> be a <code>patternIdentifier</code> constraint on the <code>identifier</code> element in each slice.  Instead that FSH produces the following constraints:</p>
+<ul>
+<li><code>patternCodeableConcept</code> on <code>identifier.type</code> (in <code>foo</code> slice)</li>
+<li><code>patternUri</code> on <code>identifier.system</code> (in <code>bar</code> slice)</li>
+<li><code>binding</code> on <code>identifier.type</code> (in <code>booFar</code> slice)</li>
+</ul>
+<p>It's also not quite correct because the slices are not mutually exclusive.  For example, if an identifier had a <code>type</code> that matched the <code>foo</code> slice <em>and</em> a <code>system</code> that matched the <code>bar</code> slice, it's ambiguous which slice it belongs to.</p>
+
+
+
+<a name="203273152"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/pattern%20discriminators%20and%20pattern%5Bx%5D/binding/near/203273152" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding.html#203273152">(Jul 08 2020 at 14:22)</a>:</h4>
+<p>Also note that right now... SUSHI only supports patterns on arbitrary datatypes by using caret syntax.  Fixing my original example to use patterns on <code>identifier</code> you'd need to do this:</p>
+<div class="codehilite"><pre><span></span><code>Profile: PractitionerBadSlicing
+Parent: Practitioner
+* identifier ^slicing.rules = #open
+* identifier ^slicing.discriminator.type = #pattern
+* identifier ^slicing.discriminator.path = &quot;$this&quot;
+* identifier contains foo 0..1 and bar 0..1 and booFar 0..2
+* identifier[foo] ^patternIdentifier.type = ExampleComponentCS#foo
+* identifier[bar] ^patternIdentifier.type = ExampleComponentCS#bar
+* identifier[booFar].type from BooFarVS // &lt;-- This is actually still wrong, but there&#39;s no way to apply it at the `identifier` level
+</code></pre></div>
+
+
+<p>FSH supports another way, but it's not yet supported in SUSHI</p>
+<div class="codehilite"><pre><span></span><code>Instance: FooIdentifier
+InstanceOf: Identifier
+Usage: #inline
+* type = ExampleComponentCS#foo
+
+Instance: BarIdentifier
+InstanceOf: Identifier
+Usage: #inline
+* type = ExampleComponentCS#foo
+
+Profile: PractitionerBadSlicing
+Parent: Practitioner
+* identifier ^slicing.rules = #open
+* identifier ^slicing.discriminator.type = #pattern
+* identifier ^slicing.discriminator.path = &quot;$this&quot;
+* identifier contains foo 0..1 and bar 0..1 and booFar 0..2
+* identifier[foo] = FooIdentifier
+* identifier[bar] = BarIdentifier
+* identifier[booFar].type from BooFarVS // &lt;-- This is actually still wrong, but there&#39;s no way to apply it at the `identifier` level
+</code></pre></div>
+
+
+<p><strong>EDIT: Actually, it's pretty much impossible to fix it for the VS constraint (since we can pop it up a level and we can't represent it in <code>patternIdentifier</code>.  So I had to edit that out.</strong></p>
+
+
+
+<a name="203340086"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/pattern%20discriminators%20and%20pattern%5Bx%5D/binding/near/203340086" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Igor Sirkovich <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding.html#203340086">(Jul 09 2020 at 00:32)</a>:</h4>
+<p>Thank you <span class="user-mention" data-user-id="191469">@Chris Moesel</span>. This is super helpful. Complex slicing is always a lot of fun :)</p>
+
+
+
+<a name="203340210"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/pattern%20discriminators%20and%20pattern%5Bx%5D/binding/near/203340210" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Igor Sirkovich <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding.html#203340210">(Jul 09 2020 at 00:35)</a>:</h4>
+<p>Just a thought: any chance the following might work?</p>
+<div class="codehilite"><pre><span></span><code>* identifier[booFar] ^patternIdentifier.type from BooFarVS
+</code></pre></div>
+
+
+<p>I've never seen this, so I assume it's not valid, but probably worth checking.</p>
+
+
+
+<a name="203347130"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/pattern%20discriminators%20and%20pattern%5Bx%5D/binding/near/203347130" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/pattern.20discriminators.20and.20pattern.5Bx.5D.2Fbinding.html#203347130">(Jul 09 2020 at 03:06)</a>:</h4>
+<p>I don't think there is a way to say that something in a <code>pattern[x]</code> should be bound to a value set.  <code>binding</code> is a property on <code>ElementDefinition</code>, as is <code>pattern[x]</code> -- so they're at the same level, making it difficult to apply one to the other.  Although <code>pattern[x]</code> allows you to specify values from a child path (via the pattern itself), I think <code>binding</code> can only be applies to the exact element it is on (no child paths).</p>
+<p>It's hard to explain, and I feel like I'm probably not saying it very well, but hopefully that is helpful anyway!</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,86 @@
+[
+    {
+        "content": "<p>Hi,</p>\n<p>Do _include and _revinclude support chaining? It doesn't appear to be obvious from <a href=\"http://build.fhir.org/search.html#include\" target=\"_blank\" title=\"http://build.fhir.org/search.html#include\">http://build.fhir.org/search.html#include</a>.</p>\n<p>Basically, I want to do the following things:<br>\n1.<br>\nModel: There is a reference link from Condition-&gt;Encounter-&gt;Patient-&gt;Organization<br>\nGoal: Get all Condition and include Encounter and Patient (but not Organization)<br>\n_include query sample:</p>\n<blockquote>\n<p>Condition?_include=Condition:context:Encounter:_include:Encounter:subject:Patient</p>\n</blockquote>\n<p>2.<br>\nModel: There is a reference link Medication&lt;-MedicationRequest&lt;-DiagnosticReport<br>\nGoal: Get all Medication as well as all the MedicationRequest pointing to those, as well as the DiagnosticReport pointing to the MedicationRequest<br>\n_revinclude query sample:</p>\n<blockquote>\n<p>Medication?_revinclude=MedicationRequest:medication:Medication:_revinclude:DiagnosticReport:basedOn:MedicationRequest</p>\n</blockquote>\n<p>Or is there a better way to achieve this (that is achievable via a single FHIR API call)?</p>",
+        "id": 153946257,
+        "sender_full_name": "Michael Calderero",
+        "timestamp": 1521486507
+    },
+    {
+        "content": "<p>To be clear, the query samples are just made up. I don't know whether they're valid (conformant with FHIR) or not.</p>",
+        "id": 153946308,
+        "sender_full_name": "Michael Calderero",
+        "timestamp": 1521508493
+    },
+    {
+        "content": "<p>Hi Michael,</p>\n<p>You would probably need to use a filter: <a href=\"https://www.hl7.org/fhir/search.html#_filter\" target=\"_blank\" title=\"https://www.hl7.org/fhir/search.html#_filter\">https://www.hl7.org/fhir/search.html#_filter</a> or a compartment search. <br>\nIn the last case it would be something like this: Condition/?_type=Condition,Encounter,Patient&amp;params<br>\nAlthough I'm not sure if it would return Patient resources if there's no direct link between Condition and Patient</p>\n<p><span class=\"user-mention\" data-user-id=\"191757\">@Christiaan Knaap</span> ?</p>",
+        "id": 153947109,
+        "sender_full_name": "Lilian Minne",
+        "timestamp": 1521707820
+    },
+    {
+        "content": "<p>The syntax would be like:<br>\n/Condition?_include=Condition:context:Encounter&amp;_include:recurse=Encounter:subject:Patient<br>\nIf you try this on <a href=\"http://test.fhir.org\" target=\"_blank\" title=\"http://test.fhir.org\">test.fhir.org</a>, you get a SQL exception, but if you omit the target type modifiers you can see it working:<br>\n/Condition?_include=Condition:context&amp;_include:recurse=Encounter:subject<br>\nOn HAPI (<a href=\"http://fhirtest.uhn.ca/baseDstu3\" target=\"_blank\" title=\"http://fhirtest.uhn.ca/baseDstu3\">http://fhirtest.uhn.ca/baseDstu3</a>) it also works with the type modifiers.</p>",
+        "id": 153947205,
+        "sender_full_name": "Christiaan Knaap",
+        "timestamp": 1521728471
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191757\">@Christiaan Knaap</span> this seems to be what I'm looking for, and highlights my misunderstanding with 'recurse' modifier.</p>\n<p>Could I infer then that the following would work as well?<br>\nModel: links are Patient&lt;-MedicationRequest-&gt;Medication<br>\nGoal: Get the medications associated with a patient<br>\nQuery: Patient?_revinclude=MedicationRequest:subject:Patient&amp;_include:recurse=MedicationRequest:medication:Medication</p>",
+        "id": 153947277,
+        "sender_full_name": "Michael Calderero",
+        "timestamp": 1521740937
+    },
+    {
+        "content": "<p>Just tried this out against HAPI and it works. Cool! :)</p>",
+        "id": 153947295,
+        "sender_full_name": "Michael Calderero",
+        "timestamp": 1521742891
+    },
+    {
+        "content": "<p>Related to this, is there guidance on how to process multiple _include and _revinclude in a single query?</p>\n<p>For example, these two queries return the same thing in HAPI (i.e. it includes Patient, MedicationRequest and Medication):</p>\n<blockquote>\n<p>Patient?_id=mymymytestpat&amp;_include=MedicationRequest:medication:Medication&amp;_revinclude=MedicationRequest:subject:Patient<br>\nPatient?_id=mymymytestpat&amp;_revinclude=MedicationRequest:subject:Patient&amp;_include=MedicationRequest:medication:Medication</p>\n</blockquote>\n<p>Notice I reversed the order of _include and _revinclude in the two queries.</p>\n<p>So it looks like HAPI executes _revinclude first before _include (have to check the code to be sure). Is this order of execution based on the FHIR spec? I couldn't tell from reading <a href=\"http://build.fhir.org/search.html#include\" target=\"_blank\" title=\"http://build.fhir.org/search.html#include\">http://build.fhir.org/search.html#include</a>.</p>",
+        "id": 153947299,
+        "sender_full_name": "Michael Calderero",
+        "timestamp": 1521745321
+    },
+    {
+        "content": "<p>there's no comment on that - why would it matter?</p>",
+        "id": 153947323,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1521747096
+    },
+    {
+        "content": "<p>If the implementation executed _include first, it wouldn't find any MedicationRequest to do the include from. Then it executes the _revinclude, which just then includes the MedicationRequest.</p>\n<p>At this point, since the _include has already been executed and is not marked 'recurse', then the final bundle would just contain the Patient and MedicationRequest. The Medication resource would not be included.</p>",
+        "id": 153947327,
+        "sender_full_name": "Michael Calderero",
+        "timestamp": 1521747843
+    },
+    {
+        "content": "<p>hmm</p>",
+        "id": 153947331,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1521748157
+    },
+    {
+        "content": "<p>Is it necessary that we document all decisions that a system design must consider? Seems we should leave something to the system design engineers...   I could see a general warning section in the query section about interaction of query parameters that might need special handling, and should be avoided by clients... with a listing of 'some' of these issues we know about, but then to express that not all are listed.</p>",
+        "id": 153947489,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1521811693
+    },
+    {
+        "content": "<p>_include and _revinclude are very dangerous in many was, yet so very essential in other ways. We have some comments regarding the potential security/privacy issues.</p>",
+        "id": 153947490,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1521811795
+    },
+    {
+        "content": "<p>Hmm, for _include and _revinclude, some general guidelines when there's multiple instances of these should be reasonable. Something like:</p>\n<blockquote>\n<p>1. Execute all _include first. If an _include didn't include anything, try to execute them a second time later (let's call this list 2nd_include)<br>\n2. Execute all _revinclude next. If a _revinclude didn't include anything, try to execute them a second time later (let's call this list 2nd_revinclude)<br>\n3. Execute all of 2nd_include<br>\n4. Execute all of 2nd_revinclude<br>\n5. Execute all _include that are marked as 'recurse'<br>\n6. Execute all _revinclude that are marked as 'recurse'<br>\n7. Repeat 5 and 6 until there are no more newly added resources</p>\n</blockquote>\n<p>I think this should achieve what HAPI does currently, assuming that's the correct behavior.</p>\n<p>I've not thought about the security/privacy issues surrounding these. The only issue I see with using 'recurse'  is that it could potentially bring in lots of records (as mentioned in the spec). If there's some way to control the recursiveness (via additional params in the REST API call) and not leave it to servers to decided it (server's discretion as mentioned in the spec), then I think that would increase interoperability.</p>",
+        "id": 153947503,
+        "sender_full_name": "Michael Calderero",
+        "timestamp": 1521815981
+    },
+    {
+        "content": "<p>graphql offers a better way to manage this. I don't know that we want to go as far as that about - particularly the repeated cycles</p>",
+        "id": 153947563,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1521833579
+    }
+]

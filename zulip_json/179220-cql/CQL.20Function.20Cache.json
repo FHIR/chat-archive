@@ -1,0 +1,50 @@
+[
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> <span class=\"user-mention\" data-user-id=\"194178\">@JP</span>  Looking at the Java engine there is a cache capability built into the ExpressionRefEvaluator that will prevent the same define from being evaluated multiple times during the course of engine execution. There is no equivalent FunctionRefEvaluator caching. Is there a specific reason for this? Are functions not assumed to be idempotent? The one easy example I could come up with was if a function used Now() and Now() changed over multiple executions, but Now/Today/TimeOfDay are explicitly defined as fixed values for the duration of engine execution. Not sure where else we might be getting non-predictable results.</p>",
+        "id": 228966387,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1614956202
+    },
+    {
+        "content": "<p>I personally can't think of any pure CQL functions that, given the same inputs, wouldn't provide the same output (within the context of an execution run).  The one exception that comes to mind is <em>external</em> functions -- which invoke a native (non-CQL) function, so anything goes (e.g., <code>rand()</code>).  But actually, those kind of mess up <em>everything</em> because you could invoke one inside a normal <code>define</code> statement and now that define is not idempotent anymore.  Oops.</p>",
+        "id": 228979106,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1614960868
+    },
+    {
+        "content": "<p>Still trying to digest all the documentation, but I do see this in the language semantics guide.<br>\n<a href=\"https://cql.hl7.org/05-languagesemantics.html#execution-model\">https://cql.hl7.org/05-languagesemantics.html#execution-model</a></p>\n<blockquote>\n<p>Because the language is pure functional, every expression and operator is defined to return the same value on every evaluation within the same artifact evaluation.</p>\n</blockquote>",
+        "id": 228981114,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1614961489
+    },
+    {
+        "content": "<p>CQL by design excludes functions that are non-deterministic (there's no Random(), Now() is fixed per evaluation, etc). In prior experiments (i.e. proof-of-concept code that never made it into the repo) caching function evaluations didn't give too much in terms of performance because there's already caching at the Expression level. You'd need a case where you were calling the same function with the same operands either within the same expression or across multiple expressions and where the cost of the computation was greater than the cost of book-keeping for the cache. If you have a scenario where that's the case we could give it a look. I would not be opposed to including it in the engine or accepting a contribution that does, just explaining why it hasn't been done yet. <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span></p>",
+        "id": 228981286,
+        "sender_full_name": "JP",
+        "timestamp": 1614961555
+    },
+    {
+        "content": "<p>To Chris' point about external functions, it seems that the either cql should support a way to mark one a deterministic or implementations should support implementing correct caching behavior for functions / definitions that use external functions (i.e. don't). The cql-engine only partially implements support for external function providers so we've (so far) dodged the need to do that.</p>",
+        "id": 228981828,
+        "sender_full_name": "JP",
+        "timestamp": 1614961740
+    },
+    {
+        "content": "<p>I wonder if the spec should be updated to either (a) require that external functions also be deterministic (i.e., referencing a non-deterministic external function is a violation of the spec, or (b) more heavily emphasize the warning about external functions, stressing that their use puts the deterministic nature of CQL at risk.</p>",
+        "id": 228981883,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1614961749
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194178\">@JP</span> below is a trivial example that highlights our area of concern. When we run this through the 1.5.1 engine, we are seeing the Adulthood function get executed n times where n is the number of encounters. It certainly isn't an expensive function, but it raised some concerns about what would happen if someone did come up with logic that was more expensive.</p>\n<div class=\"codehilite\" data-code-language=\"cql\"><pre><span></span><code>library FunctionEval version '1.0.0'\nusing FHIR version '4.0.0'\ninclude \"FHIRHelpers\" version '4.0.0' called FHIRHelpers\ncontext Patient\n\ndefine AdultEncounters:\n    [Encounter] R\n     where R.period overlaps Adulthood(18 years)\n\ndefine function Adulthood(maturationAge System.Quantity):\n    Interval[ Patient.birthDate + maturationAge, Now() ]\n</code></pre></div>",
+        "id": 229003520,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1614969713
+    },
+    {
+        "content": "<p>Obviously it's not something you want CQL authors to be concerned about and I understand that this is a just an example, but because the functions in CQL are deterministic that particular case has a pretty simple \"syntactic optimization\":</p>\n<div class=\"codehilite\"><pre><span></span><code>library FunctionEval version &#39;1.0.0&#39;\nusing FHIR version &#39;4.0.0&#39;\ninclude &quot;FHIRHelpers&quot; version &#39;4.0.0&#39; called FHIRHelpers\ncontext Patient\n\ndefine AdultEncounters:\n    [Encounter] R\n     where R.period overlaps &quot;Adulthood&quot;\n\ndefine &quot;Adulthood&quot;:\n  Adulthood(18 years)\n\ndefine function Adulthood(maturationAge System.Quantity):\n    Interval[ Patient.birthDate + maturationAge, Now() ]\n</code></pre></div>\n<p>From a  design perspective that's the sort of thing we're hoping to take care of during a \"planning / optimization\" phase that does not yet exist in the cql-engine. There are several such optimizations that we think are pretty easy.</p>",
+        "id": 229005883,
+        "sender_full_name": "JP",
+        "timestamp": 1614970681
+    }
+]

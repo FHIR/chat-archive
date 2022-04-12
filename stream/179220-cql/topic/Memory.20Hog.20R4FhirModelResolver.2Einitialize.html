@@ -1,0 +1,190 @@
+---
+layout: page
+title: "FHIR Chat  · Memory Hog R4FhirModelResolver.initialize · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html">Memory Hog R4FhirModelResolver.initialize</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="264890185"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/264890185" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vitor Pamplona <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#264890185">(Dec 14 2021 at 17:06)</a>:</h4>
+<p>After some debugging, I realized that the initialization of ResourceTypes in one-by-one fashion causes the rebuilding of multiple Maps and Lists within FhirContext, triggering several GC across the loading time. </p>
+<p>It would be nice if the method made a list of all ResourceTypes to initialize and only then called scanResourceTypes with the entire enum-based array. This would clear some memory hog the lib currently struggles with. </p>
+<p>Does that make sense? The necessary FhirContext methods to be called however doesn't seem to be public, which leads me to believe we might need to change HAPI if we really need this upfront loading of all ResourceTypes.</p>
+
+
+
+<a name="264891308"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/264891308" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vitor Pamplona <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#264891308">(Dec 14 2021 at 17:12)</a>:</h4>
+<p>Removing the initialization cuts the time for a fresh evaluation (loading fhir and everything else) by 50%</p>
+
+
+
+<a name="264928550"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/264928550" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#264928550">(Dec 14 2021 at 21:32)</a>:</h4>
+<p>Unfortunately, due to the way that the FhirContext is sealed post-initialization we have to do all initialization upfront. From the perspective of the cql-engine any arbitrary CQL can be executed so it doesn't know the types beforehand. There are some limited scenarios where if your CQL content were completely static that you could select a set of Resource types to be initialized but the most scenarios are currently the opposite, where the CQL is dynamic. We also expect the ModelResolver to be long-lived such that the initialization is a one-time cost.</p>
+
+
+
+<a name="264929011"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/264929011" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#264929011">(Dec 14 2021 at 21:36)</a>:</h4>
+<p>IOW, exposing such an API would both require upstream changes and not able to be used in most scenarios.</p>
+
+
+
+<a name="264929227"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/264929227" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#264929227">(Dec 14 2021 at 21:38)</a>:</h4>
+<p>An alternative approach would be to update the FhirContext such that new types can be added at runtime. In which cases only the types that you actually used would be loaded, and we'd not need to do the initialization upfront. I haven't dug into it to see if that would be possible.</p>
+
+
+
+<a name="264929407"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/264929407" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#264929407">(Dec 14 2021 at 21:39)</a>:</h4>
+<p>If the FhirContext supported that approach we wouldn't have to pre-init either and the startup time would be quicker.</p>
+
+
+
+<a name="264930071"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/264930071" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vitor Pamplona <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#264930071">(Dec 14 2021 at 21:42)</a>:</h4>
+<p>Agree, but the question is: if we have to pre-init, can we do it all in one load. Because right now, the procedure is just extremely wasteful</p>
+
+
+
+<a name="264930244"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/264930244" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#264930244">(Dec 14 2021 at 21:42)</a>:</h4>
+<p>As far as I'm aware there's not an API that supports that that's publicly available.</p>
+
+
+
+<a name="264930338"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/264930338" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vitor Pamplona <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#264930338">(Dec 14 2021 at 21:43)</a>:</h4>
+<p>I am ready to use reflection and force that method to be public :)</p>
+
+
+
+<a name="264930570"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/264930570" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#264930570">(Dec 14 2021 at 21:45)</a>:</h4>
+<p>There are already a couple places in the engine that we do that, so I'm not opposed outright. Obviously an official API would be better. <span aria-label="smile" class="emoji emoji-1f642" role="img" title="smile">:smile:</span></p>
+
+
+
+<a name="264930710"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/264930710" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#264930710">(Dec 14 2021 at 21:46)</a>:</h4>
+<p>As far as the resource type list, for now  it needs to be everything plus the few custom types the engine adds to patch a couple gaps.</p>
+
+
+
+<a name="264942453"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/264942453" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vitor Pamplona <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#264942453">(Dec 14 2021 at 23:16)</a>:</h4>
+<p>It's ugly but it works! </p>
+<p>The previous method is <strong>43% slower</strong> than the new one, on the <strong>desktop</strong>. </p>
+<p>Time to Load R4 on desktop one by one (previous method)</p>
+<div class="codehilite"><pre><span></span><code>3.305 s
+4.006 s
+3.301 s
+3.152 s
+3.311 s
+</code></pre></div>
+<p>Average 3.41 +/- 0.24seconds</p>
+<p>Time to Load R4 on desktop by Reflection (New Method)</p>
+<div class="codehilite"><pre><span></span><code>2.345 s
+2.293 s
+2.410 s
+2.382 s
+2.438 s
+</code></pre></div>
+<p>Average 2.37 +/- 0.04seconds</p>
+<p>Final impl below</p>
+<div class="codehilite" data-code-language="Java"><pre><span></span><code>    <span class="kd">protected</span> <span class="kt">void</span> <span class="nf">initialize</span><span class="p">()</span> <span class="p">{</span>
+        <span class="c1">// HAPI has some bugs where it's missing annotations on certain types. This patches that.</span>
+        <span class="k">this</span><span class="p">.</span><span class="na">fhirContext</span><span class="p">.</span><span class="na">registerCustomType</span><span class="p">(</span><span class="n">AnnotatedUuidType</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+
+        <span class="c1">// The context loads Resources on demand which can cause resolution to fail in certain cases</span>
+        <span class="c1">// This forces all Resource types to be loaded.</span>
+
+        <span class="cm">/*</span>
+<span class="cm">        for (Enumerations.ResourceType type : Enumerations.ResourceType.values()) {</span>
+<span class="cm">            // These are abstract types that should never be resolved directly.</span>
+<span class="cm">            switch (type) {</span>
+<span class="cm">                case DOMAINRESOURCE:</span>
+<span class="cm">                case RESOURCE:</span>
+<span class="cm">                case NULL:</span>
+<span class="cm">                    continue;</span>
+<span class="cm">                default:</span>
+<span class="cm">            }</span>
+<span class="cm">            this.fhirContext.getResourceDefinition(type.toCode());</span>
+<span class="cm">        }</span>
+<span class="cm">        */</span>
+        <span class="c1">// force calling of validateInitialized();</span>
+        <span class="k">this</span><span class="p">.</span><span class="na">fhirContext</span><span class="p">.</span><span class="na">getResourceDefinition</span><span class="p">(</span><span class="n">Enumerations</span><span class="p">.</span><span class="na">ResourceType</span><span class="p">.</span><span class="na">ACCOUNT</span><span class="p">.</span><span class="na">toCode</span><span class="p">());</span>
+
+        <span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span> <span class="n">Class</span><span class="o">&lt;?</span> <span class="kd">extends</span> <span class="n">IBaseResource</span><span class="o">&gt;&gt;</span> <span class="n">myNameToResourceType</span><span class="p">;</span>
+        <span class="k">try</span> <span class="p">{</span>
+            <span class="n">Field</span> <span class="n">f</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="na">fhirContext</span><span class="p">.</span><span class="na">getClass</span><span class="p">().</span><span class="na">getDeclaredField</span><span class="p">(</span><span class="s">"myNameToResourceType"</span><span class="p">);</span>
+            <span class="n">f</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+            <span class="n">myNameToResourceType</span> <span class="o">=</span> <span class="p">(</span><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span> <span class="n">Class</span><span class="o">&lt;?</span> <span class="kd">extends</span> <span class="n">IBaseResource</span><span class="o">&gt;&gt;</span><span class="p">)</span> <span class="n">f</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="na">fhirContext</span><span class="p">);</span>
+
+            <span class="n">List</span><span class="o">&lt;</span><span class="n">Class</span><span class="o">&lt;?</span> <span class="kd">extends</span> <span class="n">IBaseResource</span><span class="o">&gt;&gt;</span> <span class="n">toLoad</span> <span class="o">=</span> <span class="k">new</span> <span class="n">ArrayList</span><span class="p">(</span><span class="n">myNameToResourceType</span><span class="p">.</span><span class="na">size</span><span class="p">());</span>
+
+            <span class="k">for</span> <span class="p">(</span><span class="n">Enumerations</span><span class="p">.</span><span class="na">ResourceType</span> <span class="n">type</span> <span class="p">:</span> <span class="n">Enumerations</span><span class="p">.</span><span class="na">ResourceType</span><span class="p">.</span><span class="na">values</span><span class="p">())</span> <span class="p">{</span>
+                <span class="c1">// These are abstract types that should never be resolved directly.</span>
+                <span class="k">switch</span> <span class="p">(</span><span class="n">type</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="k">case</span> <span class="n">DOMAINRESOURCE</span><span class="p">:</span>
+                    <span class="k">case</span> <span class="n">RESOURCE</span><span class="p">:</span>
+                    <span class="k">case</span> <span class="n">NULL</span><span class="p">:</span>
+                        <span class="k">continue</span><span class="p">;</span>
+                    <span class="k">default</span><span class="p">:</span>
+                <span class="p">}</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">myNameToResourceType</span><span class="p">.</span><span class="na">containsKey</span><span class="p">(</span><span class="n">type</span><span class="p">.</span><span class="na">toCode</span><span class="p">().</span><span class="na">toLowerCase</span><span class="p">()))</span>
+                    <span class="n">toLoad</span><span class="p">.</span><span class="na">add</span><span class="p">(</span><span class="n">myNameToResourceType</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="n">type</span><span class="p">.</span><span class="na">toCode</span><span class="p">().</span><span class="na">toLowerCase</span><span class="p">()));</span>
+            <span class="p">}</span>
+
+            <span class="n">Method</span> <span class="n">m</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="na">fhirContext</span><span class="p">.</span><span class="na">getClass</span><span class="p">().</span><span class="na">getDeclaredMethod</span><span class="p">(</span><span class="s">"scanResourceTypes"</span><span class="p">,</span> <span class="n">Collection</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+            <span class="n">m</span><span class="p">.</span><span class="na">setAccessible</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+            <span class="n">m</span><span class="p">.</span><span class="na">invoke</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="na">fhirContext</span><span class="p">,</span> <span class="n">toLoad</span><span class="p">);</span>
+        <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="n">IllegalArgumentException</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">e</span><span class="p">.</span><span class="na">printStackTrace</span><span class="p">();</span>
+        <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="n">NoSuchFieldException</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">e</span><span class="p">.</span><span class="na">printStackTrace</span><span class="p">();</span>
+        <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="n">SecurityException</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">e</span><span class="p">.</span><span class="na">printStackTrace</span><span class="p">();</span>
+        <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="n">IllegalAccessException</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">e</span><span class="p">.</span><span class="na">printStackTrace</span><span class="p">();</span>
+        <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="n">NoSuchMethodException</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">e</span><span class="p">.</span><span class="na">printStackTrace</span><span class="p">();</span>
+        <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="n">InvocationTargetException</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">e</span><span class="p">.</span><span class="na">printStackTrace</span><span class="p">();</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+</code></pre></div>
+
+
+
+<a name="264953368"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/264953368" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vitor Pamplona <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#264953368">(Dec 15 2021 at 01:21)</a>:</h4>
+<p>PR up: <a href="https://github.com/DBCG/cql_engine/pull/521">https://github.com/DBCG/cql_engine/pull/521</a></p>
+
+
+
+<a name="265592691"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/265592691" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#265592691">(Dec 20 2021 at 17:28)</a>:</h4>
+<ul>
+<li>It's very possible with the HAPIFhirContext to create your own "Context" with only types you want to support. You have to create your own context that implements the base FhirContext and manually add classes one-at-a-time</li>
+<li>The CQL execution is dynamic, but aren't the retrieval context themselves very static? I've only been able to in the cql grammar to retrieve exactly one type of resourcetype per retrieval at a time, which makes sense. One resource domain per retrieval. A simple collection of the retrieval contexts in a script would reveal which types were needed (right?)</li>
+</ul>
+
+
+
+<a name="265594767"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Memory%20Hog%20R4FhirModelResolver.initialize/near/265594767" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Memory.20Hog.20R4FhirModelResolver.2Einitialize.html#265594767">(Dec 20 2021 at 17:44)</a>:</h4>
+<p>Yes, if your content is static (i.e. you know the full set of CQL you will ever execute ahead of time, prior to initializing the CQL engine) then you can know the full set of requirements ahead of time. In most of the deployments we're currently supporting the content is not static. For example, the cqf-ruler allows execution of arbitrary CQL via the $cql operation. Or an Android SDK could download the required Libraries for a guideline at runtime.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

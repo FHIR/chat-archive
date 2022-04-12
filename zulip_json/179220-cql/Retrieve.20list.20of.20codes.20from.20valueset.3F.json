@@ -1,0 +1,56 @@
+[
+    {
+        "content": "<p>In CQL 1.5 is there any way to retrieve a list of codes that make up a valueset?</p>\n<p>In 1.4, you could pass a valueset as a parameter to a function like this:</p>\n<p>define function \"VS Cast Function\"(VSet List&lt;System.Code&gt;):<br>\n  ( ( cast { \"VSet\", 1 }[0]as Tuple {<br>\n      codes List&lt;System.Code&gt;,<br>\n      oid System.String,<br>\n      version System.String<br>\n    }<br>\n  ).codes ) VSetCodes<br>\n    return System.Code { code: VSetCodes.code, system: VSetCodes.system }</p>\n<p>and get back a list of the codes from the valueset.</p>\n<p>In 1.5, attempting to pass in a valueset to this function results in a compilation error that complains about a parameter mismatch. If you change the function parameter to a System.ValueSet instead of a List&lt;System.Code&gt;, the code compiles, but generates a run-time error.</p>\n<p>Is there a way to retrieve the list of codes that make up a value set in CQL 1.5? Is there some reason that the code from CQL 1.4 shouldn't still work? Maybe a transparent coercion from System.ValueSet to a List&lt;System.Code&gt; in expressions would still be useful.</p>",
+        "id": 268750323,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1642709405
+    },
+    {
+        "content": "<p>Runtime error in VS Code or cqf-ruler? If so possibly a cql-engine bug.</p>",
+        "id": 268991119,
+        "sender_full_name": "JP",
+        "timestamp": 1642903533
+    },
+    {
+        "content": "<p>It's a runtime error in the CQL engine: \"Could not resolve data provider for package 'org.cqframework.cql.elm.execution'.\" It seems to happen any time you attempt to use a System.ValueSet object in the 1.5 engine.</p>\n<p>Here is some code I've been trying in 1.5 (\"ED\", \"Observation\", and \"Outpatients\" are define in the header using the valueset declaration):</p>\n<p>define function \"VS Cast Function\"(VSet System.ValueSet):<br>\n( ( cast { \"VSet\", 1 }[0]as Tuple {<br>\n  codes List&lt;System.Code&gt;,<br>\n  oid System.String,<br>\n  version System.String<br>\n}<br>\n  ).codes ) VSetCodes<br>\n  return System.Code { code: VSetCodes.code, system: VSetCodes.system }</p>\n<p>define function \"Combine Valuesets\"(vss List&lt;System.ValueSet&gt;)<br>\n  returns List&lt;System.Code&gt;:<br>\n    flatten(vss VSet return \"VS Cast Function\"(VSet))</p>\n<p>define Test: \"Combine Valuesets\"({\"ED\", \"Observation\", \"Outpatient\"})</p>\n<p>define function Test1 (vset System.ValueSet):<br>\n    [Procedure: vset] P</p>\n<p>define Test2: Test1(\"Outpatient\")</p>\n<p>Both \"Test\" and \"Test2\" die with the error message listed above.</p>",
+        "id": 269140339,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1643045451
+    },
+    {
+        "content": "<p>Hi Frank, we had some discussion about this during the connectathon. The VSCast function is actually taking advantage of the internal representation of valuesets in the JavaScript engine, and isn't \"compatible\" with the Java engine. To make it run in the Java engine, just replace the body of the VSCast function so that it returns the VSet argument (which is what the function is ultimately doing).</p>",
+        "id": 269140568,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1643045558
+    },
+    {
+        "content": "<p>There are several trackers related to addressing this behavior in the Java and JavaScript engines to address the inconsistency.</p>",
+        "id": 269140618,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1643045583
+    },
+    {
+        "content": "<p>The changes have been applied to the 1.5.6 translator and the current release of the engine/evaluator and IDE plugins in the Java stack.</p>",
+        "id": 269140705,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1643045620
+    },
+    {
+        "content": "<p>Basically, retrieving the list of codes from a ValueSet is just referencing the ValueSet declaration in 1.4, but in 1.5, since the specification introduced a ValueSet runtime type, you can now pass value sets around as references and there is newly proposed explicit ExpandValueSet operation (or you can just treat it like a list of codes to force an implicit expand).</p>",
+        "id": 269140905,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1643045712
+    },
+    {
+        "content": "<p>We've tried using 1.5.6 translator and the 1.5.4 version of the engine and received a run-time error when ExpandValueSet was run: Unexpected exception caught during execution: org.apache.commons.lang3.NotImplementedException: evaluate not implemented for class ExpandValueSet. Which version of the engine has this operator?</p>",
+        "id": 269182079,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1643063454
+    },
+    {
+        "content": "<p>The fix was actually included in the 1.5.3 engine, so it should definitely be there. Are you using the cql-evaluator? And if so, what version? 1.4.2 is the latest and targets the 1.5.4 engine.</p>",
+        "id": 269188557,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1643067633
+    }
+]

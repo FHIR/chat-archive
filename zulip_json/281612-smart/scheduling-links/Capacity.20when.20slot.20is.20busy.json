@@ -1,0 +1,152 @@
+[
+    {
+        "content": "<p>What is the intent of the capacity extension when a coarse grained slot is full (status=busy)?  Should we report how many slots were previously available?  Or how many appointments were booked in that coarse grained slot?  Or 0 indicating there is no longer any capacity.</p>\n<p>Example:  300 slots <em>were</em> available for 100 doses.  100 appointments have been booked, and the remaining slots are unavailable for booking.  Should the capacity be 300, 100, or 0?</p>",
+        "id": 229911279,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1615491125
+    },
+    {
+        "content": "<p>My immediate reaction is zero. But I would love others to chime in.</p>",
+        "id": 230030875,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1615556991
+    },
+    {
+        "content": "<p>The intention of the capacity extension is to aggregate functionally identical slots.</p>",
+        "id": 230031117,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1615557078
+    },
+    {
+        "content": "<p>What this means here is in a fine-grained world we would have a pile of individual slots for vaccination appointments that were either available or booked. Let's say you had 100 slots in the day and 70 were available in 30 were booked. That would be 100 slot resources.</p>\n<p>Aggregating slots is intended as a pure performance optimization; so if you are lumping things together, you would have a slot with status of busy and capacity 30; and a slot with a status of open and a capacity of 70.</p>",
+        "id": 230031295,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1615557167
+    },
+    {
+        "content": "<p>That said, looking at your example <span class=\"user-mention\" data-user-id=\"191764\">@Cooper Thompson</span>:</p>",
+        "id": 230031535,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1615557259
+    },
+    {
+        "content": "<p><strong>I would expect to see a capacity of 100 on the busy slot.</strong> (Because if you were doing this with fine-grained slots, you would be causing the 200 \"no longer possible\" slots to disappear from the schedule or marking them with an entered an error status when you determine if they were no longer viable on your schedule.)</p>",
+        "id": 230031590,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1615557297
+    },
+    {
+        "content": "<p>As a thought exercise, you could imagine creating an aggregated slot with capacity 200 and a status of \"entered-in-error\", which would show you how \"slots are conserved\" across all these changes -- but I don't see any advantage to actually materializing this in your published list.</p>",
+        "id": 230032125,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1615557510
+    },
+    {
+        "content": "<p>My usual questions apply:</p>\n<ol>\n<li>Is this explanation clear?</li>\n<li>Is it reasonable behavior to expect?</li>\n<li>Should we document something additional in the spec to capture this?</li>\n</ol>",
+        "id": 230032485,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1615557644
+    },
+    {
+        "content": "<p>Definitely should document this scenario in the spec.</p>",
+        "id": 230052182,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1615564596
+    },
+    {
+        "content": "<p>I think our first draft may just omit the capacity extension on busy slots.   I need to chew on the Slot representation implications Josh was suggesting a bit more.   Our data model for slots is just so different than the FHIR Slot model it gets hard to think about how to map things into it.</p>",
+        "id": 230071963,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1615571841
+    },
+    {
+        "content": "<p>Our issue is that we might have a single (Epic) slot that can be available for multiple purposes.  It could be available for a COVID vaccine (1st dose), COVID vaccine (2nd dose), a (non-COVID) well-child visit, or (non-COVID) a existing patient office visit.  Those different purposes might have different lengths (COVID 1st dose shots are 5 mins, 2nd dose are 10, well child is 15, office visit is 30).  Generally, we could expose that one timeslot as four different Schedules, with multiple different Slots (of varying lengths) that represent the same time for a given person (or group of people).  Also, the person may have limit that says they have 32 15-minute slots available during the day, but are only willing to book 30 slots (so they have time for lunch or charting or whatever).  There may also be a limit on the number of COVID 1st dose appointments based on the number of vials available.  Once the time on the schedule is booked for one of the 4 purposes, or if the daily limit is hit, or if the vial limit is hit, then we need to deactivate all the other slots associated with that time.  This may be more than 4 slots, since the slots have varying length.  E.g. we might have exposed 20 COVID vaccine slots for a given hour, but only 2 slots in that hour for the office visit.  If we book an office visit, that will \"cancel\" 10 COVID vaccine slots.</p>",
+        "id": 230074028,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1615572701
+    },
+    {
+        "content": "<blockquote>\n<p>Generally, we could expose that one timeslot as four different Schedules, with multiple different Slots (of varying lengths) that represent the same time for a given person (or group of people)</p>\n</blockquote>\n<p>Yes, that makes sense. Indeed the examples you give here seem perfectly reasonable. What conclusion does this drive towards? I think (as suggested above) removing slots from your COVID schedule when you determine they're not going to be used for COVID vaccinations seems right (so that slots on the COVID schedule are either booked for COVID vaccinations or are available to be booked for COVID vaccinations). Is there a different approach you'd prefer?</p>",
+        "id": 230074669,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1615572987
+    },
+    {
+        "content": "<p>Ok - so the capacity is just the sum of Appointments that are booked with that specific type of slot, and is not really related to the capacity that was listed on the coarse-grained slot when it was \"free\".</p>",
+        "id": 230075004,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1615573168
+    },
+    {
+        "content": "<p>I like to think about this from a granular perspective first (for intuition at least): If you start with 300 free slots on your COVID schedule, and you book 100 of them, and you cancel 100 of them, then you have:</p>\n<ul>\n<li>100 available slots and </li>\n<li>100 busy slots</li>\n</ul>\n<p>And sure, you can collapse the 100 busy slots into a single coarse-grained slot, but the meaning is the same: a booked capacity of 100 on your COVID schedule.</p>\n<blockquote>\n<p>is not really related to the capacity that was listed on the coarse-grained slot when it was \"free\".</p>\n</blockquote>\n<p>I'd describe this as \"related\"... but we may be splitting hairs over wording here, if we agree on the interpretation :-)</p>",
+        "id": 230075470,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1615573378
+    },
+    {
+        "content": "<p>By the \"not related\" part, I meant that you could have a free capacity of 300, but a busy capacity of 0, 50, 100, 200, or 300 depending on what happened with other Schedules.  If you have a free capacity of 300 for COVID vaccines, but all that time gets consumed by non-COVID appointments, then the coarse \"busy\" slot for the COVID schedule would have a capacity of 0, and it wouldn't be obvious to a client where that 300 capacity went, since it would be on unrelated Schedules (that we aren't planning to expose).  And the other schedules might use different duration appointments, so even if you knew about the other Schedules, the counts wouldn't add up.</p>",
+        "id": 230079015,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1615574946
+    },
+    {
+        "content": "<p>Gotcha -- and yes, I think that makes sense. (I'm not hearing a proposal for a different approach, right?)</p>",
+        "id": 230081098,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1615575777
+    },
+    {
+        "content": "<p>I'm not proposing something different, I think I just want omitting capacity on busy slots be ok.  Right now, the spec makes it optional, so I think I'm fine.</p>",
+        "id": 230084583,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1615577418
+    },
+    {
+        "content": "<p>Sure, but to ask differently: is there something our spec might say <em>instead</em> that would cause you to be comfortable with (or more likely to start) communicating booked capacity details?</p>",
+        "id": 230084687,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1615577475
+    },
+    {
+        "content": "<p>Right now, my main reason for not sending it for busy slots is an internal issue (partly performance, partly internal complexity and short timelines).  It might be worth clarifying what capacity means for a busy coarse slot, but that clarity, or lack thereof, wouldn't change our behavior, at least in our first draft implementation.  We will be sending capacity for free slots.</p>",
+        "id": 230088916,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1615579363
+    },
+    {
+        "content": "<p>Thanks, appreciate the clear and direct perspective on this!</p>",
+        "id": 230090547,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1615580030
+    },
+    {
+        "content": "<p>FWIW, my organization will have some of the same challenges as Cooper's. Slots can effectively disappear for a number of reasons which we do not intend to expose through this feed.</p>",
+        "id": 230764615,
+        "sender_full_name": "Ryan Owens",
+        "timestamp": 1616014413
+    },
+    {
+        "content": "<p>That makes sense re: slots disappearing (e.g. because they drop off of a schedule altogether); but <span class=\"user-mention\" data-user-id=\"340597\">@Ryan Owens</span> are you saying that you (like Cooper) wouldn't be able to publish information about <em>any</em> booked slots?</p>",
+        "id": 230777185,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1616019157
+    },
+    {
+        "content": "<p>I can't say for sure about that at this time, but our position from the very first sample format (prior to moving to FHIR) was that we would prefer to not publish the number of total slots or filled slots. Our preference was to publish a relative level of available slots such as \"available, limited or none\" as trying to publish accurate, meaningful numbers introduces a variety of challenges.</p>",
+        "id": 230868218,
+        "sender_full_name": "Ryan Owens",
+        "timestamp": 1616076182
+    },
+    {
+        "content": "<p>Gotcha. We have a precise way to say \"none\" already ;)</p>\n<p>If it's useful to define an additional extension for concepts like limited versus somewhat limited versus lots of capacity we can do it, but I worry that interpreting these values would be difficult in the context of different sites (say, for small clinics vs mass vaccination sites).</p>\n<p>If we instead said that slot capacity could be populated with a best effort estimation, would this be an improvement in your view  <span class=\"user-mention\" data-user-id=\"340597\">@Ryan Owens</span> ?</p>",
+        "id": 230869472,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1616076629
+    },
+    {
+        "content": "<p>Hi; popping into this thread after a kind USDSer activated this ex-PIF. :)</p>\n<p>One UX research finding from providers I’ve seen is that “best effort” should degrade gracefully — eg FHIR R4 Slots and an analogous IETF standard are very specific in terms of exact times, but “not available Tuesday” or “available Friday morning” are good concepts to represent if the provider — sometimes a mom and pop shop — uses a proprietary CRM system, or doesn’t use a full-bore calendaring system or EHR.</p>\n<p>The other finding is that “next availability” is often a good minimally-viable field to consider, rather than trying to aim for all availability.  While this sounds insufficient, when refreshed often it provides people searching for availability with a lot of utility when multiple locations / results are returned.</p>\n<p>Thanks,<br>\nHenry</p>",
+        "id": 231098245,
+        "sender_full_name": "Henry Wei",
+        "timestamp": 1616192898
+    }
+]

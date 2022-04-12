@@ -1,0 +1,44 @@
+[
+    {
+        "content": "<p>Hello everyone! <br>\nI'm using the IBM fhir server docker image along with a static  file server which I use to import ndjson files from via HTTPS in a Scaleway DEV1-L instance (4 vCPU 8 Go 80 Go SSD NVMe). The import is working fine without error. When monitoring my postgres database though I'm seeing an import rate of around 1 Mb/s (~100 resources / s). Do you think it is expected or should it be higher ? Please tell me if you need more details and thank you!</p>",
+        "id": 222412631,
+        "sender_full_name": "Teva Riou",
+        "timestamp": 1610446870
+    },
+    {
+        "content": "<p>Importing from a single file or multiple in parallel?</p>",
+        "id": 222437361,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1610461591
+    },
+    {
+        "content": "<p>I have one file per resource type (patient, observation, etc...) which I import in one single $import request.  So  far i've tested importing 1, 4 and 24 files in parallel with a steady rate of ~100 imported resources / resource type / second. <a href=\"user_uploads/10155/gq0N5yFY_09Ij-JYf9k25ZJ7/Screenshot-2021-01-12-at-16.03.43.png\">Screenshot-2021-01-12-at-16.03.43.png</a></p>\n<div class=\"message_inline_image\"><a href=\"user_uploads/10155/gq0N5yFY_09Ij-JYf9k25ZJ7/Screenshot-2021-01-12-at-16.03.43.png\" title=\"Screenshot-2021-01-12-at-16.03.43.png\"><img src=\"user_uploads/10155/gq0N5yFY_09Ij-JYf9k25ZJ7/Screenshot-2021-01-12-at-16.03.43.png\"></a></div>",
+        "id": 222442335,
+        "sender_full_name": "Teva Riou",
+        "timestamp": 1610463657
+    },
+    {
+        "content": "<p>thats a bit below the numbers we had collected in our environment:  <a href=\"https://github.com/ibm/fhir/issues/673#issuecomment-601794798\">https://github.com/ibm/fhir/issues/673#issuecomment-601794798</a></p>\n<p>but in our case, we were importing from ndjson files that existed on IBM cloud object storage.<br>\nis your postgresql on the same local network or is it hosted/remote?  and what are the specs on that?<br>\nare you using the same db for the batch jobs?</p>",
+        "id": 222450858,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1610466918
+    },
+    {
+        "content": "<p>A couple of things to look at. Are you using pure random ids (UUIDs) for the resources? This causes issues because it dirties so many random blocks in the b-tree indexes. This then exacerbates the issue with full-page-writes in PostgreSQL which results in a lot of log traffic. One solution we use is to prefix the UUID string with a time-based component. This results in right-hand inserts into the indexes and far fewer blocks being dirtied. Here's some example code: <a href=\"https://github.com/IBM/FHIR/blob/master/fhir-persistence-jdbc/src/main/java/com/ibm/fhir/persistence/jdbc/util/TimestampPrefixedUUID.java\">https://github.com/IBM/FHIR/blob/master/fhir-persistence-jdbc/src/main/java/com/ibm/fhir/persistence/jdbc/util/TimestampPrefixedUUID.java</a></p>\n<p>Have you tuned the PostgreSQL configuration?</p>",
+        "id": 222461712,
+        "sender_full_name": "Robin Arnold",
+        "timestamp": 1610470886
+    },
+    {
+        "content": "<p>Everything is on the same docker network in the same instance. The web file server serves the ndjson files stored in a docker volume. Thank you for the link to the benchmarks. And yes I am using pure uuids v4 for the resources, I will look into that ! And I will look into my default pg config as well since I didn't touch it so far.  Do you have any advice on that? Thank you a lot for your help.</p>",
+        "id": 222469296,
+        "sender_full_name": "Teva Riou",
+        "timestamp": 1610473997
+    },
+    {
+        "content": "<p>We've found that increasing shared_buffers to be 50% of the available memory can be helpful (although you have to be a little careful on smaller servers because you need to leave enough space for the rest of the system (OS plus other PostgreSQL needs). Also, take a look at checkpoint intervals and if they are occurring too frequently, consider increasing max_wal_size. But I wouldn't recommend doing this until you've addressed the UUID issue (because dirtying so many random pages greatly increases the amount of work needed for checkpointing. After addressing the UUID issue, you should see the checkpoint load drop significantly.</p>",
+        "id": 222474437,
+        "sender_full_name": "Robin Arnold",
+        "timestamp": 1610476238
+    }
+]

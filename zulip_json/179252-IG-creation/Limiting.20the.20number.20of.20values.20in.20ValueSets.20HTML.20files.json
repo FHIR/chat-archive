@@ -1,0 +1,104 @@
+[
+    {
+        "content": "<p>Hi,</p>\n<p>Our resources refer to multiple ontologies including HPO. Each of these ontologies is often very large, so rather than creating <code>CodeSystem</code> resources in our FHIR model , we have been trying to reference <code>CodeSystem</code>s in an external terminology server (especially Ontoserver).</p>\n<p>To this end, we've tried to point to Ontoserver for resources validation, executing the following command:</p>\n<p><code>java -jar org.hl7.fhir.publisher.jar -ig site_root/ig.ini -tx https://r4.ontoserver.csiro.au/fhir</code></p>\n<p>This command ended up running into <code>java.lang.OutOfMemoryError: Java heap space</code> error when generating output HTML files. I talked to external collaborators and figured that the above command tries to load all values (referred by Ontoserver) in ValueSets into output HTML files. The HPO CodeSystem alone includes at least 20,000 concepts and is therefore huge. After looking into the <a href=\"https://www.hl7.org/fhir/implementationguide.html\"><code>ImplementationGuide</code></a> resource, it seems like using <a href=\"https://www.hl7.org/fhir/codesystem-guide-parameter-code.html#guide-parameter-code-expansion-parameter\"><code>\"expansion-parameter\"</code></a> for <code>\"parameter\"</code> under <code>\"definition\"</code> may be a right way to control the numbers of values in <code>ValueSet</code>s rendered in the output HTML files. So, as far as I understand, I may add the following snippets to our <code>IG.json</code>:</p>\n<div class=\"codehilite\"><pre><span></span><code><span class=\"p\">{</span>\n  <span class=\"err\">...</span>\n  <span class=\"nt\">&quot;definition&quot;</span><span class=\"p\">:</span> <span class=\"p\">{</span>\n    <span class=\"nt\">&quot;parameter&quot;</span><span class=\"p\">:</span> <span class=\"p\">[</span>\n      <span class=\"p\">{</span>\n        <span class=\"nt\">&quot;code&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;expansion-parameter&quot;</span><span class=\"p\">,</span>\n        <span class=\"nt\">&quot;value&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;some value&quot;</span>\n      <span class=\"p\">}</span>\n    <span class=\"p\">]</span>\n  <span class=\"p\">}</span>\n  <span class=\"err\">...</span>\n<span class=\"p\">}</span>\n</code></pre></div>\n\n\n<p>Based on the documentation, the value for the <code>\"expansion-parameter\"</code> code should be a \"named type\", and it is really hard to find some relevant examples for this implementation. I wonder if I am looking into a right resource to limit the number of <code>ValueSet</code>'s values rendered in an output HTML file. If so, can I get some advice to properly implement this?</p>",
+        "id": 197637951,
+        "sender_full_name": "Meen Chul Kim",
+        "timestamp": 1589504855
+    },
+    {
+        "content": "<p>well, first we should talk about what you are doing and wanting to do.</p>",
+        "id": 197638051,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1589504981
+    },
+    {
+        "content": "<p>20000 isn't that much. We've had bigger. How much memory are you making available to the ig publisehr?</p>",
+        "id": 197638064,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1589504997
+    },
+    {
+        "content": "<p>Hi Graham, I work with Meen ^. We don't explicitly set the JVM heap space arguments, but from the publisher logs it looks like 1.6 GB is available to the publisher. Do you have recommendations for JVM min/max heap size?</p>",
+        "id": 197961902,
+        "sender_full_name": "Natasha Singh",
+        "timestamp": 1589820045
+    },
+    {
+        "content": "<p>that's plenty of memory. so that's not the issue. The parameter you need is <code>path-expansion-params</code> documented here: <a href=\"https://confluence.hl7.org/display/FHIR/Implementation+Guide+Parameters\">https://confluence.hl7.org/display/FHIR/Implementation+Guide+Parameters</a></p>",
+        "id": 197981561,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1589828614
+    },
+    {
+        "content": "<p>though even then, I'm not sure that'll solve your problem.Can I reproduce this?</p>",
+        "id": 197981596,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1589828633
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>!</p>\n<p>What confuses me actually is that on the official FHIR documentation (as I've linked in the initial message), there is no parameter code <code>\"path-expansion-params\"</code>, but <code>\"expansion-parameter\"</code>, and the latter is repeating whereas the former is said not to be repeating on Confluence. And <code>\"expansion-parameter\"</code> should have a <code>\"value\"</code> which is a named type (according to the documentation. I am not sure how it actually works though) while <code>\"path-expansion-params\"</code> has a path to a parameter resource as a <code>\"value\"</code>. When running validation with these two cases, <code>\"path-expansion-params\"</code> returns a build error, so it seems deprecated. So, I wonder if the use of <code>\"expansion-parameter\"</code> is the right use case for limiting the number of rendered values in an output HTML file. If so, I also wonder about how to set <code>\"value\"</code>.</p>",
+        "id": 198079115,
+        "sender_full_name": "Meen Chul Kim",
+        "timestamp": 1589900507
+    },
+    {
+        "content": "<blockquote>\n<p>When running validation</p>\n</blockquote>\n<p>So you're not talking about publishing an IG?</p>",
+        "id": 198113161,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1589915585
+    },
+    {
+        "content": "<p>We use the publisher for both validation of conformance resources and publishing the IG</p>",
+        "id": 198205967,
+        "sender_full_name": "Natasha Singh",
+        "timestamp": 1589984720
+    },
+    {
+        "content": "<p>the IG Publisher can be started in one of 2 ways :</p>\n<ul>\n<li>ig.json (deprecated): Specific parameters supported: <code>sct-edition</code> and <code>activeOnly</code></li>\n<li>ig.ini (preferred): only <code>path-expansion-params</code> is supported</li>\n</ul>",
+        "id": 198253628,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1590006789
+    },
+    {
+        "content": "<blockquote>\n<p>\"path-expansion-params\" returns a build error</p>\n</blockquote>\n<p>What's the issue?</p>",
+        "id": 198253658,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1590006807
+    },
+    {
+        "content": "<p>In our IG, I tried:</p>\n<div class=\"codehilite\"><pre><span></span><code><span class=\"p\">{</span>\n  <span class=\"nt\">&quot;code&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;path-expansion-params&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;value&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;input/resources/terminology/Parameters-kfdrc-ontoserver.json&quot;</span>\n<span class=\"p\">}</span>\n</code></pre></div>\n\n\n<p>But, the publisher returns the following error:</p>\n<div class=\"codehilite\"><pre><span></span><code>java.io.FileNotFoundException: input/resources/terminology/Parameters-kfdrc-ontoserver.json (No such file or directory)\n        at java.io.FileInputStream.open0(Native Method)\n        at java.io.FileInputStream.open(FileInputStream.java:195)\n        at java.io.FileInputStream.&lt;init&gt;(FileInputStream.java:138)\n        at org.hl7.fhir.utilities.TextFile.fileToBytes(TextFile.java:199)\n        at org.hl7.fhir.r4.formats.FormatUtilities.loadFile(FormatUtilities.java:166)\n        at org.hl7.fhir.igtools.publisher.Publisher.initializeFromIg(Publisher.java:1701)\n        at org.hl7.fhir.igtools.publisher.Publisher.initialize(Publisher.java:1322)\n        at org.hl7.fhir.igtools.publisher.Publisher.execute(Publisher.java:690)\n        at org.hl7.fhir.igtools.publisher.Publisher.main(Publisher.java:7383)\n</code></pre></div>\n\n\n<p>When not including the above parameter, all other resources are loaded fine and the validation passes.</p>",
+        "id": 199123407,
+        "sender_full_name": "Meen Chul Kim",
+        "timestamp": 1590738701
+    },
+    {
+        "content": "<p>And <code>\"input/resources/terminology/Parameters-kfdrc-ontoserver.json\"</code> is like:</p>\n<div class=\"codehilite\"><pre><span></span><code><span class=\"p\">{</span>\n  <span class=\"nt\">&quot;resourceType&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;Parameters&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;id&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;kfdrc-ontoserver&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;parameter&quot;</span><span class=\"p\">:</span> <span class=\"p\">[</span>\n    <span class=\"p\">{</span>\n      <span class=\"nt\">&quot;name&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;count&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;valueInteger&quot;</span><span class=\"p\">:</span> <span class=\"mi\">100</span>\n    <span class=\"p\">}</span>\n  <span class=\"p\">]</span>\n<span class=\"p\">}</span>\n</code></pre></div>",
+        "id": 199123504,
+        "sender_full_name": "Meen Chul Kim",
+        "timestamp": 1590738773
+    },
+    {
+        "content": "<p>hmm. evidently no one has tried to do this before, because the code is clearly wrong here</p>",
+        "id": 199209504,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1590784956
+    },
+    {
+        "content": "<p>this will work next release (and the relative path will be relative to the ig resource)</p>",
+        "id": 199213306,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1590787048
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>! Looking forward to the next release!</p>",
+        "id": 199391213,
+        "sender_full_name": "Meen Chul Kim",
+        "timestamp": 1591029212
+    },
+    {
+        "content": "<p>it's now done. Track releases on <a class=\"stream\" data-stream-id=\"217600\" href=\"/#narrow/stream/217600-tooling.2Freleases\">#tooling/releases</a></p>",
+        "id": 199414633,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1591041112
+    }
+]

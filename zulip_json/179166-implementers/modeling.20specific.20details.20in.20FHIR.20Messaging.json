@@ -1,0 +1,314 @@
+[
+    {
+        "content": "<p>I'm still trying to grok messaging ;-)</p>\n<p>As an example, say I want to send notifications like \"Alice is retiring and transfering her practice to Bob on Jan 1, 2021.\"</p>\n<p>To start, I'd define an event code (like maybe  system: <code>http://vocab.example.org/CodeSystem/lifecycle</code>,  code: <code>practice-transfer</code>). Then any time I wanted to send a message over the wire, I'd create a messaging <code>Bundle</code> and populate its <code>MessageHeader.eventCoding</code> with my new <code>practice-transfer</code> Coding.</p>\n<p>But I'd still need a spot to indicate:</p>\n<ol>\n<li>That Alice is the one retiring</li>\n<li>That Bob is the one taking over her practice</li>\n<li>That Jan 1, 2021 is the date of the transfer</li>\n</ol>\n<p>Here's where I'm struggling. In (1) and (2), Alice and Bob could be represented by FHIR Practitioner resources, and maybe could be listed in <code>MessageHeader.focus</code>, but how would I indicate which one is retiring, vs which one is taking over? And (3) isn't a resource, obviously. Would the transfer date be an extension on the <code>MessageHeader</code>?</p>\n<p>Alternatively, I see an <a href=\"http://build.fhir.org/messaging.html#search\" target=\"_blank\" title=\"http://build.fhir.org/messaging.html#search\">example</a> involving <code>Parameters</code> in <a href=\"http://build.fhir.org/messaging\" target=\"_blank\" title=\"http://build.fhir.org/messaging\">http://build.fhir.org/messaging</a>, but this would appear only to apply to operations, and not for notification-type messages like the hypothetical <code>practice-transfer</code>I describe here: <a href=\"http://build.fhir.org/parameters\" target=\"_blank\" title=\"http://build.fhir.org/parameters\">the docs say</a> that Parameters \"has no other use\" beyond \"to pass information into and back from an operation.\"</p>\n<p>I feel like I'm missing something. This seems like just about the simplest example of a \"data model\" for a message. <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> and <span class=\"user-mention\" data-user-id=\"191372\">@René Spronk</span> or others, please let me know if there's a clear expected approach here.</p>",
+        "id": 188752238,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582304922
+    },
+    {
+        "content": "<p>(Incidentally, the example at <a href=\"http://build.fhir.org/messaging.html#search\" target=\"_blank\" title=\"http://build.fhir.org/messaging.html#search\">http://build.fhir.org/messaging.html#search</a>, like all inline examples in the FHIR spec, isn't auto-validate and therefore has fallen out of date. I've submitted <a href=\"http://jira.hl7.org/browse/FHIR-26366\" target=\"_blank\" title=\"http://jira.hl7.org/browse/FHIR-26366\">J#26366</a> for this.)</p>",
+        "id": 188752704,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582305222
+    },
+    {
+        "content": "<p>How would you model this with REST and resources? I think you might be expecting too much from messaging. My first reaction would be making the \"transfer\" the focus of the message, maybe using Task.</p>",
+        "id": 188753942,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1582305929
+    },
+    {
+        "content": "<p>Thanks for the quick response <span class=\"user-mention\" data-user-id=\"192685\">@Vassil Peytchev</span>.</p>\n<p>If this example is out of scope, what's the right way for me to think about what's in-scope?</p>\n<p>Re: expecting \"too much,\" this feels like about the simplest kind of notification we could consider, right? It uses one existing resource type (Practitioner) and one existing data type (date). In REST I'd use a Parameters resource or a set of extensions to capture these.</p>",
+        "id": 188754140,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582306064
+    },
+    {
+        "content": "<p>What really changes, and what resource would one use to express it? 'Transferring a practice' could either be as simple as setting active=false on Alice. And on PractionerRole for Bob you could set active=true for a role in the 'practice organization'. The focus could also be on a Contract between Alice and Bob, with Alice and Bob as supporting (non focal) resources.</p>",
+        "id": 188754323,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1582306181
+    },
+    {
+        "content": "<p>I'm not asserting anything changes; this notification might be a broadcast that goes out via messaging to lots of endpoints in a region. Some might update their referral software, others might mail out notices to patients, others might just keep a log, others might throw it away. It's intended to be a classic \"notification\" here.</p>",
+        "id": 188754452,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582306231
+    },
+    {
+        "content": "<p>Bob taking over from Alice, that's a change. Which triggers the notification. Trigger = 'new practitioner takes over old practitioners practice/role'. Focus = 2 PractionerRoles, one which has status active, (and a date range, with the from date being the date of the switch), and the other one which wil have status active=false. Practice is referenced from PractitionerRole. That's simple enough, no need for any complexity.</p>",
+        "id": 188754755,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1582306426
+    },
+    {
+        "content": "<p>Sounds like you are looking for a Notification resource, that can have a generic set of parameters? The way I understand it, sending notifications is enabled by messaging, but the semantics of the notification is expressed using the resources in the content.</p>",
+        "id": 188755059,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1582306603
+    },
+    {
+        "content": "<p>Indeed. Notifications are based on state changes, and the focus of the message will be that resource/those resources that are subject to the state change. Any other supporting resources may be contained in the body. Some state changes (triggers) may not have a 1-1 relationship to state changes in a FHIR resource, and then the mapping gets a bit trickier.</p>",
+        "id": 188755346,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1582306787
+    },
+    {
+        "content": "<p>Messaging doesn't allow you to represent events that can't be expressed using resources normally.  I agree that you'd probably be looking at Task to represent that transfer of practice.  The MessageHeader would point to the Task.</p>",
+        "id": 188756505,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1582307489
+    },
+    {
+        "content": "<p>I guess I'm trying to ask the more generic question, as Vassil suggests. Is messaging limited to conveying \"state changes as represented in FHIR\"? In other words, does every notification correspond to some set of operations I could invoke on a FHIR REST server to update the state of the world? I thought \"event codes\" were meant to define an event space outside of simple / explicit state changes.</p>",
+        "id": 188759142,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582308903
+    },
+    {
+        "content": "<p>If every message could be boiled down to a RESTful transaction bundle POST, the world gets a lot simpler.</p>",
+        "id": 188759199,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582308956
+    },
+    {
+        "content": "<p>Reading above, René says:</p>\n<blockquote>\n<p>Some state changes (triggers) may not have a 1-1 relationship to state changes in a FHIR resource</p>\n</blockquote>\n<p>... while Lloyd says:</p>\n<blockquote>\n<p>Messaging doesn't allow you to represent events that can't be expressed using resources normally.</p>\n</blockquote>\n<p><strong>Is there disagreement or ambiguity on this point?</strong></p>",
+        "id": 188759280,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582309000
+    },
+    {
+        "content": "<p>When I think of messaging, I tend to fall back on the HL7 v2 ADT messages as a comprehensive set of messages and their events.  Some of those can be directly done via REST operations, but in many cases, there is some extra backend services that are being done which makes messaging a better fit than a REST operation.</p>\n<p>As an example, sending the ADT_A01 Admit Patient message would have a Patient resource as its focus.  This gets blasted out as a message from the ADT system to all of the other areas in the hospital and each of those areas does some area-specific thing.  In all cases, I could reproduce this by simply creating a new Patient/Encounter resource in each of those area's systems.  But then that system would have to have some notification that says \"ah, new patient has been created, must create a ping so that someone can be alerted to do something\".  That something could be a \"add the patient to the lunch and supper delivery service list\" or \"send a menu of food items to the patient's hospital location so they can choose their meals\", etc.</p>",
+        "id": 188760107,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1582309579
+    },
+    {
+        "content": "<p>I don't think that Lloyd and Rene are disagreeing.  <br>\nI think that Rene is saying that there will be times you can't express what you want the receiving system to do completely with a FHIR resource.  As an example, my ADT message to the Nutrition Services system is saying \"here is this new patient, go do whatever it is that you do when a new patient is admitted\".  There isn't necessarily a FHIR resource that can be sent that represents that \"go do\" part unless you explicitly wanted to represent that as a Task.  But I wouldn't use Task.  I would just send the trigger event and the patient information (and maybe the Encounter information to indicate length of stay and location in hospital) and let the nutrition system do whatever it does.<br>\nMeanwhile, I think that Lloyd is saying that you can't use Parameters or some other means of expressing the stuff you are sending to the receiving system.  Thus Rene's solution to your Practitioner transfer example.  You don't use Parameters or anything to express the transfer date, you indicate that using the resources that Rene provided.</p>",
+        "id": 188760573,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1582309849
+    },
+    {
+        "content": "<p>I think of messages as intrinsically being operations.  Typically the operations are super-simple ones where just specifying a focus or two is all that's needed.  If the arguments are more complex, then the MessageHeader.focus might well be Parameters.  What messaging typically adds is:</p>\n<ul>\n<li>supports routed delivery</li>\n<li>supports asynchronous responses (though we now have this covered at least in part in REST)</li>\n<li>supports operation where all contextual information must be delivered at once because the systems involved can't query to get context later</li>\n</ul>\n<p>The most typical use-case that drives messaging is the last one.</p>",
+        "id": 188762712,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1582311329
+    },
+    {
+        "content": "<blockquote>\n<p>I think that Lloyd is saying that you can't use Parameters or some other means of expressing the stuff you are sending</p>\n</blockquote>\n<p>I think Lloyd just stated otherwise (... \"the MessageHeader.focus might well be Parameters\").</p>",
+        "id": 188764061,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582312116
+    },
+    {
+        "content": "<p>i know.  i give up on trying to decipher lloyd's thoughts. :)</p>",
+        "id": 188764086,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1582312138
+    },
+    {
+        "content": "<p>;-)</p>",
+        "id": 188764088,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582312142
+    },
+    {
+        "content": "<blockquote>\n<p>operation where all contextual information must be delivered at once</p>\n</blockquote>\n<p>The regular old \"Operations\" framework supports this too -- you just supply the context as input parameters. So that's not in itself a driving use case. Ditto with asynchronous responses, given the async operations framework. Routed delivery seems like the key point of differentiation.</p>",
+        "id": 188764158,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582312177
+    },
+    {
+        "content": "<p>Right.  It <em>should</em> be able to be Parameters, but there's a prohibition.  Also, Task can also behave in an operation-like manner, so there are multiple ways to skin the cat - and we don't have strong guidance, at least not yet.</p>",
+        "id": 188765343,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1582312987
+    },
+    {
+        "content": "<p>OK, created <del>FHIR#24848</del> the issue Vassil notes below for Parameters.</p>",
+        "id": 188766914,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582314052
+    },
+    {
+        "content": "<p>That doesn't seem to be the correct Jira issue - <a href=\"http://jira.hl7.org/browse/FHIR-26368\" target=\"_blank\" title=\"http://jira.hl7.org/browse/FHIR-26368\">FHIR#26368</a></p>",
+        "id": 188773068,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1582318339
+    },
+    {
+        "content": "<p>Jean is correct in that I don't believe a trigger event could only 'be about' something that can be expressed in FHIR. The whole point of a message is that a trigger event has 'business expectations' associated with it which need to be agreed upon by senders and receivers, these are not (don't have to be) expressed in a computable fashion anywhere.<br>\nSending a 'discharge message' for inpatient Smith to the cleaning department will probably cause the bed to be exchanged and the room to be cleaned, but in and of itself there's no Task in the message that expresses that. If one were to translate such a message into a FHIR Transaction then one would have to explicitly express the business expectations, i.e. the 'trigger event' would be translated into a Task en a SeriviceRequest to clean a particular room/bed. <br>\nThere's no need to be verbose when it comes to messaging. The trigger event identifies the business expectations. In that sense Lloyds comparison to a named operation holds - that operation will have to know what to do with the parameters it receives, it has knowledge of/implements business expectations that have not been explicitly expressed in its parameters.</p>",
+        "id": 188809133,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1582364153
+    },
+    {
+        "content": "<p>We have discussed at length Sub+Rest vs FHIR messaging.  How would this scenario be answered with Sub + REST space,  I would expect the Topic to correspond the event and focus?  I have followed this thread and came away with use A,B, or C depending.  That  is not very satisfying answer for an interop standard is it?</p>",
+        "id": 188828480,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1582397046
+    },
+    {
+        "content": "<p>I see these discussions as the first step towards a more  cohesive guidance on the use of the different ways to exchange data using FHIR... I have linked several Zulip discussions in the Jira issue above, so hopefully that's a good starting point for Monday's meeting...</p>",
+        "id": 188846659,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1582428259
+    },
+    {
+        "content": "<p>Indeed, a subscription could also be to something which need not be expressible in FHIR. However, a messaging trigger event  has a pre-agreed upon business expectation, which isn't the case IMHO when it comes to subscriptions. (Maybe it is, messaging after all has an implicit subscription mechanism). <br>\nGiven that FHIR subscriptions were initially modeled as queries (as they were in v3, and are in v2) - which means the subscriber is in full control as to what they subscribe to and also what they plan to do with the data if and when they receive it - I hesitate to assign a lot of 'business expectations on the part of the event publisher' to subscription events.<br>\nBy moving to subscription topics (which need not be expressible in FHIR) we may have pushed the subscription mechanism much more into the messaging space.</p>",
+        "id": 188860751,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1582449968
+    },
+    {
+        "content": "<p>Much of the messaging we're doing at Redox is as Jean notes, translating HL7V2 events into FHIR bundles.</p>\n<p>I agree with others that Josh's initial problem seemingly isn't necessarily a Messaging problem, but a \"how do I express this in FHIR\" problem</p>",
+        "id": 188876495,
+        "sender_full_name": "Brendan Keeler",
+        "timestamp": 1582478484
+    },
+    {
+        "content": "<p>I was trying specifically to come up with an example that was just \"here's my message\" without a deep tie into FHIR modeling, so I'm glad to have stimulated the discussion! </p>\n<p>Regarding v2 examples <span class=\"user-mention\" data-user-id=\"200498\">@Brendan Keeler</span> maybe there's another angle that would help elucidate behaviors. Do your v2 notifications always come with details indicating what changed? For example if you are sending a message that is a notification of a change of patient address, do you have a way to supply just the address? Do you send along a full patient resource but only populate the address? How do you indicate which previous address is being replaced? All this kind of thing...</p>",
+        "id": 188932234,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582555653
+    },
+    {
+        "content": "<p>Well, that's one of the reasons why the discussion on what is messaging is taking place. I think what you are describing is a notification between/among tightly coupled systems. Just sending the change of address assumes that there is already established common patient object, and and established \"source of truth\" that will enable such a notification. That could be a particular flavor of messaging, or maybe a different \"notification\" (tied to/similar to subscription notification?).</p>\n<p>In V2, there is no such thing - the full information is sent to indicate the change of address, and right now, as far as I can tell,  FHIR messaging follows the same overall pattern - all resources relevant to the event in the message are contained in the message...</p>",
+        "id": 188934053,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1582556847
+    },
+    {
+        "content": "<p>Indeed. Loosely coupled, server side orchestration. So you'd better send a snapshot of everything that could be relevant in the context of the trigger event. If, when and what a receiver processes is up to the receiver.</p>",
+        "id": 188934460,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1582557118
+    },
+    {
+        "content": "<p>Explaining the event makes sense, and sending a snapshot makes sense. I'm wondering about cases where  untangling exactly what happened might not be entirely evident from just the snapshot (especially for receivers without have recently joined a network and don't have history). I guess sending a complete previous state snapshot and a complete post-state snapshot of what's missing anything...  Giving the receiver access back to a versioned store in the sender.</p>",
+        "id": 188934941,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582557457
+    },
+    {
+        "content": "<p>Messaging is about the here-and-now, who cares about a previous state? As a receiver one can't even assume one has access (via REST, messaging or otherwise) to a sender, let alone that such a sender would support versioning..</p>",
+        "id": 188935163,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1582557598
+    },
+    {
+        "content": "<p>then I guess sending complete pre and post snapshots is the only way to communicate the full event under those circumstances.</p>",
+        "id": 188935255,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582557650
+    },
+    {
+        "content": "<p>Outside of a few data types where there are ways to flag inline the fact that something is no longer current (like Address.use)</p>",
+        "id": 188935290,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582557681
+    },
+    {
+        "content": "<p>Could you explain as to why you need the 'pre' ? If the trigger event says 'discharged' it's pretty clear (implicitly) what the previous state was, even if the receiver wasn't aware of that previous state.</p>",
+        "id": 188935443,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1582557775
+    },
+    {
+        "content": "<p>And yes, there are interesting problems with snapshot behavior: trigger \"modification of list of allergies\" message1 contains all of the allergies I know (4 of them), and a later messag2 contains only 2 allergies. The receiver will have to somehow deduce that 2 allergies have been removed from the list. This requires the use of provenance and replacement of the 'snapshot as a whole' - delete all allergies that were send by application X, replace by a new list of allergies as send by X. But don't touch allergies as sent by Y, because message1 nor message2 will have included those in the snapshot they're sending.  But in general the \"here's what's happening now\" approach of messaging works just fine.</p>",
+        "id": 188935800,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1582558029
+    },
+    {
+        "content": "<p>Just to confirm, we're sending the full snapshots. EVN segment in HL7v2 is and was never good enough to really tell you what things changed.</p>",
+        "id": 188936809,
+        "sender_full_name": "Brendan Keeler",
+        "timestamp": 1582558720
+    },
+    {
+        "content": "<blockquote>\n<p>pretty clear (implicitly) </p>\n</blockquote>\n<p>Yeah, pre/post snapshots would be used to make this explicit, for just the kinds of \"interesting\" cases you describe.</p>",
+        "id": 188954050,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582570288
+    },
+    {
+        "content": "<p>I am a bit confused with the resolution of <a href=\"http://jira.hl7.org/browse/FHIR-26368\" target=\"_blank\" title=\"http://jira.hl7.org/browse/FHIR-26368\">FHIR#26368</a> - I was at 3/4 of the call, and I don't recall when it was discussed (it must have been after I dropped off).</p>\n<p>But my confusion is about the resolution itself - the Parameters resource is Normative, yet the \"relaxation\" of the language drastically changes the use of Parameters. While the question prompting the raising of the specific Jira issue may be sufficient reason to relax the language, I am far from convinced that it actually is a sufficient reason, and even it it were, I would rather see the change in the description to be specifically for the use of Prameters with MessageHeader...</p>\n<p>Can I request that the issue is re-opened until after we go through our further discussions regarding Messaging, Subscription, (Subscription)Notification,  etc.?</p>",
+        "id": 189167070,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1582756014
+    },
+    {
+        "content": "<p>I'm not sure what changed that much</p>",
+        "id": 189173372,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1582760948
+    },
+    {
+        "content": "<p>The original text clearly restricted the use of Parameters as the input to operations.</p>\n<blockquote>\n<p>This resource is a non-persisted resource used to pass information into and back from an operation. It has no other use, and there is no RESTful endpoint associated with it.</p>\n</blockquote>",
+        "id": 189179179,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1582766863
+    },
+    {
+        "content": "<p>We did talk through this issue in depth on the call and arrive at the resolution you cited. Is a specific concern you have about it? (to be clear, it is excellent having you on these calls and would love your feedback.)</p>",
+        "id": 189180798,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582769067
+    },
+    {
+        "content": "<p>I have multiple issues. On the general level, going from:</p>\n<ul>\n<li>\n<p>This is Item A and its only purpose is X (Normative)<br>\nto</p>\n</li>\n<li>\n<p>This is item A and it can be used anywhere (as an embedded resource, for example).<br>\nis a big substantive change, IMO.</p>\n</li>\n</ul>\n<p>On the specific level, referencing Parameters in MessageHeader, I don't believe there is agreement, or even sufficient discussion on whether that is a good idea.  It is possible that the upcoming weeks can bring changes to the guidance on use for messaging and subscriptions, where the application of Parameters may be not necessary, or it may turn out Parameters needs to be referenced  from a different resource. Once we have clarity,  and there is a clear need to relax the constraints, then my preference would be to from </p>\n<ul>\n<li>\n<p>This is Item A and its only purpose is X<br>\nto</p>\n</li>\n<li>\n<p>This is Item A and its  purposes are X and Y</p>\n</li>\n</ul>",
+        "id": 189183212,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1582772706
+    },
+    {
+        "content": "<p>Okay, this helps, thanks. The concern about \"normative\" content here seems less stark to me, given our versioning rules (<a href=\"http://build.fhir.org/versioning\" target=\"_blank\" title=\"http://build.fhir.org/versioning\">http://build.fhir.org/versioning</a>); generally allowing a resource to be used in additional contexts is acceptable.</p>\n<p>If you want to open an issue to discuss further, that's okay. I don't think I share your concerns though.</p>",
+        "id": 189184474,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1582774696
+    },
+    {
+        "content": "<p>The expansion of use shouldn't break any existing system, I don't think?</p>",
+        "id": 189185070,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1582775937
+    },
+    {
+        "content": "<p>well, part of the problem is what's an operation? It's being used as input to <em>operations</em>, but that doesn't just mean RESTful operations. And if it appears in a message or subscription or something, it's till input/output for an 'operation'</p>",
+        "id": 189189904,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1582784176
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179166-implementers/topic/modeling.20specific.20details.20in.20FHIR.20Messaging/near/189185070\" title=\"#narrow/stream/179166-implementers/topic/modeling.20specific.20details.20in.20FHIR.20Messaging/near/189185070\">said</a>:</p>\n<blockquote>\n<p>The expansion of use shouldn't break any existing system, I don't think?</p>\n</blockquote>\n<p>Usually the expansions that won't break any systems are of the type<br>\nreference -&gt; Practitioner changes to reference -&gt; Practitioner | PractitionerRole</p>\n<p>In this case it could be argued that the change actually modifies an implicit invariant in that wherever you had  Reference(Any) , it was \"any resource, except for Parameters\".  With the change, the invariant is no longer valid.</p>\n<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179166-implementers/topic/modeling.20specific.20details.20in.20FHIR.20Messaging/near/189189904\" title=\"#narrow/stream/179166-implementers/topic/modeling.20specific.20details.20in.20FHIR.20Messaging/near/189189904\">said</a>:</p>\n<blockquote>\n<p>well, part of the problem is what's an operation? It's being used as input to <em>operations</em>, but that doesn't just mean RESTful operations. And if it appears in a message or subscription or something, it's till input/output for an 'operation'</p>\n</blockquote>\n<p>The original text explicitly linked to <a href=\"http://hl7.org/fhir/operations.html\" target=\"_blank\" title=\"http://hl7.org/fhir/operations.html\">http://hl7.org/fhir/operations.html</a> as the definition of operation. If messages and subscriptions need to be considered as special cases of operations, then updating that page to say so will satisfy the perceived need to expand the use of Parameters, without relaxing anything in the Parameters definition. This is in line with my view that expanding the use of Parameters needs to follow the specific use case(s) that we agree on, and not introduce general and vague language (\"primarily used?\") so as to not be helpful.</p>\n<p>As per Josh's suggestion, issue <a href=\"http://jira.hl7.org/browse/FHIR-26390\" target=\"_blank\" title=\"http://jira.hl7.org/browse/FHIR-26390\">FHIR#26390</a> created.</p>",
+        "id": 189223319,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1582817258
+    },
+    {
+        "content": "<p>Relaxing invariants is allowed.  Our expectation is that old instances will still be valid, not that old systems will always be able to consume new instances</p>",
+        "id": 189230072,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1582821357
+    },
+    {
+        "content": "<blockquote>\n<p>Invariants, regular expressions, fixed values and patterns will not be added, removed or changed.</p>\n</blockquote>\n<p>Is <a href=\"http://build.fhir.org/versions.html#f-compat\" target=\"_blank\" title=\"http://build.fhir.org/versions.html#f-compat\">this</a> limited to only values, and not references?</p>",
+        "id": 189231799,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1582822345
+    },
+    {
+        "content": "<p>I would say that this line: \"Additional data types may be added to elements which are already expressed as a choice of data types only if those elements are optional (minimum cardinality = 0).\" applies to references, though some clarification would be in order.  I'd certainly expect the list of choices allowed for a reference to be able to grow over time.  (Particularly essential if a new resource is defined that is relevant for a Reference).</p>",
+        "id": 189233552,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1582823456
+    },
+    {
+        "content": "<p>Yes, the list of references is allowed to grow over time, but in this case there was a blanket prohibition present. It is a very unusual situation, due to the \"special\" nature of the Parameters resource. In case I wasn't clear before, I am not opposed to allowing Parameters in other cases, as long as the cases have clear boundaries.</p>",
+        "id": 189235132,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1582824525
+    }
+]

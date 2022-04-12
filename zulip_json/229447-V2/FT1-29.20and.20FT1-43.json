@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p>The Chapter 6 description of these fields states:</p>\n<blockquote>\n<p>Definition: This field has been defined for NDC codes that are required by HIPAA for electronic claims for Pharmacy charges. Refer to Externally-defined Table 0549- NDC Codes in Chapter 2C, Code Tables, for suggested values.</p>\n<p>If a system supports multiple NDC codes for a charge, this information will be sent in OBX segments. FT1-29 and FT1-43 can be used for single NDC codes and quantities instead of using OBX.</p>\n</blockquote>\n<p>The problem with this description is that (at least in the DFT messages) there are no OBX segments directly associated with the FT1 segment. Can we allow these fields to repeat for multiple NDC codes?</p>",
+        "id": 214757336,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1603829457
+    },
+    {
+        "content": "<p>Response from Beat Heggli:<br>\nIn all message structures of Chapter 6 the OBR, ORC, and OBX segments are not mandatory and the usage of the preceding OBR, ORC is not absolutely necessary. In message structures like BAR_P01, BAR_P05 there are single OBX segments We can also find single OBX segments in other chapters, eg. Chapter 9. All these message structures have in common, that the OBX-Segment appears only once in the whole message ( repeatable or not).</p>\n<p>If there are several OBX-Segments possible, like in the DFT_P03, we have to take care that the usage of a single OBX segment without OBR, ORC doesn’t lead to unparsable messages. In this message structure the OBX segment is part of a segment group COMMON_ORDER and FINANCIAL_COMMON_ORDER and for groups there are some requirements defined in chapter 2_Controls 2.5.2.:</p>\n<p>As of v 2.5, the first segment in a newly defined segment group will be required to help ensure that unparsable messages will not be inadvertently defined. This required first segment is known as the anchor segment.   </p>\n<p>If we follow this rule there is a least a preceding OBR segment necessary before the OBX. Nevertheless in all Financial messages the OBX are either contained in a single order group or the order group is part of another group  (like FINANCIAL with the FT1 segment) and appears only once in this group . </p>\n<p>In my opinion the usage of a OBX segment without OBR, OCR should be possible in financial messages and does not create unparsable messages.</p>",
+        "id": 215090688,
+        "sender_full_name": "Craig Newman",
+        "timestamp": 1604062830
+    },
+    {
+        "content": "<blockquote>\n<p>In my opinion the usage of a OBX segment without OBR, OCR should be possible in financial messages and does not create unparsable messages.</p>\n</blockquote>\n<p>This contradicts both the rule in chapter 2, and what is in version 2.9 (I was wrong about OBR, but ORC is still required):</p>\n<div class=\"codehilite\" data-code-language=\"code\"><pre><span></span><code>{             --- FINANCIAL begin\n  FT1\n  &lt;other segments and groups skipped&gt;\n  [{             --- FINANCIAL_COMMON_ORDER begin\n    ORC            Common Order (specific to above FT1)\n    [{ PRT }]      Participation\n    [{             --- FINANCIAL_TIMING_QUANTITY begin\n      TQ1            Timing/Quantity\n      [{ TQ2 }]      Timing/Quantity Order Sequence\n    }]             --- FINANCIAL_TIMING_QUANTITY end\n    [              --- FINANCIAL_ORDER begin\n      OBR            Order Detail Segment\n      [{ PRT }]      Participation\n      [{ NTE }]      Notes and Comments (on Order Detail)\n    ]              --- FINANCIAL_ORDER end\n    [{             --- FINANCIAL_OBSERVATION begin\n      OBX            Observations / Result\n      [{ PRT }]      Participation\n      [{ NTE }]      Notes and Comments (on Result)\n    }]             --- FINANCIAL_OBSERVATION end\n  }]             --- FINANCIAL_COMMON_ORDER end\n}              --- FINANCIAL end\n</code></pre></div>",
+        "id": 215162181,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1604100555
+    },
+    {
+        "content": "<p>It sounds like we have to create a new message structure to fix it.</p>",
+        "id": 215298906,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1604311367
+    },
+    {
+        "content": "<p>After a few e-mails. I think the current status of the issue is that:</p>\n<ol>\n<li>The intent was to have independent OBR, and independent OBX segments follow the FT1 segment</li>\n<li>The message structure before version 2.9 was not deterministically parsable, and that was \"fixed\" in 2.9, resulting in the above structure - which is not compatible with version 2.8 and earlier.</li>\n</ol>\n<p>Given the above, I believe that it is appropriate to get a technical correction on the message structure that will allow for deterministically parsable messages  <strong>and</strong> will allow independent OBR and OBX segments to follow FT1 as follows:</p>\n<div class=\"codehilite\"><pre><span></span><code>{             --- FINANCIAL begin\n  FT1\n  &lt;other segments and groups skipped&gt;\n  [{             --- FINANCIAL_OBSERVATION_STANDALONE Begin\n    OBX            Observations (directly related to FT1)\n    [{ PRT }]      Participation\n    [{ NTE }]      Notes and Comments (on Result)\n  }]             --- FINANCIAL_OBSERVATION_STANDALONE End\n  [{             --- FINANCIAL_ORDER_STANDALONE Begin\n    OBR            Order Detail Segment\n    [{ PRT }]      Participation\n    [{ NTE }]      Notes and Comments (on Order Detail)\n    [{             --- FINANCIAL_OBSERVATION begin\n      OBX            Observations / Result\n      [{ PRT }]      Participation\n      [{ NTE }]      Notes and Comments (on Result)\n    }]             --- FINANCIAL_OBSERVATION end\n  }]             --- FINANCIAL_ORDER_STANDALONE End\n  [{             --- FINANCIAL_COMMON_ORDER begin\n    ORC            Common Order (specific to above FT1)\n    [{ PRT }]      Participation\n    [{             --- FINANCIAL_TIMING_QUANTITY begin\n      TQ1            Timing/Quantity\n      [{ TQ2 }]      Timing/Quantity Order Sequence\n    }]             --- FINANCIAL_TIMING_QUANTITY end\n    [              --- FINANCIAL_ORDER begin\n      OBR            Order Detail Segment\n      [{ PRT }]      Participation\n      [{ NTE }]      Notes and Comments (on Order Detail)\n    ]              --- FINANCIAL_ORDER end\n    [{             --- FINANCIAL_OBSERVATION begin\n      OBX            Observations / Result\n      [{ PRT }]      Participation\n      [{ NTE }]      Notes and Comments (on Result)\n    }]             --- FINANCIAL_OBSERVATION end\n  }]             --- FINANCIAL_COMMON_ORDER end\n}              --- FINANCIAL end\n</code></pre></div>\n<p>Comments?<br>\n<span class=\"user-mention\" data-user-id=\"191549\">@Frank Oemig</span> <span class=\"user-mention\" data-user-id=\"192758\">@Craig Newman</span> <span class=\"user-mention\" data-user-id=\"191749\">@Anthony(Tony) Julian</span> <span class=\"user-mention\" data-user-id=\"199026\">@k connor</span></p>",
+        "id": 217202219,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1605736728
+    },
+    {
+        "content": "<p>I support Vassil's proposal but FM doesn't have a v2 editor at this time so not sure how to proceed.  If Vassil would kindly submit the CR, I will move it through FM for approval, of course with agreement from other v2 editors.  Then, guess that FM has to find a v2 editor.  Vassil, are you available to draft this change using v2 publishing processes?</p>",
+        "id": 217213128,
+        "sender_full_name": "k connor",
+        "timestamp": 1605743734
+    },
+    {
+        "content": "<p>Should I use a Jira ticket, or GForge?</p>",
+        "id": 217228678,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1605760035
+    },
+    {
+        "content": "<p>Good question Vassil - seems like the v2 tickets on next FM agenda <a href=\"https://confluence.hl7.org/display/FM/2020-11-24+FM+Interim+Meeting+-+DRAFT\">https://confluence.hl7.org/display/FM/2020-11-24+FM+Interim+Meeting+-+DRAFT</a> are in gforge.  But I thought we're supposed to migrate to JIRA.  I put that question in the agenda.  So let's wait and see what the answer is.  I've got the issue documented in the agenda, so likely ok for now.  But maybe Tony or Frank have better guidance?</p>",
+        "id": 217229447,
+        "sender_full_name": "k connor",
+        "timestamp": 1605761183
+    },
+    {
+        "content": "<p>Use Jira</p>",
+        "id": 217267540,
+        "sender_full_name": "Lynn Laakso",
+        "timestamp": 1605792078
+    },
+    {
+        "content": "<p>Well, Beat did the edits in the past. I am willing to do the edits for this correction. But it would be good to find a new editor.</p>",
+        "id": 217406529,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1605882143
+    },
+    {
+        "content": "<p>If you do not see any backward compatibility issues we could include it as a technical correction to v2.9?!</p>",
+        "id": 217406597,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1605882196
+    },
+    {
+        "content": "<p>Yes, I think it should be a technical correction to restore backwards compatibility. Added <a href=\"https://jira.hl7.org/browse/V2-6\">J#V2-6</a></p>",
+        "id": 217436101,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1605894778
+    }
+]

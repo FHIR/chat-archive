@@ -1,0 +1,332 @@
+[
+    {
+        "content": "<p>Greetings. I want the group's advice about a bulk data export scenario. First, a little background, CMS is setting up regular bulk data exports of our claims information (see the DPC and BCDA posts elsewhere in this forum).  For each client, we define a group for bulk-export. We are expecting our clients to call our bulk-export endpoint weekly to get the latest information for a group. The first time a client calls CMS, they receive the full dataset of their group. After the first export,  clients only need the updates to a group's dataset. A export with a _since parameter is well suited for this use-case, only exporting data that has changed after the passed in timestamp,  it does include information that the client already has. Because we an append-only dataset, we expect this optimization to make our exports a couple of orders of magnitude faster. </p>\n<p>The problem that I've run into is what to do when a group's roster changes. Specifically, how can a client get the initial full dataset for only new members of a group? A _since export only includes resources that have a lastUpdated time after the supplied since parameter. A full export would include the new member's resources, but it is very inefficient because the number is of new members is small. One solution would be to use a synchronous method to get an individual member's resource. Another solution would be for clients to request a full export periodically. Both of these solutions are inefficient. I want to offer an export operation that includes all resources updated since a timestamp and every resource that belongs to a new member since a timestamp. </p>\n<p>So, has anybody run into this problem? It seems to have been discussed a little on subscriptions and since parameter interaction. Thanks in advance for any advice.</p>",
+        "id": 177566606,
+        "sender_full_name": "Rick Hawes",
+        "timestamp": 1570486993
+    },
+    {
+        "content": "<p>Very good point...no idea about a solution though</p>",
+        "id": 177578782,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1570501295
+    },
+    {
+        "content": "<p>Google has encountered a pattern like that, often posed as:</p>\n<p>My app/ML model/dataset/whatever has access to only patients currently admitted to facility X, and I subscribe to or periodically export changes to those patients. When an admission happens I want to go get all of the historical record for the patient that I newly gained access to.</p>\n<p>In this context we lean towards \"subscribe to patient admissions, call synchronous patient-everything\" because the flow of data is near-real-time and the rate of patients appearing is reasonably low. For weekly updates this is not going to work.</p>\n<p>There is a related problem in subscriptions of \"I want to subscribe to the event that I gain access to a resource that I did not previously have access to\" which applies this question to a push instead of pull relationship. (And its troublesome converse \"...that I <em>lose</em> access to a resource...\")</p>",
+        "id": 177580128,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1570503498
+    },
+    {
+        "content": "<p>I have a fairly clear idea for to making Group/$export do what you want, but it requires that your Group has a properly maintained Group.member.period for every member.</p>\n<p>When doing Group/$export?_since=T, for each member if period.start &lt; T you export Patient/$everything?_since=T, and if period.start &gt;=T you just export Patient/$everything because it's a new addition. This gets you what you want in one go.</p>",
+        "id": 177580383,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1570503826
+    },
+    {
+        "content": "<blockquote>\n<p>I have a fairly clear idea for to making Group/$export do what you want, but it requires that your Group has a properly maintained Group.member.period for every member.</p>\n<p>When doing Group/$export?_since=T, for each member if period.start &lt; T you export Patient/$everything?_since=T, and if period.start &gt;=T you just export Patient/$everything because it's a new addition. This gets you what you want in one go.</p>\n</blockquote>\n<p>Thanks Paul. You are right that is what I want for semantics of the operation, but returning a resource with a lastUpdated value before the since parameter would be incompatible with the export spec. Here's the line that I'm looking at</p>\n<blockquote>\n<p>Resources will be included in the response if their state has changed after the supplied time (e.g. if Resource.meta.lastUpdated is later than the supplied _since time).</p>\n</blockquote>\n<p>To me, this description means that I can't return everything for a new member and still be compatible with the spec. What to do?</p>",
+        "id": 177582709,
+        "sender_full_name": "Rick Hawes",
+        "timestamp": 1570507830
+    },
+    {
+        "content": "<p>Yes, to be clear I am suggesting a way that the spec could be changed or extended, not how it currently is.</p>",
+        "id": 177608667,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1570538177
+    },
+    {
+        "content": "<p>Change the specs</p>",
+        "id": 177614151,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1570541651
+    },
+    {
+        "content": "<p>The export system would need to know when patient have been added to the group, but that's should not be too difficult</p>",
+        "id": 177614442,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1570541808
+    },
+    {
+        "content": "<p>I agree that it is worth describing thks functionality specifically in the next version of the $export specification and would welcome a PR + GForge tracker.</p>\n<p>I should also note that the proposed solution would not <em>technically</em> violate what we have written today, since:</p>\n<blockquote>\n<p>Resources will be included in the response if their state has changed after the supplied time (e.g. if Resource.meta.lastUpdated is later than the supplied _since time).</p>\n</blockquote>\n<p>says \"included in the response if\" and not \"only if\". It seems like an over-read, but we do have precedent for saying that it is okay for servers to return more data than a client requested (e.g., additional operation outcomes on a search; or as we said in Sync for Science, it''s okay for a server to return results from a wider range of time than the client requests).</p>",
+        "id": 177871785,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1570760120
+    },
+    {
+        "content": "<blockquote>\n<p>but we do have precedent for saying that it is okay for servers to return more data than a client requested (e.g., additional operation outcomes on a search; or as we said in Sync for Science, it''s okay for a server to return results from a wider range of time than the client requests).</p>\n</blockquote>\n<p>That is a headache for client and testing system because I cannot validate if server's export satisfied value in _since parameter.</p>",
+        "id": 177906086,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1570800084
+    },
+    {
+        "content": "<p>Yeah, that's true. You have the output's \"request\" property at least</p>",
+        "id": 177910304,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1570803159
+    },
+    {
+        "content": "<p>(And less of a headache than having no efficient way to get the data.)</p>",
+        "id": 177910415,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1570803227
+    },
+    {
+        "content": "<blockquote>\n<p>I should also note that the proposed solution would not <em>technically</em> violate what we have written today, since:</p>\n<blockquote>\n<p>Resources will be included in the response if their state has changed after the supplied time (e.g. if Resource.meta.lastUpdated is later than the supplied _since time).</p>\n</blockquote>\n<p>says \"included in the response if\" and not \"only if\". It seems like an over-read, but we do have precedent for saying that it is okay for servers to return more data than a client requested (e.g., additional operation outcomes on a search; or as we said in Sync for Science, it''s okay for a server to return results from a wider range of time than the client requests).</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span> I'm wondering what the EPIC bulk-export client would do if a bulk-export end-point returned more than what was requested per Josh's interpretation.</p>",
+        "id": 177989308,
+        "sender_full_name": "Rick Hawes",
+        "timestamp": 1570887936
+    },
+    {
+        "content": "<p>I'd like to revive this thread... :)</p>\n<p>BCDA is looking at experimental ways to simplify the problem Rick posed many months ago; and hopefully through experimentation, user feedback, and feedback from the FHIR community we can iterate and come to a solution.</p>\n<p>We currently provide <code>/Patient</code>, which allows an authorized user to request bulk data for all patients associated with their organization.  The mapping of patients-to-organization is handled by an ETL process that our system executes on a monthly basis.  We are looking for ways to utilize <code>_since</code> in a world wear group rosters change monthly.</p>\n<p>We currently offer an experimental group identifier called \"all\", which essentially does exactly what the <code>/Patient</code> endpoint does - it retrieves data for all patients associated with the requesting organization.    \\We are experimenting with a new group ID called \"new\", which would perform a grouping for patients after a request is made by an authorized organization.  The \"new\" group identifier would compare the patients from the current month's ETL load against the patients from the previous month's ETL load, and only include the \"new\" patients (i.e., exist in this month's load but not last month's load) in the bulk export job.  This provides a way for users of the API to \"slim down\" the bulk data requested, in situations where only new patient data is needed.  Note that we intend to use this in conjunction with <code>_since</code>, where <code>_since</code> would be used to retrieve newer claims data and <code>/Group/new</code> would be used to retrieve newer patients attributed to the calling organization.</p>\n<p>We are aware of this statement from the Bulk FHIR Spec: \"Note: How these Groups are defined is specific to each FHIR system’s implementation.\".... but we do want to make sure we are building something that does not stray from the spec.</p>\n<p>We are looking to the FHIR community to provide comments/feedback on this approach, from a FHIR-compliance perspective.  We are especially interested in hearing comments about our approach of creating simple group identifiers </p>\n<p>I can provide more clarification in our approach if necessary, just let me know where that might be.</p>\n<p>Thanks in advance.  Your input is greatly appreciated.</p>",
+        "id": 196214150,
+        "sender_full_name": "Matt Snook",
+        "timestamp": 1588613745
+    },
+    {
+        "content": "<p>I'm actually curious why this would vary to far from what we have said about _lastUpdated or challenges in subscription. IE: the current parameters (eg: _since) apply to the \"new\" state. This would result in you getting data from new patients but honoring the _since...</p>",
+        "id": 196216107,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1588614767
+    },
+    {
+        "content": "<p>The approach above isn't much different than requiring the caller (if they use _since) to occasionally download the full set of data on occasion. Group membership is only one tiny reason that what is included in the data may change from call to call</p>",
+        "id": 196216213,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1588614818
+    },
+    {
+        "content": "<p>security and other things that you don't typically trigger alerts on are another, more tricky reason</p>",
+        "id": 196216307,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1588614847
+    },
+    {
+        "content": "<p>Your approach does allow for a much smaller amount of data - but I think there may be other reasons they need the \"full\" set. Also, just because a patient has been added to a group I don't think it implies that the caller should be authorized to all previous data through the lifetime of the patient</p>",
+        "id": 196216463,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1588614939
+    },
+    {
+        "content": "<p>eg: as a payor, insuring a new member who is 80 yrs old, why should I get data prior to that time they were added?</p>",
+        "id": 196216582,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1588614967
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"268217\">@Matt Snook</span>  good timing! The issue of obtaining historical data on patients added to a group is one of the enhancements to the bulk IG we're focusing on this year in the Argonaut bulk data working group. I put together a straw man proposal around extending the meaning of the _since param that we discussed at the meeting last week (issue: <a href=\"https://github.com/HL7/bulk-data/issues/65\" title=\"https://github.com/HL7/bulk-data/issues/65\">https://github.com/HL7/bulk-data/issues/65</a> , proposal: <a href=\"https://github.com/HL7/bulk-data/pull/68/files\" title=\"https://github.com/HL7/bulk-data/pull/68/files\">https://github.com/HL7/bulk-data/pull/68/files</a> , meeting notes: <a href=\"https://bit.ly/argo20-bulk\" title=\"https://bit.ly/argo20-bulk\">https://bit.ly/argo20-bulk</a> ). As a follow-up, I'm writing up an alternate proposal the doesn't require the server to maintain a history of group membership that we'll be discussing at the next meeting (either next Thursday or two weeks after that depending on the FHIR Connectathon schedule - details will be posted to the Argonaut announcement thread above). Perhaps you could join the call to talk through your use case?</p>",
+        "id": 196219294,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1588616216
+    },
+    {
+        "content": "<p>Regarding the \"all\" group, why not just use the patient endpoint, since all requests are filtered by what the user is allowed to access?</p>",
+        "id": 196219312,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1588616226
+    },
+    {
+        "content": "<p>There was discussion around some of this during the <a href=\"https://github.com/argonautproject/2020#projects\" title=\"https://github.com/argonautproject/2020#projects\">Argonaut Bulk Data</a> call last week (<a href=\"https://docs.google.com/document/d/1HMpeT9Um22d8yggHq__hJ3e_dwyPUVSA_5J0NI-GxPw/edit\" title=\"https://docs.google.com/document/d/1HMpeT9Um22d8yggHq__hJ3e_dwyPUVSA_5J0NI-GxPw/edit\">notes</a>).</p>\n<p>The <a href=\"https://github.com/HL7/bulk-data/issues/65\" title=\"https://github.com/HL7/bulk-data/issues/65\">filed issue against the spec</a> uses the case where someone is added to the group, but their newest data is before your last <code>_since</code> (e.g., checking today (May 4), last check was April 27, the patient was added this past week, but newest data is from April 24).</p>\n<p>Keeping in mind that Bulk Data is generally concerned with large scales (e.g., millions of records and/or several GB of data), there is a consensus that the spec should clarify this with a 'standard process' for handling it.</p>\n<p>Can read the notes to check, but I believe that (and please jump in if I'm wrong):</p>\n<ul>\n<li>This is common enough to warrant handling</li>\n<li>It could be handled purely by clients, but:<ul>\n<li>There is a lot of complexity to handling this properly, which may not be reasonable in some implementations</li>\n<li>There are more clients than servers, so this will result in more repeated work (and opportunities to get wrong)</li>\n</ul>\n</li>\n<li>It probably should be handled by servers, but:<ul>\n<li>Servers cannot be expected to track the dataset for every query in order to compare in the future</li>\n<li>This is particularly problematic around <code>characteristic</code> groups (e.g., groups that are only instantiated during requests to resolve them)</li>\n</ul>\n</li>\n</ul>\n<p>Other than the last point, I think a subscription would actually work to bridge the gap (e.g., notify me when group membership changes, so that I can build a list of changed patients).  That last point doesn't work with subscriptions unless we define it somehow (e.g., instantiate a group over some period and build a change notification based on that?).   That last one may be worth bringing up for subscriptions during the connectathon as well.</p>",
+        "id": 196219318,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1588616230
+    },
+    {
+        "content": "<p>Also, if we went with a structure like \"Group/new\", then users with access to more than one group wouldn't be able to see additions to a specific group, right?</p>",
+        "id": 196219377,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1588616264
+    },
+    {
+        "content": "<p>Lol for hitting enter the same time as Dan, as well.</p>",
+        "id": 196219380,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1588616266
+    },
+    {
+        "content": "<p>Ha, at least we didn't contradict each other!</p>",
+        "id": 196219528,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1588616318
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191414\">Dan Gottlieb</span> <a href=\"#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196219528\" title=\"#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196219528\">said</a>:</p>\n<blockquote>\n<p>Ha, at least we didn't contradict each other!</p>\n</blockquote>\n<p>Hmm... let me edit <span aria-label=\"wink\" class=\"emoji emoji-1f609\" role=\"img\" title=\"wink\">:wink:</span></p>",
+        "id": 196219602,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1588616349
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191356\">@Jenni Syed</span> agree that whether a user gets historical data on patients added to a group certainly depends on the business rules involved, but this has been a challenge in implementations and is forcing clients have to download many gb of data on each request just to find the small set of new data being sent for this reason.</p>",
+        "id": 196220122,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1588616580
+    },
+    {
+        "content": "<p>I worry that the person being added (or removed?) is the \"easy\" problem to solve, but there are many \"hidden\" problems that servers may not be able to track which may require a client to download the full population sometimes - NOT every time</p>",
+        "id": 196221647,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1588617272
+    },
+    {
+        "content": "<p>I agree we should try to make it more performant/easy (noting that _since isn't a required parameter per spec nor per ONC regs), but I think we're going to find edge cases where this could get \"fun\" beyond just group membership</p>",
+        "id": 196221839,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1588617363
+    },
+    {
+        "content": "<p>IE: X Person was always part of the group, but this app didn't have privs to see them?</p>",
+        "id": 196221862,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1588617378
+    },
+    {
+        "content": "<p>Yeah, that wouldn't necessarily be addressed by the more robust _since approach (unless the server is sophisticated enough to consider privilege changes in the delta calculation). It should work with the other approach we discussed at the meeting of first querying for a list of patients in the group and then having the client restrict the full data query to a set of patients ids it hasn't seen before via a new \"patient\" param.</p>",
+        "id": 196223143,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1588617933
+    },
+    {
+        "content": "<p>Agreed Jenni.  But if it's hard for this group of people, I wouldn't expect every individual implementer to get it right.<br>\nI like the security use case too, but Dan handily beat my reply this time  :-)</p>",
+        "id": 196223420,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1588618016
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191414\">Dan Gottlieb</span> <a href=\"#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196219377\" title=\"#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196219377\">said</a>:</p>\n<blockquote>\n<p>Also, if we went with a structure like \"Group/new\", then users with access to more than one group wouldn't be able to see additions to a specific group, right?</p>\n</blockquote>\n<p>Technically, in BCDA, users are Accountable Care Organizations (ACOs) and thus users have access to just one group -  the beneficiaries attributed to their ACO.  This is why a call to <code>/Patient</code> returns the same data as <code>/Group/all</code> (in our implementation, which is essentially why I'm looking for feedback on our approach).  Because of this \"grouping\" on an ACO basis, we were looking at making use of pre-defined group identifiers to group patients within the ACO based on their \"newness\" to the ACO, so that the workflow plays nicely with <code>_since</code>.  Thanks for giving this thread attention.</p>",
+        "id": 196312801,
+        "sender_full_name": "Matt Snook",
+        "timestamp": 1588687945
+    },
+    {
+        "content": "<p>I'm not sure I'm following <span class=\"user-mention\" data-user-id=\"268217\">@Matt Snook</span>  -- are you describing a behavior you think we might want to standardize through the Bulk Data IG? Is there a use case you're looking to handle that's not being addressed by the PRs currently being proposed? It'd be great if you can join next week's Argonaut call.</p>",
+        "id": 196357066,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1588707869
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191315\">Josh Mandel</span> <a href=\"#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196357066\" title=\"#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196357066\">said</a>:</p>\n<blockquote>\n<p>I'm not sure I'm following <span class=\"user-mention silent\" data-user-id=\"268217\">Matt Snook</span>  -- are you describing a behavior you think we might want to standardize through the Bulk Data IG? Is there a use case you're looking to handle that's not being addressed by the PRs currently being proposed? It'd be great if you can join next week's Argonaut call.</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> I'm mainly interested in hearing comments/ feedback on the approach we are considering with a pre-defined group identifier called \"new\", which is used to only retrieve beneficiaries which are new this period (where \"period\" might be defined as 1 month).</p>",
+        "id": 196693437,
+        "sender_full_name": "Matt Snook",
+        "timestamp": 1588797331
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"268217\">@Matt Snook</span> What if an ACO forgets to pull data during a period? Or has an outage spanning the entire period?</p>",
+        "id": 196695408,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1588798314
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"192789\">Karl M. Davis</span> <a href=\"#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196695408\" title=\"#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196695408\">said</a>:</p>\n<blockquote>\n<p><span class=\"user-mention silent\" data-user-id=\"268217\">Matt Snook</span> What if an ACO forgets to pull data during a period? Or has an outage spanning the entire period?</p>\n</blockquote>\n<p>Great question.  I think, in that case, they would need to pull \"all\" data again if they'd like historical data for new beneficiaries.  Also, remember, the idea of \"new\" representing 1 month is just for purposes of discussion.  It could also mean \"new this year\" (for example) if we think that is a better approach for ACO's workflows.  The intent here is to see how these pre-defined group identifiers either stray or align with FHIR and the community.</p>",
+        "id": 196696733,
+        "sender_full_name": "Matt Snook",
+        "timestamp": 1588798927
+    },
+    {
+        "content": "<p>Okay. How would they determine, programmatically, that they need to do that? What code would they write to automatically say, \"hey, looks like we need to pull all the data from scratch again -- let's do that\"?</p>",
+        "id": 196698267,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1588799628
+    },
+    {
+        "content": "<p>In general we try not to assign any meaning to FHIR <code>Resource.id</code> values, since they're not always under a server's control (e.g., some architectures assign these randomly or through counters, etc).</p>",
+        "id": 196699942,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1588800388
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"268217\">@Matt Snook</span> - in terms of alternate options, the proposed spec changes outlined in <a href=\"https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763\" title=\"https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763\">https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763</a> are an attempt at a  generalizable approach to returning historical data for patients new to a group.</p>",
+        "id": 196772857,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1588859460
+    },
+    {
+        "content": "<p>Servers would be able to either return this data as part of the group export request based on the timestamp of the _since parameter and/or support a pattern where the client can determine which patients have been added to a group and request just their data.</p>",
+        "id": 196772890,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1588859473
+    },
+    {
+        "content": "<p>This has the advantages of not being tied to a particular time period and working on servers where a user can have access to more than one group. Would this approach work for your use case?</p>",
+        "id": 196772932,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1588859492
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191414\">Dan Gottlieb</span> <a href=\"#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196772857\" title=\"#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196772857\">said</a>:</p>\n<blockquote>\n<p><span class=\"user-mention silent\" data-user-id=\"268217\">Matt Snook</span> - in terms of alternate options, the proposed spec changes outlined in <a href=\"https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763\" title=\"https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763\">https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763</a> are an attempt at a  generalizable approach to returning historical data for patients new to a group.</p>\n</blockquote>\n<p>This approach is particularly interesting.  To clarify the meaning of this addition to the <code>_since</code> parameter:<br>\n<em>In the case of a Group level export, servers MAY return additional resources if the resource belongs to the patient compartment of a patient added to the Group after the supplied time (this behavior should be clearly documented by the server).</em></p>\n<p>I read this as, when <code>/Group</code> is called with a date specified in <code>_since</code>:</p>\n<ul>\n<li>then we return data for all patients in the specified group which have had data updated since the specified date</li>\n<li>we also, optionally, could return ALL data (including historical data prior to the specified date input in <code>_since</code> param) for any new patients added to the group after the specified date.  If we chose to optionally implement this strategy, the API should be heavily documented to clearly indicate the behavior.</li>\n</ul>\n<p>If that is the intended usage of this proposed addition, then I think it might work for our use case! I'd love to hear thoughts from <span class=\"user-mention\" data-user-id=\"192789\">@Karl M. Davis</span>  on this.</p>",
+        "id": 196774282,
+        "sender_full_name": "Matt Snook",
+        "timestamp": 1588860080
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191414\">@Dan Gottlieb</span> At the CMS, our use-cases can have large groups (the largest I know of has &gt;1M members). The <code>patient</code> query parameter in the proposal seems very well suited for small lists of patients, but for medium-sized lists of patients, it will run against URL length limits.</p>\n<p>I suspect this issue come up in your discussion. What is the workgroup's thinking?</p>",
+        "id": 196893023,
+        "sender_full_name": "Rick Hawes",
+        "timestamp": 1588943289
+    },
+    {
+        "content": "<p>The plan is to allow submissions via POST to accommodate larger payloads.</p>",
+        "id": 196893722,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1588943665
+    },
+    {
+        "content": "<p>It still limits us to what's reliably going to fit in a single http request body, but this seems workable. (To be clear though, CMS could implement the diff logic server side and save clients the trouble of computing/submitting a diff .)</p>",
+        "id": 196893944,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1588943806
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> Yes. A POST version of the request would be much more workable for large lists. Thanks for the quick response.</p>",
+        "id": 196894638,
+        "sender_full_name": "Rick Hawes",
+        "timestamp": 1588944235
+    },
+    {
+        "content": "<p>The POST support Josh mentioned is in the proposal here: <a href=\"https://github.com/HL7/bulk-data/pull/71/files#diff-985cef1e2f9cd85436f27813aa6de763R56\" title=\"https://github.com/HL7/bulk-data/pull/71/files#diff-985cef1e2f9cd85436f27813aa6de763R56\">https://github.com/HL7/bulk-data/pull/71/files#diff-985cef1e2f9cd85436f27813aa6de763R56</a> and I outlined a few implementation questions around it in the pull request at <a href=\"https://github.com/HL7/bulk-data/pull/71\" title=\"https://github.com/HL7/bulk-data/pull/71\">https://github.com/HL7/bulk-data/pull/71</a>  .</p>",
+        "id": 196895039,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1588944474
+    },
+    {
+        "content": "<p>Also, when servers have a history of group changes, it may be cleaner to just supply this data based on the _since param as outlined at <a href=\"https://github.com/HL7/bulk-data/pull/71/files#diff-985cef1e2f9cd85436f27813aa6de763R121\" title=\"https://github.com/HL7/bulk-data/pull/71/files#diff-985cef1e2f9cd85436f27813aa6de763R121\">https://github.com/HL7/bulk-data/pull/71/files#diff-985cef1e2f9cd85436f27813aa6de763R121</a> rather than implementing the patient param and making clients track and request the history.</p>",
+        "id": 196895234,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1588944580
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191414\">@Dan Gottlieb</span> I know AdHoc/CMS engineers are interested in continuing this discussion.  Is this something we can do during Connectathon or would next WG meeting be more appropriate?</p>",
+        "id": 197577641,
+        "sender_full_name": "Richard Braman",
+        "timestamp": 1589472282
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"298995\">@Richard Braman</span> thanks for following up! The current plan is to have this be the main topic of discussion at the next Argonaut meeting (two weeks from today), since a few of the folks involved are focusing on other Connectathon tracks.</p>",
+        "id": 197578797,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1589472723
+    },
+    {
+        "content": "<p>That said, if the team has time, it might be worth using the connectathon to review the proposed spec changes at <a href=\"https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763\">https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763</a> and the open questions at <a href=\"https://github.com/HL7/bulk-data/pull/71\">https://github.com/HL7/bulk-data/pull/71</a> (possibly with some prototyping) to develop specific feedback based on your implementation.</p>",
+        "id": 197579457,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1589472970
+    },
+    {
+        "content": "<p>I understand that POST was only added to handle large <code>patient</code> payloads but I think it may need a bit more details. Some questions that could use explicit answer in the spec are:</p>\n<ul>\n<li>Can I use the POST parameters for every export parameter, including <code>_since</code>, <code>_elements</code>, <code>_type</code>, etc?<br>\n    - If no, specify which parameters are allowed via POST<br>\n    - If yes<br>\n          - Can I mix POST and GET parameters, i.e. set some of them in the query string and others in the POST body?<br>\n          - Can I duplicate a parameter and specify it both in the query string and in the body<br>\n                - If no, return an error?<br>\n                - If yes, which one takes precedence?</li>\n</ul>",
+        "id": 206518883,
+        "sender_full_name": "Vladimir Ignatov",
+        "timestamp": 1597096929
+    },
+    {
+        "content": "<p>I'm hoping the core FHIR operation semantics provides answers to most of these.</p>\n<ul>\n<li>\n<p>(Idempotent) Operations can be invoked by GET or POST, with the same parameters available in both. (Exception: parameters with complex types like <code>Reference</code> can't be passed via GET, so if you need them, you need POST.) </p>\n</li>\n<li>\n<p>Any given invocation is either via POST (in which case, parameters are passed in the body) or GET (in which case, parameters are passed in the URL). There's no splitting/mixing.</p>\n</li>\n</ul>",
+        "id": 206520494,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1597098199
+    },
+    {
+        "content": "<p>Thanks Josh! I guess I'll have to get used to thinking of Bulk Data as part of FHIR :)</p>",
+        "id": 206530533,
+        "sender_full_name": "Vladimir Ignatov",
+        "timestamp": 1597107141
+    }
+]

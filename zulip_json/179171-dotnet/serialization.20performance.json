@@ -1,0 +1,140 @@
+[
+    {
+        "content": "<p>I am doing some performance testing and it takes 2 / 3 msec to serialize a 13 KB bundle containing 3 patients - that seems pretty slow. Is this  the expected performance? Or maybe I am doing something wrong...</p>",
+        "id": 179487610,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1572477937
+    },
+    {
+        "content": "<p>The string or stream serializer?</p>",
+        "id": 179487999,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1572478250
+    },
+    {
+        "content": "<p>In my server I've gone to the stream serializer to reduce string allocations and garbage collection.</p>",
+        "id": 179488073,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1572478338
+    },
+    {
+        "content": "<p>On a single instance not so significant, but for a server it all adds up.</p>",
+        "id": 179488083,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1572478357
+    },
+    {
+        "content": "<p>Are you serializing from a POCO or an ITypedElement?</p>",
+        "id": 179530110,
+        "sender_full_name": "Christiaan Knaap",
+        "timestamp": 1572528041
+    },
+    {
+        "content": "<p>Serializing from a POCO to string</p>",
+        "id": 179533160,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1572530256
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span>            var xml = File.ReadAllText(@&quot;c:\\temp\\bundle.xml&quot;);\n\n            var xmlParser = new FhirSerialization.FhirXmlParser(FhirModel.Version.DSTU2);\n            var bundle = xmlParser.Parse&lt;FhirModel2.Bundle&gt;(xml);\n            var watch = Stopwatch.StartNew();\n            bundle = xmlParser.Parse&lt;FhirModel2.Bundle&gt;(xml);\n            watch.Stop();\n            Console.WriteLine(&quot;Parse: {0}ms&quot;, watch.ElapsedMilliseconds);\n\n            var xmlSerializer = new FhirSerialization.FhirXmlSerializer(FhirModel.Version.DSTU2);\n            var bundleXml = xmlSerializer.SerializeToString(bundle);\n            watch.Restart();\n            const int count = 10;\n            for (var i=0; i&lt;count; i++)\n            {\n                xmlSerializer = new FhirSerialization.FhirXmlSerializer(FhirModel.Version.DSTU2);\n                bundleXml = xmlSerializer.SerializeToString(bundle);\n            }\n            watch.Stop();\n            Console.WriteLine(&quot;Serialize x {1}: {0}ms&quot;, watch.ElapsedMilliseconds, count);\n</pre></div>",
+        "id": 179533298,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1572530341
+    },
+    {
+        "content": "<p>Also assuming this is not the first time when it leads in all the reflection stuff?<br>\nThe first one is always considerably longer.<br>\nLooking at the code I think it's outside your timer.</p>",
+        "id": 179570757,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1572552286
+    },
+    {
+        "content": "<p>Not the first one - first one takes multiple seconds</p>",
+        "id": 179574725,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1572554742
+    },
+    {
+        "content": "<p>3 msec to serialize 13 KB is not thumbs up...</p>",
+        "id": 179578014,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1572556903
+    },
+    {
+        "content": "<p>I agree with that for sure. Was confirming what you're seeing.</p>",
+        "id": 179616971,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1572606883
+    },
+    {
+        "content": "<p>Thanks Brian - I wanted confirmation that was not something specific to our fork of the library</p>",
+        "id": 179626995,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1572616035
+    },
+    {
+        "content": "<p>I did an experiment of writing a trivial serializer for a bundle of patients to get a baseline speed:</p>\n<div class=\"codehilite\"><pre><span></span>Serialize X 1,000: 3,275.0ms\nNew serialize X 1,000: 123.0ms\n</pre></div>",
+        "id": 180200200,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1573184780
+    },
+    {
+        "content": "<p>Code is something like this:</p>\n<div class=\"codehilite\"><pre><span></span>        public void Serialize(JsonWriter writer)\n        {\n            writer.WriteStartObject();\n            writer.WritePropertyName(&quot;resourceType&quot;); writer.WriteValue(&quot;Bundle&quot;);\n            writer.WritePropertyName(&quot;type&quot;); writer.WriteValue(TypeElement.ObjectValue);\n            writer.WritePropertyName(&quot;total&quot;); writer.WriteValue(TotalElement.ObjectValue);\n            writer.WritePropertyName(&quot;link&quot;);\n            writer.WriteStartArray();\n            foreach(var link in Link)\n            {\n                link.Serialize(writer);\n            }\n            writer.WriteEndArray();\n            writer.WritePropertyName(&quot;entry&quot;);\n            writer.WriteStartArray();\n            foreach (var entry in Entry)\n            {\n                entry.Serialize(writer);\n            }\n            writer.WriteEndArray();\n            writer.WriteEndObject();\n        }\n</pre></div>\n\n\n<p>and so on down for the various classes</p>",
+        "id": 180200313,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1573184967
+    },
+    {
+        "content": "<p><a href=\"https://github.com/CareEvolution/fhir-net-api/compare/multiversions...CareEvolution:serializationexperiment\" target=\"_blank\" title=\"https://github.com/CareEvolution/fhir-net-api/compare/multiversions...CareEvolution:serializationexperiment\">https://github.com/CareEvolution/fhir-net-api/compare/multiversions...CareEvolution:serializationexperiment</a></p>",
+        "id": 180237685,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1573225655
+    },
+    {
+        "content": "<p>That seems better :)</p>",
+        "id": 180241444,
+        "sender_full_name": "VP Herisse",
+        "timestamp": 1573227917
+    },
+    {
+        "content": "<p>I did a similar experiment with the xmlwriter a while ago too.</p>",
+        "id": 180380225,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1573418261
+    },
+    {
+        "content": "<p>Have been considering doing a code generated version of these as a separate assembly too, providing extension methods.</p>",
+        "id": 180380266,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1573418288
+    },
+    {
+        "content": "<p>What you're missing is all the extensions processing too, but that's  not going to break anything in terms of raw speed.</p>",
+        "id": 180380287,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1573418386
+    },
+    {
+        "content": "<p>And while we're here, could do it with the new netcore 30 json handling.</p>",
+        "id": 180380330,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1573418412
+    },
+    {
+        "content": "<p>I implemented complete JSON and XML fast serialization: <a href=\"https://github.com/CareEvolution/fhir-net-api/pull/1\" target=\"_blank\" title=\"https://github.com/CareEvolution/fhir-net-api/pull/1\">https://github.com/CareEvolution/fhir-net-api/pull/1</a></p>",
+        "id": 181733563,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1574547417
+    },
+    {
+        "content": "<p>Mind if I grabbed this to have an alternative serializers for the core packages?</p>",
+        "id": 188723548,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1582284629
+    },
+    {
+        "content": "<p>Not at all</p>",
+        "id": 188775027,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1582319602
+    }
+]

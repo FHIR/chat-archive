@@ -1,0 +1,128 @@
+---
+layout: page
+title: "FHIR Chat  · Content-Type for extended operations · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Content-Type.20for.20extended.20operations.html">Content-Type for extended operations</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153908961"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Content-Type%20for%20extended%20operations/near/153908961" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christopher Schuler <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Content-Type.20for.20extended.20operations.html#153908961">(Sep 19 2017 at 02:18)</a>:</h4>
+<p>I am experiencing some strange behavior when calling extended operations in HAPI 2.4.</p>
+<p>The following works:</p>
+<div class="codehilite"><pre><span></span>Parameters inParams = new Parameters();
+        inParams.addParameter().setName(&quot;patient&quot;).setValue(new StringType(&quot;Patient-12214&quot;));
+        inParams.addParameter().setName(&quot;startPeriod&quot;).setValue(new DateType(&quot;2001-01-01&quot;));
+        inParams.addParameter().setName(&quot;endPeriod&quot;).setValue(new DateType(&quot;2015-03-01&quot;));
+
+        Parameters outParams = ourClient
+                .operation()
+                .onInstance(new IdDt(&quot;Measure&quot;, &quot;col&quot;))
+                .named(&quot;$evaluate&quot;)
+                .withParameters(inParams)
+                .useHttpGet()
+                .execute();
+</pre></div>
+
+
+<p>But this does not:</p>
+<div class="codehilite"><pre><span></span>Parameters inParams = new Parameters();
+        inParams.addParameter().setName(&quot;patient&quot;).setValue(new StringType(&quot;Patient-12214&quot;));
+
+        Parameters outParams = ourClient
+                .operation()
+                .onInstance(new IdDt(&quot;PlanDefinition&quot;, &quot;apply-example&quot;))
+                .named(&quot;$apply&quot;)
+                .withParameters(inParams)
+                .useHttpGet()
+                .execute();
+</pre></div>
+
+
+<p>I get the following error:</p>
+<div class="codehilite"><pre><span></span>ca.uhn.fhir.rest.server.exceptions.InvalidRequestException: HTTP 400 Bad Request: No Content-Type header was provided in the request. This is required for &quot;EXTENDED_OPERATION_INSTANCE&quot; operation
+
+    at sun.reflect.NativeConstructorAccessorImpl.newInstance0(Native Method)
+    at sun.reflect.NativeConstructorAccessorImpl.newInstance(NativeConstructorAccessorImpl.java:62)
+    at sun.reflect.DelegatingConstructorAccessorImpl.newInstance(DelegatingConstructorAccessorImpl.java:45)
+    at java.lang.reflect.Constructor.newInstance(Constructor.java:423)
+    at ca.uhn.fhir.rest.server.exceptions.BaseServerResponseException.newInstance(BaseServerResponseException.java:306)
+    at ca.uhn.fhir.rest.client.BaseClient.invokeClient(BaseClient.java:290)
+    at ca.uhn.fhir.rest.client.GenericClient$BaseClientExecutable.invoke(GenericClient.java:741)
+    at ca.uhn.fhir.rest.client.GenericClient$OperationInternal.execute(GenericClient.java:1630)
+    at org.opencds.cqf.RulerTestBase.PlanDefinitionApplyTest(RulerTestBase.java:206)
+</pre></div>
+
+
+<p>So, I tried using Postman with the following request with the Content-Type set to application/json:<br>
+<code>http://localhost:8080/cqf-ruler/baseDstu3/PlanDefinition/apply-example/$apply?patient=Patient-12214</code></p>
+<p>That request generates the following error:</p>
+<div class="codehilite"><pre><span></span>&quot;issue&quot;: [
+        {
+            &quot;severity&quot;: &quot;error&quot;,
+            &quot;code&quot;: &quot;processing&quot;,
+            &quot;diagnostics&quot;: &quot;Failed to parse request body as JSON resource. Error was: Failed to parse JSON content, error was: Did not find any content to parse&quot;
+        }
+    ]
+</pre></div>
+
+
+<p>Am I doing something wrong or is this a known issue?</p>
+
+
+
+<a name="153909003"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Content-Type%20for%20extended%20operations/near/153909003" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joel Schneider <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Content-Type.20for.20extended.20operations.html#153909003">(Sep 19 2017 at 14:40)</a>:</h4>
+<p>Using Postman, you could try sending a <code>POST</code> request to <code>http://localhost:8080/cqf-ruler/baseDstu3/PlanDefinition/$apply</code> with a body something like the following.</p>
+<div class="codehilite"><pre><span></span>{
+    &quot;resourceType&quot; : &quot;Parameters&quot;,
+    &quot;parameter&quot; : [
+        {
+            &quot;name&quot; : &quot;patient&quot;,
+            &quot;valueReference&quot; : {
+                &quot;identifier&quot;: {
+                    &quot;system&quot;: &quot;http://my-patient-id-system&quot;,
+                    &quot;value&quot;: &quot;Patient-12214&quot;
+                }
+            }
+        },
+        {
+            &quot;name&quot; : &quot;encounter&quot;,
+            &quot;valueReference&quot; : {
+                &quot;refererence&quot;: &quot;/Encounter/123&quot;
+            }
+        },
+        {
+            &quot;name&quot; : &quot;practitioner&quot;,
+            &quot;valueReference&quot; : {
+                &quot;refererence&quot;: &quot;/Practitioner/456&quot;
+            }
+        },
+        {
+            &quot;name&quot; : &quot;organization&quot;,
+            &quot;valueReference&quot; : {
+                &quot;refererence&quot;: &quot;/Organization/789&quot;
+            }
+        }
+    ]
+}
+</pre></div>
+
+
+<p>Not sure if that helps, but it should at least cause the server to return a different error message.</p>
+
+
+
+<a name="153909107"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Content-Type%20for%20extended%20operations/near/153909107" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christopher Schuler <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Content-Type.20for.20extended.20operations.html#153909107">(Sep 19 2017 at 19:05)</a>:</h4>
+<p>Thanks <span class="user-mention" data-user-id="191926">@Joel Schneider</span>, that helped. I broke up the Parameter resource param into separate optional params and all is well. Makes sense that the request would need to be a POST with a resource param.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

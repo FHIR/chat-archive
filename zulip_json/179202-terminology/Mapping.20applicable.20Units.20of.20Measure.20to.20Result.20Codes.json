@@ -1,0 +1,86 @@
+[
+    {
+        "content": "<p>Note: Topic moved here from #implementers as it was suggested this might be a more appropriate forum.</p>\n<p>I am looking at how best to implement a solution for Units of Measure in Pathology. This would involve two main mappings-</p>\n<ol>\n<li>Looking up a human readable display/presentation form for a Unit of Measure (UoM) from the UCUM code</li>\n<li>A mapping of relationships between UoMs and result codes</li>\n</ol>\n<p>The first of these would probably be defining a 1:1 synonym relationship, at least initially. I think this could be done either in SNOMED (maybe as a SimpleMap) or as a ConceptMap in FHIR.</p>\n<p>The second map would define relationships between SNOMED codes for test results (either Observable Entity or Procedure codes), and corresponding \"recognised\" units of measure. This second map would need to-</p>\n<ul>\n<li>Support many to many relationships (each UoM is used for many tests, and each test may allow for more than one valid UoM)</li>\n<li>Support metadata / properties on the relationship, e.g. allowing us to define a unit as <em>Preferred</em>, <em>Allowed</em> or <em>Deprecated</em> when applied to a specific test</li>\n</ul>\n<p>I had originally thought this also looked like a ConceptMap, although there are a couple of areas of uncertainty-</p>\n<p>The ConceptMap doc page mostly talks about defining mappings between items of similar meanings (synonym-ish) rather than \"item A when has applicability X when performing a function on item B\", but it's not clear the latter use is disallowed either. As I understand it Concept only has attributes defining similarity, plus a \"related to\" option, so for our use we would need to extend the relationship types.</p>\n<p>The question of many to many relationships isn't directly addressed in the docs either, but the ConceptMap itself looks like a joining table, with attributes, so it seems to be the right shape for the job.</p>\n<p>However, I was advised by a knowledable individual to look at a <em>CodeSystem Supplement</em> instead.</p>\n<p>Having looked at the guidance on the *CodeSystem *page-</p>\n<p><code>Both Code System supplements and Concept Maps may be used to define relationships between concepts in different systems. ConceptMaps are assertions of the relationships between different concepts that are associated with particular contexts of use, while CodeSystem supplements are used to define inherent properties and semantics of the concepts in the code system</code></p>\n<p>A Pathology report (our use case) is a \"context of use\" that defines the preference for a specific limited choice of UoM for a certain test type. That would argue for using a ConceptMap. There are \"inherent properties\" of tests and UoMs, around the associated Kinds-of-Quantity and Scale types, but that not what we are aiming to describe in this case.</p>\n<p>However I believe using a CodeSystem Supplement may make it easier to put additional properties on the relationships, and also provide different API features around code set expansion etc.</p>\n<p>Our use case seems to sit in a space where either model could probably be made to work, which makes it hard to make a choice. I would appreciate insights, especially from anyone who has actually implemented either of them, as to what the advantages and disadvantages of either choice might be.</p>\n<p>Does that sound like a reasonable rationale, or am I missing some other key factor in this?</p>",
+        "id": 209526429,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1599664886
+    },
+    {
+        "content": "<p>Not directly related to FHIR or pathology, but on units, UCUM and mapping result codes: <a href=\"http://rtmms.nist.gov\">http://rtmms.nist.gov</a></p>",
+        "id": 209529551,
+        "sender_full_name": "Christof Gessner",
+        "timestamp": 1599666322
+    },
+    {
+        "content": "<blockquote>\n<p>Looking up a human readable display/presentation form for a Unit of Measure (UoM) from the UCUM code</p>\n</blockquote>\n<p>This sounds like a supplement to UCUM to me</p>",
+        "id": 209540853,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1599671897
+    },
+    {
+        "content": "<blockquote>\n<p>A mapping of relationships between UoMs and result codes</p>\n</blockquote>\n<p>For LOINC, this is already a core property of LOINC codes. (LOINC is what you would be using if you were not in UK, which it sounds like you are). So if you were asserting additional relationships, you would do that as a LOINC supplement</p>",
+        "id": 209540980,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1599671962
+    },
+    {
+        "content": "<p>you can also use a ConceptMap, yes. It is in scope for a concept map. There is some overlap between ConceptMaps and Supplemental properties, this is quite true, and it's not an xor choice between the two.</p>",
+        "id": 209541284,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1599672085
+    },
+    {
+        "content": "<p>What is not clear to me is how you would best express the nature of the relationship in a ConceptMap. I think this is unfinished business.</p>",
+        "id": 209541404,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1599672124
+    },
+    {
+        "content": "<p>but given that LOINC already has a property for this, I think that it suggests Code System Supplement.</p>",
+        "id": 209541488,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1599672159
+    },
+    {
+        "content": "<p>for human readable display/presentation ISO/IEC 80000 might be a good source (if you believe in international standards for the purpose)</p>",
+        "id": 209573029,
+        "sender_full_name": "Christof Gessner",
+        "timestamp": 1599688197
+    },
+    {
+        "content": "<p>Thanks for all the comments so far, all very helpful. Yes I am in the UK, hence some aspects of the requirement are distinct as we are aiming to use SNOMED as the terminology in Pathology.</p>\n<p>Re. ISO80000 etc.- Some of the justification given by the authors for the work done on UCUM includes the fact that, at least at the point when UCUM was instigated, ISO style standards were still largely designed to be published in print and read by humans. This led to some major issues that UCUM was intended to address-</p>\n<ul>\n<li>\n<p>Specs written by/for human readers tend to contain ambiguities or gaps that a thousand human readers might not notice, but a developer writing code (or their code itself) will trip over PDQ.  (The example is given of \"da\" meaning both the <em>deca</em>metric prefix and <em>deci-are</em>, which maybe went unnoticed until someone tried to code it)</p>\n</li>\n<li>\n<p>They tend to focus on the metrology and specification of the individual unit \"atoms\", but then rather lose interest and leave the specification of how to combine those syntactically into unambiguous expressions and then render them for display in the hands of the typesetters and/or the mathematical knowledge of the readers. Again the UCUM docs mention one of the major standards requiring superscripted characters to meet the presentation specification, without any information on how this should be stored or shared.</p>\n</li>\n</ul>\n<p>I can't claim to have done anything like the research they would have done, but the examples in the UCUM docs of ambiguities and name clashes they had to deal with all seem real and relevant, and as far as i'm aware a rigorous character-level syntax specification for how to write unit expressions is not something the major standards bodies get involved in. </p>\n<p>This is a big part of the value that UCUM adds, and it's undoubtedly a significant contribution. It's just a shame that the work wasn't extended to an equally rigorous specification for a human-friendly display form.</p>\n<p>The standards bodies like ISO, IUPAC still don't get down to the level of things like character sets (beyond ASCII) or markup. Their print documents might well be typeset in LaTex, but that detail isn't part of the publication, and the same rendered presentation could be achieved many different ways, so exactly how a unit expression is turned into something \"display ready\" with (say) Greek letters, mathematical symbols, superscripts and subscripts etc. is left undefined.</p>\n<p>When we start considering how to display a particular complex unit expression we will definitely be looking at the standards from ISO, IUPAC. maybe others, to set the target output, but when it comes to defining the character-level specification of the text and markup we need to store to render them I suspect we will be on our own. I'd love to be proven wrong on this and find a fully specified international standard with browser-ready definitions for the unit displays, but I haven't found one so far.</p>",
+        "id": 209726098,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1599784177
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"193991\">Christof Gessner</span> <a href=\"#narrow/stream/179202-terminology/topic/Mapping.20applicable.20Units.20of.20Measure.20to.20Result.20Codes/near/209529551\">said</a>:</p>\n<blockquote>\n<p>Not directly related to FHIR or pathology, but on units, UCUM and mapping result codes: <a href=\"http://rtmms.nist.gov\">http://rtmms.nist.gov</a></p>\n</blockquote>\n<p>Thanks for the link, at first glance this looks like a very interesting resource.</p>",
+        "id": 209726375,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1599784476
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179202-terminology/topic/Mapping.20applicable.20Units.20of.20Measure.20to.20Result.20Codes/near/209540853\">said</a>:</p>\n<blockquote>\n<blockquote>\n<p>Looking up a human readable display/presentation form for a Unit of Measure (UoM) from the UCUM code</p>\n</blockquote>\n<p>This sounds like a supplement to UCUM to me</p>\n</blockquote>\n<p>I take the point from a logical/technical perspective. I don't know if this might be problematic in terms of the UCUM license terms. UCUM is \"free as in beer\" not \"free as in speech\" and the Terms of Use are restrictive when it comes to adapting, modifying or merging the content. This one of several areas where the choice to implement UCUM starts to become more complex when you look under the covers. Whether it could be claimed a UCUM supplement constituted an extension or a derivative product of the original I don't know.</p>",
+        "id": 209726730,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1599784905
+    },
+    {
+        "content": "<p>it looks to me like a code system supplement specifying correct displays for particular expressions as a  supplement falls squarely into category 7. Taking the definition narrowly and precisely (as one must do when dealing with lawyers), then any expression which happens to be a primitive unit that you include in your supplement, you must include code, definition, value, and unit. But since there's no reason to provide a display for a primitive, you wouldn't be doing that. Hence, you just include the expressions, and the copy right statement, which seems reasonable to me</p>",
+        "id": 209734661,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1599790243
+    },
+    {
+        "content": "<p>Thanks for the comments Grahame. Is there a precedent for meeting license notice requirements of the type specified in the UCUM Terms through an API like FHIR? Is the expectation is that access to the API will itself require agreement to Terms of Use (e.g. to get an access token), and that is where the upstream terms are cascaded down?</p>\n<p>For example, the US NLM service at <a href=\"https://ucum.nlm.nih.gov/ucum-service.html\">https://ucum.nlm.nih.gov/ucum-service.html</a> provides open access, doesn't appear to include the license terms either on the landing page(s) or in the responses from the web service. Given the high profile of that site one would assume it's likely to be compliant in licensing terms.</p>\n<p>Re-</p>\n<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179202-terminology/topic/Mapping.20applicable.20Units.20of.20Measure.20to.20Result.20Codes/near/209734661\">said</a>:</p>\n<blockquote>\n<p>...But since there's no reason to provide a display for a primitive, you wouldn't be doing that. Hence, you just include the expressions, and the copy right statement, which seems reasonable to me</p>\n</blockquote>\n<p>Not sure about that. Just because a display form and a UCUM code might be the same in some cases (\"m\" for metres for example will probably be the same as a code and a display) doesn't mean there might not be value in other aspects of the mapping. For example if the map was to a SNOMED code (and I accept that's not a universally popular idea) then you have access to the other capabilities of the target terminology, like defining synonyms.</p>",
+        "id": 210142400,
+        "sender_full_name": "Colin E.",
+        "timestamp": 1600182452
+    },
+    {
+        "content": "<p>Copying in <span class=\"user-mention\" data-user-id=\"193853\">@Swapna Abhyankar</span> from Regenstrief/LOINC and UCUM. HTA is currently working with Swapna to finalize a External Terminology page for UCUM on HTA Confluence, located here: <a href=\"https://confluence.hl7.org/pages/viewpage.action?pageId=91986468\">https://confluence.hl7.org/pages/viewpage.action?pageId=91986468</a></p>",
+        "id": 210267482,
+        "sender_full_name": "Carol Macumber",
+        "timestamp": 1600265666
+    }
+]

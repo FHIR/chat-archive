@@ -1,0 +1,44 @@
+[
+    {
+        "content": "<p>If I have a Condition, with an onsetDateTime that I want to compare in CQL, e.g. something that occurred (or has started) at least 6 months ago, how would I write that in CQL?    I'm trying to follow along section 5.5, Date-time operators and section 5.6, Timing and Interval Operators but can't seem to get the right syntax (therefore logic) to do this.    Here's what I'm trying:</p>\n<p>define \"Asthma over 6 months ago\"<br>\n    exists ([Condition: \"AsthmaValueSet\"] C<br>\n         where C.onsetDateTime before Today() - 6 months<br>\n    )</p>\n<p>the first thing I run into (using Atom with the language-cql plugin) is that it doesn't allow onsetDateTime but does seem to accept C.onset.   However, after I fix that I can't seem to find the correct time expression that is syntactically correct.   I was thinking I could use a simple date comparison but haven't been able to figure out how.   I also tried using the Interval[] thought didn't have any luck with that either.</p>",
+        "id": 208602735,
+        "sender_full_name": "John Silva",
+        "timestamp": 1598901223
+    },
+    {
+        "content": "<p>I found my own answer, posting it here in case it helps another 'newbie' like me.</p>\n<p><code>define \"Asthma with duration &gt; 6 months\":\n  exists ([Condition: \"AsthmaValueSet\"] C\n    where C.onset before Today() - 6 months\n  )</code></p>",
+        "id": 208606986,
+        "sender_full_name": "John Silva",
+        "timestamp": 1598903480
+    },
+    {
+        "content": "<p>You can actually be a bit more specific in the CQL if you prefer:</p>\n<div class=\"codehilite\"><pre><span></span><code>define &quot;Asthma with duration &gt; 6 months&quot;:\n  exists ([Condition: &quot;AsthmaValueSet&quot;] C\n    where (C.onset as dateTime) before Today() - 6 months\n  )\n</code></pre></div>\n\n\n<p>In this case, you probably don't need it because the compiler can figure out that <code>dateTime</code> is the only type that semantically makes sense with the <code>before</code> operator.  But if you run into something similar again, know that for choices (like <code>value[x]</code>) you can use <code>(value as type)</code> to do the equivalent of <code>valueType</code>.</p>",
+        "id": 208608159,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1598904073
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> !   I had seen some 'strange syntax' in the CQL spec page with something like dateTimeX where ...   and didn't understand what that means.   Also, since the onset can be of multiple different value types, how should this be handled?   (In my case I'm only worried about onsetDateTime -- and not sure why I can't use C.onsetDateTime as the specifier)</p>",
+        "id": 208615545,
+        "sender_full_name": "John Silva",
+        "timestamp": 1598908185
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"298707\">@John Silva</span> -- the set of possible attributes is defined by the data model the CQL library declares that it uses.  For choices (e.g., <code>onset[x]</code>), it's a little confusing because:</p>\n<ul>\n<li>the FHIR 1.0.2 CQL data model represents them as separate attributes (e.g., <code>Condition</code> has <code>onsetDateTime</code> with type <code>FHIR.dateTime</code>,  <code>onsetAge</code> with type <code>FHIR.Age</code>, etc.)</li>\n<li>but the FHIR 3.0.x and 4.0.x CQL data models represent them as CQL choice types (e.g., <code>Condition</code> has single <code>onset</code> attribute with a choice of types: <code>FHIR.dateTime</code>, <code>FHIR.Age</code>, etc.).</li>\n</ul>\n<p>So if you see CQL with something like <code>onsetDateTime</code> -- it's probably using the FHIR 1.0.2 data model.  But if you see CQL with just <code>onset</code> (or <code>onset as dateTime</code>) then it is probably using the FHIR 3.0.0, FHIR 4.0.0, or FHIR 4.0.1 data model.</p>\n<p>For attributes that are CQL choice types, you use a cast if you want to specify a particular choice type.  So, for <code>Condition</code>'s <code>onset</code> in a FHIR 4.0.1 model, you could have:</p>\n<ul>\n<li><code>onset</code> -- not specifying any particular type</li>\n<li><code>onset as dateTime</code> -- specifically the dateTime representation of onset (if it exists)</li>\n<li><code>onset as Age</code> -- specifically the Age representation of onset (if it exists)</li>\n<li><code>onset as Period</code> -- specifically the Period representation of onset (if it exists)</li>\n<li><code>onset as Range</code> -- specifically the Range representation of onset (if it exists)</li>\n<li><code>onset as string</code> -- specifically the string representation of onset (if it exists)</li>\n</ul>\n<p>So, if a FHIR 4.0.1 instance of condition has <code>\"onsetDateTime\": \"2020-08-31\"</code> in the JSON representation, you access this in CQL via <code>onset as dateTime</code>.  Note that if you attempt to access it as <code>onset as Age</code> then the CQL spec says the result should be returned as <code>null</code> (since that specific data does not have an <code>Age</code> representation of <code>onset</code>).</p>\n<p>CQL documentation on casting: <a href=\"https://cql.hl7.org/03-developersguide.html#casting\">https://cql.hl7.org/03-developersguide.html#casting</a></p>",
+        "id": 208617108,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1598909028
+    },
+    {
+        "content": "<p>Thanks for this explanation.   I guess then the problem is that the CQL Author's Guide doesn't make this clear (due to the different FHIR versions).</p>\n<p><a href=\"https://cql.hl7.org/02-authorsguide.html\">https://cql.hl7.org/02-authorsguide.html</a></p>\n<p>It seems like all (or most) of the examples on that page show Condition.onsetDateTime without any reference to the fact that this is FHIR 1.0.2 CQL (unless I missed it).</p>\n<p>Does this same problem exist for other value type choices, e.g. Observation.value[x] or is it only on Condition, where the FHIR resource model changed?</p>",
+        "id": 208668201,
+        "sender_full_name": "John Silva",
+        "timestamp": 1598955459
+    },
+    {
+        "content": "<p>Looking at the Author's Guide, it looks like most of the examples actually use the <code>QUICK</code> data model -- which is <em>based on</em> FHIR (hence the similarity).  There are indications in the Author's Guide that the QUICK model is being used.  That said, the same basic difference exists -- QUICK versions prior to QUICK 3.0.0 used the <code>onsetDateTime</code> approach, whereas QUICK versions 3.0.0 and later use <code>onset as DateTime</code> -- and it looks like the spec examples use the former.</p>\n<p>In general, however, you'll find handling of choices consistent across a data model.  So, for the FHIR 1.0.2 model, any choice ending w/ <code>[x]</code> will be represented as multiple fully spelled out properties (e.g., <code>Condition</code> has <code>onsetDateTime</code>, <code>onsetAge</code>, etc; <code>Observation</code> has <code>valueQuantity</code>, <code>valueCodeableConcept</code>, etc).  And for FHIR models 3.0.0 and later, they'll be represented as a single attribute that can be cast to the desired type (e.g., <code>Condition</code> has <code>onset</code>, allowing for <code>onset as dateTime</code>, etc; <code>Observation</code> has <code>value</code> allowing for <code>value as Quantity</code>, etc).</p>",
+        "id": 208682505,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1598964940
+    }
+]

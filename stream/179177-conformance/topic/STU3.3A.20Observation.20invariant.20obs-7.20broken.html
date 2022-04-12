@@ -1,0 +1,135 @@
+---
+layout: page
+title: "FHIR Chat  · STU3: Observation invariant obs-7 broken · conformance"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/index.html">conformance</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html">STU3: Observation invariant obs-7 broken</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153975088"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975088" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Henket <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975088">(Jul 13 2018 at 08:51)</a>:</h4>
+<p>I keep running into the same issue with every STU3 validator that does schematron: the implementation of Observation invariant obs-7 is broken. The intent is clear:</p>
+<p><code>obs-7: If code is the same as a component code then the value element associated with the code SHALL NOT be present</code></p>
+<p>But the implementation in schematron is off:</p>
+<p><code>  not(exists(f:value)) or not(count(
+    for $coding in f:code/f:coding 
+    return  parent::*/f:component/f:code/f:coding[f:code/@value=$coding/f:code/@value and f:system/@value=$coding/f:system/@value]
+  )=0)</code></p>
+<p>I'm assuming the fhirpath implementation of "value.empty() or code!=component.code" is correct as I don't see complaints there. Imo the correct implementation in xpath/schematron would be:</p>
+<p><code>  not(exists(f:value)) or count(
+    for $coding in f:code/f:coding 
+    return  parent::*/f:component/f:code/f:coding[f:code/@value=$coding/f:code/@value and f:system/@value=$coding/f:system/@value]
+  )</code></p>
+<p>I can fix my own environment, but if every implementation of FHIR STU3 might have the same issue then interoperability would be a guessing game.</p>
+<p>Am I interpreting this correctly? Recommendations?</p>
+
+
+
+<a name="153975190"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975190" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jason Walonoski <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975190">(Jul 13 2018 at 19:11)</a>:</h4>
+<p>I agree, it is broken. I override obs-7 with this java code:</p>
+<div class="codehilite"><pre><span></span><span class="k">return</span> <span class="o">(</span><span class="n">obs</span><span class="o">.</span><span class="na">hasComponent</span><span class="o">()</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">obs</span><span class="o">.</span><span class="na">hasValue</span><span class="o">())</span> <span class="o">||</span> <span class="o">(</span><span class="n">obs</span><span class="o">.</span><span class="na">hasValue</span><span class="o">()</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">obs</span><span class="o">.</span><span class="na">hasComponent</span><span class="o">());</span>
+</pre></div>
+
+
+
+<a name="153975191"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975191" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jason Walonoski <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975191">(Jul 13 2018 at 19:14)</a>:</h4>
+<p>Which probably isn't right either. But I can't figure out what that invariant is supposed to do.</p>
+
+
+
+<a name="153975211"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975211" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Henket <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975211">(Jul 13 2018 at 20:36)</a>:</h4>
+<p>I get the invariant: you don't want the same code in Observation.code and Observation.component.code and potentially have the value in .value and/or .component.value. It is effectively saying that if you 'have to' have the same code in .code and .component.code, the value shall be under component.</p>
+
+
+
+<a name="153975306"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975306" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975306">(Jul 15 2018 at 23:49)</a>:</h4>
+<p>I don't understand the proposed fix, but I don't understand that xpath anyway. <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> ?</p>
+
+
+
+<a name="153975341"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975341" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975341">(Jul 16 2018 at 02:18)</a>:</h4>
+<p>I agree with getting rid of the not()</p>
+
+
+
+<a name="153975342"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975342" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975342">(Jul 16 2018 at 02:18)</a>:</h4>
+<p>want to fix it?</p>
+
+
+
+<a name="153975345"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975345" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975345">(Jul 16 2018 at 02:21)</a>:</h4>
+<p>It looks like R4 is already fixed.  This is an R3 issue.  What's the mechanism for fixing that?</p>
+
+
+
+<a name="153975348"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975348" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975348">(Jul 16 2018 at 02:32)</a>:</h4>
+<p>wel, the only one is a technical correction, but I think it's not justified in this case</p>
+
+
+
+<a name="153975414"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975414" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Henket <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975414">(Jul 16 2018 at 10:44)</a>:</h4>
+<p>It's in the way for sending/uploading instances from/to Touchstone, <span class="user-mention" data-user-id="191370">@Richard Ettema</span> : would you feel comfortable fixing this one manually?</p>
+
+
+
+<a name="153975418"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975418" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Henket <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975418">(Jul 16 2018 at 10:47)</a>:</h4>
+<blockquote>
+<p>I don't understand the proposed fix, but I don't understand that xpath anyway. </p>
+</blockquote>
+<p>I'm assuming you do understand the fix and that is a typo. The xpath tests for equivalence of any Observation.code.coding to any Observation.component.coding. I'm assuming you would need to do the same thing upon implementing the fhirpath expression?</p>
+
+
+
+<a name="153975430"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975430" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975430">(Jul 16 2018 at 12:22)</a>:</h4>
+<p>I don't understand why removing =0 makes any useful difference</p>
+
+
+
+<a name="153975449"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975449" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Richard Ettema <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975449">(Jul 16 2018 at 13:30)</a>:</h4>
+<p><span class="user-mention" data-user-id="191375">@Alexander Henket</span>, yes, to support the Nictiz testing use case I can update the STU3 obs-7 invariant. I'll let you know when it's available via JIRA.</p>
+
+
+
+<a name="153975464"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975464" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Henket <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975464">(Jul 16 2018 at 13:45)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> it’s not about removing =0 but about removing not(). The way it is, it is a double negative not(count(...)=0)</p>
+
+
+
+<a name="153975467"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975467" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Henket <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975467">(Jul 16 2018 at 13:46)</a>:</h4>
+<p><span class="user-mention" data-user-id="191370">@Richard Ettema</span> thanks. Now let’s hope no systems we test suffer the same issue.</p>
+
+
+
+<a name="153975605"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975605" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975605">(Jul 16 2018 at 23:06)</a>:</h4>
+<p>The =0 still needs to be there.  (The removal of the =0 was a typo in Alexander's proposed solution, which makes me feel slightly less bad about getting the original wrong... :))</p>
+
+
+
+<a name="153975684"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/STU3%3A%20Observation%20invariant%20obs-7%20broken/near/153975684" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Henket <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/STU3.3A.20Observation.20invariant.20obs-7.20broken.html#153975684">(Jul 17 2018 at 08:37)</a>:</h4>
+<p>Ah... now I get the confusion... sorry about that. :-)</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

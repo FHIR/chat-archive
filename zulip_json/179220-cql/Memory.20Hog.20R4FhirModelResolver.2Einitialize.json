@@ -1,0 +1,92 @@
+[
+    {
+        "content": "<p>After some debugging, I realized that the initialization of ResourceTypes in one-by-one fashion causes the rebuilding of multiple Maps and Lists within FhirContext, triggering several GC across the loading time. </p>\n<p>It would be nice if the method made a list of all ResourceTypes to initialize and only then called scanResourceTypes with the entire enum-based array. This would clear some memory hog the lib currently struggles with. </p>\n<p>Does that make sense? The necessary FhirContext methods to be called however doesn't seem to be public, which leads me to believe we might need to change HAPI if we really need this upfront loading of all ResourceTypes.</p>",
+        "id": 264890185,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639501579
+    },
+    {
+        "content": "<p>Removing the initialization cuts the time for a fresh evaluation (loading fhir and everything else) by 50%</p>",
+        "id": 264891308,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639501939
+    },
+    {
+        "content": "<p>Unfortunately, due to the way that the FhirContext is sealed post-initialization we have to do all initialization upfront. From the perspective of the cql-engine any arbitrary CQL can be executed so it doesn't know the types beforehand. There are some limited scenarios where if your CQL content were completely static that you could select a set of Resource types to be initialized but the most scenarios are currently the opposite, where the CQL is dynamic. We also expect the ModelResolver to be long-lived such that the initialization is a one-time cost.</p>",
+        "id": 264928550,
+        "sender_full_name": "JP",
+        "timestamp": 1639517570
+    },
+    {
+        "content": "<p>IOW, exposing such an API would both require upstream changes and not able to be used in most scenarios.</p>",
+        "id": 264929011,
+        "sender_full_name": "JP",
+        "timestamp": 1639517770
+    },
+    {
+        "content": "<p>An alternative approach would be to update the FhirContext such that new types can be added at runtime. In which cases only the types that you actually used would be loaded, and we'd not need to do the initialization upfront. I haven't dug into it to see if that would be possible.</p>",
+        "id": 264929227,
+        "sender_full_name": "JP",
+        "timestamp": 1639517880
+    },
+    {
+        "content": "<p>If the FhirContext supported that approach we wouldn't have to pre-init either and the startup time would be quicker.</p>",
+        "id": 264929407,
+        "sender_full_name": "JP",
+        "timestamp": 1639517982
+    },
+    {
+        "content": "<p>Agree, but the question is: if we have to pre-init, can we do it all in one load. Because right now, the procedure is just extremely wasteful</p>",
+        "id": 264930071,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639518120
+    },
+    {
+        "content": "<p>As far as I'm aware there's not an API that supports that that's publicly available.</p>",
+        "id": 264930244,
+        "sender_full_name": "JP",
+        "timestamp": 1639518165
+    },
+    {
+        "content": "<p>I am ready to use reflection and force that method to be public :)</p>",
+        "id": 264930338,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639518225
+    },
+    {
+        "content": "<p>There are already a couple places in the engine that we do that, so I'm not opposed outright. Obviously an official API would be better. <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span></p>",
+        "id": 264930570,
+        "sender_full_name": "JP",
+        "timestamp": 1639518323
+    },
+    {
+        "content": "<p>As far as the resource type list, for now  it needs to be everything plus the few custom types the engine adds to patch a couple gaps.</p>",
+        "id": 264930710,
+        "sender_full_name": "JP",
+        "timestamp": 1639518383
+    },
+    {
+        "content": "<p>It's ugly but it works! </p>\n<p>The previous method is <strong>43% slower</strong> than the new one, on the <strong>desktop</strong>. </p>\n<p>Time to Load R4 on desktop one by one (previous method)</p>\n<div class=\"codehilite\"><pre><span></span><code>3.305 s\n4.006 s\n3.301 s\n3.152 s\n3.311 s\n</code></pre></div>\n<p>Average 3.41 +/- 0.24seconds</p>\n<p>Time to Load R4 on desktop by Reflection (New Method)</p>\n<div class=\"codehilite\"><pre><span></span><code>2.345 s\n2.293 s\n2.410 s\n2.382 s\n2.438 s\n</code></pre></div>\n<p>Average 2.37 +/- 0.04seconds</p>\n<p>Final impl below</p>\n<div class=\"codehilite\" data-code-language=\"Java\"><pre><span></span><code>    <span class=\"kd\">protected</span> <span class=\"kt\">void</span> <span class=\"nf\">initialize</span><span class=\"p\">()</span> <span class=\"p\">{</span>\n        <span class=\"c1\">// HAPI has some bugs where it's missing annotations on certain types. This patches that.</span>\n        <span class=\"k\">this</span><span class=\"p\">.</span><span class=\"na\">fhirContext</span><span class=\"p\">.</span><span class=\"na\">registerCustomType</span><span class=\"p\">(</span><span class=\"n\">AnnotatedUuidType</span><span class=\"p\">.</span><span class=\"na\">class</span><span class=\"p\">);</span>\n\n        <span class=\"c1\">// The context loads Resources on demand which can cause resolution to fail in certain cases</span>\n        <span class=\"c1\">// This forces all Resource types to be loaded.</span>\n\n        <span class=\"cm\">/*</span>\n<span class=\"cm\">        for (Enumerations.ResourceType type : Enumerations.ResourceType.values()) {</span>\n<span class=\"cm\">            // These are abstract types that should never be resolved directly.</span>\n<span class=\"cm\">            switch (type) {</span>\n<span class=\"cm\">                case DOMAINRESOURCE:</span>\n<span class=\"cm\">                case RESOURCE:</span>\n<span class=\"cm\">                case NULL:</span>\n<span class=\"cm\">                    continue;</span>\n<span class=\"cm\">                default:</span>\n<span class=\"cm\">            }</span>\n<span class=\"cm\">            this.fhirContext.getResourceDefinition(type.toCode());</span>\n<span class=\"cm\">        }</span>\n<span class=\"cm\">        */</span>\n        <span class=\"c1\">// force calling of validateInitialized();</span>\n        <span class=\"k\">this</span><span class=\"p\">.</span><span class=\"na\">fhirContext</span><span class=\"p\">.</span><span class=\"na\">getResourceDefinition</span><span class=\"p\">(</span><span class=\"n\">Enumerations</span><span class=\"p\">.</span><span class=\"na\">ResourceType</span><span class=\"p\">.</span><span class=\"na\">ACCOUNT</span><span class=\"p\">.</span><span class=\"na\">toCode</span><span class=\"p\">());</span>\n\n        <span class=\"n\">Map</span><span class=\"o\">&lt;</span><span class=\"n\">String</span><span class=\"p\">,</span> <span class=\"n\">Class</span><span class=\"o\">&lt;?</span> <span class=\"kd\">extends</span> <span class=\"n\">IBaseResource</span><span class=\"o\">&gt;&gt;</span> <span class=\"n\">myNameToResourceType</span><span class=\"p\">;</span>\n        <span class=\"k\">try</span> <span class=\"p\">{</span>\n            <span class=\"n\">Field</span> <span class=\"n\">f</span> <span class=\"o\">=</span> <span class=\"k\">this</span><span class=\"p\">.</span><span class=\"na\">fhirContext</span><span class=\"p\">.</span><span class=\"na\">getClass</span><span class=\"p\">().</span><span class=\"na\">getDeclaredField</span><span class=\"p\">(</span><span class=\"s\">\"myNameToResourceType\"</span><span class=\"p\">);</span>\n            <span class=\"n\">f</span><span class=\"p\">.</span><span class=\"na\">setAccessible</span><span class=\"p\">(</span><span class=\"kc\">true</span><span class=\"p\">);</span>\n            <span class=\"n\">myNameToResourceType</span> <span class=\"o\">=</span> <span class=\"p\">(</span><span class=\"n\">Map</span><span class=\"o\">&lt;</span><span class=\"n\">String</span><span class=\"p\">,</span> <span class=\"n\">Class</span><span class=\"o\">&lt;?</span> <span class=\"kd\">extends</span> <span class=\"n\">IBaseResource</span><span class=\"o\">&gt;&gt;</span><span class=\"p\">)</span> <span class=\"n\">f</span><span class=\"p\">.</span><span class=\"na\">get</span><span class=\"p\">(</span><span class=\"k\">this</span><span class=\"p\">.</span><span class=\"na\">fhirContext</span><span class=\"p\">);</span>\n\n            <span class=\"n\">List</span><span class=\"o\">&lt;</span><span class=\"n\">Class</span><span class=\"o\">&lt;?</span> <span class=\"kd\">extends</span> <span class=\"n\">IBaseResource</span><span class=\"o\">&gt;&gt;</span> <span class=\"n\">toLoad</span> <span class=\"o\">=</span> <span class=\"k\">new</span> <span class=\"n\">ArrayList</span><span class=\"p\">(</span><span class=\"n\">myNameToResourceType</span><span class=\"p\">.</span><span class=\"na\">size</span><span class=\"p\">());</span>\n\n            <span class=\"k\">for</span> <span class=\"p\">(</span><span class=\"n\">Enumerations</span><span class=\"p\">.</span><span class=\"na\">ResourceType</span> <span class=\"n\">type</span> <span class=\"p\">:</span> <span class=\"n\">Enumerations</span><span class=\"p\">.</span><span class=\"na\">ResourceType</span><span class=\"p\">.</span><span class=\"na\">values</span><span class=\"p\">())</span> <span class=\"p\">{</span>\n                <span class=\"c1\">// These are abstract types that should never be resolved directly.</span>\n                <span class=\"k\">switch</span> <span class=\"p\">(</span><span class=\"n\">type</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n                    <span class=\"k\">case</span> <span class=\"n\">DOMAINRESOURCE</span><span class=\"p\">:</span>\n                    <span class=\"k\">case</span> <span class=\"n\">RESOURCE</span><span class=\"p\">:</span>\n                    <span class=\"k\">case</span> <span class=\"n\">NULL</span><span class=\"p\">:</span>\n                        <span class=\"k\">continue</span><span class=\"p\">;</span>\n                    <span class=\"k\">default</span><span class=\"p\">:</span>\n                <span class=\"p\">}</span>\n                <span class=\"k\">if</span> <span class=\"p\">(</span><span class=\"n\">myNameToResourceType</span><span class=\"p\">.</span><span class=\"na\">containsKey</span><span class=\"p\">(</span><span class=\"n\">type</span><span class=\"p\">.</span><span class=\"na\">toCode</span><span class=\"p\">().</span><span class=\"na\">toLowerCase</span><span class=\"p\">()))</span>\n                    <span class=\"n\">toLoad</span><span class=\"p\">.</span><span class=\"na\">add</span><span class=\"p\">(</span><span class=\"n\">myNameToResourceType</span><span class=\"p\">.</span><span class=\"na\">get</span><span class=\"p\">(</span><span class=\"n\">type</span><span class=\"p\">.</span><span class=\"na\">toCode</span><span class=\"p\">().</span><span class=\"na\">toLowerCase</span><span class=\"p\">()));</span>\n            <span class=\"p\">}</span>\n\n            <span class=\"n\">Method</span> <span class=\"n\">m</span> <span class=\"o\">=</span> <span class=\"k\">this</span><span class=\"p\">.</span><span class=\"na\">fhirContext</span><span class=\"p\">.</span><span class=\"na\">getClass</span><span class=\"p\">().</span><span class=\"na\">getDeclaredMethod</span><span class=\"p\">(</span><span class=\"s\">\"scanResourceTypes\"</span><span class=\"p\">,</span> <span class=\"n\">Collection</span><span class=\"p\">.</span><span class=\"na\">class</span><span class=\"p\">);</span>\n            <span class=\"n\">m</span><span class=\"p\">.</span><span class=\"na\">setAccessible</span><span class=\"p\">(</span><span class=\"kc\">true</span><span class=\"p\">);</span>\n            <span class=\"n\">m</span><span class=\"p\">.</span><span class=\"na\">invoke</span><span class=\"p\">(</span><span class=\"k\">this</span><span class=\"p\">.</span><span class=\"na\">fhirContext</span><span class=\"p\">,</span> <span class=\"n\">toLoad</span><span class=\"p\">);</span>\n        <span class=\"p\">}</span> <span class=\"k\">catch</span> <span class=\"p\">(</span><span class=\"n\">IllegalArgumentException</span> <span class=\"n\">e</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n            <span class=\"n\">e</span><span class=\"p\">.</span><span class=\"na\">printStackTrace</span><span class=\"p\">();</span>\n        <span class=\"p\">}</span> <span class=\"k\">catch</span> <span class=\"p\">(</span><span class=\"n\">NoSuchFieldException</span> <span class=\"n\">e</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n            <span class=\"n\">e</span><span class=\"p\">.</span><span class=\"na\">printStackTrace</span><span class=\"p\">();</span>\n        <span class=\"p\">}</span> <span class=\"k\">catch</span> <span class=\"p\">(</span><span class=\"n\">SecurityException</span> <span class=\"n\">e</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n            <span class=\"n\">e</span><span class=\"p\">.</span><span class=\"na\">printStackTrace</span><span class=\"p\">();</span>\n        <span class=\"p\">}</span> <span class=\"k\">catch</span> <span class=\"p\">(</span><span class=\"n\">IllegalAccessException</span> <span class=\"n\">e</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n            <span class=\"n\">e</span><span class=\"p\">.</span><span class=\"na\">printStackTrace</span><span class=\"p\">();</span>\n        <span class=\"p\">}</span> <span class=\"k\">catch</span> <span class=\"p\">(</span><span class=\"n\">NoSuchMethodException</span> <span class=\"n\">e</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n            <span class=\"n\">e</span><span class=\"p\">.</span><span class=\"na\">printStackTrace</span><span class=\"p\">();</span>\n        <span class=\"p\">}</span> <span class=\"k\">catch</span> <span class=\"p\">(</span><span class=\"n\">InvocationTargetException</span> <span class=\"n\">e</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n            <span class=\"n\">e</span><span class=\"p\">.</span><span class=\"na\">printStackTrace</span><span class=\"p\">();</span>\n        <span class=\"p\">}</span>\n    <span class=\"p\">}</span>\n</code></pre></div>",
+        "id": 264942453,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639523774
+    },
+    {
+        "content": "<p>PR up: <a href=\"https://github.com/DBCG/cql_engine/pull/521\">https://github.com/DBCG/cql_engine/pull/521</a></p>",
+        "id": 264953368,
+        "sender_full_name": "Vitor Pamplona",
+        "timestamp": 1639531297
+    },
+    {
+        "content": "<ul>\n<li>It's very possible with the HAPIFhirContext to create your own \"Context\" with only types you want to support. You have to create your own context that implements the base FhirContext and manually add classes one-at-a-time</li>\n<li>The CQL execution is dynamic, but aren't the retrieval context themselves very static? I've only been able to in the cql grammar to retrieve exactly one type of resourcetype per retrieval at a time, which makes sense. One resource domain per retrieval. A simple collection of the retrieval contexts in a script would reveal which types were needed (right?)</li>\n</ul>",
+        "id": 265592691,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1640021334
+    },
+    {
+        "content": "<p>Yes, if your content is static (i.e. you know the full set of CQL you will ever execute ahead of time, prior to initializing the CQL engine) then you can know the full set of requirements ahead of time. In most of the deployments we're currently supporting the content is not static. For example, the cqf-ruler allows execution of arbitrary CQL via the $cql operation. Or an Android SDK could download the required Libraries for a guideline at runtime.</p>",
+        "id": 265594767,
+        "sender_full_name": "JP",
+        "timestamp": 1640022272
+    }
+]

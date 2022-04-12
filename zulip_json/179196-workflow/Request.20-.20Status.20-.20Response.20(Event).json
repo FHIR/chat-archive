@@ -1,0 +1,578 @@
+[
+    {
+        "content": "<p>Sorry for intrusion :) For some national system we discussed request-response(event) integration. On the patterns page, we see a definitions-request-event model.  I missed important integration aspect - status tracking and management. Spec recommends use Task to track the status of the request. It seems for me, tasks are internal implementation details of a \"performing system\". What do you think about introducing a \"Status\" pattern? There are two options - inline status into a request or keep it as a separate resource (but not a task).  In Kubernetes for better UX status is a part of object, which updated by \"performing system\". User sends object definition and introspect (track) status by reading object.status (there is special API to update only status element - as we have in FHIR for some meta elements). Another approach is to have a separate specialized resource - [X]Status (ClaimStatus for example). Tasks can update status, but should not be a public API. The key design point is that specialized Request will have a very specific Status (which should be modeled in a \"natural way\" as other FHIR resources). I understand the temptation to use \"generalized Task\", but isn't this a way to do the same mistakes as v3 did?</p>",
+        "id": 183069526,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1575991410
+    },
+    {
+        "content": "<p>As a \"modern\" client I would describe my \"wishful\" integration workflow:</p>\n<div class=\"codehilite\"><pre><span></span>1. I send [X]Request\n2. I can track [X]Status by polling [X]Request.status (`GET /[X]Request/&lt;id&gt;/status`) or link on [X]Status provided during the request\n3. If it&#39;s not too late, I can update or cancel [X]Request\n4. From [X]Status I can discover [X]Response available (ideally as reference)\n</pre></div>",
+        "id": 183069617,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1575991465
+    },
+    {
+        "content": "<p>Here is another description of  this workflow:</p>\n<div class=\"codehilite\"><pre><span></span>As &quot;a requesting system&quot; I create &quot;request&quot; resource\nIf it&#39;s not against business rules, I can refine or cancel &quot;request&quot; by &quot;updating request resource&quot;\nAs &quot;a performing system&quot; I manage &quot;status&quot; resource for specific &quot;request&quot; to reflect &quot;current state&quot; of &quot;request&quot;\nAs &quot;a requesting system&quot; I can track &quot;status&quot; of &quot;request&quot; by polling API/Subscription etc\nAs &quot;a performing system&quot; I publish &quot;response&quot; resource and update &quot;status&quot;  (ideally providing a ref to &quot;response&quot; ). Ideally &quot;request&quot; resource can be &quot;finalized&quot; and linked with &quot;response&quot;\nAs &quot;a requesting system&quot; I discover from &quot;status&quot; that &quot;request&quot; is &quot;completed&quot; and ref to retrieve &quot;response&quot;\n</pre></div>",
+        "id": 183070663,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1575992062
+    },
+    {
+        "content": "<p>A Request might have three different systems simulaneously fulfilling different aspects of the request.  (Or alternatively, there may be numerous different systems fulfilling different aspects over time).  The Request status reflects <em>only</em> the status of the authorization, never the status of the fulfillment because of this many to 1 relationship.  Task is the resource that manages tracking of fulfillment.  It acts as a shared resource that can be manipulated by both placer and filler systems.  (Typically filler systems have no authority to make any changes to the authorizing Request, though they may create their own mirror \"filler order\" Request that represents the details of what they've actually agreed to do.</p>",
+        "id": 183071247,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1575992473
+    },
+    {
+        "content": "<p>Isn't task too detailed to be public API resource?</p>",
+        "id": 183071809,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1575992846
+    },
+    {
+        "content": "<p>I'm talking about Status resources (which can be backed by tasks) but specialized for Requests.</p>",
+        "id": 183072004,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1575992955
+    },
+    {
+        "content": "<p>Let say Task implements part of the Status interface, but often has a lot of \"internal details\" of \"performing party\" and does not have \"specific status details\" for \"requesting party\"</p>",
+        "id": 183072369,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1575993199
+    },
+    {
+        "content": "<p>I.e. semantic volume of Status resource is much smaller and can be specialized</p>",
+        "id": 183072513,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1575993278
+    },
+    {
+        "content": "<p>I'm afraid in real systems we will have a heterogeneous heap of \"generic\" Tasks with an enormous amount of extensions.</p>",
+        "id": 183072960,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1575993586
+    },
+    {
+        "content": "<p>It reminds me somehow v3 style - I hope, I'm wrong! \"Too abstract/generic\" resources make \"design discussions\" too hard. All participants keep their own ideas in mind.</p>",
+        "id": 183073610,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1575993929
+    },
+    {
+        "content": "<p>I don't really understand why there'd be a need for much in the way of extensions on Task.  A Task lets you say \"who asked for this?\", \"who's doing this?\", \"what is to be done?\", \"where are things at?\".  The granularity of the tasks on a public (or internal) interface is up to the system.  It could just be a instance that's 1..1 with the Request or could get very fine-grained - generally as part of a compositional hierarchy.  Task.businessStatus is specifically intended to convey a meaningful state to the requesting party.  This is where something like \"waiting for specimen delivery\" or \" undergoing secondary review\" would go.</p>\n<p>Task is the typical mechanism that systems will use whenever one system is asking another system to do something.</p>",
+        "id": 183074858,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1575994712
+    },
+    {
+        "content": "<p>I'm not clear on what the envisioned difference is between your proposed 'Status' resource and what's on Task.  I also don't understand why there's a perceived need for specialization in either Status or Task.</p>",
+        "id": 183074947,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1575994773
+    },
+    {
+        "content": "<p>Let me explain with example. When I made a purchase in an online store, I’m interested in its status - did they find the item  when they brought it. I’m not interested in who packaged, the name of the driver, the brand of the truck - i.e. internals of workflow.</p>",
+        "id": 183099292,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576010020
+    },
+    {
+        "content": "<p>Isn't the same applicable to ServiceRequest or Claim?</p>",
+        "id": 183099403,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576010090
+    },
+    {
+        "content": "<p>A ServiceRequest would only contain the status of the request itself- draft, active, canceled... (and complete)</p>",
+        "id": 183099612,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010201
+    },
+    {
+        "content": "<p>would not contain business status like \"specimen collected\" or \"done, but not billed\"</p>",
+        "id": 183099688,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010254
+    },
+    {
+        "content": "<p>When physician ordered the lab panel, she intrested in did specimen was collected and delivered,  estimated time of result, preliminary results etc!?</p>",
+        "id": 183099773,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576010289
+    },
+    {
+        "content": "<p>those business statuses correspond to things that are triggered by a request, but are well beyond the detail needed in a request</p>",
+        "id": 183099821,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010332
+    },
+    {
+        "content": "<p>I'm not claiming this is a part of request.</p>",
+        "id": 183099866,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576010370
+    },
+    {
+        "content": "<p>I've missed status resource.</p>",
+        "id": 183099891,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576010392
+    },
+    {
+        "content": "<blockquote>\n<p>I'm not claiming this is a part of request.</p>\n</blockquote>\n<p>Correct (you type too fast, or I am slow), be patient :)</p>",
+        "id": 183099968,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010421
+    },
+    {
+        "content": "<p>;)</p>",
+        "id": 183099977,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576010431
+    },
+    {
+        "content": "<p>These statuses are a status of something, not a request. they are a status of a \"thing that will/has been done\". and that thing is task.</p>",
+        "id": 183100038,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010475
+    },
+    {
+        "content": "<p>The question is how to design request/status/response  protocol  betwen two systems.</p>",
+        "id": 183100081,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576010513
+    },
+    {
+        "content": "<p>in case of online store do you suppose to use Task API to track purchase?</p>",
+        "id": 183100162,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576010558
+    },
+    {
+        "content": "<p>as example: a lab request triggers a couple of things that will run adjacent or combined:</p>\n<ol>\n<li>collection, preparation, analysis</li>\n<li>billing</li>\n<li>patient pickup, preparation and delivery (since you mention the delivery)<br>\n3.1 for fun, the pickup can be split into more things</li>\n</ol>",
+        "id": 183100210,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010585
+    },
+    {
+        "content": "<p>Yep</p>",
+        "id": 183100233,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576010609
+    },
+    {
+        "content": "<p>The notion of status is depending on the thing it is running on.</p>",
+        "id": 183100249,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010622
+    },
+    {
+        "content": "<p>So in the list above you can have 4 tasks, each with their status.</p>",
+        "id": 183100260,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010640
+    },
+    {
+        "content": "<p>Yes, depending on workflow</p>",
+        "id": 183100314,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576010655
+    },
+    {
+        "content": "<p>But as a client,  should i track all this tasks to understand  the status of request?</p>",
+        "id": 183100390,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576010705
+    },
+    {
+        "content": "<p>(sure, all of this is depending on the workflow we choose.  BTW, there is always the chance that 3.1 will be split in 3.1.1 or appended a 3.2 because the patient was not at home)</p>",
+        "id": 183100393,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010707
+    },
+    {
+        "content": "<p>There is no status of a request.</p>",
+        "id": 183100430,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010729
+    },
+    {
+        "content": "<p>What is the status of a prescription? When the meds are dispensed by the pharmacy?</p>",
+        "id": 183100466,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010753
+    },
+    {
+        "content": "<p>what is the status of the lab example?<br>\nFor a clinician who entered the request, in simple cases, it is just either done or not.</p>",
+        "id": 183100547,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010781
+    },
+    {
+        "content": "<p>(and  that is supported in the request)</p>",
+        "id": 183100552,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010789
+    },
+    {
+        "content": "<p>if the status needs to be decomposed, then it is because different things that need to be done.</p>",
+        "id": 183100587,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010826
+    },
+    {
+        "content": "<p>For me this workflow looks like Implementation details,  as a client I'm interested in milestones  of it</p>",
+        "id": 183100595,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576010835
+    },
+    {
+        "content": "<p>sure, then you can use task to keep track of the business status that includes those milestones.<br>\nIf you are in the clinical side, you have a set of milestones</p>",
+        "id": 183100737,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010923
+    },
+    {
+        "content": "<p>if you are in the billing, perhaps another set of milestones</p>",
+        "id": 183100757,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576010938
+    },
+    {
+        "content": "<p>You can use Task resource without having to describe the detailed workflows, i.e. basically as a status tracker</p>",
+        "id": 183100942,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576011040
+    },
+    {
+        "content": "<p>it would really be a small json... which I think is what you are looking for, right? Just a notion of \"where this is at\"</p>",
+        "id": 183101003,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576011104
+    },
+    {
+        "content": "<p>That's why I'm afraid of too abstract resources  ;)</p>",
+        "id": 183101084,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576011143
+    },
+    {
+        "content": "<p>would it help to make some examples (we really really should)?</p>",
+        "id": 183101134,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576011184
+    },
+    {
+        "content": "<p>Can you sketch  api/protocol using tasks  to order MRI, track status and get report?</p>",
+        "id": 183101246,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576011251
+    },
+    {
+        "content": "<p>Suppose we have hospital and external MRI center</p>",
+        "id": 183101301,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576011296
+    },
+    {
+        "content": "<p>i.e. two systems/Organizations</p>",
+        "id": 183101348,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576011324
+    },
+    {
+        "content": "<p>oh i forgot patient</p>",
+        "id": 183101387,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576011359
+    },
+    {
+        "content": "<p>what do you mean you forgot patient?</p>",
+        "id": 183101597,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576011458
+    },
+    {
+        "content": "<p>(hoping you don't mean you are actually in a hospital and a patient is waiting for you...)</p>",
+        "id": 183101624,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576011473
+    },
+    {
+        "content": "<p>I could draft an exampleScenario starting with that. Somewhere this week is still OK with you? Or better, join the Workflow call monday?</p>",
+        "id": 183101873,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576011602
+    },
+    {
+        "content": "<p>if you can provide more info (unless you just want a really simple sequence of request, no scheduling, no contrast, nothing)</p>",
+        "id": 183102011,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576011675
+    },
+    {
+        "content": "<p>Thank you. I will try to join a call. No rush at all ;)</p>",
+        "id": 183102329,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576011877
+    },
+    {
+        "content": "<p>Thanks for the question, it stimulates us to produce guidance.</p>",
+        "id": 183102380,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576011927
+    },
+    {
+        "content": "<p>But waiting physician, patient and integration engineer would be nice motivation;)</p>",
+        "id": 183102397,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576011951
+    },
+    {
+        "content": "<p>Have you looked through <a href=\"http://build.fhir.org/workflow-communications.html\" target=\"_blank\" title=\"http://build.fhir.org/workflow-communications.html\">http://build.fhir.org/workflow-communications.html</a>? On that page you will see several scenarios that explain how this is done using a Task resource, <strong>without specifying how the Task resource is shared</strong>. </p>\n<p>Then there are several RESTful patterns of sharing Task for the purposes of workflow management at <a href=\"http://build.fhir.org/workflow-management.html\" target=\"_blank\" title=\"http://build.fhir.org/workflow-management.html\">http://build.fhir.org/workflow-management.html</a>, and there is also the option to use FHIR messaging or operations/services for sharing a Task resource.</p>",
+        "id": 183104875,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1576013611
+    },
+    {
+        "content": "<p>When a MedicationRequest is created, nothing happens.  No drugs are dispensed.  No drugs are administered.  In the paper world, the patient might take the script and stick it in their pocket and run it through the laundry and never get it filled.  (Or not run it through the laundry and <em>still</em> never get it filled.)  The trigger for action is the \"request for fulfillment\".  And a request for fulfillment often isn't to action the entire order.  The script might be for 30 days supply and 11 refills.  But maybe this is an expensive drug - and it's not tolerated that well, so the pharmacist (or the patient's insurer) recommnends only getting 10 days supply and see if it works.  So a fulfillment request (Task) - pointing to the MedicationRequest as its authorization - is created asking the pharmacy to dispense 10 days supply.  That Task has a status.  The initial pharmacy might reject the prescription (they don't carry that drug).  So a new task gets created targeting a different pharmacy than the patient's preferred pharmacy.  This pharmacy accepts the request.  Then they prepare the med.  Then the pharmacist verifies the dispense.  Then the insurance is processed.  Then the patient is contacted saying the medication is ready for pickup.  Then the package gets moved to the back drawer because the patient didn't pick it up the same day.  Then finally it's picked up.  </p>\n<p>All of those would be updates to the same Task - changing the status occasionally (accepted, in-progress, completed) and the businessStatus every time.  A week or so later, a new Task would be initiated asking for the remaining 20 days supply of the first fill.  Then another Task for the next month.  Then a Task for 2 months supply because the patient is going on holidays.  Each Task would have its own status.  The prescribing physician may or may not be aware of all of the tasks.  It might be they only see the dispense events.  It might be they see nothing at all.  The key thing is that there can be <em>numerous</em> requests for fulfillment against a single Request - and each of those requests for fulfillment will have an independent status.</p>\n<p>In practice, there may be sub-tasks generated against the base \"please fulfill\" Task.  In a lab scenario, there could be a separate Task for each step/machine the specimen runs through.  Those would typically never be exposed outside the filling system though.  The high level \"please fulfill\" Task isn't going to have any details other than what pharmacy/lab/imaging center is doing the work and a single business code reflecting \"where is it at\".</p>",
+        "id": 183116680,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1576023832
+    },
+    {
+        "content": "<p>When a MedicationRequest is created in countries with ePrescription Services, some things actually do happen and these events vary by domain - e.g. in NZ that request will be automatically sent to the Prescription Repository (Exchange); additionally, in others the patient also will nominate their pharmacy of choice who will be notified and will prepare the medication ready for pick-up. I'm certainly not disputing that there can be numerous tasks relating to a single request - but there is probably an almost infinite variety of these, particularly when insurance/reimbursement is involved which is very different outside of North America.</p>",
+        "id": 183121976,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1576030842
+    },
+    {
+        "content": "<p>The transmission to the pharmacy would generally be via Task - unless the pharmacy can't say \"no\"</p>",
+        "id": 183122493,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1576031676
+    },
+    {
+        "content": "<p>Merely posting a prescription can't result in the automatic counting of pills because sometimes prescriptions arr shared as an FYI (e.g. for drug - drug interaction checking)</p>",
+        "id": 183122563,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1576031774
+    },
+    {
+        "content": "<p>You should check that with someone with detailed knowledge of how ePrescribing works in the UK - I've only seen the videos!  However, there will obviously be exceptions to the most common workflows - e.g. the chosen pharmacy has run out of a particular drug. Some countries have a mix of paper and electronic scripts, others have moved (almost?) exclusively to paperless prescribing. Lots to consider here....including rest home prescribing, which is throwing up all sorts of new problems for the NZ ePrescription Service!</p>",
+        "id": 183122801,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1576032133
+    },
+    {
+        "content": "<p>If the UK is doing messaging, then message events can distinguish behaviour.  However if they're doing pure REST, the spec only offers two ways of asking for fulfillment - setting a tag or using Task.  The former option provides no mechanism to refuse or communicate status.</p>",
+        "id": 183123010,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1576032485
+    },
+    {
+        "content": "<p>I don't think that the UK are using FHIR for ePrescribing and neither is NZ at present. It would be interesting to know which countries do have a FHIR-based operational ePrescription Service and which approach, messaging or REST, they've taken. Even more useful, from an NZ perspective, would be to see if/how anyone has upgraded such a service from a messaging-based design to a RESTful one.</p>",
+        "id": 183123566,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1576033279
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span> do you know what we're doing here?</p>",
+        "id": 183126021,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1576037424
+    },
+    {
+        "content": "<p>Let me try again:  It's clear that behind request some workflow is started, which can be modeled by Tasks. As in Kubernetes, when I create a deployment or service a lot of things happening. I'm talking about top-level client interface/protocol to semantically tracking the status of a request, which I believe the client only cares about until the result. You can think [X]Status resource as a workflow summary, milestones, updated for a client by an internal workflow engine. Workflows variability is to hight to standardize, it is possible.  With a domain focus group, we can describe important milestones of Lab or Radiology Order, describe it as ServiceStatus resource and help systems to integrate with each other :)</p>",
+        "id": 183137043,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576053731
+    },
+    {
+        "content": "<p>I think it's just not that simple. It's a two way discussion about the status, with underlying process. It's not right to simplify too far</p>",
+        "id": 183139281,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1576055981
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> can you elaborate? Do you mean the problem that underlying processes can vary a lot?</p>",
+        "id": 183139467,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576056176
+    },
+    {
+        "content": "<p>no we don't care about the underlying processes. but we do care about the exchange between the requester and the requestee</p>",
+        "id": 183139602,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1576056337
+    },
+    {
+        "content": "<p>the requester says 'do this please'</p>",
+        "id": 183139609,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1576056344
+    },
+    {
+        "content": "<p>the requestee goes through a whole process and the requestee wants to know where it's up to.</p>",
+        "id": 183139662,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1576056364
+    },
+    {
+        "content": "<p>and it also might want to cancel it, but simply saying 'stop' doesn't actually mean 'stop' - it might be too late, for example, or it might take time</p>",
+        "id": 183139687,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1576056398
+    },
+    {
+        "content": "<p>so using a task to track the requestee status leaves the request representing the requester's desire</p>",
+        "id": 183139726,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1576056435
+    },
+    {
+        "content": "<p>Completely agree. I fill some discomfort to call it \"Task\" (but my English is not native) - I would call it \"Status of request\". \"Task\" has an additional semantic load - but maybe I'm wrong. And this is ok to use \"Task\" as \"Status\".</p>",
+        "id": 183139951,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576056624
+    },
+    {
+        "content": "<p>I like kubernetes spec/status model - it's easy to comprehend (<a href=\"https://kubernetes.io/docs/concepts/overview/working-with-objects/kubernetes-objects/#object-spec-and-status\" target=\"_blank\" title=\"https://kubernetes.io/docs/concepts/overview/working-with-objects/kubernetes-objects/#object-spec-and-status\">https://kubernetes.io/docs/concepts/overview/working-with-objects/kubernetes-objects/#object-spec-and-status</a>)</p>",
+        "id": 183140041,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576056721
+    },
+    {
+        "content": "<p>Task is a generic mechanism to say \"please do\" and to allow communication between requester and performer.  The \"please do\" might be \"fulfill Request x\".  It might be \"Change status of resource Y\".  It might be \"Complete Questionnaire Z\".  In all cases, it serves as the means to ask, for the performer to accept/reject and for the performer to communicate \"where things are at\".  Task seemed to be the most intuitive name we could come up with.  Task has \"intent\", which means they can be proposed, planned or ordered.  \"Status\" isn't terribly intuitive for covering that space.  (And it's not obvious that separate resources would work better for existing systems.)</p>",
+        "id": 183156147,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1576070931
+    },
+    {
+        "content": "<p>Isn't ServiceRequest as well \"please do\"? Should I say \"please do\" twice to know the status?</p>",
+        "id": 183162600,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576075177
+    },
+    {
+        "content": "<p>i.e. why for some \"please do\" requests we have specific domain resources like ServiceRequest, Claim, etc (which follow request pattern) and for other s we should use generic Task resource?</p>",
+        "id": 183163060,
+        "sender_full_name": "Tim Zallin",
+        "timestamp": 1576075442
+    },
+    {
+        "content": "<p>for checking claim status for instance spec right now suggests to use Task with code = status</p>",
+        "id": 183163193,
+        "sender_full_name": "Tim Zallin",
+        "timestamp": 1576075517
+    },
+    {
+        "content": "<p>I agree \"Status\" does not look like an individual resource. That's why kubernetes  guys embedded it into \"Request\" as sub-object, which updated by the \"performing party\" (that's tradeoff).</p>",
+        "id": 183163206,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576075525
+    },
+    {
+        "content": "<p>ServiceRequest is primarily for \"ordering procedures for one patient\". This is the authorization to ask \"please do\", and as such \"belongs\" to the provider who authorizes it, and it is (usually) not subject to change by another entity. The actual dynamic \"please do\" is represented by Task. When using Task for workflow management between systems, it is always paired with the authorization (which follows the request pattern) using Task.basedOn.</p>\n<p>The documentation of ServiceRequest is sub-par in this regard. A tracker is incoming: <a href=\"http://jira.hl7.org/browse/FHIR-25298\" target=\"_blank\" title=\"http://jira.hl7.org/browse/FHIR-25298\">J#25298</a></p>",
+        "id": 183163692,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1576075782
+    },
+    {
+        "content": "<p>are you saying that typically I should use two resources, one for the actual request (e.g. ServiceRequest) and also the Task resource to track the state of completion?</p>",
+        "id": 183165510,
+        "sender_full_name": "Tim Zallin",
+        "timestamp": 1576076740
+    },
+    {
+        "content": "<p>Unless you have a very simple workflow, where no negotiation, rejection, or cancellation before completion is possible, then yes, you need two resources. This is (attempted to be) explained in <a href=\"http://build.fhir.org/workflow.html\" target=\"_blank\" title=\"http://build.fhir.org/workflow.html\">http://build.fhir.org/workflow.html</a> and the related pages.</p>",
+        "id": 183165942,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1576076988
+    },
+    {
+        "content": "<p>ServiceRequest is \"I authorize\".  In some situations, the mere creation of a ServiceRequest may lead to the automatic initiation of a \"please do\", but that's not a given - and the processes are distinct.  There are many ways to invoke a \"please do\", as covered in the workflow portions of the spec:</p>\n<ul>\n<li>messaging</li>\n<li>operation</li>\n<li>Task</li>\n<li>tag</li>\n</ul>",
+        "id": 183171110,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1576079984
+    },
+    {
+        "content": "<p>Having the Request updated by the performing party is problematic - especially if digital signatures are in play.</p>",
+        "id": 183171184,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1576080010
+    },
+    {
+        "content": "<p>also things like ServiceRequest exist in many records - a record that a service was asked for. That's not the same as actually asking for it to happen</p>",
+        "id": 183214524,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1576107904
+    },
+    {
+        "content": "<p>The Australian eprescribing is in its early days, but that's planned to be rest only.<br>\nI feel it's probably different to what others are taking about, it's a central shared register of prescriptions.<br>\nPrescribers all send here. Then any dispenser can dispense it, but obviously only 1. So no real workflow like being discussed here. <br>\nA patient can go to any pharmacy and get it dispensed.<br>\nI'll re-check with the others here.</p>",
+        "id": 183243459,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1576143813
+    },
+    {
+        "content": "<p>\"no real workflow here\" ...yet (I assume)</p>",
+        "id": 183249886,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576149857
+    },
+    {
+        "content": "<p>You may eventually have to handle partial dispensing, no dispensing, updates to prescriptions, updates to prescriptions that are already partially dispensed, cancellation of prescriptions,...</p>",
+        "id": 183250001,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576149966
+    },
+    {
+        "content": "<p>You'd also want to know what was in progress so that when one pharmacy starts processing the final dispense, the patient can't go somewhere else and also ask for the last dispense.  I expect you'll find Task needs to sit in there somewhere.</p>",
+        "id": 183253526,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1576153387
+    },
+    {
+        "content": "<p>This thread does remind me of the IHE Pharmacy profiles. In the beginning, there was no workflow... Then we only needed a status. When we realised, XDW was there</p>",
+        "id": 183264744,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576161560
+    },
+    {
+        "content": "<p>The requirements listed by <span class=\"user-mention\" data-user-id=\"191832\">@Jose Costa Teixeira</span>  and <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  are all handled by NZePS when implementing the central shared registry/repository/broker model. Actually, <span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span> , our architecture was originally based on that of the Australian eRX service! It will be interesting to see this implemented using FHIR and, yes, you will need to discuss a lot of workflow issues! I'm currently tasked with mapping the NZePS Data Model to FHIR R4 resources, but the use case is for accessing NZePS data passed to a Clinical Data Repository, not a change to our transactional model.</p>",
+        "id": 183300705,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1576183891
+    },
+    {
+        "content": "<blockquote>\n<p>This thread does remind me of the IHE Pharmacy profiles. In the beginning, there was no workflow... Then we only needed a status. When we realised, XDW was there</p>\n</blockquote>\n<p>The problem with workflow modeling and engines from my experience - they just do not work or work poorly in real life :(    I sow properly working only simple status/checklist solutions</p>",
+        "id": 183430189,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576310703
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 183430754,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1576311796
+    },
+    {
+        "content": "<p>Task tries to not be over-complicated.  Though if you want complicated, you're free to bring in PlanDefinition and go to town :)</p>",
+        "id": 183443596,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1576334353
+    },
+    {
+        "content": "<p>Yes, when reality kicks in, models tend to show their ugly side. This is why I mention XDW - things get ugly.</p>",
+        "id": 183453536,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576350003
+    },
+    {
+        "content": "<p>This discussion started looking for a \"status\" resource, we have Task that can hold the status and the checklist.<br>\nImplementations with Definition/Request/Event/Task can support simple or complicated cases.</p>",
+        "id": 183453804,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1576350429
+    }
+]

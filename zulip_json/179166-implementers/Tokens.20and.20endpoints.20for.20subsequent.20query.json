@@ -1,0 +1,176 @@
+[
+    {
+        "content": "<p>Traditionally (mostly in v2), when you wanted to pass a request for someone to execute, you passed the request as well as any \"supporting information\" the recipient might need to execute that request.  E.g. passing height, weight, concurrent meds when ordering drugs, passing age and gender for certain lab tests, passing a whole whack of recent medical history when making a referral, etc.  In the Request pattern, this is handled using the 'supportingInfo' element.</p>\n<p>However, in our new world of RESTful query, CDSHooks and SMART, it's no longer a given that all data must be \"pushed\" to the fulfilling system.  Instead, the fulfilling system might want to query for the \"supplemental information\" that it actually needs.  This has benefits from a privacy perspective in that the fulfilling system can query for what it actually needs rather than being sent a bunch of stuff it doesn't need.  It also addresses the workflow complexity of the request being rejected and then resubmitted because it initially didn't contain enough supportingInfo.</p>\n<p>In one of our DaVinci operations, we're looking at adding extensions to the request resource to convey the endpoint to hit when requesting supplemental information and the security token to use when making those requests.  However, before we do that, we though it would make sense to ask whether we should have a more general approach for this problem.</p>\n<p>Opinions welcome from anyone, but specifically poking <span class=\"user-mention\" data-user-id=\"191355\">@Kevin Shekleton</span> <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span></p>",
+        "id": 153968544,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1528752526
+    },
+    {
+        "content": "<p>I've been wanting to define an API flow for the server to respond with a request for additional information in order to process a request. The use of this arises all over the place. In my idea, the server would return a questionnaire and a new location; fill out the questionnaire (automatically or by user), and then submit to new location for processing - this is a variation of the async workflow.</p>",
+        "id": 153968581,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1528759224
+    },
+    {
+        "content": "<p>your idea has many problems around security from my perspective; an inline flow like what i described is much easier. But that doesn't necessarily mean it's the only way.... the kind of problems they would solve is quite different (around async-ness of processing, primariy)</p>",
+        "id": 153968582,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1528759292
+    },
+    {
+        "content": "<p>what you propose looks a lot like how CDS hooks work - and so the group should carefully consider the ramifications of the security discussion happening there; I suspect that this is going to be onerous. And at the least, piggy back on the same set up</p>",
+        "id": 153968583,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1528759379
+    },
+    {
+        "content": "<p>This is something i've been pondering as well and is 100% applicable in the Ontario eReferral projects. My initial thoughts on it was that this can only happen if the receiving system is registered with the sending system (a la SMART on FHIR). However, an approach that didn't require registration would be very helpful. I agree that the sender including an endpoint and token to allow the receiver to ask for in-context patient info would be a very useful scenario. One of the questions would be, what resources is the receiving system allowed to query for? Is that something that the sending system should explicity tell the receiver in the payload?</p>",
+        "id": 153968593,
+        "sender_full_name": "Tim Berezny",
+        "timestamp": 1528772905
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 153968594,
+        "sender_full_name": "Tim Berezny",
+        "timestamp": 1528773083
+    },
+    {
+        "content": "<p>If the request is submitted to a known recipient, sharing the token would certainly be much-more straightforward than if the token were made available anyone who happened to choose to fulfill the request or if the request might get routed to an unknown recipient.  In any event, the business environment would have to be one where the eventual recipient would have permission to access relevant \"supportingInfo\".  If that wasn't guaranteed or the requesting system didn't have to authenticate themselves such that the requesting system could authorize permission, the token couldn't work.  The token would provide the context of what types of information were accessible and for what purpose - and thus would potentially allow more access than an unsolicited query from the fulfilling system. </p>\n<p>As for knowing what sorts of questions might be asked, that's a good question.  The simplest thing would be to punt it to \"out of band business arrangement based on request type\".  But perhaps DataRequirement could be returned in addition to the token and endpoint/base uri.</p>",
+        "id": 153968596,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1528773423
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> , could you clarify the Da Vinci use-case? Why doesn't a SMART access_token with OIDC meet your need?</p>",
+        "id": 153968601,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1528776999
+    },
+    {
+        "content": "<p>Yes, I'd like to understand the use case more before giving my opinion on any generalized approaches to this.</p>\n<p>I'll note that the CDS Hooks security model was designed for the constraints &amp; requirements of the use case (real-time, performant interactions between an EHR and external CDS Services). This resulted in the decision to have the EHR proactively share an access token with the CDS Service (which brought with it risks that have to be mitigated by implementers). Given a different use case, we likely would have designed a different security model.</p>",
+        "id": 153968608,
+        "sender_full_name": "Kevin Shekleton",
+        "timestamp": 1528784309
+    },
+    {
+        "content": "<p>LLoyd, why can't that service be a first class service, that is it is an authorized client with the SMART_on_FHIR authority? Where it gets triggered by a communication, but that communication does NOT carry any token. Sharing security tokens is a bad thing.</p>",
+        "id": 153968657,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1528805572
+    },
+    {
+        "content": "<p>The use-case is for a modified eligibility check where you're essentially asking whether any eligibility checks are required or whether there are any other rules/processes/guidelines involved with a proposed set of care.  In addition to the request itself, the EHR might provide the payer with additional patient information such as past procedures, labs, conditions, etc. that might influence those requirements/rules.  There isn't expected to be a \"human\" on the payor side.  Response will be synchronous.  The intention with the token is to allow the payer system to pull relevant information rather than having it pushed by the EHR.</p>\n<p>The main difference between this and a general SMART authorization is that the authorization is tied to the context of a specific request rather than a general \"tell me what you know about this patient\" that is contextless.  The ability of the payer to query a patient's medical data \"at will\" will generally be pretty limited.  But the need for the payer to have access to \"more\" data in the context of satisfying a specific EHR-driven request is generally accepted.</p>",
+        "id": 153968661,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1528806312
+    },
+    {
+        "content": "<p>I think you have a misunderstanding that OAuth is only used when there is a user present... OAuth can be used in a service-to-service (aka business-to-business). This has been discussed a bit, and there seems to be some maturity of the use of FHIR to bring us to the need to more fully define this.<br>\nThe dominant SMART-on-FHIR flow is two layers deep, ( 1 ) the App (client_id), and ( 2 ) the user (OpenID COnnect). If the needs of authorization (OAuth role) is satisfied by just the App authentication, then there is no second layer request to OpenID Connect.</p>",
+        "id": 153968665,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1528807380
+    },
+    {
+        "content": "<p>I understand that OAuth doesn't have to involve a patient.  The main differences here are:<br>\n- The EHR is proactively granting permission, cutting down on the back-and-forth between the systems keeping overhead lower and making synchronous communication more efficient<br>\n- The authorization \"scope\" is governed by a specific request initiated by the EHR rather than more typical scoping mechanisms</p>",
+        "id": 153968666,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1528807550
+    },
+    {
+        "content": "<p>so, you want convenience over security... then why bother with security at all?</p>",
+        "id": 153968669,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1528807776
+    },
+    {
+        "content": "<p>I didn't hear Lloyd say that</p>",
+        "id": 153968670,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1528807856
+    },
+    {
+        "content": "<p>but there are security concerns that need to be considered here.</p>",
+        "id": 153968672,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1528807879
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span>, I'm not really understanding the security risk here.  The token would not be general access - it would be tied to a specific respondant, or possibly a specific collection of known respondants who would still have to identify themselves using TLS.  The token would also presumably be time-limited (the response must be synchronous, so the TTL for the token would be in the 5-10 second range.  The EHR would still have final authority over what information was accessed.  If there are security considerations we're not thinking about, please educate - that's one of the reasons we're opening the conversation up for broad discussion :)</p>",
+        "id": 153968674,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1528808061
+    },
+    {
+        "content": "<p>See a work in progress in Argonaut. It has the client EHR requesting a token from the server EHR AS, onbehalf of the client. Thus there is not a SHARED token, but rather a purpose specific token.  <a href=\"https://github.com/smart-on-fhir/smart-on-fhir.github.io/wiki/cross-organizational-auth\" target=\"_blank\" title=\"https://github.com/smart-on-fhir/smart-on-fhir.github.io/wiki/cross-organizational-auth\">https://github.com/smart-on-fhir/smart-on-fhir.github.io/wiki/cross-organizational-auth</a></p>",
+        "id": 153968676,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1528808207
+    },
+    {
+        "content": "<p>I know you are doing a call-back situation. but the problem with sharing tokens is that they... are shared tokens... Yes they are scope limited, yes they are timelimited... but they are NOT limited by who can use them. They are by nature a 'bearer' token (which is also bad).  We sometimes use sub-optimal security during prototyping, but when we start disussing further expansiveness of that hack, we should all be careful.</p>",
+        "id": 153968677,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1528808387
+    },
+    {
+        "content": "<p>Why can't a token be limited in who can use it?</p>",
+        "id": 153968678,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1528808410
+    },
+    {
+        "content": "<p>a token that can be 'shared' is a 'bearer' token, which by definition means anyone that has a copy of that token can use that token.</p>",
+        "id": 153968679,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1528808484
+    },
+    {
+        "content": "<p>Having a token wouldn't eliminate the need for mutual TLS authentication, so the token would/could still be limited to trusted authorized systems.  And the token could further limit itself to a subset of those systems - including possibly a subset of 1 if the request itself was targeted.</p>",
+        "id": 153968683,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1528808948
+    },
+    {
+        "content": "<p>yes, bearer tokens, by definition, should not be used when they are communicated over non-protected communications channels... You are saying all the right things. I am just trying to get alternatives considered prior to falling back to sharing bearer tokens.<br>\nI will point out that in a GDPR environment (which I know you are not), there would still need to be a individual authorized access right. So you are designing a system that could not be used in GDPR.</p>",
+        "id": 153968687,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1528809488
+    },
+    {
+        "content": "<p>The individual authorized access right would have to be established regardless.  Whether the EHR pushes the data to the payer or the payer pulls it from the EHR, the business need and permission for the payer to have that information would be the same.</p>",
+        "id": 153968689,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1528810015
+    },
+    {
+        "content": "<p>If you are in a mutual TLS situation, why the tokens at all? Both sides know exactly who they are, and have all the stresses of the certificate management too.</p>",
+        "id": 153971455,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1529921378
+    },
+    {
+        "content": "<p>Because the access is tied to a business operation.  I know who you are, but I specifically authorize you to access certain information as part of answering a question I've asked you.  I might not give you access to that same information otherwise.</p>",
+        "id": 153971466,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1529921996
+    },
+    {
+        "content": "<p>It also allows me to identify why the information was provided.  If I give you 3 different tokens for 3 different claims, I can explain what data was accessed for each.</p>",
+        "id": 153971467,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1529922045
+    },
+    {
+        "content": "<p>Unless I'm understanding things wrong, it looks like the token was from the other organization, and not the insurer.</p>",
+        "id": 153971533,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1529929097
+    },
+    {
+        "content": "<p>Right.  EHR asks the insurer what sort of pre-determination requirements exist or other guidance applies and, if patient-specific, will pass a token to the insurer that the insurer can use when querying the EHR for patient information that may be necesssary to examine to determine what the rules are.</p>",
+        "id": 153971552,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1529937320
+    }
+]

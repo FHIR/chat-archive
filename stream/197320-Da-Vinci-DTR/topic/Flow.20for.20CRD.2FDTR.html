@@ -1,0 +1,111 @@
+---
+layout: page
+title: "FHIR Chat  · Flow for CRD/DTR · Da Vinci DTR"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/197320-Da-Vinci-DTR/index.html">Da Vinci DTR</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/197320-Da-Vinci-DTR/topic/Flow.20for.20CRD.2FDTR.html">Flow for CRD/DTR</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="256521559"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/197320-Da%20Vinci%20DTR/topic/Flow%20for%20CRD/DTR/near/256521559" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Sreekanth Puram <a href="https://fhir.github.io/chat-archive/stream/197320-Da-Vinci-DTR/topic/Flow.20for.20CRD.2FDTR.html#256521559">(Oct 07 2021 at 04:24)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> I just want to confirm that I understand the flow as it is in the guides (I may have some strong disagreements) from the point of view of a payer which supports multiple providers and from the point of view of a provider who supports multiple payers. I just want to make sure, we are on the same page as the guides stand today.</p>
+<p>From the point of view of the payer:</p>
+<ol>
+<li>For a service/device/medication, the payer has specific coverage rules, specific documentation rules, and a smart app that can interpret the documentation rules.</li>
+<li>When there is a request for coverage requirements, the coverage rules are evaluated on the payer's end and the launch URL of the smart app is being sent back as a response in addition to other information in the CARDS. Regardless of which provider sends the CRD request, for the same request the payer would always return back the same SMART app.</li>
+<li>The payer in order to maintain compliance with DTR IG will communicate with the SMART app through FHIR questionnaires as templates and the rules are embedded in CQL which are hosted on the Payer / payer-designated third party. </li>
+</ol>
+<p>From the point of view of the provider</p>
+<ol>
+<li>During various stages in the workflow, through supported CDSHooks the provider would invoke a call to the CRD server of the payer for the patient. Based on the request and information provided, the payer may return back the coverage requirements which include documentation requirements and coverage requirements in human-readable format as a CARD and/or link to the launch URL of a smart on FHIR application.</li>
+<li>The provider may choose to ignore the response completely and continue with their regular flow.</li>
+<li>The provider may invoke the smart app if it is allowed by his EHR / practice management system. </li>
+<li>The smart app pulls the data from the provider system as determined by the payer, presents a questionnaire to the provider by prefilling whatever information it can, and collects the information from the provider.</li>
+<li>When a new patient comes and if the patient has a different insurer, the provider will invoke the CRD request and the payer of this new patient may return back a different app as determined by their internal logic. </li>
+<li>So essentially, the provider may have to fill data into different apps as determined by the payers. There is a possibility for multiple payers using the same app based on the contracts the payers have with app vendors. </li>
+</ol>
+<p>Could you confirm if there is any discrepancy between the ways we understand the Spec as it is written today in the implementation guides?</p>
+
+
+
+<a name="256606746"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/197320-Da%20Vinci%20DTR/topic/Flow%20for%20CRD/DTR/near/256606746" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/197320-Da-Vinci-DTR/topic/Flow.20for.20CRD.2FDTR.html#256606746">(Oct 07 2021 at 16:23)</a>:</h4>
+<p>Payer-side</p>
+<ol>
+<li>I'd reframe it as "the SMART app can render and execute the Questionnaire that contains the ruleset.  The app itself won't have any rules hard-coded.</li>
+<li>There are two phases.  </li>
+</ol>
+<ul>
+<li>First, CRD tries to figure out if it can determine coverage based on what's being ordered and other information in the record accessible to the hooks service queries.  If it's not covered or is always covered or a pre-emptive prior authorization can be issued, then a descriptive card will come back declaring that.  (And, as proposed in CRD v2, we'll provide an ability to update the request with a note that indicates that guidance/prior-auth number.  There's discussion about whether we need something more computable than a 'note' here</li>
+<li>Second, if CRD decides it doesn't have enough information, it'll provide a link to a SMART app along with a 'context' that allows the SMART app to know what rules set is relevant so it can trigger the relevant questions.  There was a presumption that the CRD service would only pass back a single SMART app that it would always use.  However, in theory, it could choose the app based on configuration in terms of what app a particular hospital (or even specific provider) prefers.  It's also possible that at some point a payer might choose to start using a different SMART app, so that cards coming back last week might have recommended launching App A, while cards coming back this week recommend launching App B.  It's even <em>theoretically</em> possible for CRD to return a card with multiple alternative actions where the user has a choice of which SMART app they want to launch.  It's hard for me to conceive why this would be useful, but it wouldn't be outside the scope of the spec.  Right now, CRD and DTR are silent on how many apps could theoretically exist and how they would be chosen between.  In general, the apps shouldn't much matter because all of the logic lives in the Questionnaires.  All the app does is render the Questionnaire and execute the referenced CQL, so switching apps isn't going to do much in terms of changing user experience.  Also, in CRD &amp; DTR v1, the card and app are tightly bound - context isn't standardized.  In CRD &amp; DTR v2, we're exploring whether we want to standardize the context, which could in theory allow an EHR to substitute one app link with a different app link</li>
+<li>In DTR v1, the only interaction between the app and the payer is the app retrieving the Questionnaire &amp; associated CQL (i.e. the 'package') from the payer based on the context passed into the app by the CRD link.  How that happens is outside the scope of the spec.  In DTR v2, we're considering standardizing how the package is retrieved.  We're <em>also</em> introducing adaptive forms, where the questions aren't provided to the SMART app in bulk, but instead the SMART app repeatedly invokes an operation on the payer to determine what question(s) to ask next (and what CQL to use to auto-populate them if possible)</li>
+</ul>
+<p>In terms of the provider point of view, I think that's generally correct.  I think the hope/intent was that the provider community would standardize on a small set of apps, but we can't really force that.  However, even if you're using the same app, the questionnaires from different payers are going to be completely different - that's the primary driver of distinctive user experience.  All the apps would really introduce is different color schemes, maybe different styles for controls - so look &amp; feel, but not behavior.</p>
+
+
+
+<a name="256837447"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/197320-Da%20Vinci%20DTR/topic/Flow%20for%20CRD/DTR/near/256837447" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Sreekanth Puram <a href="https://fhir.github.io/chat-archive/stream/197320-Da-Vinci-DTR/topic/Flow.20for.20CRD.2FDTR.html#256837447">(Oct 09 2021 at 04:10)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> Thank you for explaining this in detail. I think I have better clarity in what is being proposed in the implementation guides. To understand the new enhancements to the implementation guides, let me take an example of a clinical scenario and walk through how various IGs would handle it according to the implementation guides with  proposed changes. <br>
+A patient is diagnosed with stage 2 breast cancer and the physician decides a chemotherapy regimen with 3 drugs that need to be administered in a facility. The assumption is that the drugs over here are covered under medical benefit for the payer and not the drug benefit. The payer requires information about the conditions of the patient, data from pathology like the tumor markers etc, comorbidity information, and the methodology used for managing the comorbidities if any. The patient in question is diabetic and is being managed through the use of diabetic medication. However, the information about the diabetic medication is missing from the EHR as it was done outside the hospital system.</p>
+<p>During the CRD stage : Based on the FHIR information given as a part of the CDSHook invocation, the payer will pull the necessary information from the provider's EHR, evaluate it against the internal coverage adjudication rules. The payer's rules determine that they have information to make the prior authorization except for the information about diabetic medication. 1. The payer could respond back with and of the following A card with a link to a full questionnaire like how it would have happened in CRD </p>
+<ol>
+<li>A card with human-readable information that this information is missing and a link to a full questionnaire like how it would have happened in CRD </li>
+<li>Ignore the missing diabetic drug information and send the prior auth approval.</li>
+<li>Include a link to the adaptive questionnaire which starts with a question about diabetic medication. </li>
+<li>will just check eligibility checks and prior auth requirements and not care about the rules for adjudication and send back a CARD with link to the full or adaptive questionnaire which starts with a question (which comes out in a scenario where the patient information is not known to the payer.)</li>
+</ol>
+<p>During DTR stage: Based on various CRD scenarios we will have the following DTR scenarios</p>
+<ol>
+<li>In the case of CRD scenario #1 above, the smart app in DTR would prefill the questionnaire with all the information available and prompts the oncologist/or his staff to fill in the information about the missing diabetic medications.</li>
+<li>In case of scenario 2 from CRD above, the doctor may go and document the missing diabetic medication information and rerun CRD and get the prior authorization number back as CRD with out invoking DTR.</li>
+<li>No question of DTR if scenario 3 from CRD occurs.</li>
+<li>If CRD sends an adaptive questionnaire, the smart app would present the question to the provider. After the provider answers this question and based on the answer, the payer maybe satisfied with the answer and send back a prior auth approval in the form of a response to the $nextquestion operation or just sends back a questionnaire completed message. The response is stored back in the EHR and if an approval is not granted, the questionnaire response will be attached to a PAS request.Not satisfied with the answers and ask a subsequent question and loop continues and the payer is satisfied with the answers or the payer is done asking all the questions.</li>
+<li>The scenario #5 in CRD will result in the same scenario as scenario #1 in DTR above.</li>
+<li>In any of the above scenarios, the oncologist may choose not to answer the question related to diabetic medication.</li>
+</ol>
+<p>During the PAS stage, the prior authorization request is made with a questionnaire response collected from the DTR stage.</p>
+<ol>
+<li>If the payer is able to make a decision based on the information, they may respond back with an affirmed or non-affirmed decision. If the payer is not able to make a decision, they may respond back with a pending decision.</li>
+<li>The payer may feel that the information is incomplete and may send back a link to the adaptive questionnaire and the DTR process is kicked off again. The provider may restart the PAS process or the payer may update the existing PA request with the data provided.</li>
+</ol>
+<p>I am sure there might be some shortcomings in the way I understand this. Could you please correct my understanding?</p>
+
+
+
+<a name="256878591"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/197320-Da%20Vinci%20DTR/topic/Flow%20for%20CRD/DTR/near/256878591" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/197320-Da-Vinci-DTR/topic/Flow.20for.20CRD.2FDTR.html#256878591">(Oct 09 2021 at 15:42)</a>:</h4>
+<p>In the CRD phase, I think you've got it mostly right.  #2 is certainly possible - e.g. if the payer already had awareness of the diabetic drug information from other claims.  #1 is possible, but not preferred, as it doesn't provide a vehicle to pre-emptive prior auth.  We haven't discussed #3, but nothing technically prohibits it.  I'm not really understanding how #4 and #3 are different.  And, of course, the preferred approach and most likely approach isn't listed - #5 - CRD returns a message saying that prior authorization is required and more information is needed with a link to the DTR app to capture that.  Launching DTR is preferable to returning a Questionnaire directly because most EHRs don't have an ability to handle Questionnaires with embedded CQL, while they do have the capability to launch a SMART app.</p>
+<p>DTR would <em>only</em> be available if CRD returns a link to a SMART app - not if it provides a link to a Questionnaire.  With DTR, the link to the Questionnaire (or at least sufficient context that allows the app to retrieve a Questionnaire in other ways) is provided in the launch context provided as part of the card.  (We plan to standardize this.)  However, if we presume that the questionnaires referred to are provided as part of the SMART app launch rather than in cards outside the SMART app:</p>
+<ol>
+<li>Yes</li>
+<li>A doctor wouldn't "re-run" CRD.  If they were still in the process of authoring/signing the order, CRD would run automatically and - if information was present that allowed the app to determine that prior authorization could be given pre-emptively, would return a card allowing that information to be stored - either on the order or linked to it.</li>
+<li>Adaptive forms with CQL would probably still need to be run inside a SMART app rather than by the EHR directly</li>
+<li>Another possibility is that the provider gets tired of answering questions (or all the clinically relevant ones have been answered) and tells the app to save the work in progress, so that someone else can later manually launch the SMART app to continue filling things out.</li>
+<li>Not sure what this is saying?</li>
+<li>Absolutely.  They can choose not to launch the app at all, or they can choose to stop answering questions at any point (either to come back to them later, to have someone else come back to them later, or to abandon the Questionnaire entirely).  In some cases, questions asked by the Questionnaire may prompt the clinician to abandon the proposed therapy plan and choose something else.</li>
+</ol>
+<p>For PAS, there's currently no mechanism to pass back a link to a Questionnaire.  However, our current plan for PAS v2 is to at least provide an indication that launching DTR is needed and, upon manually launching DTR, the user could choose a payer, specify a prior auth request number and the app could retrieve the relevant Questionnaire to complete - again either resulting in a new attachment to link to the prior auth request, or a pre-emptive assertion of authorization.</p>
+<p>Hope that helps :)</p>
+
+
+
+<a name="256892176"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/197320-Da%20Vinci%20DTR/topic/Flow%20for%20CRD/DTR/near/256892176" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Sreekanth Puram <a href="https://fhir.github.io/chat-archive/stream/197320-Da-Vinci-DTR/topic/Flow.20for.20CRD.2FDTR.html#256892176">(Oct 09 2021 at 19:16)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> I think we are on the same page with respect to most of the things. The difference between scenarios 3 and 4 in CRD is that #3 refers to CRD responding back with an adaptive questionnaire dynamically based on the clinical information collected so far by CRD and #4 is based on  just the administrative information and does not care about the clinical information collected during the CRD phase.</p>
+
+
+
+<a name="256892524"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/197320-Da%20Vinci%20DTR/topic/Flow%20for%20CRD/DTR/near/256892524" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Sreekanth Puram <a href="https://fhir.github.io/chat-archive/stream/197320-Da-Vinci-DTR/topic/Flow.20for.20CRD.2FDTR.html#256892524">(Oct 09 2021 at 19:21)</a>:</h4>
+<p>In the DTR scenarios when I refer to sending back a questionnaire, I was talking about the information sent as a part of the app context which would be referred to by the SMART app. I agree that as per the current IG, this app context is not standardized. So as things stand today, it may be the SMART app that we may be referring to. However if the app context is not standardized, we run into the danger of payers completely ignoring the DTR standard and use their custom cryptic messaging between the provider and payer systems.  so even if the payer sends back a SMART app launch URL to aid an EHR which does not have CQL processing ability, the IG should mandate returning of an app context that is in the standard format so that the EHR's native applications or any other entity not capable of running SMART will have the opportunity to communicate with the payer in a standardized way.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

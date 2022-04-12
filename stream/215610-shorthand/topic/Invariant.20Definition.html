@@ -1,0 +1,106 @@
+---
+layout: page
+title: "FHIR Chat  · Invariant Definition · shorthand"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/index.html">shorthand</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Invariant.20Definition.html">Invariant Definition</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="256191947"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Invariant%20Definition/near/256191947" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Diana_Ovelgoenne <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Invariant.20Definition.html#256191947">(Oct 05 2021 at 07:46)</a>:</h4>
+<p>Hi, I am struggling with the Invariants in FSH while using hasMember[Observation]. I am trying to build the logic for validating the existence of 2 different hasMember while the 3rd one then must not be present :<br>
+Profile: TestInvariants<br>
+Parent: Observation<br>
+Id: test-invariants<br>
+Title: "test invariants"<br>
+Description: "This Profile defines the different invariants"</p>
+<ul>
+<li>code = <a href="http://dicom.nema.org/resources/ontology/DCM#121071">http://dicom.nema.org/resources/ontology/DCM#121071</a> "Finding"</li>
+<li>value[x] 0..0</li>
+<li>hasMember ^slicing.discriminator.type = #profile</li>
+<li>hasMember ^slicing.discriminator.path = "$this.resolve()"</li>
+<li>hasMember ^slicing.rules = #open</li>
+<li>hasMember ^slicing.ordered = true</li>
+<li>
+<p>hasMember contains<br>
+    Observation1 0..1 and<br>
+    Observation2 0..* and<br>
+    Observation3 0..1</p>
+</li>
+<li>
+<p>hasMember[Observation1] only Reference(Observation1)</p>
+</li>
+<li>hasMember[Observation1] ^short = "Observation1"</li>
+<li>
+<p>hasMember[Observation1] ^definition = "This Profile defines the obs 1"</p>
+</li>
+<li>
+<p>hasMember[Observation2] only Reference(Observation2)</p>
+</li>
+<li>hasMember[Observation2] ^short = "Observation2"</li>
+<li>hasMember[Observation2] ^definition = "This Profile defines the obs 2"</li>
+<li>hasMember[Observation3] only Reference(Observation3)</li>
+<li>hasMember[Observation3] ^short = "Observation3"</li>
+<li>
+<p>hasMember[Observation3] ^definition = "This Profile defines the obs 3"</p>
+</li>
+<li>
+<p>obeys test</p>
+</li>
+</ul>
+<p>Invariant:   test<br>
+Description: "Observation1 and Observation2  SHALL be present Then Observation3 SHALL NOT exist"<br>
+Expression:  "hasMember[Observation1].exists() and hasMember[Observation2].exists() and hasMember[Observation3].exists().not()"<br>
+Severity:    #error</p>
+<p>Instance: InvariantsExample<br>
+InstanceOf: TestInvariants<br>
+Usage: #example<br>
+Title: "Invariants Example"<br>
+Description: ""</p>
+<ul>
+<li>status = <a href="http://hl7.org/fhir/observation-status#final">http://hl7.org/fhir/observation-status#final</a></li>
+<li>code = <a href="http://dicom.nema.org/resources/ontology/DCM#121071">http://dicom.nema.org/resources/ontology/DCM#121071</a> "Finding"</li>
+<li>hasMember[Observation1] = Reference(Observation1Example) </li>
+<li>hasMember[Observation2] = Reference(Observation2Example)</li>
+</ul>
+<p>Even if only Observation1 and Observation2 exist, I get a Failed status at the qa.html. I am not sure if the syntaxis I am using in FSH while defining the invariant  is the correct one, or why is this failing? It isn't clear how to write it when referring to the existence of a contained profile.<br>
+Thanks!</p>
+
+
+
+<a name="256405233"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Invariant%20Definition/near/256405233" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Invariant.20Definition.html#256405233">(Oct 06 2021 at 12:53)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="197447">@Diana_Ovelgoenne</span>.  Unfortunately, FSH syntax does not work inside of invariant expressions (keyword <code>Expression</code> in the <code>Invariant</code> definition).  Invariant expressions must be written using FHIRPath syntax (<a href="http://hl7.org/fhirpath/N1/">FHIRPath spec</a>, <a href="http://hl7.org/fhir/R4/fhirpath.html">FHIRPath in FHIR</a>).  You got some of the FHIRPath syntax right already (e.g., <code>.exists()</code>, <code>.not()</code>) -- but the approach to identifying slices was not correct.  In FHIR-based FHIRPath, you use the <code>slice</code> to refer to slices (documented in the <a href="http://hl7.org/fhir/R4/fhirpath.html#functions">additional functions</a> part of the spec).  Using this approach, your FHIRPath would be:</p>
+<div class="codehilite"><pre><span></span><code>Expression: &quot;hasMember.slice(&#39;http://example.org/StructureDefinition/test-invariants&#39;, &#39;Observation1&#39;).exists()
+    and hasMember.slice(&#39;http://example.org/StructureDefinition/test-invariants&#39;, &#39;Observation2&#39;).exists()
+    and hasMember.slice(&#39;http://example.org/StructureDefinition/test-invariants&#39;, &#39;Observation3&#39;).exists().not()&quot;
+</code></pre></div>
+<p>(assuming canonical URL <code>http://example.org/StructureDefinition/test-invariants</code> for your profile).</p>
+<p><em>Unfortunately</em>, however, if you run this through the IG Publisher and try to validate your example, the IG Publisher crashes with this exception:</p>
+<div class="codehilite"><pre><span></span><code>Exception in thread &quot;main&quot; java.lang.Error: Not done yet (ValidatorHostServices.resolveFunction): slice
+    at org.hl7.fhir.validation.instance.InstanceValidator$ValidatorHostServices.resolveFunction(InstanceValidator.java:228)
+    at org.hl7.fhir.r5.utils.FHIRPathEngine.parseExpression(FHIRPathEngine.java:1042)
+</code></pre></div>
+<p>I <em>think</em> this means that support for the FHIRPath slice function is not yet implemented in the validator.  Is that correct, <span class="user-mention" data-user-id="191316">@Grahame Grieve</span>?  If so, is there a way to still use the slice function in invariants without crashing the publisher?</p>
+
+
+
+<a name="268367021"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Invariant%20Definition/near/268367021" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jose Costa Teixeira <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Invariant.20Definition.html#268367021">(Jan 18 2022 at 09:53)</a>:</h4>
+<p>Is this addressed in the meanwhile? I'm looking for guidance on how to add slices in invariants, and I cannot find it</p>
+
+
+
+<a name="268399084"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Invariant%20Definition/near/268399084" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Invariant.20Definition.html#268399084">(Jan 18 2022 at 14:35)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="191832">@Jose Costa Teixeira</span> -- as noted above, the FHIRPath <code>slice</code> command is documented in the <em>additional functions</em> part of the FHIR spec's FHIRPath page here: <a href="http://hl7.org/fhir/R4/fhirpath.html#functions">http://hl7.org/fhir/R4/fhirpath.html#functions</a>.  As for whether or not the IG Publisher supports <code>slice(...)</code> yet, I don't know.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

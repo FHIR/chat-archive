@@ -1,0 +1,271 @@
+---
+layout: page
+title: "FHIR Chat  · Slicing on slices? · shorthand"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/index.html">shorthand</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html">Slicing on slices?</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="224258916"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224258916" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224258916">(Jan 27 2021 at 22:37)</a>:</h4>
+<p>I have a Bundle that I want to slice with the following requirements:<br>
+a) 1 entry with an Organization resource that matches a Registrant profile<br>
+b) 0..* entries with an OrganizationAffiliation resource<br>
+c) 0..* entries with an Organization resource that matches an Establishment profile<br>
+d) 0..1 entry with a DocumentReference resource<br>
+e) 0..* entries with no resource (used to delete resources)</p>
+<p>I'm struggling in how to slice the Bundle.entry to achieve this and I think that I might have a solution but SUSHI's validation routine might be getting in the way.</p>
+<p>If I didn't have (a) and (c), I could slice this on entry.resource with type #type.  If I didn't have (e), then I could slice on entry.resource with type #profile.  So I thought I would do an initial slice in entry.resource with type #type where (a) and (c) require an Organization resource.  Then I would further slice the Organization slice on #profile and specify the specific profile required.</p>
+<div class="codehilite"><pre><span></span><code>* entry ^slicing.discriminator.type = #type
+* entry ^slicing.discriminator.path = &quot;resource&quot;
+* entry ^slicing.rules = #open
+* entry contains Organizations 1..* MS and EstablishmentAffiliation 0..* MS and EstablishmentDelete 0..* MS and SourceSPL 0..1 MS
+
+* entry[Organizations].resource only Organization
+* entry[Organizations] ^slicing.discriminator.type = #profile
+* entry[Organizations] ^slicing.discriminator.path = &quot;this()&quot;
+* entry[Organizations] ^slicing.rules = #open
+* entry[Organizations] contains Registrant 1..1 MS and Establishment 0..* MS
+</code></pre></div>
+<p>Hopefully this makes sense and is the right way to express what I want.  Assuming that is, then this is what I have in my instance:</p>
+<div class="codehilite"><pre><span></span><code>* entry[Organizations][Registrant].resource = DenmarServicesRegistrant
+* entry[Organizations][Registrant].request.method = #POST
+* entry[Organizations][Registrant].request.url = &quot;Organization&quot;
+* entry[EstablishmentAffiliation].resource = EditorialExpertsEstablishmentAffiliation
+* entry[EstablishmentAffiliation].request.method = #POST
+* entry[EstablishmentAffiliation].request.url = &quot;OrganizationAffiliation&quot;
+* entry[Organizations][Establishment].resource = EditorialExpertsEstablishment
+* entry[Organizations][Establishment].request.method = #POST
+* entry[Organizations][Establishment].request.url = &quot;Organization&quot;
+</code></pre></div>
+<p>Unfortunately,  with the above, I get the following error from SUSHI:</p>
+<div class="codehilite"><pre><span></span><code>error Element Bundle.entry:Organizations has minimum cardinality 1 but occurs 0 time(s).
+  Line: 193 - 205
+</code></pre></div>
+<p>Am I not specifying this properly in my instance?  If I change the cardinality on the Organization slice from 1..* to 0..*, then SUSHI doesn't complain, but that doesn't seem to express what I want.</p>
+
+
+
+<a name="224261964"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224261964" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> ryan moehrke <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224261964">(Jan 27 2021 at 23:07)</a>:</h4>
+<p>Firstly, are you getting that from SUSHI? or the IG Publisher? I'm not sure how they get called exactly as I use FSHOnly for all of my tanks, <br>
+But I tried to do something very similar myself today as well but I had a different workaround (specific to my usecase) that allowed me to not use the 2nd tier of slicing once I exhausted my ideas and gave up. <br>
+From my trial-and-error and what bits of the spec I could parse, I honestly don't think that that form of re-slicing is expected/allowed for at all..</p>
+
+
+
+<a name="224262066"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224262066" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224262066">(Jan 27 2021 at 23:08)</a>:</h4>
+<p>that error was from SUSHI.  shoot, if it isn't expected/allowed.  I'm not sure how I'm going to produce a profile that will validate what I want it to validate</p>
+
+
+
+<a name="224262633"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224262633" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> ryan moehrke <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224262633">(Jan 27 2021 at 23:13)</a>:</h4>
+<p>what do you need from the delete slice? because you may be able to write an invariant with a bundle.entry.resource.exists().not() implies . . . <br>
+if it could be unilaterally applied</p>
+
+
+
+<a name="224262755"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224262755" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224262755">(Jan 27 2021 at 23:14)</a>:</h4>
+<p>i just want to say that some of the expected slices would be an entry that tells me to delete a specific resource</p>
+
+
+
+<a name="224263040"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224263040" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224263040">(Jan 27 2021 at 23:17)</a>:</h4>
+<p>you do point me in a direction - if I ignore that slice statement, that doesn't preclude instances to include those since the slicing is open, but for the slices that are recognized, it will do the proper validation.</p>
+
+
+
+<a name="224321403"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224321403" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224321403">(Jan 28 2021 at 12:57)</a>:</h4>
+<p>Hey <span class="user-mention" data-user-id="192166">@Jean Duteau</span>.  Have you tried using two discriminators?  Recall that <code>^slicing.discriminator</code> is an array -- so I think you can discriminate by <code>#type</code> and <code>#profile</code> at the same time -- and slices just need to ensure unique <em>combinations</em> of the resource and profile.  I <em>think</em>.  So... something like:</p>
+<div class="codehilite"><pre><span></span><code>* entry ^slicing.discriminator[+].type = #type
+* entry ^slicing.discriminator[=].path = &quot;resource&quot;
+* entry ^slicing.discriminator[+].type = #profile
+* entry ^slicing.discriminator[=].path = &quot;resource&quot;
+</code></pre></div>
+
+
+
+<a name="224322345"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224322345" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224322345">(Jan 28 2021 at 13:05)</a>:</h4>
+<p>I also think what you're trying to do with re-slicing makes sense (although I noticed that your re-slicing discriminator path is wrong).  That said, when I read the <a href="http://hl7.org/fhir/R4/profiling.html#reslicing">FHIR spec on re-slicing</a>, it only speaks in terms of re-slicing a slice defined in a <em>parent</em> profile.  I don't know if that's just lack of imagination on the part of the spec author, or if it's an actual requirement of re-slicing.</p>
+<p>That aside, SUSHI should allow the basic mechanism you're trying to do, and clearly there <em>is</em> an item in <code>entry[Organizations]</code> -- so this seems like perhaps SUSHI's card counting logic is getting messed up by the re-slicing.  We can look into it.</p>
+
+
+
+<a name="224324965"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224324965" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224324965">(Jan 28 2021 at 13:28)</a>:</h4>
+<p>OK, I've filed <a href="https://github.com/FHIR/sushi/issues/742">SUSHI#742</a> for this and also implemented a simple example of it at <a href="https://fshschool.org/FSHOnline/#/share/3opCADp">FSHOnline/#/share/3opCADp</a>.</p>
+
+
+
+<a name="224339226"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224339226" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> ryan moehrke <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224339226">(Jan 28 2021 at 15:11)</a>:</h4>
+<p>huh, looks like the double-slice is resolved through sushi as </p>
+<div class="codehilite"><pre><span></span><code>&quot;id&quot;:&quot;Bundle.entry:observations/heartrate&quot;
+&quot;path&quot;:&quot;Bundle.entry&quot;
+</code></pre></div>
+<p>which if double-slicing is even possible I feel like is the wrong way to express it.. But I still read the re-slicing info in the spec as adding to the current discriminators and slice definitions rather than doing something (useful) like this: another form of slicing in only one iteration of a slice at the same level.</p>
+
+
+
+<a name="224363478"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224363478" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224363478">(Jan 28 2021 at 17:37)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191469">Chris Moesel</span> <a href="#narrow/stream/215610-shorthand/topic/Slicing.20on.20slices.3F/near/224321403">said</a>:</p>
+<blockquote>
+<p>Hey <span class="user-mention silent" data-user-id="192166">Jean Duteau</span>.  Have you tried using two discriminators?  Recall that <code>^slicing.discriminator</code> is an array -- so I think you can discriminate by <code>#type</code> and <code>#profile</code> at the same time -- and slices just need to ensure unique <em>combinations</em> of the resource and profile.  I <em>think</em>.  So... something like:</p>
+</blockquote>
+<p>Yes, I tried that, but the problem is that for the #profile discriminator to work, it appears that you have to have something in resource and I don't for the DELETE transactions.  That's why I thought to slice on #type which doesn't appear to require that and then slice within that one slice.</p>
+
+
+
+<a name="224363812"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224363812" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224363812">(Jan 28 2021 at 17:40)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="237342">ryan moehrke</span> <a href="#narrow/stream/215610-shorthand/topic/Slicing.20on.20slices.3F/near/224339226">said</a>:</p>
+<blockquote>
+<p>huh, looks like the double-slice is resolved through sushi as </p>
+<div class="codehilite"><pre><span></span><code>&quot;id&quot;:&quot;Bundle.entry:observations/heartrate&quot;
+&quot;path&quot;:&quot;Bundle.entry&quot;
+</code></pre></div>
+<p>which if double-slicing is even possible I feel like is the wrong way to express it.. But I still read the re-slicing info in the spec as adding to the current discriminators and slice definitions rather than doing something (useful) like this: another form of slicing in only one iteration of a slice at the same level.</p>
+</blockquote>
+<p>I agree with Ryan about the slicing paths to not seem correct and that is potentially why you are getting the error that Bundle.entry has minimum cardinality of 2.  I was able to get this to go through validation by setting the mins all to 0.  But then the validator complained, so I'm pretty sure that this isn't an intended means of re-slicing.</p>
+
+
+
+<a name="224366507"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224366507" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> ryan moehrke <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224366507">(Jan 28 2021 at 17:57)</a>:</h4>
+<p>if there is a way to explicitly say missing is expected in a slice (per discriminator) and another way to explicitly say that missing is inconsequential to slice matching, I can see how multiple discriminators could work. But again, I did not see a way to do that. And without that clarification of missing-expected and missing-agnostic I see no way how tooling can actually resolve slices against multiple discriminators unless every slice has some value/binding/etc. for each discriminator path given.</p>
+
+
+
+<a name="224366696"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224366696" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224366696">(Jan 28 2021 at 17:58)</a>:</h4>
+<p>exactly!  although I will say that slicing on #type seems to allow for a missing as I use that in a different profile and it works.  But it doesn't seem to be allowed on #profile because the validator needs an actual instance of something to determine what it's profile is.</p>
+
+
+
+<a name="224366818"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224366818" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224366818">(Jan 28 2021 at 17:59)</a>:</h4>
+<p>in fact, I just checked and I use multiple discriminators in another profile where missing is allowed.  It seems that missing is allowed for anything that the validator doesn't have to resolve into something, i.e. if your path is x.resolve() or if the type is #profile.</p>
+
+
+
+<a name="224367077"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224367077" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> ryan moehrke <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224367077">(Jan 28 2021 at 18:00)</a>:</h4>
+<p>I think all the tooling available won't let you <em>not</em> have a type (it just inherits all of the possible options from the parent StructureDef) so that may be why type works without an explicit typing in the slice<br>
+but how does it treat a missing value? as nothing is expected and if something exists then it's not the slice in question? or that the missing value does not matter for matching that particular slice and only the other discriminator(s) matter and are sufficient for mutually exclusive slice matching?</p>
+
+
+
+<a name="224367502"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224367502" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224367502">(Jan 28 2021 at 18:03)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="237342">ryan moehrke</span> <a href="#narrow/stream/215610-shorthand/topic/Slicing.20on.20slices.3F/near/224339226">said</a>:</p>
+<blockquote>
+<p>huh, looks like the double-slice is resolved through sushi as </p>
+<div class="codehilite"><pre><span></span><code>&quot;id&quot;:&quot;Bundle.entry:observations/heartrate&quot;
+&quot;path&quot;:&quot;Bundle.entry&quot;
+</code></pre></div>
+<p>which if double-slicing is even possible I feel like is the wrong way to express it.</p>
+</blockquote>
+<p>Using <code>/</code> to separate the layers of slices in re-slicing (splitting a slice into sub-slices) is straight from the spec:<br>
+<a href="/user_uploads/10155/h4CuYMqb0PrDalQWGtSMcMB2/image.png">image.png</a></p>
+<div class="message_inline_image"><a href="/user_uploads/10155/h4CuYMqb0PrDalQWGtSMcMB2/image.png" title="image.png"><img src="/user_uploads/10155/h4CuYMqb0PrDalQWGtSMcMB2/image.png"></a></div>
+
+
+
+<a name="224368020"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224368020" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224368020">(Jan 28 2021 at 18:08)</a>:</h4>
+<p>I have a slice on Questionnaire.item where my discriminator is #value on type and #value on an extension(blah).  In my various slice definitions, I only specify the extension's value if I have multiple slices with the same item.type.  I believe that the validator therefore matches any value of the extension, including no extension specified at all, as meeting the slice condition.  And since I don't have multiple slices with the same item.type that doesn't then specify a specific item.extension(blah).value my slicing covers the space I intended.</p>
+
+
+
+<a name="224368492"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224368492" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224368492">(Jan 28 2021 at 18:11)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="237342">ryan moehrke</span> <a href="#narrow/stream/215610-shorthand/topic/Slicing.20on.20slices.3F/near/224367077">said</a>:</p>
+<blockquote>
+<p>but how does it treat a missing value? as nothing is expected and if something exists then it's not the slice in question? or that the missing value does not matter for matching that particular slice and only the other discriminator(s) matter and are sufficient for mutually exclusive slice matching?</p>
+</blockquote>
+<p>I wonder if there is a precedence to validating multiple discriminators?  In the slice I just talked about, item.type is listed first so it segments the slicing space first?  And since I only have one slice with item.type = #string, it doesn't matter what the value of the extension is, even if the slice definition is silent?</p>
+
+
+
+<a name="224369713"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224369713" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> ryan moehrke <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224369713">(Jan 28 2021 at 18:19)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191469">Chris Moesel</span> <a href="#narrow/stream/215610-shorthand/topic/Slicing.20on.20slices.3F/near/224367502">said</a>:</p>
+<blockquote>
+<p>Using <code>/</code> to separate the layers of slices in re-slicing (splitting a slice into sub-slices) is straight from the spec:<br>
+<a href="/user_uploads/10155/h4CuYMqb0PrDalQWGtSMcMB2/image.png">image.png</a></p>
+</blockquote>
+<p>interesting... that implies that this functionality that we want is explicitly allowed (and has been designed for at least in the spec) now the question turns to why isn't it working like we want it to</p>
+
+
+
+<a name="224370094"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224370094" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224370094">(Jan 28 2021 at 18:22)</a>:</h4>
+<p>I think it's just a SUSHI bug in counting occurrences of base slices when they've been re-sliced.  The real question is if the IG publisher accepts it or not.  If the IG publisher accepts it then I think the only issue is the SUSHI cardinality counting bug -- which someone will be looking at during our current 2-week sprint.</p>
+
+
+
+<a name="224370182"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224370182" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> ryan moehrke <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224370182">(Jan 28 2021 at 18:23)</a>:</h4>
+<p>Jean, if you don't mind can I see that profile you mentioned? that slices based on type and then extension if needed?<br>
+I just want to see how it manifests in the actual structure def in case I'm missing something</p>
+
+
+
+<a name="224370342"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224370342" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224370342">(Jan 28 2021 at 18:24)</a>:</h4>
+<p><a href="/user_uploads/10155/sn4bS3BT4R5pgLHX6NVR4Iml/Questionnaire.fsh">Questionnaire.fsh</a></p>
+
+
+
+<a name="224370344"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224370344" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224370344">(Jan 28 2021 at 18:24)</a>:</h4>
+<p>If the IG Publisher does not accept it, then maybe I am interpreting the spec wrong.  There is also the matter that the spec seems to imply this would mainly happen in regard to reslicing a slice from a parent profile -- not reslicing a slice from the current profile.  Although I don't see what the real difference would be.</p>
+
+
+
+<a name="224375109"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224375109" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> ryan moehrke <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224375109">(Jan 28 2021 at 18:57)</a>:</h4>
+<p>putzing around with your questionnaire fsh jean, it looks like the cause of your error might not be the slicing per se, but the use of slice names as indexes in the instance, I haven't been able to exhaustively test but once I switched to slice names in the instance you gave I saw a similar error from sushi<br>
+maybe switching to regular integer (or soft) indexes will get you past that particular hump for now and then we can see if the ig publisher / validator likes it.</p>
+
+
+
+<a name="224375345"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224375345" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224375345">(Jan 28 2021 at 18:59)</a>:</h4>
+<p>right.  we can do that with the latest version of SUSHI because the team relaxed that validation.  I would try that but I moved on for my current batch of profiles.</p>
+
+
+
+<a name="224375415"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224375415" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224375415">(Jan 28 2021 at 18:59)</a>:</h4>
+<p>I haven't had a chance to look at the FSH, but using slice names in the instance does have some advantages -- namely that it will automically apply any required fixed values for you.  But if you don't need that, you could try switching to soft indexing.  That basically entirely turns off SUSHI's slice validation.</p>
+
+
+
+<a name="224375561"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224375561" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> ryan moehrke <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224375561">(Jan 28 2021 at 19:00)</a>:</h4>
+<p>well that would make sense as to why we don't see slicing validation errors when we don't use them huh :p</p>
+
+
+
+<a name="224379868"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Slicing%20on%20slices%3F/near/224379868" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Slicing.20on.20slices.3F.html#224379868">(Jan 28 2021 at 19:28)</a>:</h4>
+<p>FWIW, I switched the Questionnaire instance to specify items by slicename instead of index and it worked just fine for me.  I'm using SUSHI 1.1.0.  I didn't run the publisher, so it may still fail there -- but SUSHI liked it just fine, and it even allowed me to remove some of the type and extension assignments in the instance (since calling out the slice by name automatically applied them).<br>
+<a href="/user_uploads/10155/XGe0etfVpWZsRUemOlCRoHNi/Questionnaire.fsh">Questionnaire.fsh</a></p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

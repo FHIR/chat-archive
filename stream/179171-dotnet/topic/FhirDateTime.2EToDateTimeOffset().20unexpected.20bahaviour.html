@@ -1,0 +1,159 @@
+---
+layout: page
+title: "FHIR Chat  · FhirDateTime.ToDateTimeOffset() unexpected bahaviour · dotnet"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/index.html">dotnet</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FhirDateTime.2EToDateTimeOffset().20unexpected.20bahaviour.html">FhirDateTime.ToDateTimeOffset() unexpected bahaviour</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="154010312"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FhirDateTime.ToDateTimeOffset%28%29%20unexpected%20bahaviour/near/154010312" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FhirDateTime.2EToDateTimeOffset().20unexpected.20bahaviour.html#154010312">(Oct 18 2018 at 23:38)</a>:</h4>
+<p>I've done a partial write-up of an odd behavior I've found in the FHIR client.<br>
+<code>new FhirDateTime(“2015-01-02”).ToDateTimeOffset(new TimeSpan(-5, 0, 0)).Day != 2</code><br>
+<a href="http://brianpos.com/2018/10/19/dates-and-timezones-in-the-fhir-net-api/" target="_blank" title="http://brianpos.com/2018/10/19/dates-and-timezones-in-the-fhir-net-api/">http://brianpos.com/2018/10/19/dates-and-timezones-in-the-fhir-net-api/</a><br>
+Planning to do more research and a recommendation on how we could proceed.<br>
+<span class="user-mention" data-user-id="191319">@James Agnew</span>, not sure if there is something similar in the Java Client libs too.</p>
+<div class="codehilite"><pre><span></span>FhirDateTime testDate = new FhirDateTime(&quot;2015-01-02&quot;);
+Trace.WriteLine($&quot;Undeclared Timezone: {testDate.ToDateTimeOffset().ToString()}&quot;);
+Trace.WriteLine($&quot;Melbourne: {testDate.ToDateTimeOffset(new TimeSpan(11, 0, 0)).ToString()}&quot;);
+Trace.WriteLine($&quot;Boston: {testDate.ToDateTimeOffset(new TimeSpan(-5, 0, 0)).ToString()}&quot;);
+</pre></div>
+
+
+<p>This test gives this result</p>
+<div class="codehilite"><pre><span></span>Undeclared Timezone: 2/01/2015 12:00:00 AM +00:00
+Melbourne: 2/01/2015 11:00:00 AM +11:00
+Boston: 1/01/2015 7:00:00 PM -05:00
+</pre></div>
+
+
+
+<a name="154010365"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FhirDateTime.ToDateTimeOffset%28%29%20unexpected%20bahaviour/near/154010365" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Angus Millar <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FhirDateTime.2EToDateTimeOffset().20unexpected.20bahaviour.html#154010365">(Oct 19 2018 at 07:37)</a>:</h4>
+<p>I can see how to get the values you are asking for, something like this still needs work:</p>
+<div class="codehilite"><pre><span></span>public static DateTimeOffset? ToNewDateTimeOffset(this Hl7.Fhir.Model.FhirDateTime FhirDate, TimeSpan TimeSpan)
+    {
+      if (FhirDate.Value.Length &lt; 11 )
+      {
+        DateTime? TempDateTime = FhirDate.ToDateTime();
+        if (TempDateTime.HasValue)
+        {
+          TempDateTime = DateTime.SpecifyKind(TempDateTime.Value, DateTimeKind.Unspecified);
+          return new DateTimeOffset(TempDateTime.Value, TimeSpan);
+        }
+        return null;
+      }
+      else
+      {
+        return FhirDate.ToDateTimeOffset(TimeSpan);
+      }
+    }
+</pre></div>
+
+
+
+<a name="154010366"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FhirDateTime.ToDateTimeOffset%28%29%20unexpected%20bahaviour/near/154010366" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Angus Millar <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FhirDateTime.2EToDateTimeOffset().20unexpected.20bahaviour.html#154010366">(Oct 19 2018 at 07:38)</a>:</h4>
+<p>But I don't understand how you would use it in your server search indexing, how do you know what Timezone to use on index commit or on the search query?</p>
+
+
+
+<a name="154010824"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FhirDateTime.ToDateTimeOffset%28%29%20unexpected%20bahaviour/near/154010824" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FhirDateTime.2EToDateTimeOffset().20unexpected.20bahaviour.html#154010824">(Oct 22 2018 at 03:49)</a>:</h4>
+<p>Yes, Hence my desire to redo the implementation in our server.</p>
+
+
+
+<a name="154012098"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FhirDateTime.ToDateTimeOffset%28%29%20unexpected%20bahaviour/near/154012098" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Angus Millar <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FhirDateTime.2EToDateTimeOffset().20unexpected.20bahaviour.html#154012098">(Oct 25 2018 at 08:46)</a>:</h4>
+<p>Brian if it helps I tackled this somewhat differently. Still not great but as close as I could possibly get with this problem to make it reasonable. Love to hear what you come up with.<br>
+So below are my notes on what I did. I will also point out that every date and datetime index I store is stored with two DateTimes, a Low and a High. So every single one is a range, not a single dateTime. Then all the searchers on these indexes are range on range searches. They are also all converted and stored in the database as  Zulu time UTC +0000. The server's default timezone is used when no timezone information is given, such as Dates and any DateTime without time zone info.<br>
+Given all this here are my notes about the Date with no time zone problem and what I do:</p>
+<p>To deal with the problem of no time zones on Dates, e.g 2018-10-05 we treat the search as a 36 hour day rather than a 24 hours day when the precision is one on Year, Month or Day. For more fine-grained precisions such as Hour, Min, Sec we expect to have the time zones information supplied if time zone differences are a concern of the searcher. <br>
+So to do this I subtract 6 hours from the beginning of the date range 2018-10-05T00:00 and add 6 hours to the end of the day 2018-10-05T23:59. This gives us a 36 hour day range. The idea is that it is better to return more than less for the search.</p>
+<p>This is a compromise as we really do not know what is meant by a date with no time zone. We can assume the servers default time zone as a starting point but this is only a guess to what the true time zone was for either the supplied search date or the stored FHIR resource dates when dealing with only date and no time.  </p>
+<p>So the range we actually use for this example is not:   <br>
+  2018-10-05T00:00 to 2018-10-05T23:59 <br>
+but rather: <br>
+  2018-10-04T18:00 to 2018-10-06T05:59 <br>
+Which in a 12hr clock is 04/10/2018 6:00PM to 06/10/2018 6:00AM when the search date was: 05/10/2018<br>
+Also bear in mind that all date times are converted to UTC Zulu +00:00 time when stored and searched in the database.</p>
+
+
+
+<a name="154012297"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FhirDateTime.ToDateTimeOffset%28%29%20unexpected%20bahaviour/near/154012297" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FhirDateTime.2EToDateTimeOffset().20unexpected.20bahaviour.html#154012297">(Oct 25 2018 at 21:50)</a>:</h4>
+<p>My server also does the high low thing that you've described. But  it happy with the other parts I've done.<br>
+I'm considering doing 2 indexes, one for partials (no times), and one for precise (with tines/zones)</p>
+
+
+
+<a name="154012298"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FhirDateTime.ToDateTimeOffset%28%29%20unexpected%20bahaviour/near/154012298" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FhirDateTime.2EToDateTimeOffset().20unexpected.20bahaviour.html#154012298">(Oct 25 2018 at 21:51)</a>:</h4>
+<p>Then these compromises aren't needed, but does cost storage space</p>
+
+
+
+<a name="154012299"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FhirDateTime.ToDateTimeOffset%28%29%20unexpected%20bahaviour/near/154012299" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FhirDateTime.2EToDateTimeOffset().20unexpected.20bahaviour.html#154012299">(Oct 25 2018 at 21:52)</a>:</h4>
+<p>A 3 integer index.</p>
+
+
+
+<a name="154012332"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FhirDateTime.ToDateTimeOffset%28%29%20unexpected%20bahaviour/near/154012332" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Angus Millar <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FhirDateTime.2EToDateTimeOffset().20unexpected.20bahaviour.html#154012332">(Oct 26 2018 at 07:38)</a>:</h4>
+<p>I still don't see it.  <br>
+If I receive a resource with a Date only 2018-10-05 I will store that in three indexes as follows:<br>
+Date:  2018-10-05<br>
+LowDateTime: 2018-10-05T00:00 Z<br>
+HighDateTime: 2018-10-05T23:59 Z<br>
+I've already had to make an assumption on time zone for the Low and High DateTimes .</p>
+<p>Now a search comes in with a timezone: 2018-10-05T21:00 -04:00  which converted to Zulu will be: 2018-10-06T01:00 Z<br>
+That will not match on the indexes we have , but the assumption I think we wanted is that it would.</p>
+<p>What about the other way around?</p>
+<p>If I receive a resource with a DateTime and time zone 2018-10-05T21:00 -04:00 I will store that in three indexes as follows:<br>
+Date:  2018-10-05<br>
+LowDateTime: 2018-10-06T01:00:00 Z<br>
+HighDateTime: 2018-10-06T01:00:59 Z<br>
+Now a search comes in with a only a date: 2018-10-05  <br>
+Its a match, but then so is :2018-10-06</p>
+<p>I don't know if I have you idea wrong but I'm still stumped on how to solve it.</p>
+
+
+
+<a name="154012336"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FhirDateTime.ToDateTimeOffset%28%29%20unexpected%20bahaviour/near/154012336" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michel Rutten <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FhirDateTime.2EToDateTimeOffset().20unexpected.20bahaviour.html#154012336">(Oct 26 2018 at 08:41)</a>:</h4>
+<blockquote>
+<p>That will not match on the indexes we have , but the assumption I think we wanted is that it would.</p>
+</blockquote>
+<p>Why? A date without a timezone is ambiguous. My Friday in The Netherlands partially overlaps with your Friday. Without a specific timezone, a date represents a broad and imprecise range.<br>
+I like your interval arithmetic approach, as it provides clearly defined behavior for imprecise ranges. You could also transform the incoming search date to an interval (possibly wider in case of missing timezone), then search db intervals for non-zero intersections.</p>
+
+
+
+<a name="154012760"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FhirDateTime.ToDateTimeOffset%28%29%20unexpected%20bahaviour/near/154012760" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FhirDateTime.2EToDateTimeOffset().20unexpected.20bahaviour.html#154012760">(Oct 26 2018 at 22:21)</a>:</h4>
+<p>Sorry, the 3 indexes I meant were year, month, day depending on the precision required. Plus the high low for precise data.</p>
+
+
+
+<a name="154013139"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FhirDateTime.ToDateTimeOffset%28%29%20unexpected%20bahaviour/near/154013139" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christiaan Knaap <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FhirDateTime.2EToDateTimeOffset().20unexpected.20bahaviour.html#154013139">(Oct 29 2018 at 08:17)</a>:</h4>
+<p>FYI: Vonk also translates every date(time) to a range based on the precision and translated to an offset of 0. Both the date(time)s in resources and in search arguments, and then match on overlap. Pretty much the same as you do. <span class="user-mention" data-user-id="191391">@Angus Millar</span> idea of a 36 hour day is a nice workaround. <br>
+<span class="user-mention" data-user-id="191367">@Brian Postlethwaite</span> solution for y/m/d/high/low is most precise. Reality is that no Vonk user has reported an issue with our current solution yet.</p>
+
+
+
+<a name="154013141"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FhirDateTime.ToDateTimeOffset%28%29%20unexpected%20bahaviour/near/154013141" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FhirDateTime.2EToDateTimeOffset().20unexpected.20bahaviour.html#154013141">(Oct 29 2018 at 08:35)</a>:</h4>
+<p>Thanks for the feedback Christiaan, great to know.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

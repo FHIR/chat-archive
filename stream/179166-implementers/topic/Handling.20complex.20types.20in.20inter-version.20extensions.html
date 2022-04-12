@@ -1,0 +1,180 @@
+---
+layout: page
+title: "FHIR Chat  · Handling complex types in inter-version extensions · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20complex.20types.20in.20inter-version.20extensions.html">Handling complex types in inter-version extensions</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="249655449"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Handling%20complex%20types%20in%20inter-version%20extensions/near/249655449" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20complex.20types.20in.20inter-version.20extensions.html#249655449">(Aug 16 2021 at 22:16)</a>:</h4>
+<p>In R4 of the core spec <a href="http://hl7.org/fhir/versions.html#extensions">here</a>, we say<br>
+<code>Where complex data types have no equivalent in an earlier version, use a complex extension, containing extensions also following this pattern. Follow the same pattern for any elements not found in data types in earlier versions</code><br>
+However, we don't explain how that works in practice in a few ways:</p>
+<ul>
+<li>how does the data type being represented get exposed?</li>
+<li>what are the URLs for the complex extension?</li>
+<li>what happens if the element in question is a choice - between types that are part of the version the extension is referencing and types that aren't?  E.g. what is the name of the value[x] when the type isn't a supported type?</li>
+</ul>
+<p>These questions come from <a href="http://jira.hl7.org/browse/FHIR-31721">FHIR#31721</a> from <span class="user-mention" data-user-id="191469">@Chris Moesel</span>.  We don't (yet) have good answers and are seeking ideas.</p>
+
+
+
+<a name="249661008"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Handling%20complex%20types%20in%20inter-version%20extensions/near/249661008" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20complex.20types.20in.20inter-version.20extensions.html#249661008">(Aug 16 2021 at 23:21)</a>:</h4>
+<p>EXAMPLE: NEW-DATATYPE-IN-CHOICE.</p>
+<p>Let me kick things off with one example from FHIR R7, where (let's imagine) <code>Observation.value[x]</code> supports a new complex type called <code>SensorData</code> that for the sake of argument looks like</p>
+<div class="codehilite" data-code-language="JavaScript"><pre><span></span><code><span class="p">{</span>
+  <span class="s2">"point"</span><span class="o">:</span> <span class="p">[{</span>
+      <span class="s2">"offset"</span><span class="o">:</span> <span class="s2">"int64 count of microseconds from the measurement start"</span><span class="p">,</span>
+      <span class="s2">"data"</span><span class="o">:</span> <span class="s2">"int64 value measured by sensor"</span>
+  <span class="p">}]</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>(is this even a legal for Observation to do in FHIR R7? I'm not 100% sure. <a href="http://hl7.org/fhir/versions.html#f-compat">Technically</a> "Additional data types may be added to elements which are already expressed as a choice of data types only if those elements are optional", and Observation.value is ... min cardinality zero... but I'm not sure what that implies with respect to "optional".)</p>
+<p>So in R7, we'd have:</p>
+<div class="codehilite" data-code-language="JavaScript"><pre><span></span><code><span class="p">{</span>
+  <span class="s2">"resourceType"</span><span class="o">:</span> <span class="s2">"Observation"</span><span class="p">,</span>
+  <span class="s2">"valueSensorData"</span><span class="o">:</span> <span class="p">{</span>
+    <span class="s2">"points"</span><span class="o">:</span> <span class="p">[</span>
+      <span class="p">{</span><span class="s2">"offset"</span><span class="o">:</span> <span class="s2">"0"</span><span class="p">,</span> <span class="nx">data</span><span class="o">:</span> <span class="s2">"800"</span><span class="p">},</span>
+      <span class="p">{</span><span class="s2">"offset"</span><span class="o">:</span> <span class="s2">"100"</span><span class="p">,</span> <span class="nx">data</span><span class="o">:</span> <span class="s2">"900"</span><span class="p">},</span>
+    <span class="p">]</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>And back-porting to R4 (assuming we map R5's int64 primitive to "string" in R4, which seems reasonable and, incidentally, like something we should not forget to write down!)...</p>
+<div class="codehilite" data-code-language="JavaScript"><pre><span></span><code><span class="p">{</span>
+  <span class="s2">"resource"</span><span class="o">:</span> <span class="s2">"Observation"</span><span class="p">,</span>
+  <span class="s2">"_valueSensorData"</span><span class="o">:</span> <span class="p">{</span>  <span class="c1">// (A) this seems wrong-- I'm not sure what element to attach these too</span>
+    <span class="s2">"extension"</span><span class="o">:</span> <span class="p">[{</span>
+      <span class="s2">"url"</span><span class="o">:</span> <span class="s2">"http://hl7.org/fhir/7.0/StructureDefinition/extension-SensorData"</span><span class="p">,</span>
+       <span class="s2">"extension"</span><span class="o">:</span> <span class="p">[{</span>
+        <span class="s2">"url"</span><span class="o">:</span> <span class="s2">"point"</span><span class="p">,</span>  <span class="c1">// (B) can we use "short" names for complex extension innards?</span>
+        <span class="s2">"extension"</span><span class="o">:</span> <span class="p">[{</span>
+          <span class="s2">"url"</span><span class="o">:</span> <span class="s2">"offset"</span><span class="p">,</span> <span class="c1">// (C) and if so, do we worry about ambiguity at different levels fo depth?</span>
+          <span class="s2">"valueString"</span><span class="o">:</span> <span class="s2">"0"</span>
+        <span class="p">},</span> <span class="p">{</span>
+          <span class="s2">"url"</span><span class="o">:</span> <span class="s2">"data"</span><span class="p">,</span>
+          <span class="s2">"valueString"</span><span class="o">:</span> <span class="s2">"800"</span>
+        <span class="p">}]</span>
+      <span class="p">}]</span>
+    <span class="p">},</span> <span class="p">{</span>
+        <span class="s2">"url"</span><span class="o">:</span> <span class="s2">"point"</span><span class="p">,</span>
+        <span class="s2">"extension"</span><span class="o">:</span> <span class="p">[{</span>
+          <span class="s2">"url"</span><span class="o">:</span> <span class="s2">"offset"</span><span class="p">,</span>
+          <span class="s2">"valueString"</span><span class="o">:</span> <span class="s2">"100"</span>
+        <span class="p">},</span> <span class="p">{</span>
+          <span class="s2">"url"</span><span class="o">:</span> <span class="s2">"data"</span><span class="p">,</span>
+          <span class="s2">"valueString"</span><span class="o">:</span> <span class="s2">"900"</span>
+        <span class="p">}]</span>
+      <span class="p">}]</span>
+    <span class="p">}]</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+
+<a name="249668477"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Handling%20complex%20types%20in%20inter-version%20extensions/near/249668477" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20complex.20types.20in.20inter-version.20extensions.html#249668477">(Aug 17 2021 at 01:23)</a>:</h4>
+<p>The element name <em>must</em> be one that's valid in the R4 schema.  _valueSensorData wouldn't be.  <br>
+Perhaps what we should have is an extension on Observation with a URL of "<a href="http://hl7.org/fhir/4.0/StructureDefinition/Observation.value">http://hl7.org/fhir/4.0/StructureDefinition/Observation.value</a>"?</p>
+
+
+
+<a name="250414378"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Handling%20complex%20types%20in%20inter-version%20extensions/near/250414378" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20complex.20types.20in.20inter-version.20extensions.html#250414378">(Aug 23 2021 at 21:27)</a>:</h4>
+<p>Poking on this - please share your thoughts</p>
+
+
+
+<a name="250416831"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Handling%20complex%20types%20in%20inter-version%20extensions/near/250416831" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20complex.20types.20in.20inter-version.20extensions.html#250416831">(Aug 23 2021 at 21:50)</a>:</h4>
+<p>Thanks for the poke.  I've already implemented support for inter-version extensions in SUSHI and had to make some assumptions/guesses regarding some of this behavior.  I'll look at my code tomorrow and let you know where I landed on some of these.  Not saying we need to go the way I did -- but will just add that info as a data point (and I of course will update SUSHI to reflect whatever we ultimately decide).</p>
+
+
+
+<a name="250443505"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Handling%20complex%20types%20in%20inter-version%20extensions/near/250443505" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20complex.20types.20in.20inter-version.20extensions.html#250443505">(Aug 24 2021 at 05:19)</a>:</h4>
+<p>First-class extensions would allow us forward compatibility,  but "it's too late ;("</p>
+
+
+
+<a name="250485962"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Handling%20complex%20types%20in%20inter-version%20extensions/near/250485962" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20complex.20types.20in.20inter-version.20extensions.html#250485962">(Aug 24 2021 at 13:39)</a>:</h4>
+<blockquote>
+<ul>
+<li>how does the data type being represented get exposed?</li>
+<li>what are the URLs for the complex extension?</li>
+</ul>
+</blockquote>
+<p>We had to implement some of this in SUSHI.  At the time, our approach was to glean what we could from docs, Zulip, and IG Publisher behavior.  Here is an example of the result when creating an instance of R4 <code>MedicationRequest</code> w/ an extension to use R5 <code>MedicationRequest.medication</code> (which is a <code>CodeableReference</code>):</p>
+<div class="codehilite" data-code-language="JSON"><pre><span></span><code><span class="p">{</span>
+  <span class="nt">"resourceType"</span><span class="p">:</span> <span class="s2">"MedicationRequest"</span><span class="p">,</span>
+  <span class="nt">"id"</span><span class="p">:</span> <span class="s2">"MyMedRequestInstanceWithCodeableReferenceExtension"</span><span class="p">,</span>
+  <span class="nt">"extension"</span><span class="p">:</span> <span class="p">[</span>
+    <span class="p">{</span>
+      <span class="nt">"url"</span><span class="p">:</span> <span class="s2">"http://hl7.org/fhir/5.0/StructureDefinition/extension-MedicationRequest.medication"</span><span class="p">,</span>
+      <span class="nt">"extension"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+          <span class="nt">"url"</span><span class="p">:</span> <span class="s2">"concept"</span><span class="p">,</span>
+          <span class="nt">"valueCodeableConcept"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="nt">"coding"</span><span class="p">:</span> <span class="p">[{</span> <span class="nt">"code"</span><span class="p">:</span> <span class="s2">"76388-713-25"</span><span class="p">,</span> <span class="nt">"system"</span><span class="p">:</span> <span class="s2">"http://hl7.org/fhir/sid/ndc"</span> <span class="p">}]</span>
+          <span class="p">}</span>
+        <span class="p">},</span>
+        <span class="p">{</span>
+          <span class="nt">"url"</span><span class="p">:</span> <span class="s2">"reference"</span><span class="p">,</span>
+          <span class="nt">"valueReference"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="nt">"reference"</span><span class="p">:</span> <span class="s2">"Medication/MyMedication"</span>
+          <span class="p">}</span>
+        <span class="p">}</span>
+      <span class="p">]</span>
+    <span class="p">}</span>
+  <span class="p">],</span>
+  <span class="nt">"status"</span><span class="p">:</span> <span class="s2">"completed"</span><span class="p">,</span>
+  <span class="nt">"intent"</span><span class="p">:</span> <span class="s2">"order"</span><span class="p">,</span>
+  <span class="nt">"medicationReference"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="nt">"reference"</span><span class="p">:</span> <span class="s2">"Medication/MyMedication"</span>
+  <span class="p">},</span>
+  <span class="nt">"subject"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="nt">"reference"</span><span class="p">:</span> <span class="s2">"Patient/Bob"</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>First, note that we still had to put in <code>medicationReference</code> too, since <code>medication[x]</code> is <code>1..1</code>.  Kind of a bummer.</p>
+<p>As you can see, we used the element names (<code>concept</code>, <code>reference</code>) as relative URLs in the complex extension.  At one point we had tried using absolute extension URLs for the sub-extensions (e.g., <code>http://hl7.org/fhir/5.0/StructureDefinition/extension-CodeableReference.concept</code> instead of <code>concept</code>). <br>
+We thought this might be nice since you re-use other inter-version extensions rather than redundantly defining them inline in the complex extension.  But... the IG Publisher was having none of that, so we reverted and stuck to inline relative URLs for complex extensions.</p>
+<p>That said, the IG Publisher actually chokes on the example above too.  We could only get it working with the IG Publisher for complex extensions representing a BackboneElement.  When we tried to represent a truly new datatype (as in above), IG Publisher complains:</p>
+<blockquote>
+<p>java.lang.Exception: Error generating snapshot for MyMedRequestProfileWithCodeableReferenceExtension(MyMedRequestProfileWithCodeableReferenceExtension): Unable to generate snapshot for <a href="http://example.org/StructureDefinition/MyMedRequestProfileWithCodeableReferenceExtension">http://example.org/StructureDefinition/MyMedRequestProfileWithCodeableReferenceExtension</a> in /Users/cmoesel/dev/fsh/ImpliedExtensionsProject/fsh-generated/resources/structuredefinition-MyMedRequestProfileWithCodeableReferenceExtension<br>
+...<br>
+Caused by: org.hl7.fhir.exceptions.DefinitionException: StructureDefinition <a href="http://hl7.org/fhir/5.0/StructureDefinition/extension-MedicationRequest.medication">http://hl7.org/fhir/5.0/StructureDefinition/extension-MedicationRequest.medication</a> at Extension.value[x]: illegal constrained type CodeableReference from base64Binary, boolean, canonical, code, date, dateTime, decimal, id, instant, integer, markdown, oid, positiveInt, string, time, unsignedInt, uri, url, uuid, Address, Age, Annotation, Attachment, CodeableConcept, Coding, ContactPoint, Count, Distance, Duration, HumanName, Identifier, Money, Period, Quantity, Range, Ratio, Reference, SampledData, Signature, Timing, ContactDetail, Contributor, DataRequirement, Expression, ParameterDefinition, RelatedArtifact, TriggerDefinition, UsageContext, Dosage, Meta in <a href="http://hl7.org/fhir/StructureDefinition/Extension">http://hl7.org/fhir/StructureDefinition/Extension</a></p>
+</blockquote>
+<p>The message seems a little odd since we're actually <em>not</em> trying to constrain anything to <code>CodeableReference</code> directly (in fact, that's the point).</p>
+
+
+
+<a name="250494618"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Handling%20complex%20types%20in%20inter-version%20extensions/near/250494618" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20complex.20types.20in.20inter-version.20extensions.html#250494618">(Aug 24 2021 at 14:39)</a>:</h4>
+<blockquote>
+<p>what happens if the element in question is a choice - between types that are part of the version the extension is referencing and types that aren't? E.g. what is the name of the value[x] when the type isn't a supported type?</p>
+</blockquote>
+<p>We punted on this one because there was no clear answer.  As you noted, there is no way to legally introduce a new type to a choice (including <code>Extension.value[x]</code>).  So if someone had an extension that pointed to a choice type, and that choice type contained new data elements, we just filtered those new types out as unrepresentable.  Not ideal, but the best we can do sans any actual specification of approach.</p>
+<p>It's difficult to determine the right approach here.  I think the best thing might be Lloyd's suggestion.  <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> - you suggested a top-level extension w/ URL: <code>http://hl7.org/fhir/4.0/StructureDefinition/Observation.value</code></p>
+<ul>
+<li>We were talking about representing a choice from hypothetical FHIR 7.0, so did you mean <code>7.0</code> (not <code>4.0</code>)?</li>
+<li>Is there a reason the extension ends w/ <code>.value</code> rather than <code>.value[x]</code>?  According to <a href="http://hl7.org/fhir/R4/versions.html#extensions">2.7.0.7</a>, "The [Path] is actually the <a href="http://ElementDefinition.id">ElementDefinition.id</a> from the relevant StructureDefinition for the element" - so I think it should be <code>value[x]</code>?</li>
+</ul>
+<p>This still does not answer what should be done if the original <code>value[x]</code> is <code>1..1</code>.  It would be hard to come up w/ a generic approach because there is no guarantee that a given choice type exists in the choice (e.g., we can't say "always use valueString" because not all choices have a string choice).</p>
+<p>The other question is that if this represents something like the value of an Observation, and we're putting that value in an extension, then is that technically a modifierExtension?  It <em>does</em> change the meaning of the Observation -- and if someone were to process the Observation without knowledge of the extension, then they'd be processing the wrong value element.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

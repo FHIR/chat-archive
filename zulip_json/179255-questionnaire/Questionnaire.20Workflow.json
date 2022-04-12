@@ -1,0 +1,152 @@
+[
+    {
+        "content": "<p>I have another question about workflows for questionnaires. I'm designing a workflow for screening questionnaires using FHIR, and I want to make sure I have all of the resources I'm going to use. It's going to go something like this:</p>\n<ol>\n<li>The clinical provider (doctor/nurse/social worker) places an order to screen a patient</li>\n<li>That order references a list of multiple questionnaires that together make up the entire screening survey</li>\n<li>After ordering, the patient sent a link via text or email that they have a survey waiting</li>\n<li>The patient clicks the link, is directed to the login screen, and then has the surveys displayed for them to complete</li>\n<li>The surveys are saved during the process, so patients can come back to complete them later</li>\n<li>The patient is alerted periodically if they have not completed the questionnaire</li>\n<li>When completed, the questionnaire is scored, and referrals are made based on these scores</li>\n</ol>\n<p>Using FHIR, I thought the workflow would look something like this:</p>\n<ol>\n<li>Order from outside system gets placed</li>\n<li>This generates a FHIR ServiceRequest</li>\n<li>The ServiceRequest references a PlanDefinition</li>\n<li>The PlanDefinition is a list of Questionnaires</li>\n<li>A Communication is generated for an email or text which is sent to the patient with a link</li>\n<li>When they open the link, the Questionnaires from the PlanDefinition are displayed</li>\n<li>They answer the Questionnaire, which gets stored as a QuestionnaireResponse on the server</li>\n<li>If it is incomplete, periodically a Communication is again generated to alert the patient to complete the survey</li>\n<li>When the questionnaire is complete, it is scored (should this be stored in an Observation, or only in the QuestionnaireResponse?)</li>\n<li>If the score meets certain thresholds, then another ServiceRequest is generated for referrals</li>\n</ol>\n<p>Am I missing anything in this workflow?</p>",
+        "id": 239963842,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1621788989
+    },
+    {
+        "content": "<p>Step 5 should ideally be a Task.  Task says \"please do\", while Communication just says \"here's some info\".  They can refuse a Task, they can't refuse a Communication.  And patient's are absolutely going to want to refuse sometimes.  (If you keep hounding them forever, they're not going to be happy with you...)  Also, you might ideally create a distinct Task for each Questionnaire, as they might fill out some but not others.  You can use Communication to log the fact that you sent a prompting email/text as well as follow-ups though.  In terms of step 9, If you want the score to be subsequently searchable, you'll definitely want an Observation for it.  (You can link it to the QuestionnaireResponse as the source it's derived form though.</p>",
+        "id": 239972952,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1621798272
+    },
+    {
+        "content": "<p>Yeah, agreed about bothering the patient (I'm not a huge fan of that aspect, but that's what we've been requested to do). <br>\nAnd for step 5, you're suggesting creating both a Task and a Communication, correct? The Task would be the \"request\" to the patient to do something, and the Communication is just the record that we did actually send them something.</p>",
+        "id": 239984412,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1621810971
+    },
+    {
+        "content": "<p>OK, one further question.</p>",
+        "id": 242904970,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1623860518
+    },
+    {
+        "content": "<p>Sorry, I'm just trying to be as clear as I can be on the workflow:</p>\n<ol>\n<li>Order placed</li>\n<li>ServiceRequest created from Order</li>\n<li>Service Request Triggers the Creation of a Task and Instantiates a PlanDefinition</li>\n<li>The PlanDefinition has references to all of the Questionnaires that are to be included</li>\n<li>The Task references the PlanDefinition and keeps track of the progress through the questionnaires</li>\n<li>When the Task is initially created, it triggers the creation of a CommunicationRequest</li>\n<li>The CommunicationRequest Triggers an SMS with a link to login and complete the Questionnaires</li>\n<li>Anytime an SMS is sent, a Communication resource is created</li>\n<li>The responses to each Questionnaire is stored as a QuestionnaireResponse, and again, this process is tracked within the Task</li>\n<li>When complete, the QuestionnaireResponse is scored, and Observations are created if appropriate</li>\n</ol>",
+        "id": 242905862,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1623860912
+    },
+    {
+        "content": "<p>Assuming that I now have the workflow correct, </p>\n<ol>\n<li>Is there a proper way in FHIR for these resources to reference one another?</li>\n<li>Both ServiceRequest and Task contain an instantiatesCanonical, should that reference the PlanDefinition?</li>\n</ol>",
+        "id": 242906784,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1623861339
+    },
+    {
+        "content": "<ol start=\"2\">\n<li>What's the difference between 'Order' and 'ServiceRequest'?  Is the former your internal object and ServiceRequest is your FHIR representation of that?</li>\n<li>Presume the ServiceRequest instantiates, not the Task?</li>\n<li>If you've got multiple Questionnaires to be completed, there should be a separate Task for each (though they could be partOf an overall Task).  Each would be a \"to do\" item and each would have their own status.  Some might be complete, some might be refused.</li>\n<li>Why do you need CommunicationRequest at all?  Task is the mechanism to say \"please complete\".  If you want to notify someone that a Task exists, you're free to fire an SMS.  If you want to track all the reminder SMSs you've sent, those would be Communication instances.  The \"please fill out the form\" would be Task, not CommunicationRequest.</li>\n<li>The response for each Questionnaire should be the 'output' for the sub-Task tied to that Questionnaire.</li>\n</ol>\n<p>ServiceRequest would point to the PlanDefinition if at the time of ordering, the order is saying \"please follow protocol X\".  The Task could have it as well, or it could have it alone if the determination to follow a particular protocol was not driven by the ServiceRequest but rather by local business rules.</p>",
+        "id": 243861491,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1624579001
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> , sorry, just coming back to this and wanted to add to it to ensure I'm understanding. Without any of the Communication stuff from above, the basic workflow would be:</p>\n<ol>\n<li>Order (internal object) is placed, and a ServiceRequest is Created </li>\n<li>The ServiceRequest triggers the creation of a Task, and passes a PlanDefinition to the newly created Task</li>\n<li>The Task uses the PlanDefinition to find the correct Questionnaire</li>\n<li>When ready to distribute the Questionnaire to a patient, we could poll the system to look for new tasks or for a specific task</li>\n<li>That Task specifies the correct PlanDefinition/Questionnaire/QuestionnaireResponse, and also gives us information about the state (in process, percent completed, etc)</li>\n</ol>\n<p>Is that closer to how it's supposed to work?</p>",
+        "id": 247212604,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1627310946
+    },
+    {
+        "content": "<p>A ServiceRequest is just an authorization - it doesn't drive any activity.  You'd normally have a Task that said \"please fulfill (all or part of) this ServiceRequest\".    If the PlanDefinition was going to be referenced by anything, it would typically be referenced by the ServiceRequest.  If as part of satisfying the ServiceRequest you wanted to ask someone to fill out a Questionnaire, then you'd have a Task that pointed to the Questionnaire.  It might have a 'basedOn' relationship to the ServiceRequest and/or an 'instantiates' relationship to the PlanDefinition.</p>",
+        "id": 247232226,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1627319508
+    },
+    {
+        "content": "<p>If that's the case, should the original internal order create a serviceRequest (to represent itself) and also create the Task object?</p>",
+        "id": 247247716,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1627326565
+    },
+    {
+        "content": "<p>I'm not sure why you're differentiating \"original internal order\".  My expectation is that the original internal order <em>is</em> a ServiceRequest - or more specifically, ServiceRequest is the way that original order is exposed over the FHIR interface.  Is there a reason they wouldn't be the same?</p>",
+        "id": 247253034,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1627329318
+    },
+    {
+        "content": "<p>I think they could probably be the same. I think I'm just missing something about the workflows.</p>\n<p>The overall idea its that we're working with a group of clinics and we're going to provide screening tools for their patients. </p>\n<p>The provider is going to send us a request from outside of our system. That request is going to have a patient's information, (mostly just age, name, birthdate). Depending on the age of the patient, there is a group of surveys we're going to provide. For instance, if the patient is 2 years old, we're going to give them a questionnaire about demographics, one about developmental milestones, and then two questionnaires about general pediatrics.</p>\n<p>My plan was to have all of the questionnaires saved on our FHIR server. For each age group, there would be a PlanDefinition which would define which questionnaires are given for which age.</p>",
+        "id": 247273296,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1627339339
+    },
+    {
+        "content": "<p>And then I was trying to understand the workflow and which resources drove the action.</p>",
+        "id": 247273309,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1627339355
+    },
+    {
+        "content": "<p>And also I mispoke about the initial order. It's an external order/order from outside of our system.</p>",
+        "id": 247273431,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1627339446
+    },
+    {
+        "content": "<p>What does the external order 'order'?  Just \"Please get them to fill out whatever questionnaires are necessary?\"  (If so, that sounds more like a Task than an order, as there doesn't seem to be an authorization involved...)</p>",
+        "id": 247273502,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1627339503
+    },
+    {
+        "content": "<p>Yep. The external order is from a provider asking us to survey the patient.</p>",
+        "id": 247273546,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1627339546
+    },
+    {
+        "content": "<p>So then would it make more sense to skip the serviceRequest completely, and just create a task?</p>",
+        "id": 247273635,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1627339602
+    },
+    {
+        "content": "<p>I think so.  You could then link the various \"please fill out form X\" Tasks as sub-tasks.</p>",
+        "id": 247273676,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1627339643
+    },
+    {
+        "content": "<p>What sort of authorization would differentiate an order from a task?</p>",
+        "id": 247273695,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1627339662
+    },
+    {
+        "content": "<p>An authorization is needed when you're prescribing, ordering drugs, lab tests, etc.  You might also want an order if you were saying \"Patient should be administered xyz psych assessment instrument\".  But just saying \"send them whatever forms you deem appropriate\" doesn't really sound like an authorization of \"I hereby give permission for forms to be sent\".  (Because normally permission includes at least some sense of what's actually supposed to happen.)</p>",
+        "id": 247274227,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1627340143
+    },
+    {
+        "content": "<p>Well, we have a specified list of questionnaires for each age group. So for 12-15 months you're supposed to fill out these 4 surveys, but if you're 23-28 months, you're supposed to fill out these 6 surveys.</p>",
+        "id": 247274457,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1627340356
+    },
+    {
+        "content": "<p>If the request is sent, the goal is to have the patient complete all of those specific surveys based on the patient's age.</p>",
+        "id": 247274475,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1627340381
+    },
+    {
+        "content": "<p>But the order doesn't have to come from a clinician (it can come from a social worker, case manager, etc). And there's no insurance requirements or anything like that.</p>",
+        "id": 247274572,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1627340419
+    },
+    {
+        "content": "<p>Hi Grey, I am running into this now, and was wondering: In step 10, after scoring the questionnaire, did you choose to store the score as an observation? Or are you also storing the score within the QuestionnaireResponse itself?</p>\n<p>My inclination is to store the score only as an Observation, but was curious if you considered storing the score in the QuestionnaireResponse (perhaps as an extension hidden from the patient??)</p>",
+        "id": 248422030,
+        "sender_full_name": "Daniel Tam",
+        "timestamp": 1628119749
+    },
+    {
+        "content": "<p>The reason for storing it in the QR would be that the logic for calculating it would be in the Questionnaire - and the extraction process generally only works with data that resides somewhere in the QR.</p>",
+        "id": 248422191,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1628119911
+    }
+]

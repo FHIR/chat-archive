@@ -1,0 +1,98 @@
+---
+layout: page
+title: "FHIR Chat  · Issue with JPA terminology validation for SNOMED · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20JPA.20terminology.20validation.20for.20SNOMED.html">Issue with JPA terminology validation for SNOMED</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="250091326"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Issue%20with%20JPA%20terminology%20validation%20for%20SNOMED/near/250091326" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20JPA.20terminology.20validation.20for.20SNOMED.html#250091326">(Aug 20 2021 at 08:35)</a>:</h4>
+<p>I am working on a validation service that is based on the HAPI JPA starter and am seeing spurious validation errors. The problem arises when SNOMED codes are not available and I validate against a profile which has a required binding to a value set that contains SNOMED codes (e.g. <a href="https://simplifier.net/forschungsnetzcovid-19/chroniclungdiseases">this profile from the German GECCO IG</a>). I have been going in debugging circles trying to find the best solution or workaround, so I'm hoping someone out there has experience with this.</p>
+<p>In my service, the user can independently configure whether to load SNOMED and LOINC into a DB. Any loaded system is then available for validation through a validation support inheriting from <code>ca.uhn.fhir.jpa.term.TermReadSvcR4</code>. The validation behavior I want is this: </p>
+<ul>
+<li>If a code system X (SNOMED or LOINC) is loaded, the validator should (i) validate individual codes from X, and (ii) validate required binding to value sets containing codes from X.</li>
+<li>If X is <em>not</em> present, the validator should suppress both these checks (possibly issuing a warning ). </li>
+</ul>
+<p>However, what I am seeing when SNOMED is not loaded and I validate a valid instance against a profile with a required bindings to value sets with SNOMED is the following:</p>
+<ul>
+<li>If I query right after the service starts and before the scheduled value set expansion jobs run, I only get warnings (OK, what I wanted)</li>
+<li>However, if I let the expansion job run and then query, I get validation errors from checks of type( ii): "The code provided [CODE] is not in the value set [VS URL], and a code from this value set is required: Unknown code [CODE]". </li>
+</ul>
+<p>From my debugging, what seems to happen is this:</p>
+<ol>
+<li>The value set expansion module still expands value sets containing SNOMED codes, leading to ValueSets that are internally flagged as "expanded" but have empty expansions because the actual SNOMED codes are not available. </li>
+<li>The validation code now tries to check codes against these "pseudo-expanded" value sets when it encounters a required binding to them. </li>
+<li>Obviously not finding any matches in the empty expansions, it generates a validation error.</li>
+</ol>
+<p>This might be specific to SNOMED: I was puzzled by the fact that the expander thinks it knows SNOMED even though it is not loaded. Debugging, I traced this down to the fact that the core spec contains a CodeSystem resource for SNOMED (albeit with no explicit concepts, of course). The expansion module find this resource and then continues instead of returning with an error. Indeed, with the expansion option <code>isFailOnMissingCodeSystem</code> set to "true" (default), and loading the <a href="https://registry.fhir.org/package/de.gecco%7C1.0.4">GECCO 1.0.4 package</a>, I get a bunch of "Unknown code system URI" errors (e.g. for LOINC) when expanding <em>but none for SNOMED</em>.</p>
+<p>This behaviour, if correct, seems strange, but I am unsure whether this is a real bug or whether I am just setting up things wrong. Any tips on how get around this?</p>
+
+
+
+<a name="250114303"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Issue%20with%20JPA%20terminology%20validation%20for%20SNOMED/near/250114303" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Oliver Egger <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20JPA.20terminology.20validation.20for.20SNOMED.html#250114303">(Aug 20 2021 at 13:02)</a>:</h4>
+<p><span class="user-mention" data-user-id="194703">@Morten Ernebjerg</span> We experienced the same behaviour. If the ValueSet is not expanded the InMemoryTerminologyServerValidationSupport is used which verifies the codes we provide with the IG and leaves the external codes systems out. To disable the expansion (because at the moment we want to be based on InMemoryTerminologyServerValidationSupport) we set the  <a href="https://github.com/ahdis/matchbox-validator/blob/550-PRE5/src/main/resources/application.yaml">defer_indexing_for_codesystems_of_size property to 0</a> and overwrite the <a href="https://github.com/ahdis/matchbox-validator/blob/550-PRE5/src/main/java/ch/ahdis/fhir/hapi/jpa/validation/ExtTermReadSvcR4.java">expand task</a>.</p>
+
+
+
+<a name="250119882"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Issue%20with%20JPA%20terminology%20validation%20for%20SNOMED/near/250119882" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20JPA.20terminology.20validation.20for.20SNOMED.html#250119882">(Aug 20 2021 at 13:50)</a>:</h4>
+<p><span class="user-mention" data-user-id="191478">@Oliver Egger</span> that seems to work in our case, too <span aria-label="confetti" class="emoji emoji-1f38a" role="img" title="confetti">:confetti:</span> Thank you so much! - saved me from heading into the weekend with my head stuck deep in some call stack <span aria-label="smile" class="emoji emoji-1f642" role="img" title="smile">:smile:</span>. Was there any discussion of how to potentially modify HAPI to avoid this behavior in the first place?</p>
+
+
+
+<a name="250121326"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Issue%20with%20JPA%20terminology%20validation%20for%20SNOMED/near/250121326" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Oliver Egger <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20JPA.20terminology.20validation.20for.20SNOMED.html#250121326">(Aug 20 2021 at 14:02)</a>:</h4>
+<p>not that i am ware off, i was also just debugging it like you to understand what was going on :-) and was not thinking of it as a wrong behaviour in the first place</p>
+
+
+
+<a name="250121721"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Issue%20with%20JPA%20terminology%20validation%20for%20SNOMED/near/250121721" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20JPA.20terminology.20validation.20for.20SNOMED.html#250121721">(Aug 20 2021 at 14:04)</a>:</h4>
+<p>Wanna do a PR to the starter project that examplifies how SNOMED is 'best' used/explains behaviour?</p>
+
+
+
+<a name="250121810"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Issue%20with%20JPA%20terminology%20validation%20for%20SNOMED/near/250121810" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20JPA.20terminology.20validation.20for.20SNOMED.html#250121810">(Aug 20 2021 at 14:05)</a>:</h4>
+<p>Would that make sense?</p>
+
+
+
+<a name="250124335"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Issue%20with%20JPA%20terminology%20validation%20for%20SNOMED/near/250124335" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20JPA.20terminology.20validation.20for.20SNOMED.html#250124335">(Aug 20 2021 at 14:25)</a>:</h4>
+<p>Hmm, wouldn't just skipping expansions/or don't persist them for VS with 0 concepts solve the issue?</p>
+
+
+
+<a name="250125177"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Issue%20with%20JPA%20terminology%20validation%20for%20SNOMED/near/250125177" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20JPA.20terminology.20validation.20for.20SNOMED.html#250125177">(Aug 20 2021 at 14:31)</a>:</h4>
+<p><span class="user-mention" data-user-id="191451">@Patrick Werner</span> Yes, I was thinking about a possible solution along those lines but did not manage to figure out how it could be done (at least not without touching core HAPI code). If I understood my own debugging right, it seems the validator has some weird behavior:</p>
+<ol>
+<li>Trying to expand value sets in cases where it does not actually have access to the needed codes (e.g. in the case of SNOMED where it only has a "dummy" CodeSystem resource) - and not flagging the outcome as not suitable for validation</li>
+<li>Trying to validate codes in fields with a required binding against expanded value sets even if the expansion is actually empty.</li>
+</ol>
+<p>I think a solution/fix that somehow gets to these deeper issues would be preferable. Having said that, though, I think it would be very valuable to have some guidance on how to deal with this while in the current state, cf. <span class="user-mention" data-user-id="191478">@Oliver Egger</span> 's tip above.</p>
+
+
+
+<a name="250125881"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Issue%20with%20JPA%20terminology%20validation%20for%20SNOMED/near/250125881" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20JPA.20terminology.20validation.20for.20SNOMED.html#250125881">(Aug 20 2021 at 14:36)</a>:</h4>
+<p>Adding a check to the VS expansion code in hapi if the/one of the CodeSystem(s) is empty/ or not available and then skipping the expansion shouldn't be too hard. <span class="user-mention" data-user-id="191319">@James Agnew</span> ?</p>
+
+
+
+<a name="250126234"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Issue%20with%20JPA%20terminology%20validation%20for%20SNOMED/near/250126234" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20JPA.20terminology.20validation.20for.20SNOMED.html#250126234">(Aug 20 2021 at 14:39)</a>:</h4>
+<p>ad 2.: if 1. is implemented, this shouldn't be needed anymore. But maybe also a good idea, as an empty VS more or less useless for validation (apart from checking CS.urls)</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,44 @@
+[
+    {
+        "content": "<p>I'm trying to post a structure definition to a simplifier project, I have the project endpoint and tried the following but get an error 'unauthorised' using the code below</p>\n<p>var uri = new Uri(simplifierEndpoint);<br>\nvar uriWithCred = new UriBuilder(uri) { UserName = \"myusername\", Password = \"mypassword\" }.Uri;<br>\nvar client = new FhirClient(uriWithCred);</p>\n<p>FhirXmlParser parser = new FhirXmlParser();<br>\nStructureDefinition stdef = parser.Parse&lt;StructureDefinition&gt;(XMLstr); //XMLstr is file with profile<br>\nclient.Create&lt;StructureDefinition&gt;(stdef);</p>\n<p>I'm wondering if <span class=\"user-mention\" data-user-id=\"191347\">@Mirjam Baltus</span> , <span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span>  or <span class=\"user-mention\" data-user-id=\"191336\">@Michel Rutten</span>  could help?</p>",
+        "id": 153904293,
+        "sender_full_name": "Chris Munro",
+        "timestamp": 1504261510
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"193298\">@Chris Munro</span>, you should add the credentials to the http headers. In Forge we use a small utility class:</p>\n<div class=\"codehilite\"><pre><span></span>var _basicAuthDecorator = new BasicAuth(endpoint, credentials);\n// ...\nusing (var client = new SimplifierWebClient(Timeout))\n{\n    // add basic authentication\n    _basicAuthDecorator.AddAuthentication(client.Headers);\n\n    client.Encoding = Encoding.UTF8;\n    client.DownloadString(...)\n}\n\n--- BasicAuth.cs ---\n\nusing System;\nusing System.Net;\nusing System.Text;\n\nnamespace Forge.ViewModels\n{\n    public sealed class BasicAuth\n    {\n        private readonly string authenticationType;\n        private readonly ICredentials credentials;\n        public Uri ServerUrl { get; private set; }\n\n        // Initialize the endpoint URL and the credentials for authentication\n        public BasicAuth(Uri serverUrl, ICredentials credentials)\n        {\n            this.credentials = credentials;\n            ServerUrl = serverUrl;\n            authenticationType = &quot;Basic &quot;;\n        }\n\n        // Initialize the endpoint URL and the credentials for authentication\n        public BasicAuth(string serverUrl, ICredentials credentials) : this(new Uri(serverUrl), credentials)\n        {\n        }\n\n        // Add basic authentication to the request\n        public void AddAuthentication(WebHeaderCollection headers)\n        {\n            if (credentials == null) return; // no credentials given, proceed without authentication\n            var networkCredentials = credentials.GetCredential(ServerUrl, authenticationType);\n            if (networkCredentials.UserName == null) return; // no credentials given, proceed without authentication\n            var encodedCredentials = Convert.ToBase64String(Encoding.UTF8.GetBytes(networkCredentials.UserName + &quot;:&quot; + networkCredentials.Password));\n            headers[HttpRequestHeader.Authorization] = authenticationType + encodedCredentials;\n        }\n    }\n}\n</pre></div>",
+        "id": 153904294,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1504263179
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191336\">@Michel Rutten</span>,  is the URL <a href=\"https://stu3.simplifier.net/ELabTest2\" target=\"_blank\" title=\"https://stu3.simplifier.net/ELabTest2\">https://stu3.simplifier.net/ELabTest2</a> the correct one to put in? I tried even with postman to post an XML file to this URL with the username/password in the header and I get a 404 not found error</p>",
+        "id": 153904314,
+        "sender_full_name": "Chris Munro",
+        "timestamp": 1504275065
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"193298\">@Chris Munro</span>, the project url appears to be correct.</p>\n<p>I forgot to mention that you need to hook/override FhirClient.(On)BeforeRequest and add credential headers, e.g. using</p>\n<div class=\"codehilite\"><pre><span></span>basicAuthDecorator.AddAuthentication(rawRequest.Headers);\n</pre></div>\n\n\n<p>I can succesfully publish profiles to my Forge STU3 demo project on Simplifier, so there are no issues on the server.</p>",
+        "id": 153904316,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1504275786
+    },
+    {
+        "content": "<p>I just realized that the logic I posted earlier is for retrieving a list of personal projects from Simplifier. This is a custom operation, not a FHIR call.</p>\n<p>To actually publish a profile to Simplifier, Forge uses a specialized FhirClient with OnBeforeRequest hook to add http heades for credentials (using BasicAuth utility class above):</p>\n<div class=\"codehilite\"><pre><span></span>public sealed class SimplifierFhirClient : FhirClient\n{\n    private readonly BasicAuth basicAuthDecorator;\n\n    public SimplifierFhirClient(Uri serverUrl, ICredentials credentials, bool verifyFhirVersion = false) : base(serverUrl, verifyFhirVersion)\n    {\n        basicAuthDecorator = new BasicAuth(serverUrl, credentials);\n    }\n\n    public SimplifierFhirClient(Uri serverUrl, string projectName, ICredentials credentials, bool verifyFhirVersion = false)\n        : this(new Uri(serverUrl, projectName), credentials, verifyFhirVersion)\n    {\n    }\n\n    protected override void BeforeRequest(HttpWebRequest rawRequest, byte[] body)\n    {\n        base.BeforeRequest(rawRequest, body);\n        // ER 22-03-2016 add default accept [Spark: bugfix 9c64d8a3 (8/1/2016)]\n        PreferredFormat = ResourceFormat.Json;\n        basicAuthDecorator.AddAuthentication(rawRequest.Headers);\n    }\n\n    // DEBUGGING\n#if DEBUG\n    protected override void AfterResponse(HttpWebResponse webResponse, byte[] body)\n    {\n        base.AfterResponse(webResponse, body);\n\n        // var s = System.Text.Encoding.UTF8.GetString(body);\n        // System.IO.File.WriteAllText(@&quot;D:\\test.xml&quot;, s)\n    }\n#endif\n\n}\n</pre></div>\n\n\n<p>Here's the calling logic:</p>\n<div class=\"codehilite\"><pre><span></span>            var client = new SimplifierFhirClient(url, new NetworkCredential(userName, password));\n\n            T result;\n            if (string.IsNullOrEmpty(resource.Id))\n            {\n                result = client.Create(resource);\n            }\n            else\n            {\n                result = client.Update(resource);\n            }\n</pre></div>",
+        "id": 153904319,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1504276557
+    },
+    {
+        "content": "<p>Fab! Thank you <span class=\"user-mention\" data-user-id=\"191336\">@Michel Rutten</span> that's really helpful. I was getting into a bit of a mess but with the last post I've managed to get it working.</p>",
+        "id": 153904321,
+        "sender_full_name": "Chris Munro",
+        "timestamp": 1504278296
+    },
+    {
+        "content": "<p>Great, happy to help out!<br>\nSorry for the confusing first post. Friday afternoon... ;p</p>",
+        "id": 153904322,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1504278461
+    }
+]

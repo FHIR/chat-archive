@@ -1,0 +1,241 @@
+---
+layout: page
+title: "FHIR Chat  · Ideas on $import · bulk data"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/index.html">bulk data</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html">Ideas on $import</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="161100606"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161100606" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161100606">(Mar 18 2019 at 22:05)</a>:</h4>
+<p>Some lessons learned from implementing an import operation in Google Cloud.<br>
+- We're loading data from cloud storage (GCS). Not much opinion on how to upload large data in general; cloud has already addressed that for us.<br>
+- Flexibility in input is good. We take wildcards. Limiting $import to accept only the file structure of $export would be undesirable, datasets come from many sources.<br>
+- The goal of $import should be an async operation with massive scalability, think gigabytes to terabytes of resources.<br>
+- Error handling: it's very helpful to have an out of band error channel - we take a user-specified GCS location where the server will write errors. If the client uploads 1M resources and 5K of them are bad, the server needs a scalable way to communicate those errors.<br>
+- We allow partial success and will import all the good resources. On the other hand, if the client uploads 1M resources and all of them are bad, maybe a fail-fast option?</p>
+
+
+
+<a name="161100649"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161100649" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161100649">(Mar 18 2019 at 22:05)</a>:</h4>
+<p>We have targeted a limited use case to start:<br>
+- empty FHIR store + many resources on disk<br>
+- not empty FHIR store, but loading a chunk of self-contained resources like a terminology or profile</p>
+<p>For this case, the import semantics are that every resource must have an ID (every operation is a PUT), referential integrity is ignored, and existing resources are overwritten without creating a _history entry.</p>
+<p>We support two modes: ndjson where every line is a resource, and ndjson where every line is a bundle. In the bundle case, bundles are all treated as 'collection' type with no semantics (except for history bundles, handled separately). This allows importing the contents of searchset bundles, for example the output from Patient/$everything.</p>
+<p>History bundles can be imported if the store config allows; they will populate the corresponding history as if it had occurred in the past. This is blocked from overwriting or adding to an existing history as the result might not make sense.</p>
+
+
+
+<a name="161100724"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161100724" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161100724">(Mar 18 2019 at 22:06)</a>:</h4>
+<p>Referential integrity, proper change history on overwrite, and batch/transaction semantics are all possible but likely to have a high tradeoff vs. throughput. Most of our users have wanted to "database restore" extremely large amounts of data so we have optimized for that.</p>
+<p>I'm quite curious how people want to define the converse of the $export operation - the user journey is not clear to me. Suppose I call $export on several FHIR servers to accumulate data for a set of patients, can I call $import to get all of it into one place without additional client processing? If the data has several copies of Practitioner/123, how does the server decide whether those are actually the same resource and which is the most current?</p>
+
+
+
+<a name="161100852"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161100852" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161100852">(Mar 18 2019 at 22:08)</a>:</h4>
+<p>These are great questions; look forward to digging in (and will propose discussion as part of a connectathon track too).</p>
+
+
+
+<a name="161100915"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161100915" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161100915">(Mar 18 2019 at 22:09)</a>:</h4>
+<p>For resource IDs, is a current expectation that you'll only import resources whose IDs are valid within the target system? (Some servers impose limits on the ID space, like hapi by default.)</p>
+
+
+
+<a name="161102156"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161102156" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161102156">(Mar 18 2019 at 22:27)</a>:</h4>
+<p>Yes, that is the current expectation. It's not ideal.</p>
+<p>Server-assigned IDs are conceptually not too bad to implement: just walk the input one additional time in advance, assign new IDs to everything, and keep track of how to rewrite references. Parallelizing that to handle very large input is another layer of complexity.</p>
+<p>There is a tension between having the client write out the desired semantics explicitly (e.g. by giving batch bundles with the verbs they want) vs. the client handing the server a bunch of resources and saying "make it happen". The output from $export isn't batch bundles...</p>
+
+
+
+<a name="161102582"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161102582" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161102582">(Mar 18 2019 at 22:32)</a>:</h4>
+<p>one key question is that if there are duplicate ids, is that by accident, or is the intent to replace them?</p>
+
+
+
+<a name="161110463"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161110463" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161110463">(Mar 19 2019 at 00:49)</a>:</h4>
+<p>We are planning to use a similar mechanism in our server, and will be moving the "external" ID that comes in from the import to an identifier that we can match into our system to be able to perform the appropriate operation on them - locating the correct resource.</p>
+
+
+
+<a name="161110541"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161110541" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161110541">(Mar 19 2019 at 00:50)</a>:</h4>
+<p>+1 I think this pattern is going to be pretty common. Do you have a strategy for assigning a system on these identifiers?</p>
+
+
+
+<a name="161110824"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161110824" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161110824">(Mar 19 2019 at 00:57)</a>:</h4>
+<p>The system will be the base URL where we got them from (at least that's where we were thinking) otherwise would need to have a system parameter somewhere in our server</p>
+
+
+
+<a name="161110915"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161110915" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161110915">(Mar 19 2019 at 00:59)</a>:</h4>
+<p>I like that. Rewrite all the references by searching on their external IDs as well?</p>
+
+
+
+<a name="161110920"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161110920" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161110920">(Mar 19 2019 at 00:59)</a>:</h4>
+<p>Yeah</p>
+
+
+
+<a name="161112094"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161112094" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161112094">(Mar 19 2019 at 01:22)</a>:</h4>
+<p>If the user wants to consolidate resources from different sources that represent the same thing (perhaps a rarely-changing entity like Location), they could have one resource with multiple external ID codes. Would make analysis easier.</p>
+
+
+
+<a name="161112828"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161112828" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161112828">(Mar 19 2019 at 01:36)</a>:</h4>
+<p>I was more thinking of reuploading new versions of existing content</p>
+
+
+
+<a name="161119522"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161119522" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161119522">(Mar 19 2019 at 04:18)</a>:</h4>
+<p>Right; I think the same approach works there too as long as the source system's base URL is included</p>
+
+
+
+<a name="161163908"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/161163908" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#161163908">(Mar 19 2019 at 16:06)</a>:</h4>
+<p>How do you want to handle referential integrity? Perhaps during the initial pass through the data the server could conditional create stub resources for each resource in the import so that during the actual import references are rewritten to point to a resource that is already valid on the server.</p>
+
+
+
+<a name="162640503"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/162640503" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#162640503">(Apr 05 2019 at 17:04)</a>:</h4>
+<p>We've got a quick write-up for $import at the connectathon! I got some early input from several folks here, but I'll personally take responsibility for any ambiguities and mistakes :-)</p>
+<p>Thanks <span class="user-mention" data-user-id="195435">@Kurt Ericson</span> <span class="user-mention" data-user-id="191318">@nicola (RIO/SS)</span> <span class="user-mention" data-user-id="191414">@Dan Gottlieb</span> <span class="user-mention" data-user-id="195775">@Michael Hansen</span> <span class="user-mention" data-user-id="191319">@James Agnew</span> for initial discussions.</p>
+<p><a href="https://confluence.hl7.org/pages/viewpage.action?pageId=46892105#id-2019-05BulkDataandAnalyticsTrack-1.Testthedraft$importoperation" target="_blank" title="https://confluence.hl7.org/pages/viewpage.action?pageId=46892105#id-2019-05BulkDataandAnalyticsTrack-1.Testthedraft$importoperation">https://confluence.hl7.org/pages/viewpage.action?pageId=46892105#id-2019-05BulkDataandAnalyticsTrack-1.Testthedraft$importoperation</a></p>
+<p>Please share any thoughts on the approach; we wanted to define something simple with limited scope, but not close the door to more complex use cases downstream.</p>
+
+
+
+<a name="167575774"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/167575774" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#167575774">(Jun 07 2019 at 13:21)</a>:</h4>
+<p><span class="user-mention" data-user-id="191315">@Josh Mandel</span>  <span class="user-mention" data-user-id="195435">@Kurt Ericson</span> <span class="user-mention" data-user-id="191318">@nicola (RIO/SS)</span> <span class="user-mention" data-user-id="195775">@Michael Hansen</span> <span class="user-mention" data-user-id="191319">@James Agnew</span> <span class="user-mention" data-user-id="191496">@Nikolai Schwertner</span> (and anyone else who's interested) Want to find time on Monday or Tuesday at Dev Days for a followup discussion on $import (we could use some of the session to come up with a plan for the September connectathon)?</p>
+
+
+
+<a name="167576597"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/167576597" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Nick Robison <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#167576597">(Jun 07 2019 at 13:32)</a>:</h4>
+<p><span class="user-mention" data-user-id="191414">@Dan Gottlieb</span> Would love to join as well, I'm planning on being there for the Tuesday meeting, if that works for everyone else.</p>
+
+
+
+<a name="167583529"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/167583529" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Kurt Ericson <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#167583529">(Jun 07 2019 at 14:51)</a>:</h4>
+<p>Yes sounds good; I'll be there and available both days to meet.</p>
+
+
+
+<a name="167588198"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/167588198" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Hansen <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#167588198">(Jun 07 2019 at 15:48)</a>:</h4>
+<p>I might want to include a few people from the team too like <span class="user-mention" data-user-id="195201">@Jack Liu</span></p>
+
+
+
+<a name="167600224"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/167600224" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#167600224">(Jun 07 2019 at 18:18)</a>:</h4>
+<p>Great! Thoughts on timing - maybe during lunch on Tuesday?</p>
+
+
+
+<a name="167602131"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/167602131" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#167602131">(Jun 07 2019 at 18:40)</a>:</h4>
+<p>Maybe session - not lunchtime? I see free slots in the schedule.</p>
+
+
+
+<a name="167603045"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/167603045" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Hansen <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#167603045">(Jun 07 2019 at 18:50)</a>:</h4>
+<p>Isn't there a popup session option or something like that?</p>
+
+
+
+<a name="167605038"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/167605038" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#167605038">(Jun 07 2019 at 19:14)</a>:</h4>
+<p><span class="user-mention" data-user-id="191354">@Rien Wertheim</span> can we schedule a popup session around defining a import operations for Tuesday?</p>
+
+
+
+<a name="167606395"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/167606395" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rien Wertheim <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#167606395">(Jun 07 2019 at 19:31)</a>:</h4>
+<p>I think so. Let me check and send you an email.</p>
+
+
+
+<a name="167669045"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/167669045" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Nikolai Schwertner <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#167669045">(Jun 08 2019 at 21:39)</a>:</h4>
+<p>I have a morning talk on Tuesday until 10am. Any time after would work for me.</p>
+
+
+
+<a name="167779890"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/167779890" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Edward Yurcisin <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#167779890">(Jun 10 2019 at 17:49)</a>:</h4>
+<p>please include me in the popup session on Tuesday.  <a href="mailto:edward.yurcisin@carejourney.com" title="mailto:edward.yurcisin@carejourney.com">edward.yurcisin@carejourney.com</a>.</p>
+
+
+
+<a name="167786324"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/167786324" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#167786324">(Jun 10 2019 at 18:59)</a>:</h4>
+<p>We're scheduled for a popup session to discuss an import operation on <strong>Tuesday from 2.10-2.50 in Sonora</strong>.</p>
+
+
+
+<a name="168608719"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/168608719" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Andrey Lyashin <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#168608719">(Jun 20 2019 at 15:59)</a>:</h4>
+<p>Hi! Could you please advise whether I could find the latest draft spec for bulk import. Thanks.</p>
+
+
+
+<a name="168612697"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/168612697" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#168612697">(Jun 20 2019 at 16:49)</a>:</h4>
+<p><a href="https://github.com/smart-on-fhir/fhir-bulk-data-docs" target="_blank" title="https://github.com/smart-on-fhir/fhir-bulk-data-docs">https://github.com/smart-on-fhir/fhir-bulk-data-docs</a></p>
+
+
+
+<a name="168616541"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/168616541" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Andrey Lyashin <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#168616541">(Jun 20 2019 at 17:36)</a>:</h4>
+<p>Thank you. I am sorry but I have found only 'export' docs.</p>
+
+
+
+<a name="168617102"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/168617102" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#168617102">(Jun 20 2019 at 17:43)</a>:</h4>
+<p>I'm not sure if <span class="user-mention" data-user-id="191315">@Josh Mandel</span> has moved it to a github location, but the working doc on $import from the connectathon is <a href="https://docs.google.com/document/d/1e9YYtDxc2Yed2RWU27jPLhfyIH0d6IH5Y9ligJUBFZE/edit#heading=h.bbcu6h9umbza" target="_blank" title="https://docs.google.com/document/d/1e9YYtDxc2Yed2RWU27jPLhfyIH0d6IH5Y9ligJUBFZE/edit#heading=h.bbcu6h9umbza">https://docs.google.com/document/d/1e9YYtDxc2Yed2RWU27jPLhfyIH0d6IH5Y9ligJUBFZE/edit#heading=h.bbcu6h9umbza</a></p>
+
+
+
+<a name="168620672"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/168620672" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#168620672">(Jun 20 2019 at 18:20)</a>:</h4>
+<p>(We'll move to GH and update the doc to point there before the next connectathon)</p>
+
+
+
+<a name="168663519"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Ideas%20on%20%24import/near/168663519" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Andrey Lyashin <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Ideas.20on.20.24import.html#168663519">(Jun 21 2019 at 08:07)</a>:</h4>
+<p>Thank you!</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

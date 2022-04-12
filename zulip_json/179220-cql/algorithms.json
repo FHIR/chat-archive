@@ -1,0 +1,248 @@
+[
+    {
+        "content": "<p>The problem I am working on at the moment seems to condense to a couple of very simple algorithms whose solutions in CQL, nevertheless, have remained elusive. The first and simplest of the two concerns combining two lists:</p>\n<p>Define the function fold({a0, a1, ..., ak}, {b0, b1, ..., bk}) -&gt; {{a1, b1}, {a2, b2}, ..., {ak, bk}}</p>\n<p>The second concerns finding clusters of dates. Define an n-cluster of dates as being groups of dates that are separated by no more than n days. For example the dates 2019-01-05, 2019-01-15, and 2019-01-24 are in a 10-cluster, but not in a 9-cluster. From the definition, it's clear that n-clusters are separated by gaps of more than n days. There can also be singleton clusters, that contain only one date which is separated from both it's predecessor and antecedent by gaps of more than n-days. My problem condenses to this:</p>\n<p>Given D, a List&lt;DateTime&gt; {d0, d1, d2, ..., dk}, d0 &lt;= d1 &lt;= d2 &lt;= dk and an integer n, return a list of all n-clusters in D. For example for the ordered list, {d0, d1, d2, [31-day gap] d3, [70-day gap], d4, d5, [50-day gap] d6, d7, d8, d9} and n = 30, return the list {{d0, d1, d2}, {d3}, {d4, d5}, {d6, d7, d8, d9}}. Alternatively, returning the endpoints of each cluster is also acceptable: {{d0, d2}, {d3, d3}, {d4, d5}, {d6, d9}}.</p>\n<p>Any ideas as to how these two functions would be defined in CQL?</p>",
+        "id": 177201328,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1570057862
+    },
+    {
+        "content": "<p>Oooh.  This feels like a coding interview question!  I only have time for one, but here's a solution for folding in CQL.  I'll admit, it's a little weird, but I tested it and it works.</p>\n<div class=\"codehilite\"><pre><span></span>library CQLFold version &#39;1.0&#39;\n\ndefine function Fold(L1 List&lt;String&gt;, L2 List&lt;String&gt;):\n (expand { Interval[0, Length(L1)-1] } per 1 &#39;1&#39;) I\n   return { L1[start of I], L2[start of I] }\n\n// Test it\ndefine L1: {&#39;A&#39;, &#39;B&#39;, &#39;C&#39;}\ndefine L2: {&#39;X&#39;, &#39;Y&#39;, &#39;Z&#39;}\ndefine Answer: Fold(L1, L2)\n</pre></div>\n\n\n<p>So we basically want to iterate over a list of indexes 0 to N and then create pairs of { L1[i], L2[i] }.  Here's a breakdown of the CQL since it is a little funky. For this example, consider L1: <code>{'A', 'B', 'C'}</code> and L2: <code>{'X', 'Y', 'Z'}</code>.</p>\n<ul>\n<li>First create an interval from 0 to Length(L1) - 1<ul>\n<li>CQL: <code>{ Interval[0, Length(L1)-1] }</code></li>\n<li>Result: =&gt; <code>Interval[0,2]</code></li>\n</ul>\n</li>\n<li>Then expand it into intervals of size 1, giving us Length(L1)-1 unit intervals<ul>\n<li>CQL: <code>(expand { Interval[0, Length(L1)-1] } per 1 '1')</code></li>\n<li>Result: <code>{ Interval[0,0], Interval[1,1], Interval[2,2] }</code></li>\n</ul>\n</li>\n<li>Now query over that returning <code>{ L1[start of I], L2[start of I] }</code> pairs<ul>\n<li>CQL: <code>I return { L1[start of I], L2[start of I] }</code></li>\n<li>Result: <code>{ {'A','X'}, {'B','Y'}, {'C','Z'} }</code></li>\n</ul>\n</li>\n</ul>",
+        "id": 177205241,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1570062589
+    },
+    {
+        "content": "<p>Thanks, Chris. Because of this, I was able to solve my n-cluster problem. Here's  the solution:</p>\n<p>define function leftEndPoints(l List&lt;DateTime&gt;, n Integer): l L without l L2 such that L2 &lt; L and difference in days between L2 and L &lt; 30<br>\ndefine function rightEndPoints(l List&lt;DateTime&gt;, n Integer): l L without l L2 such that L2 &gt; L and difference in days between L and L2 &lt; 30</p>\n<p>define LHTest: leftEndPoints({DateTime(2019, 1, 1), DateTime(2019, 1, 2), DateTime(2019, 1, 3), DateTime(2019, 3, 1), DateTime(2019, 5, 1), DateTime(2019, 5, 2), DateTime(2019, 7, 1), DateTime(2019, 9, 1), DateTime(2019, 9, 2), DateTime(2019, 9, 3), DateTime(2019, 9, 4)},<br>\n                            30)<br>\ndefine RHTest: rightEndPoints({DateTime(2019, 1, 1), DateTime(2019, 1, 2), DateTime(2019, 1, 3), DateTime(2019, 3, 1), DateTime(2019, 5, 1), DateTime(2019, 5, 2), DateTime(2019, 7, 1), DateTime(2019, 9, 1), DateTime(2019, 9, 2), DateTime(2019, 9, 3), DateTime(2019, 9, 4)},<br>\n                            30)</p>\n<p>define function nClusters(l List&lt;DateTime&gt;, n Integer): fold(leftEndPoints(l, n), rightEndPoints(l, n))</p>\n<p>define nClusterTest: nClusters({DateTime(2019, 1, 1), DateTime(2019, 1, 2), DateTime(2019, 1, 3), DateTime(2019, 3, 1), DateTime(2019, 5, 1), DateTime(2019, 5, 2), DateTime(2019, 7, 1), DateTime(2019, 9, 1), DateTime(2019, 9, 2), DateTime(2019, 9, 3), DateTime(2019, 9, 4)},<br>\n                            30)</p>",
+        "id": 177207280,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1570065509
+    },
+    {
+        "content": "<p>OK, replace the 30's in the leftEndPoints and rightEndPoints functions with n and it will be correct for n other than 30 <span aria-label=\"slight smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"slight smile\">:slight_smile:</span> .</p>",
+        "id": 177207468,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1570065784
+    },
+    {
+        "content": "<p>That's awesome.  I couldn't help myself so I was also working on this -- but from a different angle. I felt like it should be a fairly simple application of the <a href=\"https://cql.hl7.org/09-b-cqlreference.html#collapse\" target=\"_blank\" title=\"https://cql.hl7.org/09-b-cqlreference.html#collapse\">collapse</a> operator. I came up with this (returning the endpoints only):</p>\n<div class=\"codehilite\"><pre><span></span>library CQLClusters\n\ndefine function Clusters(Dates List&lt;Date&gt;, N Quantity):\n  collapse (Dates D return Interval[D,D]) per N\n\ndefine Dates: {\n  @2000-02-10,\n  @2000-02-28,\n  @2000-03-01,\n  // 31-day gap\n  @2000-04-01,\n  // 70-day gap\n  @2000-06-10,\n  @2000-06-15,\n  // 50-day gap\n  @2000-08-04,\n  @2000-09-01,\n  @2000-10-01,\n  @2000-10-31\n }\n\ndefine Answer: Clusters(Dates, 30 days)\n</pre></div>\n\n\n<p><strong>But</strong>...  it doesn't work in the Java-based CQL execution engine or the JavaScript-based CQL execution engine, so either they're wrong or I'm wrong. I code-reviewed the JavaScript engine's <code>collapse</code> implementation before it was merged, so I like to think that it's right, but then that means my CQL is wrong. ;-)  As for the Java-based implementation, it seems definitely way wrong because it returns <code>[Interval[2000-02-10, 2000-11-07]]</code> which goes entirely <em>past</em> the input intervals  (<span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> ).</p>\n<p>Anyway, I'm glad you found a way, and I'm glad my first solution could help lead you there!</p>",
+        "id": 177207565,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1570065946
+    },
+    {
+        "content": "<p>Although, I have to admit, I popped your solution into <a href=\"http://cql-runner.dataphoria.org/\" target=\"_blank\" title=\"http://cql-runner.dataphoria.org/\">CQL Runner</a> and I got the wrong answers:</p>\n<div class=\"codehilite\"><pre><span></span>&gt;&gt; Fold [2:1] Definition successfully validated\n&gt;&gt; leftEndPoints [6:1] Definition successfully validated\n&gt;&gt; rightEndPoints [7:1] Definition successfully validated\n&gt;&gt; LHTest [9:1] [2019-01-01, 2019-01-02, 2019-01-03, 2019-03-01, 2019-05-01, 2019-05-02, 2019-07-01, 2019-09-01, 2019-09-02, 2019-09-03, 2019-09-04]\n&gt;&gt; RHTest [11:1] [2019-01-01, 2019-01-02, 2019-01-03, 2019-03-01, 2019-05-01, 2019-05-02, 2019-07-01, 2019-09-01, 2019-09-02, 2019-09-03, 2019-09-04]\n&gt;&gt; nClusters [14:1] Definition successfully validated\n&gt;&gt; nClusterTest [16:1] [[2019-01-01, 2019-01-01], [2019-01-02, 2019-01-02], [2019-01-03, 2019-01-03], [2019-03-01, 2019-03-01], [2019-05-01, 2019-05-01], [2019-05-02, 2019-05-02], [2019-07-01, 2019-07-01], [2019-09-01, 2019-09-01], [2019-09-02, 2019-09-02], [2019-09-03, 2019-09-03], [2019-09-04, 2019-09-04]]\n</pre></div>\n\n\n<p>If it worked for you, however, perhaps it is an issue with CQL Runner.</p>",
+        "id": 177207839,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1570066335
+    },
+    {
+        "content": "<p>I can't comment on CQL Runner, but my implementation gives <br>\nLHTest: [2019-01-01, 2019-03-01, 2019-05-01, 2019-07-01, 2019-09-01]<br>\nRHTest: [2019-01-03, 2019-03-01, 2019-05-02, 2019-07-01, 2019-09-04]</p>\n<p>nClusterTest:[[2019-01-01, 2019-01-03],[2019-03-01, 2019-03-01], [2019-05-01, 2019-05-02], [2019-07-01, 2019-07-01], [2019-09-01, 2019-09-04]]</p>",
+        "id": 177211332,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1570072233
+    },
+    {
+        "content": "<p>Clever use of expand to create a sequence <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span>, very nice :)</p>",
+        "id": 177213645,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1570076111
+    },
+    {
+        "content": "<p>I agree these should be working, I will test these on the runner and get to the bottom of why they're not giving the results expected here.</p>",
+        "id": 177213653,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1570076143
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span>, it did get me to thinking though... should we consider some new features for CQL?</p>\n<ol>\n<li>\n<p><strong>Convert an Interval&lt;Integer&gt; to a list.</strong> Ruby supports something like this.  It might look like <code>convert Interval[0,15] to List&lt;Integer&gt;</code>.  That said, this is a pretty narrow use case and I wouldn't want to have to support it for other types, so maybe not.  The expression for doing this (<code>(expand { Interval[0, N] } per 1 '1') IVL return start of IVL</code>) isn't too bad.</p>\n</li>\n<li>\n<p><strong>Support an indexer argument on queries.</strong> Since the primary use case for getting a sequence of integers might be something similar to the fold operation, we could borrow a page from ES6 (sort of) and have an optional indexer argument on a query.  Then that fold function would be simplified to:</p>\n</li>\n</ol>\n<div class=\"codehilite\"><pre><span></span>define function Fold(L1 List&lt;String&gt;, L2 List&lt;String&gt;):\n L1 Item, Index return { Item, L2[Index] }\n</pre></div>\n\n\n<p>That said, we already use <code>,</code> to separate sources in a multi-source query, so we'd want to be careful not to confuse matters too much (although, technically, I think the parser could disambiguate).  Still if we wanted to make it clearer, we could introduce new keywords (e.g., <code>L1 Item at Index</code>, <code>L1 Item at index Index</code>, <code>L1 Item using index Index</code>, etc).</p>\n<p>Anyway, just a thought.  Do you think it's worth me filing an official STU comment?</p>",
+        "id": 177240337,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1570107050
+    },
+    {
+        "content": "<p>It might be. Another choice in addition to an indexer, could be lag(n) and/or lead(n) functions like are found in some SQL implementations, which return records n elements before or after the current one. Sometimes relative indexing works better than absolute.</p>",
+        "id": 177241671,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1570107933
+    },
+    {
+        "content": "<p>re: lag/lead, couldn't you accomplish the same w/ an index?  E.g. <code>Items.lag(4)</code> == <code>Items[Index-4]</code>?</p>",
+        "id": 177252611,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1570114681
+    },
+    {
+        "content": "<p>Although I guess in a complex query, you don't have a simple variable that equates to all the results... so maybe not.</p>",
+        "id": 177252719,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1570114726
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> , apologies for the delay here. Yes, I think it would be worth submitting those as STU comments. Another specific item I've wished for is some answer for recursive queries.</p>",
+        "id": 177547288,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1570473559
+    },
+    {
+        "content": "<p>For the indexer argument on queries, am I misunderstanding the request, or would the $this iteration accessor work?</p>",
+        "id": 177547364,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1570473603
+    },
+    {
+        "content": "<p>Sorry, $index, not $this</p>",
+        "id": 177547437,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1570473659
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> -- is <code>$index</code> defined as part of the core CQL spec? I'm having trouble finding any documentation about it in the CQL spec.  Even in the FHIRPath 1.0 spec, only <code>$this</code> is called out as a keyword.</p>",
+        "id": 177551787,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1570476787
+    },
+    {
+        "content": "<p>OK, I did just find it in the proposed FHIRPath 2.0 spec, but still having trouble finding it in the CQL spec.</p>",
+        "id": 177551909,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1570476880
+    },
+    {
+        "content": "<p>True enough, I had thought we documented those here: <a href=\"https://cql.hl7.org/03-developersguide.html#using-fhirpath\" target=\"_blank\" title=\"https://cql.hl7.org/03-developersguide.html#using-fhirpath\">https://cql.hl7.org/03-developersguide.html#using-fhirpath</a></p>",
+        "id": 177552640,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1570477371
+    },
+    {
+        "content": "<p>Sounds like another STU comment.</p>",
+        "id": 177552648,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1570477379
+    },
+    {
+        "content": "<p>Since the cql.g4 includes the fhirpath.g4, it is part of the grammar, but yes, the specification should be clear about the behavior in CQL.</p>",
+        "id": 177552815,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1570477475
+    },
+    {
+        "content": "<p>I don't think we need <code>$index</code> <em>and</em> the second index arg on queries -- so if have <code>$index</code> that ought to be good enough.</p>",
+        "id": 177557604,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1570480311
+    },
+    {
+        "content": "<p>But is <code>$this</code> and <code>$index</code> considered part of the core spec?  E.g., can we expect standard CQL engines (for CDS/eCQM use cases) to support this?  If it's in the \"Using FHIRPath\" section, it sounds ancillary.</p>",
+        "id": 177557744,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1570480401
+    },
+    {
+        "content": "<p>Well CQL is defined as a superset of FHIRPath, so any valid FHIRPath expression should be valid in CQL.</p>",
+        "id": 177559721,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1570481675
+    },
+    {
+        "content": "<p>There are some specific options in the translator for disabling some of the FHIRPath functionality, but in general, yes, any CQL engine should be able to run any FHIRPath expression.</p>",
+        "id": 177559768,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1570481708
+    },
+    {
+        "content": "<p>I understand that -- but I thought there were general recommendations regarding what features should generally be used or not used in CQL for quality purposes (e.g., for CDS/eCQM).  For example, as you know (since you probably wrote it), the CPG IG defines recommended compiler settings here: <a href=\"http://hl7.org/fhir/uv/cpg/2019SEP/documentation-libraries.html\" target=\"_blank\" title=\"http://hl7.org/fhir/uv/cpg/2019SEP/documentation-libraries.html\">http://hl7.org/fhir/uv/cpg/2019SEP/documentation-libraries.html</a>.</p>\n<p>I guess I just have a feeling (right or not) that quality engines may ignore most of what is in the FHIRPath part of CQL (especially since it is mainly relegated to the Appendix -- and Appendix Letter I no less!).  If we want to encourage use of <code>$index</code> in CDS/eCQM and quality engines, we probably ought to document it in the actual <em>chapters</em> of the spec rather than just the appendix.  As someone who built a reference implementation myself, I have to admit that I did not add support for <code>$this</code> or <code>$index</code> (yet)!</p>",
+        "id": 177570894,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1570490984
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> ,<br>\ni want to test cqf-ruler-0.1.13-SNAPSHOT.jar with hapi-fhir-3.8 , to test $evaluate-measure<br>\nbut it's not working with example given by hspc in there documentation<br>\nanybody know about where i will get example related to $evaluate-measure, $apply, cds-hooks etc...<br>\nThank you in advance.</p>",
+        "id": 178942381,
+        "sender_full_name": "Saoji Adhe",
+        "timestamp": 1571916598
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"196449\">@Saoji Adhe</span> -- I don't work on (or use) CQF Ruler, so I'm afraid I can't help you much.  You might want to take up <span class=\"user-mention\" data-user-id=\"197470\">@Alexander Kiel</span> on his offer to try Blaze, or wait for a response from <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> who is more familiar with CQF Ruler.</p>",
+        "id": 178957657,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1571927366
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"196449\">@Saoji Adhe</span> , there is a CQF-Ruler running <a href=\"http://cqm-sandbox.alphora.com/cqf-ruler-dstu3\" target=\"_blank\" title=\"http://cqm-sandbox.alphora.com/cqf-ruler-dstu3\">here</a> that we use as a sandbox for the connectathons. That has the content from the latest <a href=\"https://github.com/dbcg/connectathon\" target=\"_blank\" title=\"https://github.com/dbcg/connectathon\">connectathon</a> loaded. We are still addressing issues uncovered by that connectathon, so no guarantees that everything there is 100% functional, but it should be enough to play around with.</p>",
+        "id": 178984678,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1571943162
+    },
+    {
+        "content": "<p>Another CQL query question.</p>\n<p>I have a list of MedicationDispenses (MD[i]), each with a whenHandedOver date and daysSupply quantity. For each MedicationDispense, I need to compute  the consumptionInterval(CI) for the dispense, defined as the earliest interval when this drug could be consumed (i.e., starting at the later of when all prior dispenses have been consumed or when this dispense was handed over and ending when this dispense runs out):<br>\nstart of CI[i] = maximum(CI[i-1] + 1 day, MD[i].whenHandedOver),<br>\nend of CI[i] = start of CI[i] + daysSupply</p>\n<p>The problem is that CI[i] depends on the value of CI[i-1], which you can't access from the computation of CI[i]. How does one go about doing something like this in CQL? The best solution I've found so far involves unrolling the evaluation loop, making each calculation of a given CI[i] its own definition, but not only is thisdefinitely not the CQL way to solve this, it also doesn't work for more dispenses than the loop has been unrolled with.</p>\n<p>If you want to get CS'y about this, it boils down to computing the earliest start and end times for tasks using batch queueing  on a uniprocessor (the when handed over date is the arrival time, the days supply is the task length, and the consumption interval is the run interval of the task, and the patient is the uniprocessor). Calculating this is essentially a (very simple)  dynamic programming problem. The trouble is that CQL doesn't seem very amenable to dynamic programming problems. If I had a reduce function, this would be fairly simple, but CQL doesn't have that, either. Any ideas?</p>",
+        "id": 184557123,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1577815347
+    },
+    {
+        "content": "<p>I also forgot to say that by collapsing the CI[i], you compute the overall set of intervals during which the patient was supplied with drugs.</p>",
+        "id": 184559435,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1577817851
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span></p>",
+        "id": 184739529,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1578063596
+    },
+    {
+        "content": "<p>I haven't had time to give this the attention it deserves, but I wonder if the <a href=\"http://build.fhir.org/ig/HL7/FHIRPath/#aggregateaggregator-expression-init-value-value\" target=\"_blank\" title=\"http://build.fhir.org/ig/HL7/FHIRPath/#aggregateaggregator-expression-init-value-value\">.aggregate()</a> operator would provide a solution here?</p>",
+        "id": 184755208,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1578075656
+    },
+    {
+        "content": "<p>Thanks for the suggestion, Bryn. I'll see if this function is implemented and if I can come up with something that works using the function.</p>",
+        "id": 184934463,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1578336671
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> , thanks for the aggregate suggestion, but I'm not sure it applies. What I'd like to try to do is reduce <span class=\"user-mention\" data-user-id=\"242670\">@Frank Adrian</span> 's description of the overall problem to a simple, explicit example of what I think is the core problem here. Basically, we can reduce the various MedicationDispense events to a list of intervals like this:</p>\n<p>{[1,6], [2,3], [7,10], [15,17]}</p>\n<p>And what I think we need to do is to determine a kind of extending overlap such that if the first two overlap, they are added together recursively until we hit a non- overlapping member. The desired sequence of reductions is then:</p>\n<p>{[1,8], [7,10], [15,17]}</p>\n<p>and finally: {[1,12], [15,17]}</p>\n<p>I can achieve this relatively easily in a general purpose language by iteratively replacing the first and second intervals in the list with a single interval that starts when the first interval starts, and has a length that is the sum of the lengths of the first and second intervals, iterating as long as the first two intervals overlap, and then starting the process again with the now second element, until I reach the end of the list. I haven't been able to figure out a way to do this in CQL.</p>",
+        "id": 184963970,
+        "sender_full_name": "Keith Deutsch",
+        "timestamp": 1578349838
+    },
+    {
+        "content": "<p>I found an algorithm that (sort of) works, but I basically had to manually unroll the iteration as follows:</p>\n<div class=\"codehilite\"><pre><span></span>//Dispense objects represent what happens to a given dispense - it is received on the who (whenHandedOver) date, has ds days supply, with the start of consumption being st, and the end of consumption being nd.\ndefine function Dispense(who DateTime, ds Integer): Tuple{who:date from who, ds: ds, st: date from who, nd: date from who + ds}\ndefine function Dispense(who DateTime, ds Integer, st DateTime, nd DateTime): Tuple{who:date from who, len: ds, st: date from st, nd: date from nd}\n\n//For testing...\ndefine &quot;All Dispenses&quot;: ({Dispense(DateTime(2018, 1, 1), 30), Dispense(DateTime(2018, 1, 1), 30), Dispense(DateTime(2018, 2, 1), 30), Dispense(DateTime(2018, 3, 1), 30)}) T sort by date from who\n\ndefine function Index(l List&lt;Any&gt;): (expand {Interval[0, Count(l) - 1]} per 1 &#39;1&#39;) I return Tuple{idx: start of I, obj: l[start of I]}\n\ndefine &quot;All Dispenses Indexed&quot;: Index(&quot;All Dispenses&quot;)\ndefine function GetItem(dispenseListSoFar List&lt;Tuple{idx Integer, obj Any}&gt;, i Integer): First(dispenseListSoFar T where T.idx = i return all T.obj)\n\n//Work around random issue in the execution engine\ndefine function MyMaximum(dtl DateTime, dtr DateTime): if dtl &lt;= dtr then dtr else dtl\n\n//Calculate the start and end consumption dates for the i&#39;th dispense of a given drug. The start of consumption is the maximum of the whenHandedOver date of the i&#39;th dispense\n//and the end of consumption of the i-1&#39;th dispense plus one day. The end of consumption for the i&#39;th dispense is the start of consumption of the i&#39;th dispense plus daysSupply.\n//Note that the start and end consumption dates for the i&#39;th dispense depends on the end consumption date for the i-1&#39;th dispense (and thus depends on all previous consumption\n//dates, which must be computed before the i&#39;th is computed).\ndefine function ComputeStartAndEndDate(i Integer, dispListSoFar List&lt;Tuple{idx Integer, obj Tuple{who DateTime, ds Integer, st DateTime, nd DateTime}}&gt;):\n    First(({0}) X //This bit of cruft needed because CQL does not let you define a let outside the confines of a query.\n        let dsp: GetItem(dispListSoFar, i) as Tuple{who DateTime, ds Integer, st DateTime, nd DateTime},\n            prv: GetItem(dispListSoFar, i-1) as Tuple{who DateTime, ds Integer, st DateTime, nd DateTime},\n            //ccStart: Maximum(prv.nd + 1 day, dsp.who),\n            ccStart: MyMaximum(date from prv.nd + 1 day, date from dsp.who),  //work around compiler issue above\n            ccEnd: ccStart + dsp.ds - 1 day,\n            lim: Count(&quot;All Dispenses Indexed&quot;) - 1\n        return if i &lt;= 0 or i &gt;= lim\n               then dispListSoFar\n               else\n                  (dispListSoFar except {dsp}) union {Tuple{idx: i, obj: Dispense(dsp.who, dsp.ds, ccStart, ccEnd)}})\n\n\ndefine Test0: &quot;All Dispenses Indexed&quot; as List&lt;Tuple{idx Integer, obj Tuple{who DateTime, ds Integer, st DateTime, nd DateTime}}&gt;\ndefine Test1: ComputeStartAndEndDate(1, Test0 as List&lt;Tuple{idx Integer, obj Tuple{who DateTime, ds Integer, st DateTime, nd DateTime}}&gt;)\ndefine Test2: ComputeStartAndEndDate(2, Test1 as List&lt;Tuple{idx Integer, obj Tuple{who DateTime, ds Integer, st DateTime, nd DateTime}}&gt;)\ndefine Test3: ComputeStartAndEndDate(3, Test2 as List&lt;Tuple{idx Integer, obj Tuple{who DateTime, ds Integer, st DateTime, nd DateTime}}&gt;)\n//...up to TestN where N is Count(&quot;All Dispenses Indexed&quot;) - 1.\n//Ideally, there would be a construct in the language that would allow us to iterate (or at least to do the unrolling in a single line of code).\n//Here, we&#39;re unrolling the loop manually. We&#39;ll set a limit here of 50 dispenses or so, with an error escape in case the number of dispenses exceed that amount.\n</pre></div>\n\n\n<p>As far as I can tell, CQL's inability to modify data that has been defined previously requires a new definition to be created for each new piece of state that needs to be iterated over. I'd still like a better solution, if anyone can come up with one.</p>",
+        "id": 185228856,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1578587421
+    },
+    {
+        "content": "<p>So, I'm not 100% sure this will work, but here's what I think is a solution using the <code>aggregate()</code> method:</p>\n<div class=\"codehilite\"><pre><span></span>define MedicationRequestIntervals:\n  [MedicationRequest] MD\n    return Interval[MD.whenHandedOver, MD.whenHandedOver + (MD.daysSupply * 1 day)]\n\ndefine RolledOutIntervals:\n  MedicationRequestIntervals.aggregate($total union\n    ($this) X\n      let S: Max({ end of Last($total) + 1 day, start of X }),\n      E: S + duration in days of X\n      return Interval[S, E]\n  )\n</pre></div>",
+        "id": 187354664,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1580819975
+    },
+    {
+        "content": "<p>Basically, <code>aggregate</code> sets the value of <code>$total</code> to the result of evaluating the function after each iteration, and returns the overall $total. So each iteration will union the current $total with the calculation of an Interval based on the Last interval in $total.</p>",
+        "id": 187354768,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1580820067
+    },
+    {
+        "content": "<p>I think there's probably a bug in that Last will return null if $total is empty (on the first iteration) so there's probably a Coalesce needed there, but that's the gist.</p>",
+        "id": 187354780,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1580820095
+    },
+    {
+        "content": "<p>Again, I'm not sure it would work, and even if it did, I'd like to see something more first-class that could handle this.</p>",
+        "id": 187354849,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1580820152
+    },
+    {
+        "content": "<p>At the Sydney WGM we worked on this problem and are proposing an <code>aggregate</code> clause that would support expression of this type of query. In particular: <a href=\"/user_uploads/10155/7fMGEIdl_5dOoS4dWRQ_Dkjr/pasted_image.png\" target=\"_blank\" title=\"pasted_image.png\">pasted image</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/7fMGEIdl_5dOoS4dWRQ_Dkjr/pasted_image.png\" target=\"_blank\" title=\"pasted image\"><img src=\"/user_uploads/10155/7fMGEIdl_5dOoS4dWRQ_Dkjr/pasted_image.png\"></a></div>",
+        "id": 187919371,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1581433291
+    }
+]

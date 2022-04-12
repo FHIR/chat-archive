@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p>Hi, I'm looking to support a use case for my Hooks server where, depending on the output of a Hooks service, a patient (FHIR resource) may need to be added to a group (FHIR resource), either automatically or after confirmation from the user.  It seems like the automatic use case could be supported via system action, and the use case for user confirmation with cards[].suggestions[].actions[].  My server currently does not support either of these, so thinking through how this could work, I have some questions.</p>\n<p>It seems like if I want to return a card suggesting a patient be added to a group, then on the Hooks server, I would have to obtain the Group resource, modify it to include the patient, and include the modified Group resource in the response, either as a system action or card suggestion action.  My concern though is concurrency.  If the Group resource is updated after the Hooks server fetches it but before the Hooks client can update it, then the update from the Hooks client will undo the previous update.  I know that FHIR supports conditional updates (i.e., update a resource, but only if resource.version=x), but that doesn't seem to be incorporated into Hooks actions.</p>\n<p>I'm a little fuzzy on how patch works in FHIR, but I think that if Hooks actions supported patch, that could be used to add a patient to an existing group, while working around the concurrency problem. So, that would be a use case for supporting patch.</p>\n<p>One thing I'm not clear on is whether the client is supposed to apply the proposed action to the same FHIR endpoint that was used as the data source for the service request.  I would think so, since I don't see a way for the service response to specify a target endpoint for the action, unless the Hooks client somehow just \"knows\" (i.e., through custom logic) that actions should be carried out against a different endpoint.  And in the use case I'm trying to support, the endpoint that is the FHIR data source for the service would not be the same endpoint where the updated Group resource would need to be posted to.</p>\n<p>I also considered implementing this as a link in the service response.  In this case, I could have the link invoke a REST API that I would create  that gets the patient resource ID and group resource ID from URL parameters and adds the patient to the group. Except the Hooks spec seems to imply the link is supposed to be for a web page, not a REST request?  The description of the \"url\" property of the \"Link\" data type reads \"URL to load (via GET, in a browser context) when a user clicks on this link.\"  So if the client is supposed to do a GET on that URL, then treating that as a REST request that modifies data feels like a bit of a hack.</p>\n<p>Maybe I could have the link launch an app that would prompt the user to make this update (add the patient to the group).  If I do it this way, does it <em>have</em> to be a SMART app, or can it be any app?</p>\n<p>So, any suggestions on how this could be done in Hooks?</p>",
+        "id": 258750143,
+        "sender_full_name": "Jorge de la Garza",
+        "timestamp": 1634925985
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span></p>",
+        "id": 258751772,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1634926753
+    },
+    {
+        "content": "<p>On this part:</p>\n<blockquote>\n<p>[...] I would have to obtain the Group resource, modify it to include the patient, and include the modified Group resource in the response, either as a system action or card suggestion action. My concern though is concurrency. If the Group resource is updated after the Hooks server fetches it but before the Hooks client can update it, then the update from the Hooks client will undo the previous update. </p>\n</blockquote>\n<p>My understanding is that this is supposed to fail because an update will contain a Resource.meta.lastUpdated that would not correspond to the one on the server.</p>",
+        "id": 259263661,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1635351055
+    },
+    {
+        "content": "<p>The point is that there won't <em>be</em> anything on the server yet (at least in some implementations).  The draft orders might only reside in memory.  And there's no guidance setting an expectation that meta.lastUpdated needs to be present in the data passed to the hook service, nor that the EHR needs to pay attention to meta.lastUpdated when making changes.</p>",
+        "id": 259268102,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1635352801
+    },
+    {
+        "content": "<p>Wow, I'm super late and there's <em>a lot</em> here.</p>",
+        "id": 265245061,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1639706181
+    },
+    {
+        "content": "<ol>\n<li>Concurrency &amp; patch -- Jorge, yes, you're right. LLoyd mentioned this same idea in a jira ticket within the last month (perhaps this thread was the genesis). Personally, that seems like a great idea and we'll pursue it. I think that in historical remote CDS, the CPOE \"locked\" the order while the synchronous remote call was happening. That approach doesn't travel.</li>\n</ol>",
+        "id": 265245186,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1639706387
+    },
+    {
+        "content": "<ol start=\"2\">\n<li>an action writing to a different FHIR server than prefetch/content/fhirServer</li>\n</ol>\n<blockquote>\n<p>the endpoint that is the FHIR data source for the service would not be the same endpoint where the updated Group resource would need to be posted to. </p>\n</blockquote>\n<p>Jorge, this is an unanticipated use-case.  Could you help us understand why this would be  valuable?  I'm imagining a user curating a Group for a bulk export ; let's say , enrolling patients into a clinical study cohort as part of an ambulatory encounter. It seems like it would always be reasonable to only ever use a single FHIR server, and then to interact with new resources through that FHIR server's REST endpoints. ... What are we missing?</p>",
+        "id": 265245610,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1639706773
+    },
+    {
+        "content": "<ol start=\"3\">\n<li>What if link.url doesn't return html? <blockquote>\n<p>I also considered implementing this as a link</p>\n</blockquote>\n</li>\n</ol>\n<p>Jorge, this is creative! Yes, CDS Clients should expect link.url to be a webpage .... therefore, they'll open the link.url in browser. You could treat it as a simple GET API, and maybe auto-close the browser with js or something, but agree that this would be a bit hacky. </p>\n<p>Other idea here -- Just have the CDS Hooks action write anything to the <em>single</em> FHIR Server, then subscribe or poll. From your other FHIR server.</p>",
+        "id": 265245906,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1639707129
+    },
+    {
+        "content": "<ol start=\"4\">\n<li>Why not launch an app?<blockquote>\n<p>Maybe I could have the link launch an app that would prompt the user to make this update (add the patient to the group). If I do it this way, does it have to be a SMART app, or can it be any app?</p>\n</blockquote>\n</li>\n</ol>\n<p>It doesn't have to be a SMART app; see link.type.  </p>\n<p>DTR  implements this pattern a bit -- questionnaire response is saved both to the payer (other FHIR server) and the EHR (CDS Client FHIR server).   This pattern would work, but it seems like it would be a bit frustrating to the user.</p>",
+        "id": 265246024,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1639707291
+    },
+    {
+        "content": "<p>Overall, it seems like writing some arbitrary piece of data (flag? flowsheet? data element?) to the CDS Client's FHIR server, (and assuming a relationship between the CDS service and the other FHIR server, have the other FHIR server read this data from the CDS Client's FHIR server after the CDS exchange.</p>",
+        "id": 265246124,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1639707420
+    },
+    {
+        "content": "<p>Last idea -- you could perhaps also use feedback here.</p>",
+        "id": 265246144,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1639707442
+    },
+    {
+        "content": "<p>Thanks for the response <span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span> . With regard to #2 \"an action writing to a different FHIR server than prefetch/content/fhirServer\": the use case is that my organization has developed an HIE platform that predates FHIR by a little bit, so rather than one monolithic FHIR repository that stores everything, we're building FHIR APIs to existing services (patient data, provider registry, group registry, etc.).  In time, it may make sense to condense all these services into a single FHIR endpoint.  But for right now, at least, a client to our platform obtains patient data from one endpoint and creates a group membership using a different endpoint.  Of course we could develop something bespoke that can conditionally add a patient to a group - but the goal of this project is to do it all, or as much as possible, within CDS Hooks.</p>\n<p>I would think, though, that this problem would not be unique to our platform.  Is it not common for a hospital to have data siloed into multiple different systems?</p>",
+        "id": 265579754,
+        "sender_full_name": "Jorge de la Garza",
+        "timestamp": 1640015153
+    }
+]

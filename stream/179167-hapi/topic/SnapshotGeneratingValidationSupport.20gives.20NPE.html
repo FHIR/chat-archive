@@ -1,0 +1,380 @@
+---
+layout: page
+title: "FHIR Chat  · SnapshotGeneratingValidationSupport gives NPE · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html">SnapshotGeneratingValidationSupport gives NPE</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="244156676"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244156676" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244156676">(Jun 28 2021 at 14:52)</a>:</h4>
+<p>I am using the HAPI SnapshotGeneratingValidationSupport and am getting an NPE when I try to use it for the profile <a href="https://simplifier.net/forschungsnetzcovid-19/chroniclungdiseases">https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/chronic-lung-diseases</a>.</p>
+<p>This profile defines a slice on <code>Coding.code.coding</code> with a required binding to a ValueSet containing a few explicitly listed (German) ICD-codes. However, it is a re-profiling of the base profile <a href="https://simplifier.net/forschungsnetzcovid-19/geccobasecondition">https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition</a> which, in turn, <em>also</em> defines a slice on <code>Coding.code</code> with a required binding to a ValueSet containing all (german) ICD codes.</p>
+<p>Possibly, it is this combination that causes problems. What I observe is that the validation codes tries to expand the full ICD-10 ValueSets and fails but nonetheless assumes that it succeeded, causing an NPE. The first bit of the stack trace I see at the top level is this:</p>
+<div class="codehilite"><pre><span></span><code>Failed to generate snapshot
+ca.uhn.fhir.rest.server.exceptions.InternalErrorException: Failed to generate snapshot
+    at org.hl7.fhir.common.hapi.validation.support.SnapshotGeneratingValidationSupport.generateSnapshot(SnapshotGeneratingValidationSupport.java:134)
+    at org.hl7.fhir.common.hapi.validation.support.ValidationSupportChain.generateSnapshot(ValidationSupportChain.java:95)
+    at org.hl7.fhir.common.hapi.validation.validator.VersionSpecificWorkerContextWrapper.lambda$new$0(VersionSpecificWorkerContextWrapper.java:100)
+</code></pre></div>
+<p>Through some longwinded debugging, I managed to dig a bit deeper and find the following chain of events:</p>
+<ol>
+<li><code>SnapshotGeneratingValidationSupport#generateSnapshot</code> is called with the input SD <em>https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/chronic-lung-diseases</em></li>
+<li>This triggers a call to <code>ProfileUtilities#generateSnapshot</code> with the parameters <code>base</code> = SD for <em>https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition</em> and <code>derived</code> = SD for <em>https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/chronic-lung-diseases</em></li>
+<li>This eventually triggers a call to <code>ProfileUtilities#updateFromDefinition</code> with parameters <code>dest</code> = "Condition.code.coding:icd10-gm" , <code>source</code> = "Condition.code.coding:icd10-gm", and <code>srcSD</code> = SD for <em>https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition</em></li>
+<li>In the line <code>ValueSetExpansionOutcome expBase = context.expandVS(baseVs, true, false);</code>,  <code>expBase</code> is set to null since no validation support can expand this (<code>baseVs</code> is the full ICD-10 ValueSet)</li>
+<li>Nonetheless, two lines further down, the call <code>expBase.getValueset()</code>is made, causing a null pointer exception.</li>
+</ol>
+<p>Is this a known issue? (<span class="user-mention" data-user-id="194952">@Julian Sass</span> This is a GECCO profile, maybe have you seen smt. like this before?)</p>
+
+
+
+<a name="244258275"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244258275" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Julian Sass <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244258275">(Jun 29 2021 at 10:09)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="194703">Morten Ernebjerg</span> <a href="#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE/near/244156676">said</a>:</p>
+<blockquote>
+<p>Is this a known issue? (<span class="user-mention silent" data-user-id="194952">Julian Sass</span> This is a GECCO profile, maybe have you seen smt. like this before?)</p>
+</blockquote>
+<p>No, also first time I'm seeing this.</p>
+
+
+
+<a name="244290913"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244290913" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244290913">(Jun 29 2021 at 14:33)</a>:</h4>
+<p>A similar (but possibly different) error also happens with the latest command-line validator (well, actually the validator seems to complete but output errors along the way). I tested it using <a href="/user_uploads/10155/8APeA56zq4VC0ITYViysq3tS/test.json">this Condition resource</a> (which also provokes the error in my code) and pulling in the latest version of the <code>de.gecco</code> package. (I wonder if the differences in the details may be due to the fact that the command-line validator uses a terminology server, but my code not):</p>
+<div class="codehilite"><pre><span></span><code>&gt; java -jar validator/validator_cli.jar -version 4.0.1 -ig de.gecco#1.0.4 test.json
+FHIR Validation tool Version 5.4.6 (Git# aa0b7bc056c6). Built 2021-06-24T19:45:14.861Z (4 days old)
+  Java:   16.0.1 from /Library/Java/JavaVirtualMachines/adoptopenjdk-16.jdk/Contents/Home on x86_64 (64bit). 4096MB available
+  Paths:  Current = [REDACTED], Package Cache = [REDACTED]/.fhir/packages
+  Params: -version 4.0.1 -ig de.gecco#1.0.4 test.json
+Loading
+  Load FHIR v4.0 from hl7.fhir.r4.core#4.0.1 - 4575 resources (00:04.0261)
+  Load hl7.terminology#2.0.0 - 3749 resources (00:00.0908)
+  Terminology server http://tx.fhir.org - Version 1.9.378 (00:01.0816)
+  Load de.medizininformatikinitiative.kerndatensatz.meta#1.0.3 - 2 resources (00:00.0065)
+  Load hl7.fhir.uv.ips#1.0.0 - 82 resources (00:00.0023)
+  Load de.medizininformatikinitiative.kerndatensatz.medikation#1.0.8 - 9 resources (00:00.0105)
+  Load de.basisprofil.r4#0.9.13 - 128 resources (00:00.0131)
+  Load de.medizininformatikinitiative.kerndatensatz.prozedur#1.0.7 - 15 resources (00:06.0046)
+  Load de.medizininformatikinitiative.kerndatensatz.laborbefund#1.0.5 - 10 resources (00:00.0017)
+  Load kbv.basis#1.1.3 - 68 resources (00:00.0063)
+  Load de.medizininformatikinitiative.kerndatensatz.diagnose#1.0.4 - 12 resources (00:03.0793)
+  Load de.gecco#1.0.4 - 134 resources (00:00.0122)
+  Get set... Previous POST attempt returned HTTP&lt;422&gt; from url -&gt; http://tx.fhir.org/r4/ValueSet/$expand?_limit=1000&amp;_incomplete=true.
+Unable to generate snapshot for cardiovascular-diseases from gecco-base-condition because Profile CardiovascularDiseases (https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/cardiovascular-diseases), element Cardiovascular Diseases.coding.Condition.code.coding. Error generating snapshot: Binding https://www.netzwerk-universitaetsmedizin.de/fhir/ValueSet/cardiovascular-diseases is not a subset of binding https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/ValueSet/diagnoses-sct
+org.hl7.fhir.exceptions.DefinitionException: Profile CardiovascularDiseases (https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/cardiovascular-diseases), element Cardiovascular Diseases.coding.Condition.code.coding. Error generating snapshot: Binding https://www.netzwerk-universitaetsmedizin.de/fhir/ValueSet/cardiovascular-diseases is not a subset of binding https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/ValueSet/diagnoses-sct
+        at org.hl7.fhir.r5.context.SimpleWorkerContext.generateSnapshot(SimpleWorkerContext.java:786)
+        at org.hl7.fhir.r5.context.SimpleWorkerContext.generateSnapshot(SimpleWorkerContext.java:753)
+        at org.hl7.fhir.r5.context.SimpleWorkerContext.allStructures(SimpleWorkerContext.java:636)
+        at org.hl7.fhir.validation.ValidationEngine.prepare(ValidationEngine.java:502)
+        at org.hl7.fhir.validation.cli.services.ValidationService.initializeValidator(ValidationService.java:257)
+        at org.hl7.fhir.validation.cli.services.ValidationService.initializeValidator(ValidationService.java:212)
+        at org.hl7.fhir.validation.ValidatorCli.doValidation(ValidatorCli.java:203)
+        at org.hl7.fhir.validation.ValidatorCli.main(ValidatorCli.java:159)
+[a number of similar errors for other binding follow]
+</code></pre></div>
+<p><span class="user-mention" data-user-id="248736">@Mark Iantorno</span> Do you happen to have an idea what might be happening?</p>
+
+
+
+<a name="244291335"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244291335" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244291335">(Jun 29 2021 at 14:36)</a>:</h4>
+<p>So, you're saying that when you run it with the core validator, you expect no errors, but you are getting one error?</p>
+
+
+
+<a name="244291413"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244291413" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244291413">(Jun 29 2021 at 14:36)</a>:</h4>
+<p>Forget about the HAPI validation for a second, let's just deal with the core validator first.</p>
+
+
+
+<a name="244292497"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244292497" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244292497">(Jun 29 2021 at 14:43)</a>:</h4>
+<p>Let me take a closer look</p>
+
+
+
+<a name="244325656"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244325656" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244325656">(Jun 29 2021 at 18:25)</a>:</h4>
+<p>Thanks! The resource should be valid. Indeed, that is also what the validator outputs, i.e. it does not crash. But it does output all these stacktraces on the way, which makes it look as if an error is occurring under the hood. And judging by the stacktrace, that error might also be related to the one I'm seing in HAPI (snapshot generation).</p>
+
+
+
+<a name="244325789"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244325789" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244325789">(Jun 29 2021 at 18:26)</a>:</h4>
+<p>it most likely is being caused by the core validator if it is happening in both instances</p>
+
+
+
+<a name="244325823"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244325823" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244325823">(Jun 29 2021 at 18:26)</a>:</h4>
+<p>HAPI does eventually call the core validator in most cases</p>
+
+
+
+<a name="244326133"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244326133" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244326133">(Jun 29 2021 at 18:28)</a>:</h4>
+<p>Right, my debugging (above) also seems to indicate that it happens in the core, if I read it right (BTW to clarify: the HAPI validator does crash, the command-line one does not)</p>
+
+
+
+<a name="244326693"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244326693" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244326693">(Jun 29 2021 at 18:32)</a>:</h4>
+<p>well, is the validator right?</p>
+
+
+
+<a name="244326772"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244326772" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244326772">(Jun 29 2021 at 18:32)</a>:</h4>
+<p>If it bubles up an Error to hapi, hapi will most likely just stop, so this all makes sense</p>
+
+
+
+<a name="244326825"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244326825" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244326825">(Jun 29 2021 at 18:33)</a>:</h4>
+<p>Which is why I said not to worry about HAPI, and only focus on the core validator</p>
+
+
+
+<a name="244382752"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244382752" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244382752">(Jun 30 2021 at 06:38)</a>:</h4>
+<p>I have to correct steps 4 and 5 of the initial description (above <span aria-label="point up" class="emoji emoji-1f446" role="img" title="point up">:point_up:</span>) of the  error in see in my code. The NPE actually flies inside HAPI code, specifically in the  <a href="https://github.com/hapifhir/hapi-fhir/blob/ff2698d4d16fc938b592b9336cd4b71fe235ae0b/hapi-fhir-validation/src/main/java/org/hl7/fhir/common/hapi/validation/validator/VersionSpecificWorkerContextWrapper.java#L266">expandVS method of  VersionSpecificWorkerContextWrapper (around line 266)</a>.:</p>
+<div class="codehilite"><pre><span></span><code>IValidationSupport.ValueSetExpansionOutcome expanded = myValidationSupportContext.getRootValidationSupport().expandValueSet(myValidationSupportContext, null, convertedSource);
+
+org.hl7.fhir.r5.model.ValueSet convertedResult = null;
+if (expanded.getValueSet() != null) {
+    ...
+</code></pre></div>
+<p>With the input I describe above, <code>myValidationSupportContext.getRootValidationSupport()</code> returns a ValidationSupportChain instance. Calling expandValueSet on that returns <code>null</code> (no support in chain can expand the ICD-10 VS), so the variable <em>expanded</em> is <code>null</code> leading to the NPE in the if-check two lines below.</p>
+
+
+
+<a name="244412916"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244412916" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244412916">(Jun 30 2021 at 12:13)</a>:</h4>
+<p>Yeah, the validation chain in HAPI is getting a null returned value because the core is throwing an error then returning null. This has nothing to do with HAPI and we should stop looking at HAPI altogether</p>
+
+
+
+<a name="244412950"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244412950" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244412950">(Jun 30 2021 at 12:13)</a>:</h4>
+<p>I'm just eating breakfast now. I'm going to dedicate a couple hours this morning to look at it starting at 9.</p>
+
+
+
+<a name="244413723"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244413723" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244413723">(Jun 30 2021 at 12:19)</a>:</h4>
+<p><span aria-label="+1" class="emoji emoji-1f44d" role="img" title="+1">:+1:</span></p>
+
+
+
+<a name="244420929"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244420929" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244420929">(Jun 30 2021 at 13:12)</a>:</h4>
+<p>Alright, here's the full output I get...similar to what you encountered:<br>
+<a href="/user_uploads/10155/eBeGgeqhjvqhJsV1pwLRuBRz/stacktrace.txt">stacktrace.txt</a></p>
+
+
+
+<a name="244420968"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244420968" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244420968">(Jun 30 2021 at 13:13)</a>:</h4>
+<p>So, it's reproducible on the latest</p>
+
+
+
+<a name="244420970"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244420970" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244420970">(Jun 30 2021 at 13:13)</a>:</h4>
+<p>good start</p>
+
+
+
+<a name="244423231"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244423231" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244423231">(Jun 30 2021 at 13:28)</a>:</h4>
+<p>Well, this is strange.</p>
+
+
+
+<a name="244423264"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244423264" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244423264">(Jun 30 2021 at 13:28)</a>:</h4>
+<p>When I actually create the test case within the validator with all the provided data, I get this output:</p>
+
+
+
+<a name="244423274"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244423274" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244423274">(Jun 30 2021 at 13:28)</a>:</h4>
+<div class="codehilite"><pre><span></span><code>---- gecco-profile-slicing ----------------------------------------------------------------
+** Core:
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/home/mark/.m2/repository/org/slf4j/slf4j-simple/1.7.28/slf4j-simple-1.7.28.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/home/mark/.m2/repository/ch/qos/logback/logback-classic/1.2.3/logback-classic-1.2.3.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [org.slf4j.impl.SimpleLoggerFactory]
+  Load de.medizininformatikinitiative.kerndatensatz.meta#1.0.3 - 2 resources (00:05.0432)
+  Load hl7.fhir.uv.ips#1.0.0 - 82 resources (00:00.0012)
+  Load de.medizininformatikinitiative.kerndatensatz.medikation#1.0.8 - 9 resources (00:00.0119)
+  Load de.basisprofil.r4#0.9.13 - 128 resources (00:00.0142)
+  Load de.medizininformatikinitiative.kerndatensatz.prozedur#1.0.7 - 15 resources (00:05.0273)
+  Load de.medizininformatikinitiative.kerndatensatz.laborbefund#1.0.5 - 10 resources (00:00.0014)
+  Load kbv.basis#1.1.3 - 68 resources (00:00.0062)
+  Load de.medizininformatikinitiative.kerndatensatz.diagnose#1.0.4 - 12 resources (00:04.0884)
+  Load de.gecco#1.0.4 - 134 resources (00:00.0140)
+Start Validating (16464 to set up)
+Unable to generate snapshot for https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/chronic-lung-diseases: Profile ChronicLungDiseases (https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/chronic-lung-diseases), element Chronic Lung Diseases.coding.Condition.code.coding. Error generating snapshot: Binding https://www.netzwerk-universitaetsmedizin.de/fhir/ValueSet/chronic-lung-diseases is not a subset of binding https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/ValueSet/diagnoses-sct
+Times (ms): overall = 9403, tx = 1212, sd = 1, load = 5, fpe = 6
+WARNING: Condition.category[0]: None of the codings provided are in the value set http://hl7.org/fhir/ValueSet/condition-category (http://hl7.org/fhir/ValueSet/condition-category), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://snomed.info/sct#418112009)
+</code></pre></div>
+
+
+
+<a name="244423287"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244423287" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244423287">(Jun 30 2021 at 13:28)</a>:</h4>
+<p>Which is a pass</p>
+
+
+
+<a name="244423296"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244423296" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244423296">(Jun 30 2021 at 13:28)</a>:</h4>
+<p>only one warning</p>
+
+
+
+<a name="244423307"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244423307" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244423307">(Jun 30 2021 at 13:29)</a>:</h4>
+<p>no 422 timeouts</p>
+
+
+
+<a name="244475420"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244475420" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244475420">(Jun 30 2021 at 19:28)</a>:</h4>
+<p>you still get the same error, just no satck dump. No one has addressed the question of whether the error is correct or not</p>
+
+
+
+<a name="244674305"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244674305" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244674305">(Jul 02 2021 at 08:42)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> I had a deeper look a the look the snapshot generation errors logged in the command line validator output I posted above (third msg. in this thread), i.e. this:</p>
+<div class="codehilite"><pre><span></span><code>Unable to generate snapshot for cardiovascular-diseases from gecco-base-condition because Profile CardiovascularDiseases (https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/cardiovascular-diseases), element Cardiovascular Diseases.coding.Condition.code.coding. Error generating snapshot: Binding https://www.netzwerk-universitaetsmedizin.de/fhir/ValueSet/cardiovascular-diseases is not a subset of binding https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/ValueSet/diagnoses-sct
+</code></pre></div>
+<p>If I understood everything correctly, it seems this error is not correct , i.e. the new binding is indeed a subset of the old one. The profile <a href="https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/cardiovascular-diseases">https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/cardiovascular-diseases</a></p>
+<ul>
+<li>is a re-profiling of <a href="https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition">https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition</a></li>
+<li>which is turn is a re-profiling of <a href="https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/StructureDefinition/Diagnose">https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/StructureDefinition/Diagnose</a></li>
+</ul>
+<p>The profile at the bottom of the hierarchy (".../Diagnose") defines a slicing of <code>Condition.code.coding</code>. with the a pattern-discriminator on the path <code>$this</code>. A least one slice must be present. The sct-slice has <code>patternCoding</code> set to "<a href="http://snomed.info/sct">http://snomed.info/sct</a>" and also has a required binding to a subset of SNOMED given by the value set <a href="https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/ValueSet/diagnoses-sct">https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/ValueSet/diagnoses-sct</a>. This value set contains all terms that have a "is-a" relationship with either "Situation with explicit context" (243796009), "Event" (272379006), or "Clinical finding" (404684003).</p>
+<p>The profile at the top of the hierarchy (".../cardiovascular-diseases") overrides the binding for the sct-slice of <code>Condition.code.coding</code>, replacing it with a required binding to the value set <a href="https://www.netzwerk-universitaetsmedizin.de/fhir/ValueSet/cardiovascular-diseases">https://www.netzwerk-universitaetsmedizin.de/fhir/ValueSet/cardiovascular-diseases</a> .The latter contains all codes with an is-a relation to "Disorder of cardiovascular system (disorder)" (49601007) and contains a number of SNOMED disorder terms. I checked all the terms in this value set and they are indeed all connected to either "Clinical finding" or "Situation with explicit context" through parent-links. Hence, the new VS does seem to be subset of the VS bound in the base profile. <span class="user-mention" data-user-id="194952">@Julian Sass</span> Was this ensured by construction in this and other Conditions profiles from GECCO?</p>
+
+
+
+<a name="244684562"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/244684562" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Julian Sass <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#244684562">(Jul 02 2021 at 10:30)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="194703">Morten Ernebjerg</span> <a href="#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE/near/244674305">said</a>:</p>
+<blockquote>
+<p><span class="user-mention silent" data-user-id="194952">Julian Sass</span> Was this ensured by construction in this and other Conditions profiles from GECCO?</p>
+</blockquote>
+<p>Yes, the concepts in the derived profile are all subsumed by the concepts in the parent profile.</p>
+
+
+
+<a name="245164840"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/245164840" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#245164840">(Jul 07 2021 at 11:29)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="248736">@Mark Iantorno</span>, was there any conclusion to this?</p>
+
+
+
+<a name="245174424"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/245174424" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#245174424">(Jul 07 2021 at 12:55)</a>:</h4>
+<p>I was working on other things. I will get back on this, this afternoon</p>
+
+
+
+<a name="245180364"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/245180364" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#245180364">(Jul 07 2021 at 13:36)</a>:</h4>
+<p>Great, thanks! - let me know if you need more info etc.</p>
+
+
+
+<a name="245459754"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/245459754" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#245459754">(Jul 09 2021 at 15:44)</a>:</h4>
+<p>So, couple things to keep in mind here: 1. I have very little knowledge about or experience with slicing. 2. I haven't really touched this part of the validator before.</p>
+
+
+
+<a name="245459784"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/245459784" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#245459784">(Jul 09 2021 at 15:44)</a>:</h4>
+<p>So I'm going to ask a bunch of dumb questions as I'm going through this.</p>
+
+
+
+<a name="245459911"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/245459911" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#245459911">(Jul 09 2021 at 15:45)</a>:</h4>
+<p>You said: "However, it is a re-profiling of the base profile <a href="https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition">https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition</a> which, in turn, also defines a slice on Coding.code with a required binding to a ValueSet containing all (german) ICD codes."</p>
+
+
+
+<a name="245460069"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/245460069" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#245460069">(Jul 09 2021 at 15:47)</a>:</h4>
+<p>Where in the JSON is that defined? I only see 3 sliceNames? and they don't appear to point to a set of all german ICD codes</p>
+
+
+
+<a name="245460105"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/245460105" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#245460105">(Jul 09 2021 at 15:47)</a>:</h4>
+<p>I see slices for verification status and uncertainty of presence</p>
+
+
+
+<a name="245460117"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/245460117" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#245460117">(Jul 09 2021 at 15:47)</a>:</h4>
+<p><span class="user-mention" data-user-id="194703">@Morten Ernebjerg</span></p>
+
+
+
+<a name="245460338"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/245460338" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#245460338">(Jul 09 2021 at 15:49)</a>:</h4>
+<p>What timezone are you in Morten, can we have a quick call at some point</p>
+
+
+
+<a name="245543310"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/245543310" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Julian Sass <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#245543310">(Jul 10 2021 at 10:51)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="248736">@Mark Iantorno</span> thanks for looking into this. <br>
+The profile <a href="https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition">https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition</a> again is a re-profiling. The base where the slices on Condition.code.coding are defined is <a href="https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/StructureDefinition/Diagnose">https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/StructureDefinition/Diagnose</a>. Here in the diff is e.g. the Condition.code.coding:icd10-gm slice with a required binding to the ValueSet containing all German ICD Codes.</p>
+
+
+
+<a name="245545446"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/245545446" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#245545446">(Jul 10 2021 at 11:40)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="248736">@Mark Iantorno</span>, I'm on central European time. Would be happy to talk, feel free to PM me. Mondays looks good, but I will be away on vacation starting Tuesday late afternoon.</p>
+
+
+
+<a name="245701674"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/245701674" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#245701674">(Jul 12 2021 at 15:21)</a>:</h4>
+<p><span class="user-mention" data-user-id="411403">@Rene Lebherz</span> FYI</p>
+
+
+
+<a name="247900568"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/247900568" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#247900568">(Aug 02 2021 at 08:37)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="248736">@Mark Iantorno</span>, any updates on this?</p>
+
+
+
+<a name="248214825"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/248214825" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Iantorno <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#248214825">(Aug 03 2021 at 12:40)</a>:</h4>
+<p>Grahame has requested that this wait until he returns</p>
+
+
+
+<a name="248215204"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport%20gives%20NPE/near/248215204" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE.html#248215204">(Aug 03 2021 at 12:44)</a>:</h4>
+<p>OK, thanks for the update!</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

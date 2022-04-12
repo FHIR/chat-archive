@@ -1,0 +1,566 @@
+[
+    {
+        "content": "<p>From discussion on the DaVinci \"Formulary IG\" call, they have a use case where a \"Formulary Item\" describes the details of how a particular drug is included in a formulary. Logically the \"Formulary Item\" says things like:</p>\n<blockquote>\n<p>\"acetaminophen 325 MG / oxycodone hydrochloride 5 MG Oral Tablet\" is covered on Formulary A with a quantity limit of 60 pills per 30 days</p>\n</blockquote>\n<p>Today, they want to support things like searching by various brand/generic names or different dose forms. All this information lives in vocabularies like RxNorm, but it's not easy to <em>search</em>, so instead of just listing an RxNorm code in the Formulary Item, the IG adds a <a href=\"https://build.fhir.org/ig/HL7/davinci-pdex-formulary/use_cases_and_overview.html#resource-relationships\">new resource called \"Formulary Drug\"</a> -- a profile on MedicationKnowledge that basically acts an an \"index\" for drug properties (name, generic equivalents, dose forms, etc). This pattern is useful because it lets you use search params to find, say, brand name drugs via a query like:</p>\n<div class=\"codehilite\"><pre><span></span><code> /Basic?code=formulary-item&amp;subject.drug-name=percocet&amp;doseform=tablet\n</code></pre></div>",
+        "id": 275025508,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647028418
+    },
+    {
+        "content": "<p>... but <strong>it strikes me that this pattern  (creating a FormularyDrug resource to staple together terminology details into a resource, to enable search) is creating a whole new problem</strong> -- lots of state to manage, even when the underlying data already exist in terminologies (concepts, hierarchies, properties, etc). It would be nicer if a <code>FormularyItem</code> could just list a drug (say, by RxNorm code) and queries could ask these kinds of questions directly against the FormularyItem.</p>",
+        "id": 275025595,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647028468
+    },
+    {
+        "content": "<p>In other words, it'd be nice to write queries like:</p>\n<div class=\"codehilite\"><pre><span></span><code>/Basic?code=formulary-item&amp;drug:terminology=(rxnorm.type = SBD, rxnorm.doseform = Tablet, rxnorm.preferredTerm ~ Percocet)\n</code></pre></div>\n\n<p>(Never mind my ad-hoc syntax, hopefully you understand the kind of thing I mean.)</p>\n<p>Has there been discussion about this kind of capability, pushing terminology details (beyond above/below) into queries? (It's something the semantic web stack expresses really well, but I'm wondering if there's some practical application in FHIR too. </p>\n<p>Particularly interested whether <span class=\"user-mention\" data-user-id=\"191318\">@nicola (RIO/SS)</span> or <span class=\"user-mention\" data-user-id=\"191376\">@Jim Steel</span> have built features like this (standardized or non).</p>",
+        "id": 275025951,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647028677
+    },
+    {
+        "content": "<p>We provide Concept resource with first-class extensions - i.e. rxnorm can be loaded with extra info. Custom resources can be used for formulary item, and query is quite trivial join with our SQL on FHIR</p>",
+        "id": 275027891,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1647029637
+    },
+    {
+        "content": "<p>Thanks!  Do you support a generic kind of query syntax where anytime you are searching by \"token\" type search parameter, there is a way to leverage properties from a terminology? And if you're defining a custom resource can it be (essentially) just a \"materialized view\" on a terminology? Or are you thinking about another model for supporting a Formulary Drug?</p>",
+        "id": 275030063,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647030728
+    },
+    {
+        "content": "<p>These are the kinds of things you can do with ECL for snomed (which translate directly to an implicit valueset URI).<br>\nI've long thought a similar capability (and syntax) that approximates the Valuset compose functionality would be a great addition to FHIR Terminology services</p>",
+        "id": 275132684,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1647145756
+    },
+    {
+        "content": "<p>Interesting <span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span> ! Do you have any thoughts about what a good starting point for this would look like? And what do you think about the idea of surfacing this as a capability within FHIR search?</p>",
+        "id": 275380838,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647354887
+    },
+    {
+        "content": "<p>I see the main use-case for such a VCL (ValueSet  Constraint/Compose Language) as being the basis for implicit valueset URIs much as ECL can be used to specify them of the form <code>http://snomed.info/sct?fhir_vs=ecl/[ECL]</code>.</p>\n<p>So, off the top of my head, I'd limit to a single codesystem (based on the base of said URI), and focus on simple &amp; common aspects of ValueSet.compose functionality, building from the existing ECL syntax pattern:<br>\n<code>[focus] : [property] [op] [value]</code><br>\nwhere <code>[focus]</code> includes <code>*</code> as a wildcard, and <code>&lt;&lt;</code>, <code>&lt;</code> etc operators for  hierarchy traversal, and then add in simple AND / OR / MINUS and bracketing to compose sub-expressions.</p>\n<p>The would give you things like:</p>\n<ul>\n<li><code>&lt;!  LP43571-6 MINUS 5932-9</code> (equivalent of <a href=\"http://hl7.org/fhir/ValueSet/example-intensional\">http://hl7.org/fhir/ValueSet/example-intensional</a>)</li>\n<li><code>&lt;&lt; _ActClassROI MINUS _ActClassROI</code> (equivalent of <a href=\"http://terminology.hl7.org/ValueSet/v3-ActClassROI\">http://terminology.hl7.org/ValueSet/v3-ActClassROI</a>), but more simply: <code>&lt; _ActClassROI</code></li>\n<li><code>* : {{ C STATUS = ACTIVE, CLASSTYPE = 1, CLASS != regex:\"CYTO|HL7\\\\.CYTOGEN|HL7\\\\.GENETICS|^PATH(\\\\..*)?|^MOLPATH(\\\\..*)?|NR STATS|H&amp;P\\\\.HX\\\\.LAB|CHALSKIN|LABORDERS\" }}</code> (equivalent of <a href=\"http://hl7.org/fhir/uv/ips/ValueSet/results-laboratory-observations-uv-ips\">http://hl7.org/fhir/uv/ips/ValueSet/results-laboratory-observations-uv-ips</a>)</li>\n</ul>\n<p>That last one is perhaps stretching what might be needed in practice, but is a real-world example and shows how property filters would be expressed.  The others just constrain based on hierarchy.</p>\n<p>Finally, one might introduce the rule for implicit ValueSets that allows <code>[uri]?vcl=[expression]</code> to be used as an implicit valueset for the CodeSystem where <code>[uri]</code> is the \"all code ValueSet\", ie. the value of <code>CodeSystem.valueSet</code></p>",
+        "id": 275448026,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1647385692
+    },
+    {
+        "content": "<p>Cool! I like the idea of exposing the same machinery (or a subset) as ValueSet definitions inline. I'll try to write out examples from the RxNorm cases above.</p>",
+        "id": 275457090,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647393386
+    },
+    {
+        "content": "<p>So if you wanted to find meds that included tylenol you could do a query using the generic (161) and branded (202433) ingredients like:</p>\n<div class=\"codehilite\"><pre><span></span><code>MedicationUsage?code=(tty in [&#39;scd&#39;, &#39;sbd&#39;], has_ingredient in [161, 202433])\n</code></pre></div>\n\n<p>... though I'm not sure how to say \"we're talking about RxNorm\". I'm also not quite sure how to write a search over concept names (e.g., preferred terms or synonyms that match \"tylenol\") based on the properties defined in <a href=\"https://www.hl7.org/fhir/rxnorm.html\">https://www.hl7.org/fhir/rxnorm.html</a> (I haven't worked with this page in the FHIR spec before, and the syntax is not super clear to me, so I may just be misunderstanding)</p>",
+        "id": 275464693,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647402806
+    },
+    {
+        "content": "<p>For what I was brainstorming above, the ValueSet URI would be something like:<br>\n<code>http://www.nlm.nih.gov/research/umls/rxnorm/vs?vcl=*: has_ingredient =  (161 OR 202433) {{ C tty = (\"scd\"  \"sbd\") }}</code><br>\nwith appropriate %-encoding.</p>\n<p>This is saying match any (<code>*</code>) RxNorm code (<code>http://www.nlm.nih.gov/research/umls/rxnorm/vs</code> is the all-codes valueset) with a <code>has_ingredient</code> relationship to either of the codes 161 or 202433 and a <code>tty</code> property of \"scd\" or \"sbd\".</p>\n<p>If you want to limit matches to those with \"tylenol\" in the display/designation text, then you would append a clause like <code>{{ D term=\"tylenol\" }}</code></p>\n<p>( I'm basing all this on a straightforward re-use of SNOMED's ECL - <a href=\"http://snomed.org/ecl\">http://snomed.org/ecl</a> )</p>",
+        "id": 275465583,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1647403877
+    },
+    {
+        "content": "<p>Putting it together we'd end up with:</p>\n<div class=\"codehilite\"><pre><span></span><code>MedicationUsage?code:in=http://www.nlm.nih.gov/research/umls/rxnorm/vs?vcl=*: has_ingredient =  (161 OR 202433) {{ C tty = (&quot;scd&quot;  &quot;sbd&quot;) }} {{ D term=&quot;tylenol&quot; }}\n</code></pre></div>",
+        "id": 275465673,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1647404015
+    },
+    {
+        "content": "<p>This pushes all the interpretation off to the terminology server layer, rather than extending FHIRPath or _search syntax</p>",
+        "id": 275465802,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1647404170
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>  You can add first-class extensions to Concept resource with rxnorm and formulary item  attrs, then define search params for it. Is it what you call \"materialized\" terminology? Or you can create custom resource for formulary item and join/filter with rxnorm concepts</p>",
+        "id": 275488038,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1647424519
+    },
+    {
+        "content": "<p>I think,  what you want may be expressed as chained search/_search (with only one join) with Concept resource. I do not like idea of one more \"new ad-hock search syntax\"</p>",
+        "id": 275488593,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1647424812
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span> thanks, those references are helpful. I'll read up on the ECL syntax (it's not totally transparent at first, which is fair). In your proposed example, I'm assuming this uses (depends on?) the definitions from <a href=\"https://www.hl7.org/fhir/rxnorm.html\">https://www.hl7.org/fhir/rxnorm.html</a>? Even though none of those properties are defined (? I think?) as supporting subsumption?</p>",
+        "id": 275509655,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647437217
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191318\">@nicola (RIO/SS)</span> yes, I'm thinking about a world where a FHIR server generically \"loads RxNorm\" to support diverse use cases -- not specifically to populate a FormularyDrug resource or a ReconciliationRecommendation in particular, but in a way that <em>any search on any Coding</em> can ask questions like the ones above.</p>\n<p>Maybe it'd be good to work through similar examples with your architecture. How would a client ask for:</p>\n<ul>\n<li>\n<p>All MedicationUsage resources where patient is 123 and the drug code is an RxNorm code with \"tylenol\" or \"acetaminophen\" as part of the preferred name?</p>\n</li>\n<li>\n<p>All MedicationUsage resources where patient is 123 and the drug code is an RxNorm code that \"has_ingredient\"  of RxNorm CUI 161 or 202433?</p>\n</li>\n</ul>",
+        "id": 275511464,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647438120
+    },
+    {
+        "content": "<p>Folks, we've bantered about a generic terminology query and representation syntax and it's never gotten anywhere. Apelon DTS uses \"TQL\" and obviously SCT uses ECL. I strongly agree that we need to expose a common general hierarchical and filter-based query syntax for use in defining value sets and performing inline queries as <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> wants. Can we get some folks to come and play at connectathon?  <span class=\"user-mention\" data-user-id=\"340004\">@Davera Gabriel</span> This discussion is perfect for connectathon topic.</p>",
+        "id": 275522278,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1647442510
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>  now it can be done with something  like this:</p>\n<p>select mu.* from medicationusage mu, concept c where mu.resource#&gt;&gt;'{patient,id}' = '123' and mu.resource-&gt;'code' = c.resource-&gt;'code' and c.resource#&gt;&gt;'{rxnorm, prefName}' in ()</p>",
+        "id": 275567453,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1647459959
+    },
+    {
+        "content": "<p>If we introduce chain by code - it can be GET /Mu?pid=...&amp;code:Concept.rxnormPerf=a,b</p>",
+        "id": 275567767,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1647460085
+    },
+    {
+        "content": "<p>The key is Concept resource and application of FHIR search framework to it! Concept may be extended and profiled for specific terminology like rxnorm</p>",
+        "id": 275568173,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1647460290
+    },
+    {
+        "content": "<p>So we do not have to reinvent the wheel</p>",
+        "id": 275568258,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1647460324
+    },
+    {
+        "content": "<p>Neat! Can you write out a full example for the search query? I'm not 100% sure I follow the chaining, and whether/where composite search parameters are needed</p>",
+        "id": 275570749,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647461543
+    },
+    {
+        "content": "<p>I will prepare working notebook for aidbox tomorrow with sql  - ok?</p>",
+        "id": 275571333,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1647461699
+    },
+    {
+        "content": "<p>Search query is hypothetical  - means we can \"join\" concept by code - but maybe implemented</p>",
+        "id": 275571562,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1647461801
+    },
+    {
+        "content": "<p>Thanks! I'm looking to understand how this would appear on the search API (I mean, the underlying SQL is great too but it doesn't quite answer my question).</p>",
+        "id": 275571962,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647462026
+    },
+    {
+        "content": "<p>Example syntax is fine if you identify it as such.</p>",
+        "id": 275571993,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647462050
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> Yes, I've used the filters from <a href=\"https://www.hl7.org/fhir/rxnorm.html\">https://www.hl7.org/fhir/rxnorm.html</a>, and in general I would expect any filter to be usable since a design goal would be that all expressions are transformable into an explicit <code>ValueSet.compose</code> element.  However the expressions above don't depend on subsumption wrt properties, only wrt the concepts themselves.</p>\n<p>Wrt syntax, SNOMED's ECL was modelled on its post coordination syntax which makes a lot of sense in that domain. It's also quite succinct.<br>\nIt doesn't quite seamlessly translate to FHIR CodeSystems since it distinguishes concept properties and concept relationships (properties that reference other concepts in the same CodeSystem), distinguishes concept properties from designation properties (hence the <code>{{C</code> and <code>{{D</code> parts of the syntax), and doesn't cover all the FHIR datatypes (eg Coding).<br>\nWe could probably define a prettier syntax, but coming from SNOMED-land, I like the idea of building something that's aligned with an existing domain-oriented syntax because there's less to learn.  It's also an implementation-independent syntax (i.e., doesn't leak out relational table design elements).</p>\n<p>Wrt <span class=\"user-mention\" data-user-id=\"191318\">@nicola (RIO/SS)</span> 's point of new syntaxes, ad hoc or not, his approach depends on a new Resource and associated additional extensions, which could also be labelled ad hoc :-). I'm not sure why, in such an approach, you'd need to introduce extensions to carry the rxnorm attrs; I would have expected generic attrs to be a fundamental aspect of such a Concept Resource?<br>\nHowever, use still requires some way to \"chain\" through a code/concept.  This pushes a pile of implementation logic into the FHIR Server itself, rather than leaving it all in the terminology subsystem sitting in an existing re-usable abstraction (ValueSet).</p>",
+        "id": 275582471,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1647467625
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> wrt TQL, I think the advantage here is that we'd be looking at an 80% approach that doesn't try to get at every possible underlying aspect of a code system, but rather covers off the core parts that are exposed using <strong>existing ValueSet functionality</strong>.  This would be my argument as to why this might get traction where other things remain niche / proprietary -- an open syntax that compiles down to existing standard capability that could even be provided as part of the standard libraries.</p>",
+        "id": 275585692,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1647469864
+    },
+    {
+        "content": "<p>Really enjoyed reading examples at  <a href=\"https://confluence.ihtsdotools.org/display/DOCECL/6.+Examples\">https://confluence.ihtsdotools.org/display/DOCECL/6.+Examples</a> (in lieu of the spec itself ;-)). The main difference I see for terminologies like RxNorm is that the detailed relationship types aren't modeled as concepts in the terminology (whereas in SCT they are), but that's not any great impediment to reusing the syntax.</p>",
+        "id": 275589728,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647472844
+    },
+    {
+        "content": "<p>I'm quite interested in how well a \"regular FHIR server\" (as opposed to a specialty terminology server) could join together clinical resources with (standardized / consistently modeled) concept tables to support this kind of thing. Of course, maybe the answer is \"send the terminology piece to a terminology subsystem to resolve it into a set of concepts first\" -- but with this approach you don't have the advantage of query optimization across the clinical and terminology data. </p>\n<div class=\"spoiler-block\"><div class=\"spoiler-header\">\n</div><div class=\"spoiler-content\" aria-hidden=\"true\">\n<p>Is that at all clear? What I mean is: some queries match a tiny number of clinical data rows and a huge number of terminology rows, like</p>\n<div class=\"codehilite\"><pre><span></span><code>Observation?_id=123&amp;code:tx=(*: {term=&quot;*e*&quot;})\n</code></pre></div>\n\n<p>which asks whether observation 123 has a concept with any description containing \"e\".</p>\n<p>Whereas other queries match a huge number of clinical data rows and a tiny number of terminology rows, like </p>\n<div class=\"codehilite\"><pre><span></span><code>Observation?code:tx=(*: {{term=&quot;*excited*&quot;})\n</code></pre></div>\n\n<p>which asks for any Observation that has a concept with a description containing \"excited\".</p>\n</div></div>",
+        "id": 275590944,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647473860
+    },
+    {
+        "content": "<p>Since SCT now has non-concept relationships, and ECL supports those. I think that aligns very well with the kinds of properties you'd see in RxNorm.</p>",
+        "id": 275591145,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1647474019
+    },
+    {
+        "content": "<p>I guess I am assuming that 1. a \"regular FHIR Server\" already needs to support queries like <code>Observation.code:in=http://example.com/SomeValueset</code> and this proposal would leverage that capability, 2. if it doesn't, then both approaches require a bunch of server-side implementation.  It would not be hard for a server to recognise a trailing <code>?vcl=...</code> in a valueset URI and do local evaluation as an optimisation step (both approaches would require the raw terminology data to be available in the data server).</p>",
+        "id": 275591446,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1647474301
+    },
+    {
+        "content": "<p>In terms of optimisation, the FHIR (data) server can always (internally) compute the unique set of codes for <code>Observation.code</code> (which will be much smaller than the # unique Observation records) and then dynamically compose a ValueSet with these codes and the (compiled) VCL expression as an intersection resulting in a single call to the terminology server, and avoids the blowout in # of codes matching the unconstrained query.  Also, if desired/needed, the set of unique <code>Observation.code</code> values could be maintained incrementally rather than being computed on-demand.</p>",
+        "id": 275591857,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1647474685
+    },
+    {
+        "content": "<p>Thanks for the info on SCT non concept relationships!</p>\n<p>For (1) some servers do \":in\" today but don't have all the data or infrastructure in place to support more sophisticated queries.  I'm thinking that the more we can support \"raw terminology data\" (with properties and relationships packaged and distributed in ways that facilitate querying \"at the edge\") in all kinds of FHIR services, the more choices server developers have about how to optimize.</p>",
+        "id": 275591865,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647474691
+    },
+    {
+        "content": "<p>I also agree with all the suggestions you're making about how to optimize the communication between a data server and a terminology server, when that architecture is in play. These seem like excellent techniques to have in the bag of tricks.</p>",
+        "id": 275592013,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647474817
+    },
+    {
+        "content": "<p>I think a key aspect is that if a server also has the relevant terminology data available locally (even for only some code systems), this approach is not really a stretch -- I'd probably limit the syntax to non-nested constraints in the first instance (since, as you say, most terminologies don't have intra-code system relationships), and then it would be pretty straightforward to turn into SQL with the main requirement being that you have parent-child edge and path (transitive closure) tables available if the code system has hierarchy.</p>",
+        "id": 275592319,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1647475081
+    },
+    {
+        "content": "<p>Yes! This is exactly why I'm excited about the idea. It should not be overly ambitious and opens up quite a lot of expressive capability.</p>",
+        "id": 275592439,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647475172
+    },
+    {
+        "content": "<p>One other bit of semantics for RxNorm: relationships are described between atoms asserted by various sources and it would make sense to surface the \"source\" as a restriction on attribute queries. I.e. a way to request not just \"any concept with property x having value y\" but more specifically, \"any concept with property x having value y as asserted by source z\". (Syntactically this could use an optional \"sab=\" clause similar to the description filters in ECL taking optional clauses like \"lang=\" in <code>{{term=\"\", lang=\"\"}}</code>. But does FHIR CodeSystem have a way to assert such properties of properties?)</p>",
+        "id": 275602939,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647486521
+    },
+    {
+        "content": "<p>hah!  FHIR Tx has a way to return subproperties (I think of them as grouped properties), but currently no way in the FHIR CodeSystem resource to specify such things.<br>\nSCT has them (for historical reasons its call \"role grouping\") and a server is supposed to know how to do this stuff (since its accepted that their isnt' a FHIR CodeSystem rendering of SCT).</p>\n<p>I'm not really across RxNorm details, but I don't recall the rxnorm page saying anything about grouping a set of properties with another that is the source of their assertion.  However, if one did follow this path, then ECL has syntax to suit with <code>{</code> and '}' to group the properties together (SCT and thus ECL doesn't actually care what the properties are \"sub\" of since it's always the same.</p>\n<p>This property grouping idea also comes up in meds terminologies with multi-ingredient drugs and their associated ingredient strengths; you can't just say this thing has codeine and paracetamol and strength 50mg and strength 200mg.  To resolve this in a FHIR CodeSystem for dm+d in the UK, Ontoserver (6.7.0, due end of the month) uses some extensions to capture the grouping .  Hopefully in R5 we'll be able to add this as a 1st class capability.</p>\n<p>So, these are not really properties of properties since that would be more like an association class, but it does result in a similar capability.</p>\n<p>Conceptually it is like this:</p>\n<div class=\"codehilite\" data-code-language=\"JSON\"><pre><span></span><code><span class=\"p\">{</span><span class=\"w\"></span>\n<span class=\"w\">  </span><span class=\"nt\">\"code\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"123\"</span><span class=\"p\">,</span><span class=\"w\"></span>\n<span class=\"w\">  </span><span class=\"nt\">\"display\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"p 200mg + c 50mg\"</span><span class=\"p\">,</span><span class=\"w\"></span>\n<span class=\"w\">  </span><span class=\"nt\">\"property\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[{</span><span class=\"w\"></span>\n<span class=\"w\">    </span><span class=\"nt\">\"name\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"status\"</span><span class=\"p\">,</span><span class=\"w\"></span>\n<span class=\"w\">    </span><span class=\"nt\">\"valueCode\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"active\"</span><span class=\"w\"></span>\n<span class=\"w\">  </span><span class=\"p\">},{</span><span class=\"w\"></span>\n<span class=\"w\">    </span><span class=\"nt\">\"name\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"prop\"</span><span class=\"p\">,</span><span class=\"w\"></span>\n<span class=\"w\">    </span><span class=\"nt\">\"subproperty\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[{</span><span class=\"w\"></span>\n<span class=\"w\">      </span><span class=\"nt\">\"name\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"ingredient\"</span><span class=\"p\">,</span><span class=\"w\"></span>\n<span class=\"w\">      </span><span class=\"nt\">\"valueCode\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"codeine\"</span><span class=\"w\"></span>\n<span class=\"w\">    </span><span class=\"p\">},</span><span class=\"w\"> </span><span class=\"p\">{</span><span class=\"w\"></span>\n<span class=\"w\">      </span><span class=\"nt\">\"name\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"unit\"</span><span class=\"p\">,</span><span class=\"w\"></span>\n<span class=\"w\">      </span><span class=\"nt\">\"valueCode\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"mg\"</span><span class=\"w\"></span>\n<span class=\"w\">    </span><span class=\"p\">},</span><span class=\"w\"> </span><span class=\"p\">{</span><span class=\"w\"></span>\n<span class=\"w\">      </span><span class=\"nt\">\"name\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"strength\"</span><span class=\"p\">,</span><span class=\"w\"></span>\n<span class=\"w\">      </span><span class=\"nt\">\"valueDecimal\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mi\">50</span><span class=\"w\"></span>\n<span class=\"w\">    </span><span class=\"p\">}]</span><span class=\"w\"></span>\n<span class=\"w\">  </span><span class=\"p\">},{</span><span class=\"w\"></span>\n<span class=\"w\">    </span><span class=\"nt\">\"name\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"prop\"</span><span class=\"p\">,</span><span class=\"w\"></span>\n<span class=\"w\">    </span><span class=\"nt\">\"subproperty\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[{</span><span class=\"w\"></span>\n<span class=\"w\">      </span><span class=\"nt\">\"name\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"ingredient\"</span><span class=\"p\">,</span><span class=\"w\"></span>\n<span class=\"w\">      </span><span class=\"nt\">\"valueCode\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"paracetamol\"</span><span class=\"w\"></span>\n<span class=\"w\">    </span><span class=\"p\">},</span><span class=\"w\"> </span><span class=\"p\">{</span><span class=\"w\"></span>\n<span class=\"w\">      </span><span class=\"nt\">\"name\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"unit\"</span><span class=\"p\">,</span><span class=\"w\"></span>\n<span class=\"w\">      </span><span class=\"nt\">\"valueCode\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"mg\"</span><span class=\"w\"></span>\n<span class=\"w\">    </span><span class=\"p\">},</span><span class=\"w\"> </span><span class=\"p\">{</span><span class=\"w\"></span>\n<span class=\"w\">      </span><span class=\"nt\">\"name\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"strength\"</span><span class=\"p\">,</span><span class=\"w\"></span>\n<span class=\"w\">      </span><span class=\"nt\">\"valueDecimal\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mi\">200</span><span class=\"w\"></span>\n<span class=\"w\">    </span><span class=\"p\">}]</span><span class=\"w\"></span>\n<span class=\"w\">  </span><span class=\"p\">}]</span><span class=\"w\"></span>\n<span class=\"p\">}</span><span class=\"w\"></span>\n</code></pre></div>\n<p>and in your case you'd have each \"x = y, source = z\" assertion grouped in a subproperty.  If a source was making multiple assertions then they'd all be in the same subproperty group.</p>",
+        "id": 275663989,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1647528500
+    },
+    {
+        "content": "<p>Very interesting. Yeah, the UMLS (and RxNorm) have a top level notion of Concepts and Atoms, and the question is whether FHIR can or should account for atoms and their sources. Will try to make some time to play with all this.</p>",
+        "id": 275665981,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647529229
+    },
+    {
+        "content": "<p>It struck me that one other DSL we have is FHIRpath, and it could conceivably be bent into shape for things like (newlines added for clarity)</p>\n<div class=\"codehilite\"><pre><span></span><code>GET MedicationRequest?code:tx=\n  Concept\n  .where(terms.IN.matches(&#39;acetaminophen&#39;))\n  .select(rels.ingredient_of)\n  .select(rels.constitutes)\n</code></pre></div>\n<p>i.e. \"tell me all meds that have ingredients with tylenol in them\", or whatever. Basic point being: there's a tree of Concepts each with terms, attrs, and rels as defined in an underlying terminology.</p>\n<p><strong>I made a quick demo of this at <a href=\"https://termquery-demo.fhir.me\">https://termquery-demo.fhir.me</a> </strong> (note: this loads like 30MB into your browser and will probably run jankily because I have sqlite running in the UI thread ;-) -- you can link to a query by appending <code>#</code>).</p>\n<p>Bottom line: this was a fun diversion and FHIRpath has some interesting expressive capabilities here; it's approachable for the things it covers, but nowhere near as sophisticated as SNOMED ECL.</p>",
+        "id": 276112459,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647896214
+    },
+    {
+        "content": "<p>Looking back at this thread, I think the \"low hanging fruit\" would be:</p>\n<ol>\n<li>A publication format that makes it easier for servers to load common vocabularies and make use of terms, attributes, and relationships from them</li>\n<li>Maybe a couple of standard modifiers on the token search param for simple jobs, like <code>:tx-term</code> that searches a token's terminology entries across all official terms, like <code>MedicationRequest?code:tx-term=acetaminophen</code>, and could specify prefixes to lock down term types or languages, like <code>code:tx-term=BN|Tylenol</code>. And a similar concept for attributes like <code>code:tx-attr=RXTERM_FORM|Tab</code> to look for tablets.</li>\n</ol>",
+        "id": 276113037,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647896430
+    },
+    {
+        "content": "<ol>\n<li>Isn't CodeSystem itself already such a publication format?  It is, in fact, what we use.</li>\n</ol>",
+        "id": 276140907,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1647920951
+    },
+    {
+        "content": "<ol start=\"2\">\n<li>Interesting, that would be a very stripped-down semantics.  Perhaps something modelled on <code>ValueSet.compose.include.filter</code> like <code>code:filter=[name].[op].[value]</code> leading to <code>code:filter=RXTERM_FORM.=.Tab</code>(although this doesn't really address language-specific matching as you've suggested, and I'm not sure whether you can do that in a ValueSet compose anyway)</li>\n</ol>",
+        "id": 276141002,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1647921050
+    },
+    {
+        "content": "<p>(1) I haven't seen how to publish large terminologies in CodeSystem with terms, attributes, and relationships included. It's possible this works; does someone host RxNorm, LOINC, and SNOMED in this format? (I was thinking formats that allow streaming processing would be preferable, but I don't think it's a strict requirement. <a href=\"http://tx.fhir.org/snomed/900000000000207008-20200731/?type=snomed&amp;id=*\">http://tx.fhir.org/snomed/900000000000207008-20200731/?type=snomed&amp;id=*</a> seems to be broken at the moment and <a href=\"http://tx.fhir.org/r4/CodeSystem/snomedct?_format=json\">http://tx.fhir.org/r4/CodeSystem/snomedct?_format=json</a> doesn't include concepts)</p>\n<p>(2) it seems like detailed terms might just be absent from the FHIR models, or they're intended to be treated as a kind of property?  The examples from (1) would help to clarify.</p>",
+        "id": 276143632,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1647924831
+    },
+    {
+        "content": "<p>This SNOMED example from tx shows terms, attributes and hierarchical relationships <a href=\"https://tx.fhir.org/snomed/900000000000207008-20210731/?type=snomed&amp;id=780128004\">https://tx.fhir.org/snomed/900000000000207008-20210731/?type=snomed&amp;id=780128004</a><br>\nAnd a LOINC code with terms, attributes and categories <a href=\"https://tx.fhir.org/loinc/en-US?srch=60048-6\">https://tx.fhir.org/loinc/en-US?srch=60048-6</a><br>\nDoesn't look like RxNorm is on tx.</p>",
+        "id": 276842566,
+        "sender_full_name": "Kai Kewley",
+        "timestamp": 1648456766
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192855\">@Kai Kewley</span>  RxNorm version 20210208 is available on <a href=\"http://tx.fhir.org\">tx.fhir.org</a> (<a href=\"http://tx.fhir.org/r4/CodeSystem/$lookup?system=http://www.nlm.nih.gov/research/umls/rxnorm&amp;code=723\">example</a>).  Since it's now over a year old it needs to be refreshed (I'll plan to do that as soon as I have a chance).</p>",
+        "id": 276857132,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1648465992
+    },
+    {
+        "content": "<p>In the snomed example, It looks like the UI is showing me this information but I don't know how to access it through the API. Is this information about concepts exposed directly? (For example <a href=\"https://tx.fhir.org/snomed/900000000000207008-20210731/?type=snomed&amp;id=780128004\">https://tx.fhir.org/snomed/900000000000207008-20210731/?type=snomed&amp;id=780128004</a> didn't include anything like a \"see JSON\" link.)</p>",
+        "id": 276872029,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1648473692
+    },
+    {
+        "content": "<p>Of course there are FHIR servers that load and manage these vocabularies<br>\nMy key questions for this thread are:</p>\n<ol>\n<li>Is there a consistent way to distribute them for easy sharing/loading into any FHIR server</li>\n<li>Can the FHIR search API provide ways to surface information from these terminologies in clinical data search</li>\n</ol>\n<p>For (1) I haven't seen this commonly done, and I've made some proposals for discussion</p>\n<p>For (2) I've submitted Jira issues to surface more terminology in information as standard/implicit \"filters\", but I think additional search modifiers are needed in order to surface these terminology filters in search</p>",
+        "id": 276872487,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1648473959
+    },
+    {
+        "content": "<p>The problem with (1) is that a SNOMED distribution (RF2 SNAPSHOT) contains a lot more stuff than just the CodeSystem; it contains Reference Sets in various formats, and a whole pile of technical (meta)data that is 99% of the time[*] irrelevant to clinical / runtime use of SNOMED, and only of interest to tool developers supporting SNOMED authoring.</p>\n<p>If you're a TX developer and want to support SNOMED properly (which you should), then you need to implement the implicit ValueSets, understand grouped relationships (subproperties in FHIR) and ECL, etc.  For this you need the RF2 distribution.<br>\nIf you're only going to do a limited implementation, then a transform similar to the approach you did for LOINC with sqlite into a FHIR CodeSystem will get you some of the way there (subproperties would require an Extension, as we've done here: <a href=\"https://ontoserver.csiro.au/docs/6/ext-subproperties-cs.html\">https://ontoserver.csiro.au/docs/6/ext-subproperties-cs.html</a>).</p>\n<p>[*] made up stat</p>",
+        "id": 276936453,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1648504783
+    },
+    {
+        "content": "<blockquote>\n<p>I haven't seen how to publish large terminologies in CodeSystem with terms, attributes, and relationships included.</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> it's not necessary to actually publish them - the existing terminology servers make the data available as if they were published (it's an engineering question)</p>",
+        "id": 277081674,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648600643
+    },
+    {
+        "content": "<p>the problem with all this approach is that we can do all sorts of super clever things on the terminology server side, but a search like this:</p>",
+        "id": 277081686,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648600672
+    },
+    {
+        "content": "<p><code>GET MedicationRequest?code:tx={some clever syntax}&amp;date=2022-01-01</code></p>",
+        "id": 277081740,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648600717
+    },
+    {
+        "content": "<p>is really hard for a server. it needs to turn whatever syntax this :tx thing is into a list of codes - and the list may be infinite in size - and then join that in to the rest of the criteria</p>",
+        "id": 277081783,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648600791
+    },
+    {
+        "content": "<p>that's why the syntax only supports value set - :in.</p>",
+        "id": 277081828,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648600805
+    },
+    {
+        "content": "<p>so that servers can line this up in advance, and perform whatever optimisations they believe are needed in order to support this search</p>",
+        "id": 277081844,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648600834
+    },
+    {
+        "content": "<p>None of this thread has convinced me that this is not an unreasonable trade-off. Particularly given that very few servers support :in as it is. Significantly increasing the complexity isn't going to help</p>",
+        "id": 277081871,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648600887
+    },
+    {
+        "content": "<p>I didn't see anything in your thinking that couldn't be done with value sets as they are.</p>",
+        "id": 277081922,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648600937
+    },
+    {
+        "content": "<p>my own server maintains a join table in the background, and a robot that iterates through the observed codes and the observed value sets asking the terminology server whether the code is a member of the value set using $validate-code, and then it can join across that table as part of it's other queries.</p>",
+        "id": 277081980,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648601036
+    },
+    {
+        "content": "<blockquote>\n<p>is really hard for a server. it needs to turn whatever syntax this :tx thing is into a list of codes - and the list may be infinite in size - and then join that in to the rest of the criteria</p>\n</blockquote>\n<p>Right -- my assertion is that there's a common set of property based search functionality that would enable diverse use cases and could be fueled by publishing data in consistent and reasonably complete format. This pattern could work with or without a dedicated/distinct \"terminology server\".</p>\n<p>Effectively these capabilities are <em>shy</em> of the needs that terminilogy developers might have, but similar to the use cases we already know how to index using search parameters on regular old FHIR resources. Indeed we are seeing groups like DaVinci Drug Formulary inventing FHIR resources just for this purpose, because there's no reliable access to terminology properties in search.</p>\n<p>To be clear, I quickly swung away from proposing a very expressive search functionality like SNOMED ECL, in favor of proposals that are based on simple property filters.</p>",
+        "id": 277083542,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1648602794
+    },
+    {
+        "content": "<p>I don't believe that there's a sweet spot</p>",
+        "id": 277083729,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648603071
+    },
+    {
+        "content": "<blockquote>\n<p>None of this thread has convinced me that this is not an unreasonable trade-off. Particularly given that very few servers support :in as it is. Significantly increasing the complexity isn't going to help</p>\n</blockquote>\n<p>I think you have one too many negatives there ;-)</p>\n<p>I'm suggesting that publishing terminology data in an interoperable format that's aligned with fhir's terminology features lowers the implementation bar for servers or anyone else that wants to \"do more\" with terminologies. The fact that many (most?) severs today don't support <code>:in</code> even ok on simple terminologies is a symptom of the problem, and we should be offering anything we can to give severs pathways to successful implementation.</p>",
+        "id": 277083756,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1648603083
+    },
+    {
+        "content": "<p>If there's no sweet spot, do you think we should just encourage IG developers to design more \"terminology proxy\" resources to index the properties they care about?</p>",
+        "id": 277083791,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1648603138
+    },
+    {
+        "content": "<blockquote>\n<p>for servers or anyone else that wants to \"do more\" with terminologies. The fact that many (most?) severs today don't support :in even ok on simple terminologies is a symptom of the problem</p>\n</blockquote>\n<p>yes, though at least part of it is legacy, and around division of labor on the server and the dev teams</p>",
+        "id": 277083808,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648603165
+    },
+    {
+        "content": "<p>your minimal syntax will never be enough until it's too much. You need at least intersections and unions of filters</p>",
+        "id": 277083867,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648603203
+    },
+    {
+        "content": "<p>So again, do we just embrace/encourage the use of domain specific resources to act as termination caches (per Da Vinci Drug Formulary)? They don't seem to require intersection or union FWIW.</p>",
+        "id": 277085830,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1648605355
+    },
+    {
+        "content": "<p>not generally, though I could speak in favour of that particular approach. For the big terminologis we will inevitably define resources</p>\n<p>Rxnorm = MedicationKnowledge<br>\nLOINC = ObservationDefinition<br>\nSCT (Clinical arm) = ConditionDefinition</p>\n<p>you can build a set of the resources from the terminology, and there's reasons why that's a solid arrangement, since everyone has their own formulary, observables, and condition predicates that build on and extend beyond the underlying code systems</p>",
+        "id": 277085963,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648605482
+    },
+    {
+        "content": "<p>I have spoken on this repeatedly and walked though the logic with, for instance, NLM RxNorm team</p>",
+        "id": 277086006,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648605520
+    },
+    {
+        "content": "<p>but that doesn't mean we are generally in favor of it, or that I agree with what the project has done</p>",
+        "id": 277086025,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648605544
+    },
+    {
+        "content": "<p>Hmm, I'm not sure I understand your position. But I'm confident that not every terminology will fit neatly into these resource types (e.g., your parenthetical on SNOMED above), so we'll have more and more resources and profiles to contend with as we travel down this path.</p>",
+        "id": 277086273,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1648605716
+    },
+    {
+        "content": "<p>yes agree with that</p>",
+        "id": 277086378,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648605822
+    },
+    {
+        "content": "<p>In any case, I have more humility about this topic than I'm letting on here :) I just want to make sure we're giving FHIR servers (and their users) a chance to take advantage of the incredible amount of knowledge that gets poured into terminology development.</p>",
+        "id": 277086522,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1648605983
+    },
+    {
+        "content": "<p>going back to the start of the thread... they created a 'FormularyDrug' resource - though why they wouldn't use that resources we already had defined, I don't know. I hope that's been discussed with Pharmacy WG ( <a class=\"stream\" data-stream-id=\"179249\" href=\"/#narrow/stream/179249-Medication\">#Medication</a>).</p>\n<p>But I did want to ask back when I read the start of the thread: why do you think that the formulary is limited to RxNorm? that seems like a clear problem in your approach to me</p>",
+        "id": 277086543,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648606013
+    },
+    {
+        "content": "<p>Formulary Drug is a profile on Medication Knowledge (looking back: I did call this out when introducing the topic, but I can see it may have gotten lost) --  so that's reusing the existing resource, just with use case specific profiles, no?</p>",
+        "id": 277086654,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1648606160
+    },
+    {
+        "content": "<p>Re: RxNorm, it doesn't <em>have to be limited</em> but it currently <em>is</em> specified that way.</p>",
+        "id": 277086682,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1648606199
+    },
+    {
+        "content": "<p><a href=\"https://build.fhir.org/ig/HL7/davinci-pdex-formulary/StructureDefinition-usdf-FormularyDrug-definitions.html#MedicationKnowledge.code.coding:semantic-drug\">https://build.fhir.org/ig/HL7/davinci-pdex-formulary/StructureDefinition-usdf-FormularyDrug-definitions.html#MedicationKnowledge.code.coding:semantic-drug</a></p>",
+        "id": 277086745,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1648606258
+    },
+    {
+        "content": "<p>Specifically they want to ensure that each formulary item is <em>indexed for search</em> based on RxNorm SBD/SCD/BPCK/GPCK designations as well as dose form.</p>",
+        "id": 277086809,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1648606325
+    },
+    {
+        "content": "<p>so can't use local drugs?</p>",
+        "id": 277087033,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648606658
+    },
+    {
+        "content": "<p>so I don't think it's that bad an approach then</p>",
+        "id": 277087048,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648606681
+    },
+    {
+        "content": "<p>I believe that's changing.  FormularyDrug isn't about the Medication, it's about the formulary information for a drug for a particular type of insurance.  It's a \"joining\" structure.</p>",
+        "id": 277087910,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1648607702
+    },
+    {
+        "content": "<p>The current design has a FormularyItem specifying the policy details (coverage, price tiers, etc), and that points to a FormularyDrug that acts as a search index for terms/properties that exist in RxNorm, to facilitate querying for FormularyItems.</p>",
+        "id": 277090140,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1648610257
+    },
+    {
+        "content": "<p>that's... not what I expected. (I was going to say weird, but that's not the same)</p>",
+        "id": 277093576,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648614713
+    },
+    {
+        "content": "<p>Hello All ...  We have discussed this thread in both the Vocab Working group and TSMG calls over the past few days and agree with <span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> that this would be a very good breakout topic for the upcoming May Connectathon.  I am eyeing 7-8p Tuesday  5/3 to schedule this discussion.  <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span> <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  are you gentlemen available to attend a breakout on this topic at that time?  Please advise &amp; Thanks!  Davera</p>",
+        "id": 277738705,
+        "sender_full_name": "Davera Gabriel",
+        "timestamp": 1649082476
+    },
+    {
+        "content": "<p>Tuesday night doesn't work well for me.  I <em>might</em> be able to make the first 30 minutes.</p>",
+        "id": 277742886,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1649084112
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179202-terminology/topic/Terminology-powered.20search/near/277742886\">said</a>:</p>\n<blockquote>\n<p>Tuesday night doesn't work well for me.  I <em>might</em> be able to make the first 30 minutes.</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> would the prior hour work for you?  Will also see what our other discussion members have to say...</p>",
+        "id": 277756151,
+        "sender_full_name": "Davera Gabriel",
+        "timestamp": 1649089248
+    },
+    {
+        "content": "<p>It would work better.</p>",
+        "id": 277756982,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1649089543
+    },
+    {
+        "content": "<p>That would be 8am UTC+10 I think which works for me</p>",
+        "id": 277819813,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1649125194
+    },
+    {
+        "content": "<p>Hello All:<br>\nI have scheduled a breakout session in the May Connectathon Terminology Services track on Tuesday 5/2, from 6-7:30p entitled \"Terminology Queries &amp; Representation Syntax\" and have tagged <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> <span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span> <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> and <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> as leading the discussion. </p>\n<p>The following is the session description: \"The need to expose a common general hierarchical and filter-based query syntax for use in defining value sets and performing inline queries has come up yet again as evidenced by a recent Zulip chat in the Terminology stream. This session aims to provide a real-time discussion of the topic, and identify the next steps to resolution.\"  </p>\n<p>Please suggest any alternative text for the description &amp; If I have abused your time / schedule <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> &amp; <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> by indicating you will help led this discussion - my apologies, and I'm happy to remove this designation.</p>\n<p>Does this work for everyone?<br>\nCheers<br>\nDavera</p>",
+        "id": 278483239,
+        "sender_full_name": "Davera Gabriel",
+        "timestamp": 1649616049
+    },
+    {
+        "content": "<p>I'm not sure I'm essential for the discussion, but will do my best to be there.</p>",
+        "id": 278486616,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1649620434
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179202-terminology/topic/Terminology-powered.20search/near/278486616\">said</a>:</p>\n<blockquote>\n<p>I'm not sure I'm essential for the discussion, but will do my best to be there.</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  I do not have to list you as a lead if you'd rather not I not do that :)</p>",
+        "id": 278488243,
+        "sender_full_name": "Davera Gabriel",
+        "timestamp": 1649622728
+    },
+    {
+        "content": "<p>Er, Tue <em>3rd</em> May?</p>",
+        "id": 278493359,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1649630128
+    },
+    {
+        "content": "<p>And what time zone?</p>",
+        "id": 278502793,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1649644286
+    },
+    {
+        "content": "<p>I've been working on \"Eastern\" (and hoping that no daylight saving changes happen before 3/5 (or 5/3 ;-)</p>",
+        "id": 278503306,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1649644941
+    }
+]

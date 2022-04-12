@@ -1,0 +1,230 @@
+[
+    {
+        "content": "<p>Liebe Community, <br>\nich habe eine Frage zum Umgang mit Profilen, wenn ein FHIR Server als Facade implementiert wird, also gegen ein existierendes System geht.</p>\n<p>Nehmen wir das Beispiel „Observation“. Dort können ja sowohl Laborwerte als auch z.B. Scores abgespeichert werden.</p>\n<p>Nehmen wir zwei konkrete Observations (Instanzen)<br>\nO1. Kaliumwert=6.1 mmol/ml<br>\nO2. APGAR 5min=9 </p>\n<p>Und zwei Profile:<br>\nP1. Laborwert<br>\nP2. Score <br>\n<br>\nWenn ich nun die Ressource O1 abfrage, dann muss ich die in Profil P1 zurückliefern. Wenn ich Ressource O2 abfrage mit Profil P2. Wenn ich alle Ressourcen abfrage, dann muss ich gemischte Profile zurückgeben. Wenn ich alle Ressourcen mit Profil P1 abfrage, bekomme ich nur Ressource O1. Wenn ich Ressource O2 mit Profil P1 abfrage, darf ich eigentlich nichts zurückliefern, obwohl die Ressource existiert. <br>\nWenn ich noch ein Profil definiere:<br>\nP3. Neo-Score <br>\ndas auch auf Ressource O2 passt, wie liefere ich dann die Ressource O2 zurück, wenn kein Profil bei der Abfrage angegeben wurde?</p>\n<p>Wenn ich z.B. den LOINC Code als Basis für eine Entscheidung habe, dann muss ich zunächst voraussetzen, dass alle Observations einen LOINC Code haben. Außerdem müsste ich umfangreiche Maps pflegen. Und was passiert, wenn ein LOINC Code mehr als einem Profil passt?</p>\n<p>Aufgefallen ist das initial bei den teilweise widersprüchlichen Definitionen des KDS, der MIOs und der \"ambulanten KBV Profilen\" für ein und dieselbe Ressource. Und aktuell habe ich das Problem beim Implementieren der unterschiedlichen Fall-Profile, die alle auf Encounter angewendet werden und eine völlig unterschiedliche Transformation der zugrunde liegenden KIS-Fälle erfordert.</p>\n<p>Hat da jemand einen Leitfaden oder irgendeine Doku oder möglichwerweise sogar schon eigene Erfahrungen mit gemacht?</p>",
+        "id": 201978100,
+        "sender_full_name": "André Sander",
+        "timestamp": 1593096134
+    },
+    {
+        "content": "<p>Any FHIR resource type could have lots of profiles associated with it, even for one specific LOINC code. The conformance layer exists to express a 'contract' between two or more systems. As such the set of profiles to use depends on the system/organization you're communicating with, that context (mostly implicitly) defines the set of profiles to use. If the context doesn't imply/specify the use of a particular profile (let's say for your P3) then you're free to use any profile you want, or to use none, because there has not been any prior agreement on the use of specific profiles.</p>",
+        "id": 202058976,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1593155759
+    },
+    {
+        "content": "<p>(Obviously it would be nice to have one set of profiles in a country, and for those to be fully harmonized and synced. But that's unlikely to happen)</p>",
+        "id": 202059041,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1593155808
+    },
+    {
+        "content": "<p>You would have something like <a href=\"https://www.ohdsi.org/data-standardization/the-common-data-model/\">https://www.ohdsi.org/data-standardization/the-common-data-model/</a> less flexible, more harmonized ;)</p>",
+        "id": 202059145,
+        "sender_full_name": "Sven Helfer",
+        "timestamp": 1593155914
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"213583\">André Sander</span> <a href=\"#narrow/stream/179183-german-(d-a-ch)/topic/Umgang.20mit.20Profilen/near/201978100\">said</a>:</p>\n<blockquote>\n<p>Wenn ich z.B. den LOINC Code als Basis für eine Entscheidung habe, dann muss ich zunächst voraussetzen, dass alle Observations einen LOINC Code haben. Außerdem müsste ich umfangreiche Maps pflegen. Und was passiert, wenn ein LOINC Code mehr als einem Profil passt?</p>\n</blockquote>\n<p>Ich denke nicht, dass an solchen Mappings irgendein Weg vorbeiführt, da man bei Fassaden immer damit rechnen muss, dass für unterschiedliche Messungen unterschiedliche Transformationen vorgenommen werden müssen. <br>\nMan könnte sich die Sache mit Hilfe eines mehrstufigen Mappings erleichtern, z.B. erst Prüfen, ob auf Ressourcentyp-Ebene bereits ein Mapping festgelegt ist, falls nicht, dann auf Kategorie-Ebene, falls nicht, dann auf Code-Ebene.</p>\n<p>Wenn es konkurrierende Profile (z.B: MI-I Patient und eRezept Patient) gibt, wäre es m.M.n. der beste Ansatz, ein neues Profil zu erschaffen, das die Anforderungen beider UseCases vereint und alle Instanzen passend zu diesem Profil zu erzeugen.<br>\nFalls das nicht möglich ist, weil (wie im Fall MI-I vs. eRezept) die Übermittlung bestimmter Felder in einem Szenario aus Datenschutzgründen verboten im anderen jedoch erforderlich ist, wäre der einfachste Weg vermutlich die Implementierung eines generischen Filters, der als Input eine Instanz und ein Target-Profil entgegennimmt und als output eine auf die \"Must-Support\"-Felder reduzierte Instanz zurückgibt.</p>\n<p>Damit könnte man dann relativ einfach viele verschiedenen Output-Kanäle bedienen, muss die (aufwändigere) Transformation von proprietärer Datenbank nach FHIR aber nur einmal implementieren.</p>\n<p>...ist allerdings, zugegeben, nicht die performanteste Lösung.</p>",
+        "id": 202277560,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1593414268
+    },
+    {
+        "content": "<p>FHIR-native Systeme, die beim Input der Daten bereits gegen alle in Frage kommenden Profile validieren und die erfolgreiche Validierung in den Meta-Daten der Ressourcen festhalten können, haben es da erheblich einfacher...</p>",
+        "id": 202277657,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1593414414
+    },
+    {
+        "content": "<p>Da aktuell viele der vorliegenden Implementierungsleitfäden noch \"formbar\" sind, sollte es jedoch das vorrangige Ziel der Community sein, konkrete Inkompatibilitäten zwischen den Profilen zu erkennen und hier zu diskutieren. Je mehr davon wir auflösen können, desto einfacher haben wir es hinterher bei der Implementierung!</p>",
+        "id": 202278066,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1593414817
+    },
+    {
+        "content": "<p>Es gibt dazu Ausarbeitungen. Rob und ich haben das vor Jahren ausführlich beschrieben. Es gibt dazu auch Einzeldokumente wie das ECCF und RCnL.</p>",
+        "id": 202284138,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1593419865
+    },
+    {
+        "content": "<p>Vielen Dank soweit. Ich habe das mit dem Mappings schon befürchtet. Das macht aus Entwicklersicht FHIR wesentlich unattraktiver - zumindest, wenn man eine vorhandene Datenbank mit einer FHIR API versieht. Aber der Tipp mit dem generischen Filter ist gut - Danke!</p>\n<p>\"FHIR-native Systeme, die beim Input der Daten bereits gegen alle in Frage kommenden Profile validieren und die erfolgreiche Validierung in den Meta-Daten der Ressourcen festhalten können, haben es da erheblich einfacher...\"</p>\n<p>Was machen denn native FHIR Stores mit Profilen, die zum Zeitpunkt der Erfassung einer Ressource noch gar nicht bekannt waren? Das Datenschutzbeispiel ist ja der Klassiker. In Bundesland A muss der Name entfernt werden, in Bundesland B der ICD-Code verallgemeinert werden. Und beim nächsten DSGVO-Update werden alle Profile nochmal angepasst. Und das Beispiel illustriert auch, dass es nicht immer Sinn macht, die Ressourcen direkt zu bzw. in den Profilen zu speichern - denn primär macht es wohl keinen Sinn im Krankenhaus anonymisierte Daten zu speichern, nur weil ein \"Anonymisierungsprofil\" exisitiert.  Und alle Ressourcen in allen Profilen zu speichern dürfte noch andere Probleme mit sich bringen.<br>\nFrank, wo finde ich denn ECCF?</p>",
+        "id": 202552743,
+        "sender_full_name": "André Sander",
+        "timestamp": 1593599044
+    },
+    {
+        "content": "<p>Ich habe noch ein weiteres, interessantes Beispiel:<br>\nNehmen wir die Abfrage \"Alle Observations zum Patienten x\": soll die</p>\n<ul>\n<li>alle Ressourcen ohne Profil liefern</li>\n<li>\n<p>oder einen Mix aus Ressourcen jeweils mit den originären Profilen?<br>\nUnd noch viel spannender:<br>\nDie Abfrage \"Alle Observations zum Patienten x mit Profil y\": soll die</p>\n</li>\n<li>\n<p>nur Ressourcen liefern, die mit Profil y erzeugt wurden</p>\n</li>\n<li>Oder alle Ressourcen entsprechend transformiert</li>\n</ul>",
+        "id": 202566114,
+        "sender_full_name": "André Sander",
+        "timestamp": 1593608886
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"213583\">André Sander</span> <a href=\"#narrow/stream/179183-german-(d-a-ch)/topic/Umgang.20mit.20Profilen/near/202552743\">said</a>:</p>\n<blockquote>\n<p>Vielen Dank soweit. Ich habe das mit dem Mappings schon befürchtet. Das macht aus Entwicklersicht FHIR wesentlich unattraktiver - zumindest, wenn man eine vorhandene Datenbank mit einer FHIR API versieht. </p>\n</blockquote>\n<p>Wie sollte denn eine Lösung aussehen (und diese Frage ist absolut ernst gemeint, auch wenn's schnippisch klingt) die für Entwickler attraktiver wäre?</p>",
+        "id": 202569525,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1593610640
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"213583\">André Sander</span> <a href=\"#narrow/stream/179183-german-(d-a-ch)/topic/Umgang.20mit.20Profilen/near/202566114\">said</a>:</p>\n<blockquote>\n<p>Ich habe noch ein weiteres, interessantes Beispiel:<br>\nDie Abfrage \"Alle Observations zum Patienten x mit Profil y\"</p>\n</blockquote>\n<p>Ich weiß, dass das theoretisch in FHIR mit dem _profile-Parameter möglich wäre, aber was wäre dafür der UseCase?<br>\nWenn ich alle \"Blutdruckwerte\" des Patienten haben möchte, dann würde ich nach dem LOINC-Code suchen, nicht nach Ressourcen, die dem Blutdruck-Profil entsprechen. Wenn ich gewisse Mindestanforderungen an Blutdrücke habe, würde ich die Ergebnisse meiner Suche gegen mein Blutdruck-Profil validieren und würde dabei evtl. feststellen, dass ich ein paar davon nicht gebrauchen kann. Aber in keinem Fall wäre die Behauptung des Servers, die Ressourcen seien gegen irgendein Profil valide, von Belang. Als Empfänger würde ich vor der Verarbeitung immer grundsätzlich gegen <em>mein</em> Profil validieren, das bestimmt, ob ich die Daten verarbeiten kann, oder nicht.</p>",
+        "id": 202570368,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1593611135
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"213583\">@André Sander</span> ein möglicher Einstieg in die von <span class=\"user-mention\" data-user-id=\"191549\">@Frank Oemig</span> angeteaserte Dimension der Conformance-Problematik ist sicher über die aktuellen Arbeiten der internationalen WG <a href=\"https://confluence.hl7.org/display/CONF/Conformance%2C+Guidance+and+Best+Practices+for+FHIR+Implementation+Guides+Project\">https://confluence.hl7.org/display/CONF/Conformance%2C+Guidance+and+Best+Practices+for+FHIR+Implementation+Guides+Project</a> </p>\n<p>ECCF &amp; Co sind vorherige Produkte aus der langen Geschichte der Standardisierung in dem Bereich  <a href=\"https://wiki.hl7.org/index.php?title=SAIF_ECCF\">https://wiki.hl7.org/index.php?title=SAIF_ECCF</a>, auch in DE verwendet z. B. zur Beschreibung der Fallakte <a href=\"https://wiki.hl7.de/index.php?title=HL7_Enterprise_Conformance_and_Compliance_Frameworks\">https://wiki.hl7.de/index.php?title=HL7_Enterprise_Conformance_and_Compliance_Frameworks</a></p>\n<p>Ob und wie die angesprochenen wichtigen grundsätzlichen Arbeiten hier konkrete Handlungsanweisungen für die Implementierung liefern, müsste vermutlich in einem separaten Thread mal diskutiert werden.</p>",
+        "id": 202571244,
+        "sender_full_name": "Christof Gessner",
+        "timestamp": 1593611644
+    },
+    {
+        "content": "<p>Eine andere Dimension und Sichtweise ist, dass FHIR technisch eigentlich auch komplett ohne Profile funktionieren könnte. Das lenkt den Blick vielleicht hin auf die eigentliche Zielsetzung von Profilen und Konformanzkriterien - und weg von der Notwendigkeit, für alles und jedes erstmal ein eigenes Profil zu benötigen.</p>",
+        "id": 202571603,
+        "sender_full_name": "Christof Gessner",
+        "timestamp": 1593611864
+    },
+    {
+        "content": "<p>Eine Welt ohne Profile  - würden auch alle Radfahrer gut finden ;-) Aber im Ernst: wenn die Profile keine implizite Filterung der Ressourcen vornehmen (Observations mit Profil A sind Laborwerte und Observations mit Profil B sind Vitalzeichen). D.h. Profile auf einer Ressource ohne weitere inhaltliche Abhängigkeit.</p>",
+        "id": 202576624,
+        "sender_full_name": "André Sander",
+        "timestamp": 1593614411
+    },
+    {
+        "content": "<p>Bzgl. der Abfrage: man kann auch Observation durch Condition ersetzen - dann funktioniert das Beispiel mit dem Blutdruck nicht mehr, denn ich frage ja nicht beim Patienten nach ICD-10 Codes ab (die eben bei Condition die primäre Codierung wären), sondern ich möchte halt alle Diagnosen haben. Gleiches gilt bei den vier Fall-Arten, die gerade entwickelt werden. <br>\nUnd wie soll ohne \"_profile\" Parameter der Server wissen, wie er etwas zurückliefert? Ich bekomme die Daten per ADT, Direktimport und anderes direkt in eine relationale Datenbank. Dann fragt jemand meinen FHIR Server: gib mal alle Diagnosen zum Fall XY. Liefere ich jetzt MII-Diagnosen, oder KBV-Diagnosen? Oder Elga? Ich weiß doch gar nicht wer fragt. Oder liefere ich die Diagnosen in allen Profilen, die ich kenne?</p>\n<p>Ich finde den Einwurf von Christof Gessner tatsächlich absolut richtig: Was wollen wir mit Profilen erreichen - warum holen wir uns diese Komplexität ins Haus?</p>",
+        "id": 202577354,
+        "sender_full_name": "André Sander",
+        "timestamp": 1593614769
+    },
+    {
+        "content": "<blockquote>\n<p>wenn die Profile keine implizite Filterung der Ressourcen vornehmen (Observations mit Profil A sind Laborwerte und Observations mit Profil B sind Vitalzeichen). D.h. Profile auf einer Ressource ohne weitere inhaltliche Abhängigkeit.</p>\n</blockquote>\n<p>Das sollten Sie meiner (und Grahame's) Meinung nach in der Tat nicht. VitalSigns und Laborwerte erkennt man an Observation.category, nicht am Profil.</p>\n<p>Allerdings hatten wir diese Diskussion letztens in Bezug auf die Covid-Conditions, in denen Profile tatsächlich verwendet werden, um Diagnosen thematisch zu gruppieren, die an sonsten nicht durch eine Kategorie unterscheidbar wären. (siehe <a href=\"https://simplifier.net/forschungsnetzcovid-19/~resources?category=Profile&amp;corebasetype=Condition&amp;sortBy=RankScore_desc\">https://simplifier.net/forschungsnetzcovid-19/~resources?category=Profile&amp;corebasetype=Condition&amp;sortBy=RankScore_desc</a>). Ich habe das bemängelt, wurde jedoch überstimmt.</p>\n<p><span class=\"user-mention\" data-user-id=\"191532\">@dr Kai U. Heitmann</span> <span class=\"user-mention\" data-user-id=\"194952\">@Julian Sass</span></p>",
+        "id": 202577694,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1593614926
+    },
+    {
+        "content": "<blockquote>\n<p>Dann fragt jemand meinen FHIR Server: gib mal alle Diagnosen zum Fall XY. Liefere ich jetzt MII-Diagnosen, oder KBV-Diagnosen? Oder Elga? Ich weiß doch gar nicht wer fragt. Oder liefere ich die Diagnosen in allen Profilen, die ich kenne?</p>\n</blockquote>\n<p>ich würde die Diagnosen grundsätzlich so ausliefern, wie ich sie bestmöglich aus den vorhandenen Informationen erstellen kann.<br>\nD.h. ich muss dafür sorgen, dass die Instanzen - egal wer fragt - immer alle Anforderungen aller in Frage kommenden Profile erfüllen.<br>\nWenn das nicht geht, weil die KBV z.B. die Belegung einiger Elemente aus Datenschutzgründen verbietet, dann muss ich einen Filter zwischenschalten (\"generischer Filter\", s.o.).</p>",
+        "id": 202578420,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1593615246
+    },
+    {
+        "content": "<p>Kann ich noch ein konkretes Beispiel beisteuern: in einem kleineren Projekt hatte ich die Forderung Conditions, die einen ICD-Code aus dem Kapitel C (Neubildungen) haben, sollen Profil 1 bekommen (da wurde z.B. TNM gefordert) und Conditions, aus dem Kapitel Q bekommen Profil 2 (Stichwort Orphacode) - die Diskussion ging dann soweit, dann man auf einzelne Krankheiten runtergegangen ist und meinte, für ein Leberkarzinom brauche ich das Informationsmodell und für ein Bronchial Ca jenes...</p>",
+        "id": 202578482,
+        "sender_full_name": "André Sander",
+        "timestamp": 1593615277
+    },
+    {
+        "content": "<p>\"D.h. ich muss dafür sorgen, dass die Instanzen - egal wer fragt - immer alle Anforderungen aller in Frage kommenden Profile erfüllen.\" Und genau das geht nicht mit den jetzt definierten Fall-Arten (Abrechnungsfall, Versorgunsfall), wenn man nach Encounter eines Patienten fragt. Dann muss man nämlich je nach Profil die in der Datenbank gespeicherten Fälle ganz unterschiedlich zusammenbauen.</p>",
+        "id": 202578687,
+        "sender_full_name": "André Sander",
+        "timestamp": 1593615372
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"213583\">André Sander</span> <a href=\"#narrow/stream/179183-german-(d-a-ch)/topic/Umgang.20mit.20Profilen/near/202578687\">said</a>:</p>\n<blockquote>\n<p>\"D.h. ich muss dafür sorgen, dass die Instanzen - egal wer fragt - immer alle Anforderungen aller in Frage kommenden Profile erfüllen.\" Und genau das geht nicht mit den jetzt definierten Fall-Arten (Abrechnungsfall, Versorgunsfall), wenn man nach Encounter eines Patienten fragt. Dann muss man nämlich je nach Profil die in der Datenbank gespeicherten Fälle ganz unterschiedlich zusammenbauen.</p>\n</blockquote>\n<p>Dann bitte Feedback an die Spezifizierer geben, dass das so nicht implementierbar ist und es ein konkretes Unterscheidungsmerkmal geben muss, das einen Versorgungsfall von einem Abrechnungsfall unterscheidet. Notfalls eine Extension. Oder man macht's gleich so, wie's die Spec fordert und modelliert den Abrechnungsfall als Account <span aria-label=\"smiling devil\" class=\"emoji emoji-1f608\" role=\"img\" title=\"smiling devil\">:smiling_devil:</span></p>",
+        "id": 202579078,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1593615557
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191450\">Simone Heckmann</span> <a href=\"#narrow/stream/179183-german-(d-a-ch)/topic/Umgang.20mit.20Profilen/near/202577694\">said</a>:</p>\n<blockquote>\n<p>Das sollten Sie meiner (und Grahame's) Meinung nach in der Tat nicht. VitalSigns und Laborwerte erkennt man an Observation.category, nicht am Profil.</p>\n<p>Allerdings hatten wir diese Diskussion letztens in Bezug auf die Covid-Conditions, in denen Profile tatsächlich verwendet werden, um Diagnosen thematisch zu gruppieren, die an sonsten nicht durch eine Kategorie unterscheidbar wären. (siehe <a href=\"https://simplifier.net/forschungsnetzcovid-19/~resources?category=Profile&amp;corebasetype=Condition&amp;sortBy=RankScore_desc\">https://simplifier.net/forschungsnetzcovid-19/~resources?category=Profile&amp;corebasetype=Condition&amp;sortBy=RankScore_desc</a>). Ich habe das bemängelt, wurde jedoch überstimmt.</p>\n<p><span class=\"user-mention silent\" data-user-id=\"191532\">dr Kai U. Heitmann</span> <span class=\"user-mention silent\" data-user-id=\"194952\">Julian Sass</span></p>\n</blockquote>\n<p>Ich wäre auch dieser Meinung.  Solche \"selbsterfüllenden\" Constraints (Eine gültige instanz ist eine, die sagt, dass sie gültig ist) finde ich persönlich hässlich. Gerade, wenn man davon ausgeht dass Ressourcen idR auch Profile erfüllen, von denen sie nichts wissen. Im COVID-Beispiel wird das meta.profile Feld im Prinzip zweckentfremded, um inhaltliche Aussagen zu treffen. dabei ist es ja ein Feld für meta-informationen.</p>",
+        "id": 202579138,
+        "sender_full_name": "Noemi Deppenwiese",
+        "timestamp": 1593615589
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"213583\">André Sander</span> <a href=\"#narrow/stream/179183-german-(d-a-ch)/topic/Umgang.20mit.20Profilen/near/202578482\">said</a>:</p>\n<blockquote>\n<p>die Diskussion ging dann soweit, dann man auf einzelne Krankheiten runtergegangen ist und meinte, für ein Leberkarzinom brauche ich das Informationsmodell und für ein Bronchial Ca jenes...</p>\n</blockquote>\n<p>Das ist in der Tat dann eine Überspezifikation und hat sich bereits in der Vergangenheit als schwer handhabbar und am Ende unwartbar erwiesen. Allein schon beim TNM.</p>\n<p>Dennoch sind Profile ein sehr probates Mittel, um Interoperabilität (nicht nur syntaktische, sondern auch semantische) herzustellen.</p>",
+        "id": 202579243,
+        "sender_full_name": "Stefan Lang",
+        "timestamp": 1593615635
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"213583\">André Sander</span> <a href=\"#narrow/stream/179183-german-(d-a-ch)/topic/Umgang.20mit.20Profilen/near/202578482\">said</a>:</p>\n<blockquote>\n<p>Kann ich noch ein konkretes Beispiel beisteuern: in einem kleineren Projekt hatte ich die Forderung Conditions, die einen ICD-Code aus dem Kapitel C (Neubildungen) haben, sollen Profil 1 bekommen (da wurde z.B. TNM gefordert) und Conditions, aus dem Kapitel Q bekommen Profil 2 (Stichwort Orphacode) - die Diskussion ging dann soweit, dann man auf einzelne Krankheiten runtergegangen ist und meinte, für ein Leberkarzinom brauche ich das Informationsmodell und für ein Bronchial Ca jenes...</p>\n</blockquote>\n<p>In gewissen Grenzen kann man so etwas besser mit Constraints modellieren (\"wenn ICD-Code mit C beginnt, dann muss TNM gefüllt sein\")<br>\nDafür hat Gott die FHIRPath-Expression Language geschaffen <span aria-label=\"smirk\" class=\"emoji emoji-1f60f\" role=\"img\" title=\"smirk\">:smirk:</span></p>",
+        "id": 202579354,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1593615697
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"213583\">André Sander</span> <a href=\"#narrow/stream/179183-german-(d-a-ch)/topic/Umgang.20mit.20Profilen/near/202578687\">said</a>:</p>\n<blockquote>\n<p>\"D.h. ich muss dafür sorgen, dass die Instanzen - egal wer fragt - immer alle Anforderungen aller in Frage kommenden Profile erfüllen.\" Und genau das geht nicht mit den jetzt definierten Fall-Arten (Abrechnungsfall, Versorgunsfall), wenn man nach Encounter eines Patienten fragt. Dann muss man nämlich je nach Profil die in der Datenbank gespeicherten Fälle ganz unterschiedlich zusammenbauen.</p>\n</blockquote>\n<p>Oder, man mappt größere \"Informationseinheiten\" (ich vermute, die gibt es in der Datenbank sowieso?) dann auf eine Struktur von Profilen wie zB. beim Fall. Dann müsste man bei Anfragen alle \"Objekte\" evaluieren, ob in ihrer FHIR Struktur eine der angefragten ressourcen vorkommt, und die dann mit allen für die einzelnen teile der Struktur passenden profilen zurückgeben. Oder ist das zu komplex?</p>",
+        "id": 202579528,
+        "sender_full_name": "Noemi Deppenwiese",
+        "timestamp": 1593615774
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191436\">Stefan Lang</span> <a href=\"#narrow/stream/179183-german-(d-a-ch)/topic/Umgang.20mit.20Profilen/near/202579243\">said</a>:</p>\n<blockquote>\n<p>Dennoch sind Profile ein sehr probates Mittel, um Interoperabilität (nicht nur syntaktische, sondern auch semantische) herzustellen.</p>\n</blockquote>\n<p>Absolut! Bitte lasst mir meine Profile <span aria-label=\"cold sweat\" class=\"emoji emoji-1f630\" role=\"img\" title=\"cold sweat\">:cold_sweat:</span> !! Aber wir müssen hier Requirement Definition von Implementierung trennen.<br>\nProfile sind ersteres!</p>",
+        "id": 202579531,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1593615775
+    },
+    {
+        "content": "<p>Profile dienen dazu, dem Entwickler mitzuteilen, was zu tun ist und der Überprüfung ob man's richtig gemacht hat.<br>\nZur Laufzeit spielen sie eine untergeordnete Rolle.<br>\nKlar kann man viel damit (auch zur Laufzeit) zaubern (Stichwort: \"generischer Filter\", UI-Generierung etc.), aber das sollte \"internal\" use sein, nicht Teil des Datenaustauschs.</p>",
+        "id": 202580156,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1593616020
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"221444\">Noemi Deppenwiese</span> [said](https://chat.fhir.org/#narrow/stream/179183-german-(d-a-</p>\n<blockquote>\n<p>Oder, man mappt größere \"Informationseinheiten\" (ich vermute, die gibt es in der Datenbank sowieso?) dann auf eine Struktur von Profilen wie zB. beim Fall. Dann müsste man bei Anfragen alle \"Objekte\" evaluieren, ob in ihrer FHIR Struktur eine der angefragten ressourcen vorkommt, und die dann mit allen für die einzelnen teile der Struktur passenden profilen zurückgeben. Oder ist das zu komplex?</p>\n</blockquote>\n<p>ich musste das jetzt dreimal lesen um es zu verstehen, von daher aus meiner Sicht: ja: zu komplex <span aria-label=\"laughter tears\" class=\"emoji emoji-1f602\" role=\"img\" title=\"laughter tears\">:laughter_tears:</span></p>",
+        "id": 202580436,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1593616132
+    },
+    {
+        "content": "<p>Die Profildiskussion ist auf der einen Seite gut und wichtig, auf der anderen lenkt sie vom Thema/Problem ab. Wohin Profile führen habe ich in Kap.8 meines Buches beschrieben.<br>\nFhir hat keinerlei Grundanforderungen. Deshalb braucht man Profile - mehr als vorher. Wenn aber - wie es gerade geschieht - jeder auf Teufel komm raus profiliert, dann sieht man den Wald vor lauter Profilen nicht mehr. Nochmal, Fhir ist nur eine Technologie, die laut RM-ODP ganz rechts angesiedelt ist. Die Lösung liegt links im Logikbereich, wo es um die inhaltliche Ausgestaltung geht. Es muss also darum gehen, möglichst wenige Profike zu erstellen. Hierbei sind die gegenseitigen Abhängigkeiten sowohl vertikal als auch horizontal herauszukitzeln. Und das geht nur als Abbildung einer vorher gemeinsam ausgearbeiteten Konzeptualisierung. Letzteres ist aber bisher nicht geschehen und wird außer von mir auch von niemandem gefordert.<br>\nGenau das ist im ECCF, dem Enterprise Compliance and Conformance Framework bei <a href=\"http://hl7.org\">hl7.org</a>, beschrieben. Das wurde im Rahmen von V3 ausgearbeitet. Mit Fhir ist das nicht veraltet, sondern aufgrund des fehlenden Architekturframeworks wichtiger als zuvor.</p>",
+        "id": 202580800,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1593616267
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191549\">Frank Oemig</span> <a href=\"#narrow/stream/179183-german-(d-a-ch)/topic/Umgang.20mit.20Profilen/near/202580800\">said</a>:</p>\n<blockquote>\n<p>Und das geht nur als Abbildung einer vorher gemeinsam ausgearbeiteten Konzeptualisierung.</p>\n</blockquote>\n<p>Warum hätten wir da dann <em>nicht</em> das Problem, dass jeder sein eigenes Ding macht weil keiner die Autorität besitzt, solche Konzepte sektorenübergreifend und deutschlandweit festzulegen?</p>",
+        "id": 202583176,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1593617392
+    },
+    {
+        "content": "<p>Das Zauberwort heißt 'gemeinsam'...</p>",
+        "id": 202584186,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1593617955
+    },
+    {
+        "content": "<p>Ist vllt. in dem langen Text untergegangen.</p>",
+        "id": 202584243,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1593617994
+    },
+    {
+        "content": "<p>Jo ebent. Daher die Frage: wenn wir es schon nicht schaffen, gemeinsam FHIR Profile festzulegen, warum soll es dann einfacher sein, gemeinsam Datenmodelle festzulegen (wo potentiell noch mehr Parteien mitreden wollen). </p>\n<p>Aber wir sollten diesen Thread besser der Lösung der praktischen Implementierungsfragen überlassen, der philosophisch-politische Exkurs führt hier zu weit. Wer daran Interesse hat kann ja wie von Christoph angeregt dazu einen separaten Thread eröffnen.</p>",
+        "id": 202584812,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1593618297
+    },
+    {
+        "content": "<p>Message received</p>",
+        "id": 202589816,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1593620364
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"221444\">Noemi Deppenwiese</span> <a href=\"#narrow/stream/179183-german-(d-a-ch)/topic/Umgang.20mit.20Profilen/near/202579138\">said</a>:</p>\n<blockquote>\n<p><span class=\"user-mention silent\" data-user-id=\"191450\">Simone Heckmann</span> <a href=\"#narrow/stream/179183-german-(d-a-ch)/topic/Umgang.20mit.20Profilen/near/202577694\">said</a>:</p>\n<blockquote>\n<p>Das sollten Sie meiner (und Grahame's) Meinung nach in der Tat nicht. VitalSigns und Laborwerte erkennt man an Observation.category, nicht am Profil.</p>\n<p>Allerdings hatten wir diese Diskussion letztens in Bezug auf die Covid-Conditions, in denen Profile tatsächlich verwendet werden, um Diagnosen thematisch zu gruppieren, die an sonsten nicht durch eine Kategorie unterscheidbar wären. (siehe <a href=\"https://simplifier.net/forschungsnetzcovid-19/~resources?category=Profile&amp;corebasetype=Condition&amp;sortBy=RankScore_desc\">https://simplifier.net/forschungsnetzcovid-19/~resources?category=Profile&amp;corebasetype=Condition&amp;sortBy=RankScore_desc</a>). Ich habe das bemängelt, wurde jedoch überstimmt.</p>\n<p><span class=\"user-mention silent\" data-user-id=\"191532\">dr Kai U. Heitmann</span> <span class=\"user-mention silent\" data-user-id=\"194952\">Julian Sass</span></p>\n</blockquote>\n<p>Ich wäre auch dieser Meinung.  Solche \"selbsterfüllenden\" Constraints (Eine gültige instanz ist eine, die sagt, dass sie gültig ist) finde ich persönlich hässlich. Gerade, wenn man davon ausgeht dass Ressourcen idR auch Profile erfüllen, von denen sie nichts wissen. Im COVID-Beispiel wird das meta.profile Feld im Prinzip zweckentfremded, um inhaltliche Aussagen zu treffen. dabei ist es ja ein Feld für meta-informationen.</p>\n</blockquote>\n<p>Inwiefern unterscheidet sich denn das Covid Beispiel vom zuvor genannten Blutdruck-Profil? Hier trifft meta.profile ja auch keine inhaltliche Aussage nur weil die Canonical \"bp\" or \"bloodpressure\" enthält. Meta.profile sagt doch nur gegen welche Anforderungen die Instanz valide sein soll. VitalSigns teilen sich eine Kategorie, trotzdem gibt es für jeden Parameter ein eigenes Profil. Ebenso will man hier bspw eine Condition für lediglich ein bestimmtes Subset von Lungenerkrankungen, was über code etc definiert ist und nicht in meta. Die Semantik der Instanz bliebe darüber hinaus auch ohne meta bestehen. Ich lasse mich gerne vom Gegenteil überzeugen und bin der Unterscheidung über category nicht abgeneigt, mir erscheint aber das Diagnose Profil allein nicht ausreichend, und alles in einem Profil zu definieren würde dies überladen.</p>",
+        "id": 202606873,
+        "sender_full_name": "Julian Sass",
+        "timestamp": 1593628571
+    },
+    {
+        "content": "<p>Beim Blutdruck-Beispiel kann man über den LOINC als Entscheidungskriterium gehen. Ob meta.profile das \"bp-Profil\" enthält ist dabei erstmal egal. Man kann die dann gegen das \"bp\" Profil validieren um zB sicherzustellen, dass bei der Verarbeitung keine unvorhergesehen Fehler auftreten, wenn man die Anwendung mit Blick auf das bp Profil entwickelt hat.<br>\nIm COVID-Beispiel ist die Erfüllung des Profiles Teil des Profiles (so verstehe ich zumindest das meta.profile 1..., ich schätze nicht, dass man hier ein Profil seiner Wahl angeben soll?) , d.h. wenn das System keine Sonderregel für meta.profile einbaut, wird keine der Instanzen als passend erkannt, obwohl es passende Daten geben könnte.<br>\nEine Suche sollte sich wie schon diskutiert und auch nach meiner Meinung auf ein \"Unterscheidungsmerkmal\" inhaltlicher Natur (momentan wäre das in COVID wohl Condition.code?) stützen und nicht auf das _profile. Eine category wäre da wahrscheinlich praktisch, um nicht eine uU sehr lange oder-Abfrage bauen zu müssen (icd oder sct und dann jeweils noch das ValueSet...).</p>",
+        "id": 202654707,
+        "sender_full_name": "Noemi Deppenwiese",
+        "timestamp": 1593671938
+    },
+    {
+        "content": "<p>Ja ok das ist ein gutes Argument für ein weiteres Merkmal wie Category :)</p>",
+        "id": 202655790,
+        "sender_full_name": "Julian Sass",
+        "timestamp": 1593673101
+    },
+    {
+        "content": "<p>Drei unterschiedliche Strategien habe ich bei Implementierungen beobachten können (das betrifft jetzt FHIR-Profiles, aber auch CDA-Templates). Als Beispiel nehme ich mal \"Severity\". Siehe z. B. im Kontext der IPS  <a href=\"https://art-decor.org/art-decor/decor-templates--hl7ips-?id=2.16.840.1.113883.10.22.4.25&amp;effectiveDate=dynamic\">https://art-decor.org/art-decor/decor-templates--hl7ips-?id=2.16.840.1.113883.10.22.4.25&amp;effectiveDate=dynamic</a></p>\n<ul>\n<li>\n<p>XPath-Statements, die auf die templateID bzw. meta.profile referenzieren: <br>\n<code>*[templateId='2.16.840.1.113883.10.22.4.25']</code></p>\n</li>\n<li>\n<p>Ausführliche Adressierung der Position in einer Struktur anhand der element names: <code>Composition.section:sectionPastIllnessHx.entry:pastProblem.severity</code>,  oder <code>/ClinicalDocument/[IPS History of Past Illness Section]/entry/[IPS Problem Concern Entry]/entryRelationship/[IPS Problem Entry]/entryRelationship/[IPS Severity Observation]</code> - so z. B. in <a href=\"https://www.ihe.net/uploadedFiles/Documents/PCC/IHE_PCC_Suppl_IPS.pdf\">https://www.ihe.net/uploadedFiles/Documents/PCC/IHE_PCC_Suppl_IPS.pdf</a></p>\n</li>\n<li>\n<p>\"Semantische\" Adressierung über Merkmale wie Category oder entsprechende CDA/v3-Konstrukte: <br>\n<code>*[@classCode='OBS'][@moodCode='EVN'][code[@codeSystem='2.16.840.1.113883.5.4'][@code ='SEV']]</code> bzw. <br>\n<code>*[@classCode='OBS'][@moodCode='EVN'][code[concat(@code, @codeSystem) = doc('vs_eHDSIVaccine.xml')//concept/concat(@code, @codeSystem)]]</code></p>\n</li>\n</ul>",
+        "id": 202656226,
+        "sender_full_name": "Christof Gessner",
+        "timestamp": 1593673453
+    }
+]

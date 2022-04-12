@@ -1,0 +1,62 @@
+[
+    {
+        "content": "<p>I tried to use HAPI server as FHIR server. I have a request queue placed for the interaction from the client. HAPI server fetch each message from the request queue and process it and successful messages will be moved to response queue. But it is found that HAPI server occupies entire processor load as well as the memory. It is almost 12 minutes to process 1000 request. I am using Oracle database to store FHIR messages. It is not scalable in this way. Can you please give me some suggestions to make the processing bit faster..</p>",
+        "id": 153855006,
+        "sender_full_name": "Binu DGIT",
+        "timestamp": 1477996547
+    },
+    {
+        "content": "<p>Binu, there are a whole host of issues to consider, so apologies for all of the incoming questions:</p>\n<p>1. What version of HAPI are you using?<br>\n2. Do you need to support full text search or terminology services?<br>\n3. What is the ratio of reads to writes in those 1000 requests?<br>\n4. How many requests per second do you <strong>need</strong> to support?<br>\n5. Are you using HAPI's JPA database layer, or is HAPI just wrapping some other backend?</p>",
+        "id": 153855007,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1478001684
+    },
+    {
+        "content": "<p>Karl, Thank you very much for the response. Please find my response to your queries<br>\n1. What version of HAPI are you using?<br>\n-- Version 1.4<br>\n2. Do you need to support full text search or terminology services?<br>\n-- Not necessary<br>\n3. What is the ratio of reads to writes in those 1000 requests?<br>\n-- Currently 2  minutes is taken to process 100 requests, want to achieve the same in 1 second.<br>\n4. How many requests per second do you need to support?<br>\n--100 requests / second<br>\n5. Are you using HAPI's JPA database layer, or is HAPI just wrapping some other backend?<br>\n--I am using HAPI JPA database layer storing data in Oracle database..</p>\n<p>what I found today that the bottleneck is with FHIRValidator using the XML file.. The file is huge and it occupies more memory.  Further not enough memory is available for the process to utilized. Is there any mechanism to cache the XML and do the validation? or which is the better mechanism to make validation faster?</p>",
+        "id": 153855073,
+        "sender_full_name": "Binu DGIT",
+        "timestamp": 1478061068
+    },
+    {
+        "content": "<p>what I found today that the bottleneck is FHIRValidator using the XML file.. The file is huge and it occupies more memory. Is there any mechanism to cache the XML and do the validation? or which is the better mechanism to make validation faster?</p>",
+        "id": 153855201,
+        "sender_full_name": "Binu DGIT",
+        "timestamp": 1478146451
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> where did we get to talking about that? The validator is not thread safe, but it's the context that matters - the validator doesn't load or cache it's own stuff. </p>",
+        "id": 153855206,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1478152818
+    },
+    {
+        "content": "<p>Hi Binu,</p>\n<p>Assuming that you're keeping an instance of HAPI's <code>DefaultProfileValidationSupport</code> in memory, and reusing it for all validation activities? That's the class that loads the profile StructureDefinitions into memory and it will keep a cache going as long as you are reusing it. You should see lines like the following in your server logs only once:</p>\n<div class=\"codehilite\"><pre>06:46:03.353 [main] INFO  o.h.f.d.h.v.DefaultProfileValidationSupport - Loading structure definitions from classpath: /org/hl7/fhir/instance/model/dstu3/profile/profiles-resources.xml\n06:46:04.146 [main] INFO  o.h.f.d.h.v.DefaultProfileValidationSupport - Loading structure definitions from classpath: /org/hl7/fhir/instance/model/dstu3/profile/profiles-types.xml\n06:46:04.188 [main] INFO  o.h.f.d.h.v.DefaultProfileValidationSupport - Loading structure definitions from classpath: /org/hl7/fhir/instance/model/dstu3/profile/profiles-others.xml\n</pre></div>",
+        "id": 153855258,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1478170135
+    },
+    {
+        "content": "<p>Thank you James for the timely response..<br>\nI am using HAPI 1.4 and DSTU2 in place. It is found that profile resources are spread among many XML files than the three mentioned above in DSTU3  It seems the mistake which I have done that each time new instance of the validator is initiated. I ll have a detailed look into this and let you know the root cause..</p>",
+        "id": 153855289,
+        "sender_full_name": "Binu DGIT",
+        "timestamp": 1478171590
+    },
+    {
+        "content": "<p>Sounds good.</p>\n<p>If at all possible, I'd also recommend looking at upgrading HAPI to the latest version (2.0). HAPI FHIR 2.0 still supports the exact same FHIR structures for DSTU2 but has lots of fixes including performance fixes that may help you.</p>",
+        "id": 153855298,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1478172463
+    },
+    {
+        "content": "<p>Actually, DefaultProfileValidationSupport instance is created every time the FhirResourceDaoDstu2.validate() is invoked. May be this is causing the issue.</p>\n<div class=\"codehilite\"><pre>    FhirInstanceValidator val = new FhirInstanceValidator();\n    val.setBestPracticeWarningLevel(BestPracticeWarningLevel.Warning);\n    val.setValidationSupport(new ValidationSupportChain(new DefaultProfileValidationSupport(), myJpaValidationSupport));\n    validator.registerValidatorModule(val);\n</pre></div>\n\n\n<p>Is it okay to autowire this instance?</p>",
+        "id": 153855633,
+        "sender_full_name": "Jasmine Ameerdeen",
+        "timestamp": 1478423823
+    },
+    {
+        "content": "<p>Oh yeah, you definitely want to keep a single instance of that class loaded and reuse it. That will certainly cause bad performance otherwise.</p>",
+        "id": 153855638,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1478436591
+    }
+]

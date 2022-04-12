@@ -1,0 +1,177 @@
+---
+layout: page
+title: "FHIR Chat  · bulk data import · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html">bulk data import</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="154010248"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/154010248" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Sergei Gnezdov <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#154010248">(Oct 18 2018 at 19:01)</a>:</h4>
+<p>hi, I have originally posted this question to HAPI group.  This group appears to be a more correct location.  </p>
+<p>Hi,</p>
+<p>We are evaluating FHIR as a workflow management backend.  I have written a simple CSV import into FHIR system and I have run it against Spark server and I am running it against HAPI server 3.5.0.</p>
+<p>I observed that import performance is one of the slowest I have ever worked with.  So, I am looking at figuring out how FHIR import process can be done faster.</p>
+<p>Here is a high level algorithm I have applied so far:</p>
+<p>For each CSV record:</p>
+<p>For each FHIR resource type in CSV record:</p>
+<p>1. Build FHIR object from CSV data<br>
+2. Derive unique FHIR identifier from CSV data<br>
+3. Search by unique identifier in FHIR service to find if resource already exists.  If resource exists, make update call with FHIR object's id set to found id.  If object is not found, don't set id and create a new object in FHIR data store.</p>
+<p>Here is a log of the sequence used to create different resource types:</p>
+<ul>
+<li>Location: updated existing ID 4952</li>
+<li>Device: updated existing ID 5124</li>
+<li>Patient: created with ID 88366</li>
+<li>Encounter: created with ID 88367</li>
+<li>Practitioner: updated existing ID 40318</li>
+<li>Practitioner: updated existing ID 7</li>
+<li>Organization: updated existing ID 4957</li>
+<li>Organization: updated existing ID 4958</li>
+<li>Specimen: created with ID 88368</li>
+<li>ProcedureRequest: created with ID 88369</li>
+<li>Procedure: created with ID 88370</li>
+<li>ImagingStudy: created with ID 88371</li>
+<li>DiagnosticReport: created with ID 88372</li>
+<li>Task: created with ID 88373</li>
+<li>Task: created with ID 88374</li>
+<li>Task: created with ID 88375</li>
+<li>Task: created with ID 88376</li>
+<li>Task: created with ID 88377</li>
+<li>Task: created with ID 88378</li>
+<li>Task: created with ID 88379<br>
+Finished 5711 row; duration: 00:00:20.1776926</li>
+</ul>
+<p>From the log statement above you can see that:<br>
+I am on row #5711 and the import time is 20 seconds for 1 CSV record!  The import started at below 1 second on default HAPI installation.<br>
+I made 20 search calls, 6 update calls that generated new FHIR object version while data has not changed, 14 create calls.<br>
+Obviously this kind of import process is inefficient and I am looking into ways to improve it.  </p>
+<p>As I understand Bundle could be the answer, but I am not quite sure how to specify id for object's that don't exist yet.</p>
+<p>So, any advice is appreciated.  </p>
+<p>Thank you.</p>
+
+
+
+<a name="154010257"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/154010257" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#154010257">(Oct 18 2018 at 19:22)</a>:</h4>
+<p>Sounds interesting - if we have Bulk Export we should have Bulk Import API :)</p>
+
+
+
+<a name="154010266"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/154010266" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#154010266">(Oct 18 2018 at 20:05)</a>:</h4>
+<p>Agreed -- this has come up in discussions on the export side, and I think there'd be a pretty natural analog that we can define.</p>
+
+
+
+<a name="154010273"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/154010273" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#154010273">(Oct 18 2018 at 21:26)</a>:</h4>
+<p>A couple of things that might bridge the gap between "full blown bulk import service" (which would be great) and your current level of performance:</p>
+<ul>
+<li>The default config for HAPI is definitely not tuned for write performance. It has tons of search parameters enabled (basically all of the built-in FHIR ones), fulltext indexing enabled, "missing search param" indexing enabled, etc. You should consider disabling any search parameters you don't need, disabling lucene if you're not using <code>_text</code>, etc.</li>
+<li>The workflow of doing a whole bunch of searches and creates/updates individually for each row sounds like a killer for performance. You should consider using FHIR transactions with features like placeholder IDs between your resources, conditional creates, conditional updates, etc. This lets HAPI optimize quite a bit in terms of how the write works.</li>
+</ul>
+
+
+
+<a name="154010443"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/154010443" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#154010443">(Oct 19 2018 at 14:51)</a>:</h4>
+<p>I think, efficient bulk import can sometimes for performance go directly into database with some asynchronous (deferred) validation</p>
+
+
+
+<a name="154010677"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/154010677" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#154010677">(Oct 19 2018 at 22:21)</a>:</h4>
+<p>yeah, a mechanism for that would be much better still, Id agree..</p>
+
+
+
+<a name="154010723"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/154010723" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#154010723">(Oct 20 2018 at 06:05)</a>:</h4>
+<p>That's what ours does, it processes the import file in several passes, then is a direct import into our native table format.</p>
+
+
+
+<a name="154010729"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/154010729" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> natus <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#154010729">(Oct 20 2018 at 09:39)</a>:</h4>
+<p>We have an implementation of HAPI fhir based on a plain server (not jpa) and it's trivial<br>
+to bulk load in the database thought basic ETL. BTW the database backend is a hadoop <br>
+10 computer cluster with apache Phoenix  combined to a apache solR for _text filtering.<br>
+Once all resource implemented, that's confortable to work with.</p>
+
+
+
+<a name="154010735"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/154010735" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cinyoung Hur <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#154010735">(Oct 20 2018 at 11:31)</a>:</h4>
+<p>Hi all, I think I can get good advice from this group.<br>
+I'm transforming EHR to FHIR. At first, I start with the small size of EHR, and I used SQL procedures and a couple of bash script. <br>
+But I have to handle much larger volumes(terabytes).<br>
+Have you used big data backend like Apache Kafka, Apache NiFi to do ETL?<br>
+I found this document, but it would like to know other references from this group. <a href="https://community.hortonworks.com/articles/138249/nifi-in-healthcare-ingesting-hl7-data-in-nifi.html" target="_blank" title="https://community.hortonworks.com/articles/138249/nifi-in-healthcare-ingesting-hl7-data-in-nifi.html">https://community.hortonworks.com/articles/138249/nifi-in-healthcare-ingesting-hl7-data-in-nifi.html</a></p>
+
+
+
+<a name="154010760"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/154010760" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> natus <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#154010760">(Oct 20 2018 at 21:42)</a>:</h4>
+<p><span class="user-mention" data-user-id="196774">@Cinyoung Hur</span> From my side the ETL has focused on batch processing though apache hive/spark/sqoop to load the historical part (multiple terabytes of RDBMS EHR databases). Kafka, nifi, spark streaming are more relevant for ingesting data stream in realtime but I have not right now plugged them on.</p>
+
+
+
+<a name="154010771"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/154010771" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cinyoung Hur <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#154010771">(Oct 21 2018 at 03:41)</a>:</h4>
+<p>@natus How often do you batch processing?</p>
+
+
+
+<a name="154010777"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/154010777" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> natus <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#154010777">(Oct 21 2018 at 09:05)</a>:</h4>
+<p>Right now, on a daily basis</p>
+
+
+
+<a name="249571181"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/249571181" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> sandeep diddi <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#249571181">(Aug 16 2021 at 10:22)</a>:</h4>
+<p>Team,</p>
+<div class="codehilite"><pre><span></span><code>We need to use FHIRloader to do multi loads. How can we integrate this with Azure Datafactory or Databricks to perform bulk upload to FHIR server
+</code></pre></div>
+
+
+
+<a name="249589290"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/249589290" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#249589290">(Aug 16 2021 at 13:37)</a>:</h4>
+<p>What is FHIRloader?</p>
+
+
+
+<a name="249601221"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/249601221" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> sandeep diddi <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#249601221">(Aug 16 2021 at 15:09)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> Its a tool from Microsoft for Bulk load to FHIR</p>
+
+
+
+<a name="249601863"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/249601863" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#249601863">(Aug 16 2021 at 15:13)</a>:</h4>
+<p><span class="user-mention" data-user-id="241501">@Caitlin Voegele</span> <span class="user-mention" data-user-id="195075">@Brendan Kowitz</span></p>
+
+
+
+<a name="249604941"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/bulk%20data%20import/near/249604941" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Caitlin Voegele <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/bulk.20data.20import.html#249604941">(Aug 16 2021 at 15:35)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="428612">sandeep diddi</span> <a href="#narrow/stream/179166-implementers/topic/bulk.20data.20import/near/249571181">said</a>:</p>
+<blockquote>
+<p>Team,</p>
+<div class="codehilite"><pre><span></span><code>We need to use FHIRloader to do multi loads. How can we integrate this with Azure Datafactory or Databricks to perform bulk upload to FHIR server
+</code></pre></div>
+
+</blockquote>
+<p>If you are looking at this tool here: <a href="https://github.com/microsoft/fhir-loader">https://github.com/microsoft/fhir-loader</a>, please feel free to open an issue against the GitHub repo with questions so that one of the implementers of the tool can review. There are also examples on the page about the architecture.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,44 @@
+[
+    {
+        "content": "<p>As per our discussion during the connectathon, we are interested in adding conditional processing to TestScript but needed more solid use cases to drive what we need/should implement in the resource<br>\nWe also wanted a implementation, mocked up or otherwise, to test these use cases against and to help us figure out which design is best from a complexity vs flexibility vs processing requirements.</p>",
+        "id": 239265543,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1621349020
+    },
+    {
+        "content": "<p>to facilitate this I had mocked up some potential solutions to conditional processing needs:</p>\n<div class=\"codehilite\"><pre><span></span><code>Loop based on Test Id:\n\ntest id=test1\n    name+description etc.\n    action\n        operation does a polling read\n    action\n        assert\n            checks polling came back completed\n            LoopTest\n                Wait: ${waitUntilValueFromPoll}\n                When: OnFail\ntest id=test2\n    name+description etc.\n    action\n        operation does a read on completed async result\n    action\n        assert like normal\n\nLoop Based on action.loopReference\n\ntest id=test1\n    name+description etc.\n    action\n        loopReference: pollingOperation\n        operation does a polling read\n    action\n        assert\n            checks polling came back completed\n            JumpTo:\n                Where: pollingOperation\n                When: OnFail\n                Wait: ${waitUntilValueFromPoll}\ntest id=test2\n    name+description etc.\n    action\n        operation does a read on completed async result\n    action\n        assert like normal\n\n\ntest id=test1\n    name+description etc.\n    action\n        operation does a POST\n    action\n        assert\n            type: structural (of structural|conformance|warning)\n            is the body correct resourceType\n            JumpTo:\n                Where: skipBodyVal\n                When: OnFail\n    action\n        assert\n            validate profileId\n    action\n        loopReference: skipBodyVal\n        assert\n            other important asserts\n\n\nConditional actions\n\ntest id=test1\n    name+description etc.\n    action\n        operation does a POST\n    action\n        doIf: is the body correct resourceType\n        assert\n            validate profileId\n    action\n        assert\n            other important asserts\n</code></pre></div>",
+        "id": 239265695,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1621349062
+    },
+    {
+        "content": "<p>And to start off the discussion of use-cases:<br>\nPolling requests for subscriptions and/or bulk data require an indeterminate amount of requests to the polling endpoint - especially servers that reject requests to the polling endpoint after a success has given the client the needed data  as one would need the absolute perfect number of polling requests too few and too many would not process correctly. So some way to define if and how many times an operation and their asserts would need to be run/repeated is important to defining one testscript for the full polling use cases</p>",
+        "id": 239266715,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1621349406
+    },
+    {
+        "content": "<p>seems this is re-inventing scripting that has already been standardized.</p>",
+        "id": 239285841,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1621356035
+    },
+    {
+        "content": "<p>reminds me of a dilbert</p>",
+        "id": 239285867,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1621356047
+    },
+    {
+        "content": "<p>Our use-cases for conditional processing as mentioned in the Connectathon:<br>\nNote up front: We test if implementers can exchange FHIR resources based on dummy data that we provide, so next to testing the infrastructure we also test if they have entered our specific data correctly. minimumId has too much limitations (maybe this is a separate discussion), that is why we test this with asserts.</p>\n<p>The FHIRpath expressions we test this with are growing pretty complex pretty quick (maybe because the asserts expressions do not recognize any 'context', so they cannot be broken down into smaller pieces). If an implementer fails the large expression, we would like to offer some extra guidance on where the error exactly is and how to solve this. This can perhaps be done looking in two directions (all element names are reflecting their exact intended functionality):</p>\n<p>messageOnFail</p>\n<div class=\"codehilite\"><pre><span></span><code>&lt;test&gt;\n    &lt;action&gt;\n        &lt;operation/&gt;\n    &lt;/action&gt;\n    &lt;action&gt;\n        &lt;messageOnFail value=&quot;Guidance on how to solve this&quot;/&gt;\n        &lt;assert&gt;\n            &lt;label value=&quot;test1&quot;/&gt;\n            &lt;expression value=&quot;false&quot;/&gt;\n        &lt;/assert&gt;\n    &lt;/action&gt;\n&lt;/test&gt;\n</code></pre></div>\n<p>Execute additional asserts (three different variants of <span class=\"user-mention\" data-user-id=\"237342\">@ryan moehrke</span> 's doIf, using assert.label:</p>\n<div class=\"codehilite\"><pre><span></span><code>&lt;test&gt;\n    &lt;action&gt;\n        &lt;operation/&gt;\n    &lt;/action&gt;\n    &lt;action&gt;\n        &lt;assert&gt;\n            &lt;label value=&quot;test1&quot;/&gt;\n            &lt;expression value=&quot;...&quot;/&gt;\n        &lt;/assert&gt;\n        &lt;assert&gt;\n            &lt;doIfExpression value=&quot;${expressionIsTrue}&quot;/&gt;\n            &lt;expression value=&quot;...&quot;/&gt;\n        &lt;/assert&gt;\n        &lt;assert&gt;\n            &lt;doIfTrue value=&quot;test1&quot;/&gt;\n            &lt;expression value=&quot;...&quot;/&gt;\n        &lt;/assert&gt;\n        &lt;assert&gt;\n            &lt;doIfFalse value=&quot;test1&quot;/&gt;\n            &lt;expression value=&quot;...&quot;/&gt;\n        &lt;/assert&gt;\n    &lt;/action&gt;\n&lt;/test&gt;\n</code></pre></div>\n<p>Another use case I mentioned is that implementers can provide a PDF as both Binary resource and inline data. At the moment we provide separate TestScripts for each use case and implementers have to select the correct one themselves. It would be more user friendly and easier to maintain if this branching could be done in 1 TestScript:</p>\n<div class=\"codehilite\"><pre><span></span><code>&lt;test id=&quot;test1&quot;&gt;\n    &lt;executeWhenExpression value=&quot;${expressionIsTrue}&quot;/&gt;\n    &lt;executeWhenTestPass value=&quot;test1&quot;/&gt;\n    &lt;executeWhenTestFail value=&quot;test2&quot;/&gt;\n    &lt;action&gt;\n        ...\n    &lt;/action&gt;\n&lt;/test&gt;\n&lt;test id=&quot;test2&quot;&gt;\n    &lt;executeWhenTestPass value=&quot;test1&quot;/&gt;\n    &lt;action&gt;\n        ...\n    &lt;/action&gt;\n&lt;/test&gt;\n&lt;test id=&quot;test3&quot;&gt;\n    &lt;executeWhenTestFail value=&quot;test1&quot;/&gt;\n    &lt;action&gt;\n        ...\n    &lt;/action&gt;\n&lt;/test&gt;\n</code></pre></div>\n<p>There are obvious parallels between these mockups, only difference is one being on <code>assert</code> level and the other on <code>test</code> level. Maybe this can be generalized. I also see a lot of dependencies on the 'variables: how and where' discussion we had at the Connectathon</p>",
+        "id": 240166915,
+        "sender_full_name": "Jorn Duwel",
+        "timestamp": 1621937922
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"237342\">@ryan moehrke</span>  According to <a href=\"http://hl7.org/fhir/testreport.html#scope\">TestReport Scope and Usage</a>, \"The TestReport structure mirrors the TestScript concepts of having sections for setup, tests, and teardown.\" Have you considered the TestReport that mirrors the TestScript loop construct idea?</p>",
+        "id": 243934211,
+        "sender_full_name": "Sunil Bhaskarla",
+        "timestamp": 1624636211
+    }
+]

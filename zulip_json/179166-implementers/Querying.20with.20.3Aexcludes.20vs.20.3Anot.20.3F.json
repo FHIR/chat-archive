@@ -1,0 +1,110 @@
+[
+    {
+        "content": "<p>Today in FHIR it's hard to query for data that <em>doesn't</em> match a specific value. For example, say you want to query for data that *aren't marked with a \"restricted\" or \"very restricted\" security label. You might try:</p>\n<div class=\"codehilite\"><pre><span></span><code>GET Observation?_security:not=R,VR\n</code></pre></div>\n\n\n<p>... but this query is subtly broken (and <span class=\"user-mention\" data-user-id=\"191387\">@Keith Boone</span> explains many of the reasons in <a href=\"http://motorcycleguy.blogspot.com/2019/06/set-theory-much-yeah-me-too.html\">his \"Set theory much\" blog post</a>). Briefly, this query will match a resource that has a <code>VR</code> security label if the resource <em>also</em> has some some other label like a \"sensitivity category\" code of <code>http://terminology.hl7.org/CodeSystem/v3-ActCode|HIV</code> indicating that it's very restricted data <em>about HIV</em>. The <code>HIV</code> code means there's a security label present that <em>isn't</em> <code>R</code> or <code>VR</code>, so this Observation gets included in the response to the <code>:not</code> search, even though we didn't want it to.</p>",
+        "id": 203735692,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1594656987
+    },
+    {
+        "content": "<hr>\n<p>Have we thought about defining a different modifier to convey this intent -- something like <code>:exclude</code> instead of <code>:not</code>, that would allow queries like:</p>\n<div class=\"codehilite\"><pre><span></span><code>GET Observation?_security:exclude=R,VR\n</code></pre></div>",
+        "id": 203735762,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1594657034
+    },
+    {
+        "content": "<p>to be clear this is not a problem specific to _security..... and actually ConfidentialityCode vocabulary is a bad example as it is a non-overlapping set of 6 codes, so to say 'not this' can also be said as 'only that'. This vocabulary is unusual in that it is explicitly designed as a non-overlapping set of 6 codes. (Note part of this design was also assuming all data had to have a confidentiityCode value (1..1), we did not put that requirement into FHIR core to avoid massive duplication of 99.99% of all resources being forced to have the code Normal. Had we required (1..1) then 'only that' would have been equivalent to 'not this'.  Sadly current core requirements on .meta.security do lead to situations you are pointing out.</p>",
+        "id": 203750488,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1594664270
+    },
+    {
+        "content": "<p>Good point. I've updated the topic to make this clear.</p>",
+        "id": 203755982,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1594666797
+    },
+    {
+        "content": "<p>you could do this with a value set query, I believe</p>",
+        "id": 203757898,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594667677
+    },
+    {
+        "content": "<p>Can you show me what that would look like <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> ? How do I define a valueset so that <code>Observation?_security:in=https://my-value-set</code> returns only observations that <em>lack</em> a <code>R</code> or <code>VR</code> label? The ValueSet query will only find observations that <em>match</em> something, right?</p>",
+        "id": 203769711,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1594673573
+    },
+    {
+        "content": "<p>yes like that, but using :not-in instead of :in</p>",
+        "id": 203775666,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594676723
+    },
+    {
+        "content": "<p>So if <code>https://my-value-set</code> has 3 codes (<code>A</code>, <code>B</code>, <code>C</code>), then <code>?_security:not-in=https://my-value-set</code> acts differently from <code>?_security:not=A,B,C</code>?</p>",
+        "id": 203776921,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1594677563
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> can you weigh in on this?</p>",
+        "id": 204125219,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1594924997
+    },
+    {
+        "content": "<p>no I think you're right - it will return any resources that have at least security tag that it not in the value set</p>",
+        "id": 204157590,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594943759
+    },
+    {
+        "content": "<p>So is it worth proposing a new <code>:excludes</code> modifier for these kinds of cases? Or better to just leave this as a known challenge? I could see it either way...</p>",
+        "id": 204236758,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1595008119
+    },
+    {
+        "content": "<p>not sure. we could. Let's see - can we do it with _filter? </p>\n<p><code>Observation?_filter=not (security in https://my-value-set)</code></p>\n<p>I think that's what you want  - because with richer syntax, you can control the handling of the not</p>",
+        "id": 204265572,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1595023907
+    },
+    {
+        "content": "<p>That's true; is that an argument against proposing a modifier? Many of our most recent improvements to search are things that _filter \"already covers\"</p>",
+        "id": 204281257,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1595042686
+    },
+    {
+        "content": "<p>it is an argument, yes. I'm not sure how strong it is, as you say</p>",
+        "id": 204281736,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1595043488
+    },
+    {
+        "content": "<p>I'm revisiting this with a new use case of excluding data; from search results we're looking at examples in the Argo Write project where patient-supplied data may have a specific tag; it's important to have some way to include or exclude such data from a search -- and today, there's no way to ask for data <em>without</em> a certain tag.</p>\n<div class=\"codehilite\"><pre><span></span><code>GET Observation?_tag:excludes=http://terminology.hl7.org/CodeSystem/common-tags|unreconciled\n</code></pre></div>\n\n<p>would be a fairly natural thing to do. I'll submit a Jira issue.</p>",
+        "id": 244473210,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1625080162
+    },
+    {
+        "content": "<p>Wait, reading now I see the following note tucked away in an example at <a href=\"http://hl7.org/fhir/search.html#token\">http://hl7.org/fhir/search.html#token</a>:</p>\n<blockquote>\n<p>Note that this search does not return \"any document that has a section that is not an Allergies and adverse reaction section\" (e.g. in the presence of multiple possible matches, the negation applies to the set, not each individual entry)</p>\n</blockquote>\n<p>... this seems to imply that <code>:not</code> <em>already</em> behaves like the <code>:excludes</code> I'm asking for -- but nobody point this out, and <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>  you even said the opposite:</p>\n<blockquote>\n<p>it will return any resources that have at least security tag that it not in the value set</p>\n</blockquote>",
+        "id": 244474805,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1625080995
+    },
+    {
+        "content": "<p>yes i was wrong, sorry</p>",
+        "id": 244476196,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1625081703
+    },
+    {
+        "content": "<p>No, that's a great outcome. My use case is already supported. I'll give this a shot against some reference servers.</p>",
+        "id": 244478180,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1625082647
+    }
+]

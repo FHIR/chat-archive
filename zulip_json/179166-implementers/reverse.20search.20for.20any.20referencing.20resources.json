@@ -1,0 +1,308 @@
+[
+    {
+        "content": "<p>If I have resource A and B that references resource C, is there a way to search for <em>any</em> resources that reference resource C. In other words, if I only know of resource C and want to find anything that references it, is that possible?</p>",
+        "id": 177204273,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570061146
+    },
+    {
+        "content": "<p>I don't think so.  Both _revinclude and _has require specifying the specific target class and relationship.</p>",
+        "id": 177208119,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570066793
+    },
+    {
+        "content": "<p>That was my conclusion as well, <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> ... I ended up submitting a tracker (24888) for this.</p>",
+        "id": 177208311,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570067075
+    },
+    {
+        "content": "<p>It's a really expensive search to run - you'd need to hit every resource and every element that could have extensions that could possibly point to the resource.  What's the use-case?</p>",
+        "id": 177208381,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570067248
+    },
+    {
+        "content": "<p>If you were to supply a GraphDefinition as the intended response structure, it could be defined (well, not right now, but its within its scope) to be a \"any resource with a reference to C\" graph. That won't make the query less expensive, but it just goes to show we could already support the use case (once we finalise the GraphDefintion resource, and if/when implemented by servers :-) )</p>",
+        "id": 177213710,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1570076198
+    },
+    {
+        "content": "<p>Wow.  Didn't realize that 'path' was optional in 'link'.  That's pretty scary given that you'd then have to check all extensions within the source resource as well as all elements that have outbound relationships.</p>",
+        "id": 177213997,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570076720
+    },
+    {
+        "content": "<p>To support that, I would think you would want to create an index of references. When a resource is POST/PUT to a server, extensions would be traversed and any references extracted.</p>",
+        "id": 177249745,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570112917
+    },
+    {
+        "content": "<p>But really, I'm less concerned about extensions than I am about the core spec's References.</p>",
+        "id": 177249785,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570112940
+    },
+    {
+        "content": "<p>The challenge is that most people will care about \"the relationships I care about\" - which will likely be a subset of both core elements and extensions</p>",
+        "id": 177249851,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570112984
+    },
+    {
+        "content": "<p>I think the main benefit of something like this is to ensure referential integrity.</p>",
+        "id": 177250213,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570113216
+    },
+    {
+        "content": "<p>for example, HAPI enforces referential integrity by default</p>",
+        "id": 177250225,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570113228
+    },
+    {
+        "content": "<p>so, if I wanted to delete a resources that is referenced by other things, right now I have no way of determining what resources reference it</p>",
+        "id": 177250285,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570113244
+    },
+    {
+        "content": "<p>short of a TON of queries</p>",
+        "id": 177250299,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570113256
+    },
+    {
+        "content": "<p>it is less likely that a system will enforce referential integrity on references in extensions. if it does, then it likely processes references in extensions like I mentioned above (via an index)</p>",
+        "id": 177250358,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570113314
+    },
+    {
+        "content": "<p>Enforcing referential integrity sounds like something that should be handled at the persistence layer rather than as a query capability?</p>",
+        "id": 177258928,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570118555
+    },
+    {
+        "content": "<p>In HAPI, for example, referential integrity IS enforced at the persistence layer. So, you can't delete a resource that is referenced by something else. But, how do you find out what that \"something else\" is?? you can't...</p>",
+        "id": 177260014,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570119221
+    },
+    {
+        "content": "<p>you could always write a custom interceptor on the <code>STORAGE_PRESTORAGE_DELETE_CONFLICTS</code> hook.. it gets called when a conflict is about to prevent deletion in order to allow you to resolve it</p>",
+        "id": 177260808,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1570119719
+    },
+    {
+        "content": "<p>we actually <em>like</em> the way referential integrity is enforced right now... we wouldn't want to change that</p>",
+        "id": 177261841,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570120412
+    },
+    {
+        "content": "<p>but to an end-user trying to delete a resource, they need a way of knowing what is referencing it, that may be affected by the change</p>",
+        "id": 177261870,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570120432
+    },
+    {
+        "content": "<p>but right now there is no way to know that</p>",
+        "id": 177261921,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570120449
+    },
+    {
+        "content": "<p>GCP does handle this in the persistence layer and not in the search index...sort of. Not all references are the subject of search parameters; the ones that are do appear in the search index so there are tricks that can be used to find them. It turns out that \"?_content=Patient/123\" on the base URL works, but that's not guaranteed by the spec. I don't think the search index is the right place to solve this problem.</p>\n<p>Even if we give you a nice error message \"can't delete Patient/123 because it's referred to by Observation/456, Observation/789, ...\" (and we currently don't) this is not parseable in an interoperable way, and there could be an unbounded number of references.</p>\n<p>For the specific case of any resource that has a compartment definition, retrieving the compartment might help.</p>\n<p>Define a new operation? It would be relatively easy for us to page through the references from storage and return them.</p>",
+        "id": 177262525,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1570120864
+    },
+    {
+        "content": "<p>If the error response from the delete request included a computable list of references that are stopping the delete, that would solve the problem for me...</p>",
+        "id": 177262678,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570120962
+    },
+    {
+        "content": "<p>for example, perhaps an OperationOutcome with a specific code, and multiple OperationOutcome.issue.expression entries for each of the referenced resources</p>",
+        "id": 177262777,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570121034
+    },
+    {
+        "content": "<p>I think the biggest risk there is that there are too many of them and you can't paginate an OperationOutcome response.</p>",
+        "id": 177263140,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1570121275
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> does HAPI enforce referential integrity on references that are in extensions?</p>",
+        "id": 177265204,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1570122592
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span> We do, but only if there is a search parameter on that extension, and the server is configured to enforce referential integrity.</p>",
+        "id": 177266146,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1570123195
+    },
+    {
+        "content": "<p>...and Sean, you could definitely implement that logic (the OO resource containing the conflicts) using an interceptor on the hook I mentioned. Honestly that sounds pretty useful to me.</p>\n<p>There is a catch though: If you can't delete Patient/1 because Observation/2 links to Patient/1, you'd get that in the response.. but there is no guarantee you would be able to delete Observation/2, since DiagnosticReport/3 might link to it.</p>",
+        "id": 177267484,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1570124065
+    },
+    {
+        "content": "<p>No, but you could delete just the reference inside Observation/2, effectively leaving it blank...</p>",
+        "id": 177268115,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570124433
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> is that logic you mentioned something you would want in core hapi-fhir, or as part of hapi-fhir-jpaserver-starter</p>",
+        "id": 177268171,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570124474
+    },
+    {
+        "content": "<p>if in core hapi-fhir, I would think you would want that logic built into framework, not implemented via hooks... could be wrong though</p>",
+        "id": 177268216,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570124501
+    },
+    {
+        "content": "<p>I think it would make sense in core hapi fhir... but as a hook. These days our philosophy is increasingly that if something can be done with interceptors, that's how we do it. It enforces a nice separation of concerns, and means it's really easy to turn on and off features (you'll notice that a lot of the new flags being added to jpaserver-started actually just toggle interceptors actually).</p>",
+        "id": 177270781,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1570126182
+    },
+    {
+        "content": "<p>no idea if/when I will be able to get to this...</p>",
+        "id": 177279144,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570131505
+    },
+    {
+        "content": "<p>but if I ever do, that's the approach I'll try</p>",
+        "id": 177279165,
+        "sender_full_name": "Sean McIlvenna",
+        "timestamp": 1570131520
+    },
+    {
+        "content": "<p>You could craft a search parameter that does this (which I noted when considering how to locate all the resources for processing a patient merge).<br>\nOnly way around it is to scan everything in the way in and tag a special search parameter <code>patient-for-merge</code><br>\nsearch expression: <code>descendants.ofType(ResourceReference).resolve().ofType(Patient)</code><br>\nI know probably wrong and expensive but that gives the idea.<br>\nAnd maybe use it on the system level search?</p>",
+        "id": 177309929,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1570163720
+    },
+    {
+        "content": "<p>There's a proposal to support _include and _revinclude syntaxes that allow \"*\" as a relationship type.  Questions to consider:</p>\n<ul>\n<li>would this only match on the specific search criteria the system supports, or would it handle all references, even if they aren't supported as independent search criteria?  (The latter is necessary to safely use this for referential integrity purposes)</li>\n<li>what are the performance ramifications of supporting this?</li>\n<li>If we introduce this, would the syntax allow constraining what resource types relationships are considered for?</li>\n<li>if we don't do this in search, should we support a custom operation instead?</li>\n</ul>",
+        "id": 219136548,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1607374261
+    },
+    {
+        "content": "<p>It may be we don't actually want a search set, but rather just the resource ids that have references.</p>",
+        "id": 219136677,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1607374334
+    },
+    {
+        "content": "<p>We encountered this issue also in FHIRcast were we want to find all resources that relate to an \"Anchor\" - all referred and and all referred from. Having this as a search criteria would be great as we can use R5 subscriptions for it.</p>",
+        "id": 219136737,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1607374384
+    },
+    {
+        "content": "<p>That gets at the idea of subscribing to changes to a patient, but more generally. I believe this is an area where search-based subscription definitions becomes quite awkward, but is the only tool we currently have.</p>",
+        "id": 219137036,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1607374555
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"197072\">Paul Church</span> <a href=\"#narrow/stream/179166-implementers/topic/reverse.20search.20for.20any.20referencing.20resources/near/219137036\">said</a>:</p>\n<blockquote>\n<p>That gets at the idea of subscribing to changes to a patient, but more generally. I believe this is an area where search-based subscription definitions becomes quite awkward, but is the only tool we currently have.</p>\n</blockquote>\n<p>The R4 backport of topic-based subscriptions is up for ballot in January, so it will hopefully be available <code>Soon(tm)</code></p>",
+        "id": 219138157,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1607375124
+    },
+    {
+        "content": "<p>I can't really judge the usefulness of it, but implementing it is quite doable for Vonk. <br>\nFor _include, both options are feasible (all reference searchparameters or all reference elements), but for efficient evaluation of _revInclude it would have to be on searchparameters only. <br>\nHaving a type modifier seems useful to me, e.g. for Observation that can have many basedOn or partOf references, most of which may not be of interest to the search at hand.<br>\nBut I do expect problems with :iterate.</p>",
+        "id": 219193045,
+        "sender_full_name": "Christiaan Knaap",
+        "timestamp": 1607424608
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> - thoughts on this?</p>",
+        "id": 221575005,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1609791451
+    },
+    {
+        "content": "<p>Mind you, we already have wildcards for 'reference-type search parameters', to _(rev)include=Encounter:* - this isn't actually supported on (the public version of) HAPI, Vonk, <a href=\"http://test.fhir.org\">test.fhir.org</a> last I tested.</p>",
+        "id": 221620218,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1609832852
+    },
+    {
+        "content": "<p>Question for <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> Are we in favor of adding support for _revInclude=*</p>",
+        "id": 224235001,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1611775698
+    },
+    {
+        "content": "<p>HAPI already supports <code>_revInclude=*</code>, at the time it was implemented I don't think we knew it wasn't in the spec :)</p>",
+        "id": 224237578,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1611776884
+    },
+    {
+        "content": "<p><code>_revinclude=*</code> has been in the spec for a while, I thought this was about being able to revinclude on incoming references that aren't the subject of any search parameter?</p>",
+        "id": 224237760,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1611776984
+    },
+    {
+        "content": "<p>As far as I can tell, it's not specified.  The <a href=\"https://www.hl7.org/fhir/search.html#revinclude\">section in search</a> says that you can use an <code>*</code> in place of the search parameter name.  It does not indicate anything about the resource name, or being able to override the <code>&lt;resource&gt;:&lt;search param&gt;</code> format with a single <code>*</code>.</p>\n<p>(btw, I am for the change - just stating why I think a change is necessary)</p>",
+        "id": 224240168,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1611778117
+    },
+    {
+        "content": "<p>Ah, didn't realize this was about supporting if for non-searchparameter revincludes.</p>\n<p>I'm indifferent to that idea. It wouldn't be hard to implement, but it'd certainly have an impact on indexing speed so I'd probably want it to be configurable at the server level. Do0able though, if there was a good use case.</p>",
+        "id": 224246360,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1611781182
+    },
+    {
+        "content": "<p>I'm pretty sure that's part of the question.  <a href=\"http://jira.hl7.org/browse/FHIR-24888\">FHIR#24888</a> is asking for a way to search for all references to a resource.  Since the behavior of <code>_include=*</code> and <code>_revInclude=*</code> isn't defined, does/should it:</p>\n<ul>\n<li>Match every resource with a search parameter of the correct linkage.</li>\n<li>Match every resource with a link.</li>\n</ul>\n<p>If it's agreed on the latter, then that fills the need of the request (with additional docs, etc.).  Otherwise... an operation? another parameter?</p>",
+        "id": 224248737,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1611782258
+    },
+    {
+        "content": "<p>I have always been in favour of an operation for this, Resource/$references-to. I don't think something that explicitly isn't limited to search parameters is a good fit for search.</p>",
+        "id": 224257267,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1611786187
+    },
+    {
+        "content": "<p>If _include=* were to mean \"it's up to the server to include as may as possible (without any guarantees of completeness) resources that have a reference to the focal resource\" then I'd be in favor of such a suggestion. Note that even $everything doesn't guarantee you get 'everything'.  If you want a guaranteed 100% set of resources - which is harder to implement, it sounds like an operation to me, which a server may or may not wish to support.  Note that we already have a wildcard on the searching of compartments, adoption of which is low AFAIK.</p>",
+        "id": 224298369,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1611823906
+    },
+    {
+        "content": "<p>Reading <a href=\"https://www.pewtrusts.org/en/research-and-analysis/reports/2021/01/standard-technology-presents-opportunities-for-medical-record-data-extraction\">https://www.pewtrusts.org/en/research-and-analysis/reports/2021/01/standard-technology-presents-opportunities-for-medical-record-data-extraction</a> I see lots of / some of US EHR/EMR vendors are going to charge \"per API call\", which means clients will try and minimize API calls, which in FHIR terms means they'll try and squeeze as much data out of a server in one API call as they can, a) thus subverting the nature of REST [multiple more atomic exchanges when one really needs the data], and b) probably leading to a client duplicating the data on their own system rather than requesting a new fresh copy of that data each and every time they need it. (b) has patient safety issues associated with it, one would be working with potentially outdated data.</p>\n<p>Whilst I understand that some would like to use a fee per call  scheme (reminds me of the fee per message scheme in the 1990s) - such a choice has negative repercussions. IMHO It would be best if US regulators were to move away from this specific payment scheme.</p>",
+        "id": 224300884,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1611825376
+    }
+]

@@ -1,0 +1,83 @@
+---
+layout: page
+title: "FHIR Chat  · Evaluating multiple patients at once · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Evaluating.20multiple.20patients.20at.20once.html">Evaluating multiple patients at once</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="247754000"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Evaluating%20multiple%20patients%20at%20once/near/247754000" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Richard Stanley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Evaluating.20multiple.20patients.20at.20once.html#247754000">(Jul 30 2021 at 19:54)</a>:</h4>
+<p>I have a use case where there's a main Patient resource, and links in it (link.other.reference) pointing to other Patient resources that are all the same person but come from different EHRs. To properly evaluate with CQL, I need to traverse multiple Patient resources. Can CQL evaluate more than one Patient in a run, or is this a job for unfiltered context, or some other approach or simple not possible?</p>
+
+
+
+<a name="247755377"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Evaluating%20multiple%20patients%20at%20once/near/247755377" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Evaluating.20multiple.20patients.20at.20once.html#247755377">(Jul 30 2021 at 20:06)</a>:</h4>
+<p>The <code>context</code> value defines the Patient, Encounter, etc. that the CQL is written with respect to. For example:</p>
+<div class="codehilite" data-code-language="cql"><pre><span></span><code>context Patient
+define "Encounters":
+   [Encounter]
+</code></pre></div>
+<p>returns the Encounters for a single patient. If you run <code>Patient</code> context CQL for a single patient, you get one result with values for one Patient.</p>
+<p>On the other hand,</p>
+<div class="codehilite" data-code-language="cql"><pre><span></span><code>context Unfiltered
+define "Encounters":
+   [Encounter]
+</code></pre></div>
+<p>returns all the Encounters that are available. If you run <code>Unfiltered</code> for multiple patients you get one result with values for multiple Patients.</p>
+<p>You can both run <code>Patient</code> context CQL for multiple patients (in which case you get multiple per-patient results) and run <code>Unfiltered</code> context CQL for a single patient (in which case you get one result with values for one patient)</p>
+
+
+
+<a name="247755443"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Evaluating%20multiple%20patients%20at%20once/near/247755443" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Evaluating.20multiple.20patients.20at.20once.html#247755443">(Jul 30 2021 at 20:07)</a>:</h4>
+<p>Whoops. Posted before I was ready. Editing...</p>
+
+
+
+<a name="247755885"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Evaluating%20multiple%20patients%20at%20once/near/247755885" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Evaluating.20multiple.20patients.20at.20once.html#247755885">(Jul 30 2021 at 20:11)</a>:</h4>
+<p>To run <code>Patient</code> context CQL in a Measure against multiple patients with the cqf-ruler, for example, you do this:</p>
+<p><code>{server base}/Measure/{Id}/$evaluate-measure?periodStart=2019-01&amp;periodEnd=2019-12</code></p>
+<p>Note the lack of <code>subject</code> parameter. That basically means run the Measure against all the Patients on this server.</p>
+
+
+
+<a name="247756364"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Evaluating%20multiple%20patients%20at%20once/near/247756364" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Evaluating.20multiple.20patients.20at.20once.html#247756364">(Jul 30 2021 at 20:15)</a>:</h4>
+<p>All of that said, neither of those handles the case where a logically identical Patient from a separate EHR should be considered as the same Patient. I think there would  typically be some record-linking process prior to CQL evaluation that would consolidate those resources.</p>
+<p>You could, in principle, write some CQL that would look up the related Patient from the EHR. I think that'd be something like:</p>
+<div class="codehilite" data-code-language="cql"><pre><span></span><code>include FHIRHelpers version '4.0.1'
+using FHIR version '4.0.1'
+
+context Patient
+define "Related Patients":
+     "Get Related Patients"(Patient.id)
+
+context Unfiltered
+define function "Get Related Patients"(id String):
+          [Patient] P where P.whatever = id
+</code></pre></div>
+
+
+
+<a name="247756796"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Evaluating%20multiple%20patients%20at%20once/near/247756796" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Evaluating.20multiple.20patients.20at.20once.html#247756796">(Jul 30 2021 at 20:19)</a>:</h4>
+<p>Obviously you'd have to substitute the logic appropriate for your specific use case to do the look-up of additional patients.</p>
+
+
+
+<a name="247770031"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Evaluating%20multiple%20patients%20at%20once/near/247770031" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Richard Stanley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Evaluating.20multiple.20patients.20at.20once.html#247770031">(Jul 30 2021 at 22:38)</a>:</h4>
+<p>Ok, great thanks. The main Patient resource is actually from a service that already did record linkage. That 'golden record' has the links to the Patients from the EHRs in the same datastore. I'll try the last bit to see how far I get.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

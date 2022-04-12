@@ -1,0 +1,437 @@
+---
+layout: page
+title: "FHIR Chat  · CDS Hooks feature request · cds hooks"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/index.html">cds hooks</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html">CDS Hooks feature request</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="174839857"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174839857" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174839857">(Sep 03 2019 at 23:47)</a>:</h4>
+<p>Hey guys - I have a few things we have identified as we need here at Epic, in working through some implementations. </p>
+<p>#1 - A <strong>Card Identifier</strong>. This needs to do three things for us. </p>
+<p>A. The Card ID tells us at some "abstract"/vague level what the card is about. So one card could be about "diabetes" and another card could be about the "chest-x-ray" the provider orders. </p>
+<p>B. The Card ID can serve for deduplication of alerts. So for example, a health system could decide that I'm subscribing to both services X and Y. However, if service X and service Y both return alerts about "diabetes" I think they are duplicative and result in alert fatigue for the provider. Besides I know service X is a better source than service Y for "diabetes" related information. So if both returns "diabetes" cards, then I want to suppress the card from service Y and only show the card from service X. </p>
+<p>C. The health system has already made a CDS Hooks request and is showing the cards to the provider. The provider thinks, because they did something to the patient after the CDS request, one of the cards shown is no longer up to date. They want to just selectively refresh that card. (or they simply, for no reason want to refresh that one card to get up to date info). <em>This needs a separate field in the request as well - I'm writing up a separate comment on selective refresh below.</em></p>
+<p>It could be argued even that there are two concepts being intermixed here - a <strong>Card ID</strong> and a <strong>Card Category</strong>. Open to feedback; let me know how to proceed with this.</p>
+
+
+
+<a name="174840051"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174840051" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174840051">(Sep 03 2019 at 23:51)</a>:</h4>
+<p>#2 - A <strong>request field for specifying what cards</strong> to refresh. </p>
+<p>As stated above, sometimes, after the initial request for CDS, the EHR may want to selectively refresh some but not all the cards being shown. <br>
+This refresh can happen in two ways.<br>
+A - refresh (a) specific card(s), by specifying (a) Card ID(s) in the request, as stated in the previous issue. <br>
+B - refresh all cards of (a) specific <strong>indicator</strong> type(s) (indicator field in the card is defined as either <em>info</em>, <em>warning</em>, or <em>critical</em>.)<br>
+C - possibly there are other refresh types I'm not considering? </p>
+<p>How can we incorporate this in the CDS Hooks request? Ideally, I don't want to do a full refresh and drop specific cards (and even dropping specific cards needs a Card ID field.) since then I'm dropping CDS information sent back by the service into the void.</p>
+
+
+
+<a name="174840219"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174840219" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174840219">(Sep 03 2019 at 23:54)</a>:</h4>
+<p>#3 - Flexibility on <strong>selectionBehavior</strong> of Suggestions in the card. </p>
+<p>Right now, the Suggestion + Action structure doesn't really work for our use. We are planning to <strong>add a constraint that each suggestion only contain one action for our initial implementation</strong> of Suggestions because of this. So a CDS Service can return N different suggestions. And we want the provider to be able to select a subset of them. This means, the value set for <strong>selectionBehavior</strong> (currently only 'at-most-one') also does not work for us. Can we add a new value to the valueset: <strong>Any</strong>, which implies the provider can accept none/some/all of the suggestions returned?</p>
+
+
+
+<a name="174840341"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174840341" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174840341">(Sep 03 2019 at 23:57)</a>:</h4>
+<p>#4 - finally, given the above <strong>Any</strong> option for the selectionBehavior, we would like to specify a <strong>default selection status</strong> for each suggestion. </p>
+<p>Basically, when there are multiple suggestions, some suggestions are "preferred"/"recommended" suggestions, and others are "alternate"/"less-preferred" suggestions. So we want to mark the preferred suggestions, so that when the card is returned, the preferred suggestions are selected by default, and the provider can accept the preferred suggestions by a single click. They only need to tweak selections etc, if they want to disregard the preferred suggestion and go with an alternate suggestion returned by the CDS Service.</p>
+
+
+
+<a name="174840405"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174840405" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174840405">(Sep 03 2019 at 23:58)</a>:</h4>
+<p>Writing these up so that I can have your feedback on what is the best way to accomplish the objectives. Please provide feedback here, but I will also be present at the connectathon if anyone would like to talk more.</p>
+
+
+
+<a name="174841785"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174841785" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174841785">(Sep 04 2019 at 00:30)</a>:</h4>
+<p>My opinions (for what they're worth)<br>
+#1 - I'm ok with a card id, but I can't imagine a situation where there could be meaningful de-duplication except from a single server.  Servers might well provide all sorts of different information about diabetes - protocol recommendations, rules for diagnosing,  tests that should be performed,  etc.  You could use the id to suppress a particular card for that patient (possibly for a period of time) or independent of the patient forever if the information is particularly useless/annoying.  But the notion that we could come up with an ontology that would be specific enough to allow de-duplication across servers seems far-fetched to me given the potentially infinite set of recommendations CDS systems might come up with.  And if we did get one that was sufficiently all-encompassing, the likelihood of everyone coding recommendations consistently would also be poor.  I'd very much like to see this in action (particularly across non-coordinating CDS systems) using extensions before we consider semantic identifiers.<br>
+#2 - My understanding was that the service gets hit every time a field changes, so all the cards should effectively get refreshed pretty much all the time and nothing should be out of date.  If an action results in changes to the resource in question, that should certainly trigger a refiring of the hook services, no?  (I wouldn't expect most clinicians to be paying enough attention to the cards they're getting back to notice if they've changed and expecting a couple of additional clicks to force refresh of each card seems like a lot of imposed cost on the users for something that definitely shouldn't be the user's problem.)<br>
+#3 - There are good reasons to have multiple actions in a single suggestion.  If you want to replace a record with a new record, that's a delete + an add (2 actions).  In CRD, one of the suggestions is to fill out a Questionnaire (create questionnaire + create task).  If you have multiple actions for a single suggestion it's because they <em>must</em> be executed together to make sense.  Fine with adding clarification to that effect, but not so fine with prohibiting multiple actions per suggestion.<br>
+#4 - In practice, there can be logic to the suggestions where some are mutually exclusive, some could be done together, etc.  The notion of 'preference' could be challenging in a lot of those situations.  Also, 'preference' implies that the service knows what's better than the practitioner - which a) might not be true; and b) might be true, but not appreciated by the practitioner.  My take on the 'default' for CDS Hooks was always "ignore the cards and continue with what you were doing" - particularly when the cards may well change as you continue filling out the screen.</p>
+
+
+
+<a name="174846152"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174846152" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174846152">(Sep 04 2019 at 02:23)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> - as I mentioned, these are all issues that came up from real world implementation efforts going on right now. Epic does not, ideally, want to go ahead and make extensions to support this, since we think these are valuable to others as well and so merit being standardized. </p>
+<p>#1 - We actually have some meaningful deduplication examples which were designed with input from CDS Service and are being developed right now for real world use with multiple sources of decision support. Granted, this would require communication between services, a mix of EHR configuration for mappings, and CDS Hooks card ID support - so I'm also not expecting a complete ontology, and in your terminology this would not be a non-coordinating CDS system, but coordinating CDS systems are rather common in the real world. </p>
+<p>#2 - EHRs usually have workflows where only a subset of decision support may be refreshed. These are usually actively triggered by a clinician's interaction, so that there is no risk of the clinician not noticing. Essentially this is a clinician driven refresh of a single specified card / single indicator type group that the clinician clicked on. This is existing EHR behavior that clinicians are used to, that we need to make sure works with CDS Hooks as well.</p>
+<p>#3 - We cannot currently support multiple actions inside a suggestion. So Epic's initial implementation will constrain that there be only one action within a suggestion, but there can be multiple suggestions in a card. Eventually we plan to take this limitation away so both ways become supported. <br>
+#3.1 To be clear, I am <strong>not proposing prohibiting multiple actions</strong>. We also want to support that eventually, and we really think it is a very valuable thing. I am only asking that both options / both ways of doing things be allowed. selectionBehavior can retain existing value of 'at-most-one', plus asking to add a new value of 'any' (or some other equivalent word) representing multiple selections being allowed.<br>
+#3.2 Also note that, what I am asking for is how EHR decision support works in many examples out in real world today (not driven by CDS Hooks, but built natively in EHR) - so what CDS Hooks has formulated doesn't fit existing decision support implementations / what clinicians are used to. What I'm asking for is one way to bridge the gap - open to other ways to solve the problem as well. <br>
+#3.3 <strong>For example</strong>, if I place an MRI, and the CDS comes back and says use a CT preferably or an X-Ray, but not an MRI. Then there are two ways to represent this in suggestions:<br>
+#3.3.1 with a selectionBehavior of 'at-most-one', there will be a suggestion of CT+remove MRI, and another suggestion of X-Ray+remove MRI. <br>
+#3.3.2 with the new proposed selectionBehavior of 'any', there will be three suggestions: CT, X-Ray, and remove MRI. The CT and the remove MRI will be selected by default, but the X-ray being the less preferred suggestion, will not be selected by default. So if the clinician just accepts the Card without tweaking suggestions, they place a CT and remove the MRI.</p>
+<p>#4 The <strong>concept of a preference is already baked into existing decision support mechanisms</strong> (EHR-native) that are out there in real world use. So we are not introducing anything new to a practitioner, but rather introducing something that <strong>gels comfortably into what they are already used to</strong>. <br>
+#4.1 Even in 3.3.1 above where I have the example with the current CDS Hooks way of doing things, it is still extremely useful for the CDS service to be able to mark that the CT+remove action is preferable to the X-Ray+remove action in the 'at-most-one' case (as I understand there are real world use-cases which can actually make such distinctions based on radiation exposure, implants that the patient has etc.). EHRs will very likely default to making the first suggestion be the preferred suggestion if an explicit marking of the preferred suggestion is not supported. But I would say, explicit marking makes for a better standard than allowing arbitrary behavior like the first suggestion becoming the preferred suggestion.</p>
+
+
+
+<a name="174846867"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174846867" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174846867">(Sep 04 2019 at 02:44)</a>:</h4>
+<blockquote>
+<p>t could be argued even that there are two concepts being intermixed here - a Card ID and a Card Category</p>
+</blockquote>
+<p>I definitely think that. id needs to be some kind of generated UUID thing. category needs to some managed code from some useful ontology that doesn't currently exist (and feels like a nightmare)</p>
+
+
+
+<a name="174847139"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174847139" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174847139">(Sep 04 2019 at 02:52)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> Category is attempting to capture the set of types of alerts that a CDS Service can generate. Therefore, I would say it is preferable to make it a string and leave it to the CDS service, or make it a code where there are code systems defined by each CDS Service. I can't imagine a universal ontology - each CDS service is going to differ in how they categorize alerts.</p>
+
+
+
+<a name="174847147"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174847147" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174847147">(Sep 04 2019 at 02:52)</a>:</h4>
+<p>Also, I don't think CDS Hooks should bring it under its scope to start defining clinical content such as code-systems/ontologies etc.</p>
+
+
+
+<a name="174847272"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174847272" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174847272">(Sep 04 2019 at 02:56)</a>:</h4>
+<p>I certainly wasn't proposing that we do it. but if you're going to try and do meaningful de-duplication based on the category code (however represented) then someone has to impose some consistent meaning on it; you can't just leave it to the CDS service - all their incentive is to game the system by choosing a code no one else uses</p>
+
+
+
+<a name="174847425"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174847425" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174847425">(Sep 04 2019 at 03:00)</a>:</h4>
+<p>What about making it a code? Then different vendors can define different code systems, and they can work together with the EHR for the translations. This is already how things are done in many other situations. </p>
+<p>Also, I would say the statement "all their incentive is to game the system by choosing a code no one else uses" comes across as rather harsh. At least all services that I have worked with, and afaik all that are used in the real world, are pretty good at cooperating and collaborating to make really cool things happen.</p>
+
+
+
+<a name="174847545"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174847545" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174847545">(Sep 04 2019 at 03:04)</a>:</h4>
+<p>yes ok it was a bit harsh. But I had just read this: <a href="https://twitter.com/jasonfried/status/1168986962704982016" target="_blank" title="https://twitter.com/jasonfried/status/1168986962704982016">https://twitter.com/jasonfried/status/1168986962704982016</a>, so that colored my opinion a little. But nevertheless, it needs some curation centrally. So yes, it needs to be a code of some kind. And with multiple supporting code systems.... yes....</p>
+<div class="inline-preview-twitter"><div class="twitter-tweet"><a href="https://twitter.com/jasonfried/status/1168986962704982016" target="_blank"><img class="twitter-avatar" src="https://pbs.twimg.com/profile_images/3413742921/0e9ef95e76c4a965b9b177fa2267d6c1_normal.png"></a><p>When Google puts 4 paid ads ahead of the first organic result for your own brand name, you’re forced to pay up if you want to be found. It’s a shakedown. It’s ransom. But at least we can have fun with it. Search for Basecamp and you may see this attached ad. <a href="https://t.co/c0oYaBuahL" target="_blank" title="https://t.co/c0oYaBuahL">https://twitter.com/jasonfried/status/1168986962704982016/photo/1</a></p><span>- Jason Fried (@jasonfried)</span><div class="twitter-image"><a href="https://t.co/c0oYaBuahL" target="_blank" title="https://t.co/c0oYaBuahL"><img src="https://pbs.twimg.com/media/EDkTcjZXoAADGTM.png:medium"></a></div></div></div>
+
+
+
+<a name="174847644"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174847644" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174847644">(Sep 04 2019 at 03:07)</a>:</h4>
+<p>Ok - I agree code will meet the need and avoid many of the unfortunate situations that could potentially arise out of a plain string.</p>
+
+
+
+<a name="174847694"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174847694" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174847694">(Sep 04 2019 at 03:08)</a>:</h4>
+<p>Maybe the difference is that these CDS Services needing to be configured in the EHR, if they are malicious actors, the Health System will just end their contract - so there is good incentive on the part of the CDS Services to play good actors.</p>
+
+
+
+<a name="174847717"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174847717" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174847717">(Sep 04 2019 at 03:09)</a>:</h4>
+<p>so I think that's a thing that's true for your use of CDS hooks, but not true in other uses outside pay-to-play EHRs. EHRs are obviously an important use case, but not the only one</p>
+
+
+
+<a name="174847845"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174847845" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174847845">(Sep 04 2019 at 03:12)</a>:</h4>
+<p>Agreed - but I'm only asking category in the standard. How that is used to deduplicate isn't baked into the standard. So the category can be optional, and in a non EHR case it can be ignored. Is that fair?</p>
+
+
+
+<a name="174847934"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174847934" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174847934">(Sep 04 2019 at 03:15)</a>:</h4>
+<p>Also, for CardID being a UUID, can we say then that if nothing has changed so that the same card is being returned by the service, the UUID will/can remain the same?</p>
+
+
+
+<a name="174848004"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174848004" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174848004">(Sep 04 2019 at 03:17)</a>:</h4>
+<p>well, i'd just make it an id and say that if the CDS service returns an id, it must be something it recognises when it's returned in the request, and then say what it functionally means in the request</p>
+
+
+
+<a name="174848053"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174848053" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174848053">(Sep 04 2019 at 03:18)</a>:</h4>
+<p>Ok - I think I can make that work.</p>
+
+
+
+<a name="174848055"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174848055" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174848055">(Sep 04 2019 at 03:18)</a>:</h4>
+<p>and I think yes about the category, though I'm not sure whether it should be system+code (like a FHIR  coding) or a URI (which is kind of system#code)</p>
+
+
+
+<a name="174848076"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174848076" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174848076">(Sep 04 2019 at 03:19)</a>:</h4>
+<p>Open to either - my preference would be to keep it like it is done in FHIR.</p>
+
+
+
+<a name="174848137"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174848137" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174848137">(Sep 04 2019 at 03:21)</a>:</h4>
+<p>so would mine, but Coding isn't directly available</p>
+
+
+
+<a name="174848193"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174848193" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174848193">(Sep 04 2019 at 03:22)</a>:</h4>
+<p>Well, everything in CDS Hooks is custom JSON anyway? Except for the JWT and the contained resources.</p>
+
+
+
+<a name="174848205"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174848205" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174848205">(Sep 04 2019 at 03:22)</a>:</h4>
+<p>yes so just have to define an object with system/code properties - looks the same, and refer to FHIR Coding for the entire edifice it sits in front of</p>
+
+
+
+<a name="174848217"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174848217" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174848217">(Sep 04 2019 at 03:23)</a>:</h4>
+<p>I can agree with that.</p>
+
+
+
+<a name="174848306"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174848306" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174848306">(Sep 04 2019 at 03:26)</a>:</h4>
+<p>then of course I ask the logical corollary... is only one enough? .. <span aria-label="unamused" class="emoji emoji-1f612" role="img" title="unamused">:unamused:</span></p>
+
+
+
+<a name="174848372"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174848372" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174848372">(Sep 04 2019 at 03:27)</a>:</h4>
+<p>That depends on how complex we want to make this.</p>
+
+
+
+<a name="174848505"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174848505" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174848505">(Sep 04 2019 at 03:31)</a>:</h4>
+<p>I am open to multiple. I don't necessarily need multiple. But maybe someone else does?</p>
+
+
+
+<a name="174848511"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174848511" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174848511">(Sep 04 2019 at 03:31)</a>:</h4>
+<p>typically, we define a singleton and wait for someone to protest</p>
+
+
+
+<a name="174848556"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174848556" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174848556">(Sep 04 2019 at 03:32)</a>:</h4>
+<p>Okay - I'm fine with that strategy.</p>
+
+
+
+<a name="174849812"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174849812" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174849812">(Sep 04 2019 at 04:12)</a>:</h4>
+<p>I'm not totally clear on why Epic can't support multiple actions within a suggestion - is it issues with the transactional nature of both must succeed?  You should provide feedback to the CRD specification because right now, two very key suggestion types depend on multiple actions.  (And I don't expect the need for them will be limited to CRD.)</p>
+<p>The concern about "preference" is that if you're calling 5 different decision support services and each of them are providing cards, what does the notion of "preference" mean?  Sure, if all the cards are coming back from one place, you could indicate preference if that's sensible in the context of what's being returned (i.e. the actions are intended to be mutually exclusive).  My my expectation is that most of the time there will be numerous services involved.  And at that point, the notion of "preferred" is going to become pretty meaningless.</p>
+
+
+
+<a name="174878037"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174878037" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174878037">(Sep 04 2019 at 12:53)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> Every EHR ideally wants to integrate CDS Hooks into existing decision support mechanisms. So major differences from how existing decision support mechanisms work will require a much larger development effort. Like I said, we also want to eventually support multiple actions within a suggestion and see it as desirable; however, that is not how things work today. Also we really feel most multiple action situations can be equivalently accomplished by single actions as I showed with the example, maybe that won't be as nifty as with a grouped action, but it meets the need. This is really not in my power to change, I'm trying as best as I can. </p>
+<p>Preference exists only within a card. So I don't think I follow your concern with preference.</p>
+
+
+
+<a name="174915708"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174915708" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174915708">(Sep 04 2019 at 19:41)</a>:</h4>
+<p>Catching up here --</p>
+<p>1) regarding a card ID, having a <em>semantically meaningless</em> unique id is fine/feasible; trying to use this ID for context-sensitive de-duplication is like requiring the ID semantics to "read your mind" (i.e., it's expecting the id to reflect exactly whatever hard-to-pin-down de-duplication semantics you want to enforce). Seems infeasible to me.</p>
+<p>2) With respect to multiple suggestions per card (<code>selectionBehavior</code>), I'd be in favor of adding <code>all</code> and <code>any</code> (in addition to <code>at-most-one</code>), and making this a required field; right now, it seems like "all" semantics only happens if you omit the field.</p>
+
+
+
+<a name="174916694"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174916694" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174916694">(Sep 04 2019 at 19:53)</a>:</h4>
+<p><span class="user-mention" data-user-id="191315">@Josh Mandel</span> <br>
+1. In the conversation with <span class="user-mention" data-user-id="191316">@Grahame Grieve</span> above, we are saying there will be Category which will be a Code-System+Coding and can work for deduplication (but only with co-operating services and additional configuration in EHR to map different codesets), and there will be a separate UUID which must be recognizable to the CDS Service if returned in a subsequent request.<br>
+2. <code>selectionBehavior</code> is already required field. From the specification (Card Attributes, text against the suggestions property)</p>
+<blockquote>
+<p>If suggestions are present, selectionBehavior MUST also be provided.</p>
+</blockquote>
+<p>So sending suggestions without a <code>selectionBehavior</code> is currently precluded.</p>
+
+
+
+<a name="174916923"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174916923" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174916923">(Sep 04 2019 at 19:56)</a>:</h4>
+<p>Wait, I see</p>
+<p><a href="/user_uploads/10155/-VTdqBh8ixOjIWlmS2d3WZ7a/pasted_image.png" target="_blank" title="pasted_image.png">this content</a>  at <a href="https://cds-hooks.org/specification/1.0/#http-response" target="_blank" title="https://cds-hooks.org/specification/1.0/#http-response">https://cds-hooks.org/specification/1.0/#http-response</a></p>
+<div class="message_inline_image"><a href="/user_uploads/10155/-VTdqBh8ixOjIWlmS2d3WZ7a/pasted_image.png" target="_blank" title="this content"><img src="/user_uploads/10155/-VTdqBh8ixOjIWlmS2d3WZ7a/pasted_image.png"></a></div>
+
+
+
+<a name="174916933"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174916933" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174916933">(Sep 04 2019 at 19:56)</a>:</h4>
+<p>Ah. "If suggestions are present, selectionBehavior MUST also be provided" is what I was missing!</p>
+
+
+
+<a name="174916945"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174916945" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174916945">(Sep 04 2019 at 19:56)</a>:</h4>
+<p>Thanks.</p>
+
+
+
+<a name="174916984"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174916984" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174916984">(Sep 04 2019 at 19:57)</a>:</h4>
+<p>So to restate: I'd be in favor of adding <code>all</code> and <code>any</code> (in addition to <code>at-most-one</code>).</p>
+
+
+
+<a name="174917076"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174917076" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174917076">(Sep 04 2019 at 19:58)</a>:</h4>
+<p>(Incidentally, I'd prefer the word <code>CONDITONAL</code> to <code>OPTIONAL</code> for <code>selectionBehavior</code>. Will add a PR.)</p>
+
+
+
+<a name="174917189"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174917189" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174917189">(Sep 04 2019 at 20:00)</a>:</h4>
+<p><a href="https://github.com/cds-hooks/docs/pull/492" target="_blank" title="https://github.com/cds-hooks/docs/pull/492">https://github.com/cds-hooks/docs/pull/492</a></p>
+
+
+
+<a name="174925737"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/174925737" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#174925737">(Sep 04 2019 at 21:40)</a>:</h4>
+<p>Agree with both the values for <code>selectionBehavior</code> and the <code>CONDITIONAL</code> phrasing.</p>
+
+
+
+<a name="175627033"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/175627033" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dennis Patterson <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#175627033">(Sep 13 2019 at 14:08)</a>:</h4>
+<p><span class="user-mention" data-user-id="193265">@Matt Varghese</span> these are topics that would be worth discussing further this weekend.  Outside of integrating and testing CDS Hooks workflows at the Connectathon, let's try to talk through some of your use-cases, whether in a break out session or otherwise.  Sound good?</p>
+
+
+
+<a name="175630582"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/175630582" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#175630582">(Sep 13 2019 at 14:42)</a>:</h4>
+<p><span class="user-mention" data-user-id="191358">@Dennis Patterson</span> Yes, that sounds good.</p>
+
+
+
+<a name="175706724"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/175706724" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jacob Crump <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#175706724">(Sep 14 2019 at 15:40)</a>:</h4>
+<p>I'm not sure if this has been brought up, but in the <code>fhirAuthorization</code> object, the key names are in snake case format (i.e. access_token). Why are the key names not camel cased like all of the other fields in the specification (i.e. accessToken)? Is there sound reason for this difference or is this something that could be changed for 1.1? It just seems inconsistent in my limited lens of view.</p>
+
+
+
+<a name="175707083"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/175707083" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Isaac Vetter <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#175707083">(Sep 14 2019 at 15:50)</a>:</h4>
+<p>Hey Jacob, I think it's because those are names defined by OAuth.</p>
+
+
+
+<a name="175707164"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/175707164" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jacob Crump <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#175707164">(Sep 14 2019 at 15:53)</a>:</h4>
+<p>Gotcha that makes sense. I just found the rfc documentation for anyone else interested: <a href="https://tools.ietf.org/html/rfc6749" target="_blank" title="https://tools.ietf.org/html/rfc6749">https://tools.ietf.org/html/rfc6749</a>. Thanks Isaac.</p>
+
+
+
+<a name="177725642"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/177725642" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#177725642">(Oct 09 2019 at 15:32)</a>:</h4>
+<p>Hey folks, I've created a few pull requests, based on this thread:</p>
+<ul>
+<li><code>ruleCode</code> (<a href="https://github.com/cds-hooks/docs/pull/505" target="_blank" title="https://github.com/cds-hooks/docs/pull/505">https://github.com/cds-hooks/docs/pull/505</a>) based on the discussion about the Card Category above, as well as some discussions at the Connectathon. </li>
+<li><code>uuid</code> (<a href="https://github.com/cds-hooks/docs/pull/496" target="_blank" title="https://github.com/cds-hooks/docs/pull/496">https://github.com/cds-hooks/docs/pull/496</a>) to add a Card ID to the card.</li>
+<li>(<a href="https://github.com/cds-hooks/docs/pull/498" target="_blank" title="https://github.com/cds-hooks/docs/pull/498">https://github.com/cds-hooks/docs/pull/498</a>) adds <code>selectionBehavior</code> value <code>any</code>.</li>
+<li><code>preference</code> indication (<a href="https://github.com/cds-hooks/docs/pull/497" target="_blank" title="https://github.com/cds-hooks/docs/pull/497">https://github.com/cds-hooks/docs/pull/497</a>) on suggestion.</li>
+</ul>
+
+
+
+<a name="223438430"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/223438430" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Frank Pandolfe <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#223438430">(Jan 20 2021 at 21:30)</a>:</h4>
+<p><span class="user-mention" data-user-id="193265">@Matt Varghese</span> Has there been any further discussion, decisions, consensus regarding the card.uuid? Is the UUID typically associated with the card or "instance of the card" i.e. as you had mentioned, if nothing has changed so that the same card is being returned by the service, does the UUID remain the same, or is it different?</p>
+
+
+
+<a name="223448258"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/223448258" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#223448258">(Jan 20 2021 at 22:50)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="224788">@Frank Pandolfe</span> , my above requests have made their way into CDS Hooks, and have been in the spec for some time now. <br>
+<a href="https://cds-hooks.org/specification/current/#card-attributes">https://cds-hooks.org/specification/current/#card-attributes</a></p>
+<p>card.uuid represents a unique instance of the card. </p>
+<p>We also have card.source.topic which is a coding object, and captures the type of card, or rule or logic that led to the generation of the card.</p>
+
+
+
+<a name="223451781"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/223451781" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Frank Pandolfe <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#223451781">(Jan 20 2021 at 23:28)</a>:</h4>
+<p>Thanks <span class="user-mention" data-user-id="193265">@Matt Varghese</span> </p>
+<p>Do you consider every time the card is issued (returned to the calling application) a unique instance of the card? </p>
+<p>I have been thinking about the cards as more static objects. Generating a new UUID for the same card every time it is issued seems to present difficulties when trying to use the feedback for analysis. For example, if a service determines to return Card_A , for an A1c between 7 and 9 and Card_B for an A1c greater than 9. Both cards may have some unique suggestions but may also have a shared one (suggestion_1). Additionally, both of these cards will have the same topic (diabetes). </p>
+<p>Since we are generating a new UUID every time the card is issued, do you have any recommendations regarding re-associating the UUIDs to the same card?  How else would one try to determine how often suggestion_1 was taken for Card_A vs for Card_B?</p>
+
+
+
+<a name="223458070"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/223458070" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#223458070">(Jan 21 2021 at 00:58)</a>:</h4>
+<p><span class="user-mention" data-user-id="224788">@Frank Pandolfe</span> , I personally don't have an opinion or preference here :( . </p>
+<p>In my CDS Hooks client implementation, I assume that the CDS Service will make the determination if and when card UUIDs can stay the same, suggestion UUIDs can stay the same, what is the boundary between things that fall in two different topics etc. At least in my implementation, I am able to handle the same UUID returned across multiple invocations, but I cannot speak for the broader community, and will defer to others to chime in. </p>
+<p>What I can say is, if I get the same value for topic, I treat that as the same conceptual card / template card. So for example, if a physician says "snooze this topic for the next four hours", I can skip presenting cards with that topic but different (or same UUIDs) for the next four hours even if the CDS Hooks response returned those.</p>
+
+
+
+<a name="223522051"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/223522051" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Frank Pandolfe <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#223522051">(Jan 21 2021 at 15:17)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> . Based on some of your thoughts from the original thread, wondered if you have comments or thoughts you'd be willing to share. Thanks.</p>
+
+
+
+<a name="223554960"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/223554960" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#223554960">(Jan 21 2021 at 19:00)</a>:</h4>
+<p>The key thing for Da Vinci CRD is that there's a clear ability to audit on both sides - so an EHR can capture "we received card X from payer Y" and be able to verbally share an identifier for that card so they payer can find it in their own log.  As such, for us, it's fine if the identifier changes every time.  It's also ok if the identifier remains if identical information is sent multiple times in close proximity (e.g. during order create)</p>
+
+
+
+<a name="223571485"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/223571485" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Frank Pandolfe <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#223571485">(Jan 21 2021 at 21:16)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191320">Lloyd McKenzie</span> <a href="#narrow/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request/near/223554960">said</a>:</p>
+<blockquote>
+<p>The key thing for Da Vinci CRD is that there's a clear ability to audit on both sides - so an EHR can capture "we received card X from payer Y" and be able to verbally share an identifier for that card so they payer can find it in their own log.  As such, for us, it's fine if the identifier changes every time.  It's also ok if the identifier remains if identical information is sent multiple times in close proximity (e.g. during order create)</p>
+</blockquote>
+<p>It seems like the combination of the UUID and a timestamp could help resolve the exact identify. Additionally, in your case the CDS Hooks service provider would have to log every time a card was sent, not just feedback received. i.e. server sent Card_A at 12:01 and the card is ignored on the client... no feedback is generated. The client could log the receipt of the card, but unless the server is also logging every card it sends, you're not going to find it in the feedback log. This could also possibly help with figuring out an "ignore rate" and potentially "dwell time"</p>
+
+
+
+<a name="223573225"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/223573225" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#223573225">(Jan 21 2021 at 21:30)</a>:</h4>
+<p>The notion of feedback didn't exist at the time we adopted CDS Hooks.  We don't have an expectations to require use for that at the moment.</p>
+
+
+
+<a name="223577312"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/223577312" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#223577312">(Jan 21 2021 at 22:04)</a>:</h4>
+<p>I don't know why it would be hard either way? Even if you have a card UUID that is unique to each instance / each response, wouldn't the service still be able to do analysis like that on the data?</p>
+
+
+
+<a name="223577413"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/223577413" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#223577413">(Jan 21 2021 at 22:05)</a>:</h4>
+<p>In fact, I would wonder if "dwell time" isn't harder if the UUID is reused?</p>
+
+
+
+<a name="223582905"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/223582905" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Frank Pandolfe <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#223582905">(Jan 21 2021 at 22:56)</a>:</h4>
+<p>sorry... my stream of consciousness was probably hard to follow. I agree now that a UUID for every card instance is a good idea. I think the trick is the service provider logging the cards template name, the UUID and timestamp (along with any optional details that may differ from the card template) when the card is generated and sent to a client. If and when feedback is received from the client, that UUID row can be updated with the additional details from the feedback response. This will allow for ignore rate and dwell time. If the client chooses to keep its own details based on the UUID it can.  Potentially it can be merged/compared with the log kept on the service provider, depending on the use case... i suppose possibly for auditing reasons.</p>
+
+
+
+<a name="223584736"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179159-cds%20hooks/topic/CDS%20Hooks%20feature%20request/near/223584736" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Varghese <a href="https://fhir.github.io/chat-archive/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request.html#223584736">(Jan 21 2021 at 23:16)</a>:</h4>
+<p><span class="user-mention" data-user-id="224788">@Frank Pandolfe</span> , I agree with that.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

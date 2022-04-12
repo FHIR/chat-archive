@@ -1,0 +1,165 @@
+---
+layout: page
+title: "FHIR Chat  · Behaviour of the root · fhirpath"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/index.html">fhirpath</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html">Behaviour of the root</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="219238022"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/219238022" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Felix Chapman <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#219238022">(Dec 08 2020 at 17:44)</a>:</h4>
+<p>I'm implementing FHIRPath and was wondering the exact behaviour of the root path. In particular, why this expression behaves the way it does:</p>
+<div class="codehilite"><pre><span></span><code>type!=&#39;display&#39; or code.empty()
+</code></pre></div>
+<p>Notice <code>code</code> is also a type (full name <a href="https://hl7.org/fhir/fhirpath.html#types">FHIR.code</a>).</p>
+<p>In this case, <code>code</code> is meant to be interpreted as a label - but why is that the case? It's the root of a path, which means it <a href="http://hl7.org/fhirpath/#path-selection">should be interpreted as a type</a>. Or does "path" refer only to the entire expression, and not sub-expressions?</p>
+<p>A related question, how would this on its own behave?</p>
+<div class="codehilite"><pre><span></span><code>code.empty()
+</code></pre></div>
+<p>Are there some cases where it would be interpreted as a type, and other cases where it would be interpreted as a label?</p>
+
+
+
+<a name="219242694"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/219242694" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#219242694">(Dec 08 2020 at 18:22)</a>:</h4>
+<p>Each invariant specifies a 'context'.  That establishes the node in which the expression will be evaluated.</p>
+
+
+
+<a name="219243643"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/219243643" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Felix Chapman <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#219243643">(Dec 08 2020 at 18:30)</a>:</h4>
+<p>I see, so in this case the context is <a href="https://www.hl7.org/fhir/questionnaire.html#invs">Questionnaire.item</a>, which has type <code>BackboneElement</code>.</p>
+<p>The spec says this:</p>
+<blockquote>
+<p>When resolving an identifier that is also the root of a FHIRPath expression, it is resolved as a type name first, and if it resolves to a type, it must resolve to the type of the context (or a supertype). Otherwise, it is resolved as a path on the context. If the identifier cannot be resolved, the evaluation will end and signal an error to the calling environment.</p>
+</blockquote>
+<p>Applying to this example: <code>code</code> resolves to a type, so it "must resolve to the type of the context". The type of the context is <code>BackboneElement</code>, so it fails. After this point I'm uncertain, should it:</p>
+<ul>
+<li>Resolve to a path on the context?</li>
+<li>End evaluation and signal an error?</li>
+</ul>
+<p>I read it as the latter, because I thought "Otherwise, it is resolved as a path on the context" referred to the condition "if it resolves as a type". But perhaps it's the former?</p>
+
+
+
+<a name="219275917"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/219275917" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Lynch <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#219275917">(Dec 08 2020 at 23:09)</a>:</h4>
+<p>That is an interesting question.  In the fhirpath.js library, we assumed that the "type" was referring to a resource type (e.g. Patient, Observation), not primitive types.  Otherwise, if you had an Observation in the context, wrote <code>code</code>, it would fail, unless you wrote <code>Observation.code</code>.  I am not sure which behavior is correct.  <span class="user-mention" data-user-id="191359">@Bryn Rhodes</span> ?</p>
+
+
+
+<a name="219280204"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/219280204" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#219280204">(Dec 08 2020 at 23:49)</a>:</h4>
+<p>It would be the former, the intent being to ensure that paths written against base resource types resolve correctly (e.g. <code>Resource.id = '123'</code>, though I agree the language can be tightened. Please submit a tracker on that?</p>
+
+
+
+<a name="219280282"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/219280282" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#219280282">(Dec 08 2020 at 23:50)</a>:</h4>
+<p>Should probably be 'if it resolves to a type and that type is the type of the context (or a supertype).'</p>
+
+
+
+<a name="219280306"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/219280306" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#219280306">(Dec 08 2020 at 23:50)</a>:</h4>
+<p>Only in the case that the identifier can't resolve at all should it result in an error.</p>
+
+
+
+<a name="219396004"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/219396004" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#219396004">(Dec 09 2020 at 20:52)</a>:</h4>
+<p>there is a corner case where this is a problem, which is where the focus element has a sub-element with the same name as the type.</p>
+
+
+
+<a name="219396029"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/219396029" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#219396029">(Dec 09 2020 at 20:52)</a>:</h4>
+<p>I don't think that we have any of these in FHIR, but it might happen elsewhere</p>
+
+
+
+<a name="219853470"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/219853470" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Felix Chapman <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#219853470">(Dec 14 2020 at 15:04)</a>:</h4>
+<p>Thanks for the help, the behaviour is clear to me now!</p>
+<p>I've requested a HL7 JIRA account, then I'll submit an issue to clarify that paragraph.</p>
+
+
+
+<a name="220006057"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/220006057" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Felix Chapman <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#220006057">(Dec 15 2020 at 16:39)</a>:</h4>
+<p><a href="https://jira.hl7.org/browse/FHIR-30008">https://jira.hl7.org/browse/FHIR-30008</a></p>
+
+
+
+<a name="220028005"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/220028005" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Lynch <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#220028005">(Dec 15 2020 at 19:18)</a>:</h4>
+<p>Agreed, but added a comment.</p>
+
+
+
+<a name="220030772"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/220030772" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Lynch <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#220030772">(Dec 15 2020 at 19:36)</a>:</h4>
+<p>Actually, for processing JSON (e.g. fhirpath.js) I am wondering whether that sentence could be a bit clearer about handling primitive types.  If someone passes in a JSON string (not a string of JSON, but just a JSON string value, e.g. '"hi"'), then per the <a href="https://www.hl7.org/fhir/datatypes.html">data types page</a> it might be one of several FHIR types:  string, uri, url, canonical, base64Binary, date, dateTime, time, code, oid, id, markdown, or uuid.  One might guess at the intended type (or at least rule out some possibilities) by looking at the content of the string, but there will be ambiguous cases.  Is '"2014"' a date, an id, or markdown?  So if that is the context, and someone writes "markdown" for the FHIRPath expression, is it valid or not?</p>
+
+
+
+<a name="220031011"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/220031011" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Lynch <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#220031011">(Dec 15 2020 at 19:38)</a>:</h4>
+<p>I think the same issue arises for complex types.  If the context is <code>{"text": "George"}</code> is that a CodeableConcept or a HumanName?  So, if someone writes <code>HumanName.text</code>, should that be permitted because it is possible?</p>
+
+
+
+<a name="220753643"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/220753643" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#220753643">(Dec 23 2020 at 01:28)</a>:</h4>
+<p>FHIRPath doesn't really work on untyped content, though we can approximate it if we declare than any untyped primitive content is treated as as string</p>
+
+
+
+<a name="220790227"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/220790227" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Lynch <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#220790227">(Dec 23 2020 at 13:54)</a>:</h4>
+<p>"FHIRPath doesn't really work on untyped content"<br>
+In Questionnaire expressions (e.g. calculatedExpresion) the context is QuestionnaireResponse.item (or item.item), which as a fragment of a resource, does not contain the resource type.  Therefore expressions like "answer.value" won't work, because the structure will really be something like "answer.valueCoding", and there is no type information to translate "valueCoding" to "value".  Just yesterday I worked around that by using "answer.children()".</p>
+
+
+
+<a name="220797873"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/220797873" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> ryan moehrke <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#220797873">(Dec 23 2020 at 15:23)</a>:</h4>
+<p>valueCoding isn't fhirpath anyways, you would use value.ofType(Coding)</p>
+
+
+
+<a name="220798199"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/220798199" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Lynch <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#220798199">(Dec 23 2020 at 15:27)</a>:</h4>
+<p>If you are working in JSON, the fragment passed in for an item would have valueCoding (or other type) not "value".  But you are correct that if the choice type could be recognized, the proper FHIRPath syntax would be "value".</p>
+
+
+
+<a name="220814407"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/220814407" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#220814407">(Dec 23 2020 at 18:26)</a>:</h4>
+<blockquote>
+<p>which as a fragment of a resource, does not contain the resource type</p>
+</blockquote>
+<p>but it is still known, since they are always contained by the resource</p>
+
+
+
+<a name="221680413"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Behaviour%20of%20the%20root/near/221680413" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Lynch <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root.html#221680413">(Jan 05 2021 at 18:05)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191316">Grahame Grieve</span> <a href="#narrow/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root/near/220814407">said</a>:</p>
+<blockquote>
+<blockquote>
+<p>which as a fragment of a resource, does not contain the resource type</p>
+</blockquote>
+<p>but it is still known, since they are always contained by the resource</p>
+</blockquote>
+<p>I suppose you mean that "item" could have some extra property which points back to its parent node, or to the containing resource.   That extra property would have to be named carefully to avoid conflicting with possible resource element names.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

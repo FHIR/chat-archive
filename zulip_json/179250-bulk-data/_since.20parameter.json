@@ -1,0 +1,110 @@
+[
+    {
+        "content": "<p>We are in the process of adding <code>_since</code> support to our bulk data export.  The downstream data server that our Bulk FHIR API pulls from has years of historical data, but has only recently started adding <code>lastUpdated</code> to its data loads (for the purposes of discussion, lets say this date is 1/1/20).  Therefore, usage of <code>_since</code> when interacting with our Bulk FHIR API is really only effective as of the first date that the downstream server has begun adding <code>lastUpdated</code> to its data.  </p>\n<p>I'm looking for suggestions from this group on a standard way to handle this situation in a user-friendly manner.  <br>\nSome options we've been kicking around:<br>\n(1) Add some logic to our API implementation which returns a <code>4xx</code> error code (possibly <code>422</code>) if a date prior to 1/1/20 is passed to the <code>_since</code> parameter by a user of our API.  An <code>OperationOutcome</code> specifying the reason for error would also be returned.  The idea here, is that if a user inputs a date prior to 1/1/20 (lets say they input 1/1/19), they might be expecting data that goes back to 1/1/19 but we'd only send them data from 1/1/20 to now.  We would also update our Capability Statement indicating the limitation on the dates supported by <code>_since</code>.<br>\n(2) Add no internal logic to prevent a date prior to 1/1/20.  A user submitting a date prior to 1/1/20 (i.e., 1/1/19) would expect data from 1/1/19 but only receive it from 1/1/20.  Of course, interacting with the API and omitting <code>_since</code> would give the user the ability to receive all historical data (no date bounds).</p>\n<p>Feedback appreciated.  Thanks!</p>",
+        "id": 189553954,
+        "sender_full_name": "Matt Snook",
+        "timestamp": 1583197289
+    },
+    {
+        "content": "<p>as far as API compatibility goes, I don't see any reason not to just provide what would be the default logic on your server based on the fact that all last updated dates for older resources are (for the sake of your example) 1/1/2020. The FHIR lastUpdated value is specifically tied to the times at which FHIR resources were last changed -- and for your historical data, they will all be 1/1/2020.</p>",
+        "id": 189554972,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1583198477
+    },
+    {
+        "content": "<p>I think this corresponds to what you have described as option number two above. That has my vote :-)</p>",
+        "id": 189554977,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1583198487
+    },
+    {
+        "content": "<p>It is perfectly consistent for a client to ask what is new since 2018, and to get a whole pile of data that might actually be related to care provided in 2017, if the FHIR resources were last updated in 2020.</p>",
+        "id": 189555032,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1583198553
+    },
+    {
+        "content": "<p>Keep in mind that the primary goal of the  _since parameter (design-wise) is to allow for incremental updates after a client has performed an initial fetch. So in the case of your server, this will work perfectly. No special behavior required.</p>",
+        "id": 189555050,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1583198596
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> Thanks for the feedback.<br>\nI think this assumption that you made might be incorrect: <code>The FHIR lastUpdated value is specifically tied to the times at which FHIR resources were last changed -- and for your historical data, they will all be 1/1/2020.</code><br>\nOne clarifying point I'd like to bring up, is that in our case, the downstream server's historical data does NOT have a <code>lastUpdated</code> marker.  Only newly loaded data is marked with <code>lastUpdated</code>. <br>\nSo if the downstream server's data has data that goes all the way back to 2010, none of that data will be marked as <code>lastUpdated</code>.  Therefore, none of that data will be included in a request made by a user specifying <code>_since</code>.  This is the primary reason why we are considering sending a <code>4xx</code> if a date prior to 1/1/20 is specified in <code>_since</code>.  <br>\nDoes this change your vote or line of thinking?  Thanks again!</p>",
+        "id": 189607605,
+        "sender_full_name": "Matt Snook",
+        "timestamp": 1583251966
+    },
+    {
+        "content": "<blockquote>\n<p>So if the downstream server's data has data that goes all the way back to 2010, none of that data will be marked as lastUpdated.</p>\n</blockquote>\n<p>I think what should happen here is that you should populate your <code>.meta.lastUpdated</code> data <em>always</em>. So any data older than your \"date of origin\" should be marked as <code>lastUpdated</code> at your date of origin, and the FHIR resources should reflect this. In other words, use the actual date at which the FHIR resources are first generated (from your source data warehouse)  as their <code>lastUpdated</code>.</p>",
+        "id": 189608086,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1583252256
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> so a wrong <code>lastUpdated</code> value is better than a missing value? Just to be clear on what you are suggesting.</p>",
+        "id": 189615673,
+        "sender_full_name": "Rick Hawes",
+        "timestamp": 1583257059
+    },
+    {
+        "content": "<p>Let's see -- I'm not trying to describe a <em>wrong</em> value :-)</p>",
+        "id": 189618489,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1583259068
+    },
+    {
+        "content": "<p>I'm trying to describe the true semantics of what's happening here.</p>",
+        "id": 189618503,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1583259081
+    },
+    {
+        "content": "<p>Which, if I understood correctly is: </p>\n<ol>\n<li>There's a data warehouse of \"old stuff\"</li>\n<li>At some point in time <code>t</code>, all the old stuff is converted to FHIR</li>\n<li>Beyond point <code>t</code>, new resources sometimes land in the data warehouse</li>\n<li>At intervals, these new resources are also converted to FHIR</li>\n</ol>",
+        "id": 189618601,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1583259129
+    },
+    {
+        "content": "<p>If that's the scenario, then marking all the \"old stuff\" as <code>lastUpdated: t</code> seems semantically correct. (And marking the new resources are <code>lastUpdated: t+n*interval</code>, based on the actual time at which they're converted to FHIR.)</p>",
+        "id": 189618660,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1583259182
+    },
+    {
+        "content": "<p>The FHIR representation of the \"old stuff\"  was last (and, incidentally also <em>first</em>) updated at <code>t</code>.</p>",
+        "id": 189618788,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1583259244
+    },
+    {
+        "content": "<p>Good idea to state a clarifying timeline. Here's the timeline</p>\n<ol>\n<li>There is a data warehouse of old stuff</li>\n<li>A couple of years ago <code>t1</code>, the warehouse converted to FHIR. All resources do not have the <code>lastUpdated</code> field. </li>\n<li>New data arrives at the warehouse on a weekly basis. The timestamp for these inserts is not recorded. </li>\n<li>About a month ago <code>t2</code>, the warehouse started to record the <code>lastUpdated</code> field for new resources as they land into the warehouse. </li>\n</ol>\n<p>Currently, when resources are retrieved from the warehouse, there is a mix of resources with <code>lastUpdated</code> set and those with <code>lastUpdated</code> empty. </p>\n<p>If I understand your suggestion, we should set <code>t2</code> for the <code>lastUpdated</code> timestamp for resources that currently do not have <code>lastUpdated</code>.</p>",
+        "id": 189630677,
+        "sender_full_name": "Rick Hawes",
+        "timestamp": 1583267068
+    },
+    {
+        "content": "<p>Exactly (or set it to <code>t1</code> -- either way seems semantically reasonable and provides similar behavior).</p>",
+        "id": 189655399,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1583289279
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> Thanks. We are going to take your suggestion.</p>",
+        "id": 189713589,
+        "sender_full_name": "Rick Hawes",
+        "timestamp": 1583342501
+    },
+    {
+        "content": "<p>Thanks for the great feedback <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span></p>",
+        "id": 189714427,
+        "sender_full_name": "Matt Snook",
+        "timestamp": 1583342951
+    },
+    {
+        "content": "<p>Pretty late jumping in, but please document whatever decision is taken in a durable manner, so that people analyzing the data in the future understand what was done (e.g., data from this date to this date is all tagged as t.x).</p>",
+        "id": 189719951,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1583346271
+    }
+]

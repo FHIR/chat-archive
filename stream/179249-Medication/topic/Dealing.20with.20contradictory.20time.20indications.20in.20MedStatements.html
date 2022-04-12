@@ -1,0 +1,51 @@
+---
+layout: page
+title: "FHIR Chat  · Dealing with contradictory time indications in MedStatements · Medication"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179249-Medication/index.html">Medication</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179249-Medication/topic/Dealing.20with.20contradictory.20time.20indications.20in.20MedStatements.html">Dealing with contradictory time indications in MedStatements</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="230721565"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179249-Medication/topic/Dealing%20with%20contradictory%20time%20indications%20in%20MedStatements/near/230721565" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179249-Medication/topic/Dealing.20with.20contradictory.20time.20indications.20in.20MedStatements.html#230721565">(Mar 17 2021 at 16:22)</a>:</h4>
+<p>I am looking at displaying med dosing information in a UI based on MedicationStatement/-Usage instances. In such resources, one can indicate times or time intervals in both <code>MedicationStatement.effective[x]</code> and in the <code>Medication.dosage.timing</code> element. The formers is defined as (R4) "The date/time or interval when the medication is/was/will be taken" whereas the <code>Timing</code> data type is for "[a] timing schedule that specifies an event that may occur multiple times".  Since <code>dosage.timing</code> can also specify durations or specific dates, the information in these two elements can clearly (apparently) contradict each other. For instance:</p>
+<ol>
+<li><code>dosage.timing</code> says that medication should be be taken for 30 days but the <code>effectivePeriod</code> is only three days long</li>
+<li><code>dosage.timing.event</code> gives a date that does not coincide with the date/interval given in <code>effective[x]</code>. </li>
+</ol>
+<p>My basic interpretation would be that <code>dosage.timing</code> describes what was <em>supposed to happen</em> whereas <code>effective[x]</code> is about what <em>actually happened</em>. Hence, in the two examples above, I would take it to mean that the Patient deviated from the instructions and (1) stoped the meds prematurely and (2) took the meds on at the wrong time. In terms of UI display, I would use <code>effective[x]</code> to indicate the time/interval the meds were taken, but probably still be very defensive about the display if there was a contradiction with <code>dosage.timing</code>.</p>
+<p>Still, several things are unclear to me:</p>
+<ol>
+<li>Is my "basic understanding"/UI logic correct?</li>
+<li>If the information is <em>patient reported</em> (<code>MedicationStatement.informationSource</code> points to a Patient), I would interpret the information in <code>dosage.timing</code> as reflecting how the Patient had actually been taking the meds. If so, what would a contradiction with <code>effective[x]</code> mean then?</li>
+<li>What would a contradiction mean if <code>MedicationStatement.status</code> is "intended" and <code>effective[x]</code> is in the future?</li>
+</ol>
+
+
+
+<a name="230755464"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179249-Medication/topic/Dealing%20with%20contradictory%20time%20indications%20in%20MedStatements/near/230755464" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christof Gessner <a href="https://fhir.github.io/chat-archive/stream/179249-Medication/topic/Dealing.20with.20contradictory.20time.20indications.20in.20MedStatements.html#230755464">(Mar 17 2021 at 19:51)</a>:</h4>
+<p>As I understand the specs, <code>MedicationStatement.effective[x]</code> is closely related to the <code>MedicationStatement.status</code>, it tells us when this status applies. When the status is <code>not-taken</code>, <code>stopped</code> or <code>on-hold</code>, the <code>effective[x]</code>would be the time (or period) when this Medication was not-taken/stopped/on-hold. In those cases it is pretty clear that the <code>dosage.timing</code> speaks about what was <em>supposed</em> to happen_. As to your examples:</p>
+<ol>
+<li>is probably better expressed using <code>status=stopped</code>, otherwise it could also mean: Med was ordered for 30 days, but all we <em>know</em> is that it was taken for three days. </li>
+<li>this contradiction could probably be avoided, by splitting the MedicationStatement in two: One MedicationStatement reporting that the Med was <code>not-taken</code> as it was suggested in <code>dosage.timing</code>, and a second MedicationStatement stating that it was <code>active</code>or <code>completed</code> at a different time <code>effective[x]</code> and/or with a different <code>dosage.timing</code>. </li>
+</ol>
+<p>So my recommendation: If the "supposed" <code>dosage.timing</code> was changed, use a <code>status</code> of stopped/on-hold/not-taken (possibly also providing a <code>statusReason</code>). For the other statusCodes, I would derive the actual dosage from a kind of "constructive" combination of  <code>MedicationStatement.effective[x]</code> and <code>dosage.timing</code>, where typically the <code>effective[x]</code> gives a time window, and <code>dosage.timing</code> says what happened during this time window.<br>
+(just my interpretation of the specs)</p>
+
+
+
+<a name="230871770"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179249-Medication/topic/Dealing%20with%20contradictory%20time%20indications%20in%20MedStatements/near/230871770" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179249-Medication/topic/Dealing.20with.20contradictory.20time.20indications.20in.20MedStatements.html#230871770">(Mar 18 2021 at 14:24)</a>:</h4>
+<p>Thanks for the thorough answer <span class="user-mention" data-user-id="193991">@Christof Gessner</span>!  - I had not taken the relation to <code>status</code> into consideration. I suppose one could say that <code>status</code> and <code>effective</code> combine to give a temporal-contextual "lens" through which the dosage data must be read. Unfortunately, I usually cannot directly decide how to coordinate  <code>status</code> and <code>effective[x]</code> since I 'm mainly at the "receiving end" &amp; get resources others have constructed - but I can certainly take it into account in our IG.</p>
+<p>In line with your analysis, my conclusion is also that for the typical status values (active or completed), the cases that can be handled without uncertainty are those where <code>Dosage.timing</code> does not refer to to absolute dates or intervals, but only given a "rhythm" (twice a day, every 8 hours...). Then the combined schedule is simply that rhythm within the period indicated by <code>effective[x]</code>. Whenever <code>Dosage.timing</code> involves dates or intervals, I think the generic arithmetic for combining it with <code>effective[x]</code> becomes so complicated that I'm not sure I'd trust a machine with it <span aria-label="smile" class="emoji emoji-1f642" role="img" title="smile">:smile:</span> .</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

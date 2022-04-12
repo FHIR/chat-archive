@@ -1,0 +1,58 @@
+---
+layout: page
+title: "FHIR Chat  · Looping through observations · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Looping.20through.20observations.html">Looping through observations</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="247403543"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Looping%20through%20observations/near/247403543" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Marisa Hoenig <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Looping.20through.20observations.html#247403543">(Jul 27 2021 at 22:59)</a>:</h4>
+<p>We are trying to optimize our CQL, which uses the JS engine. We are currently grabbing only the <code>Heart rate</code> observations from a list of ALL the patient observations using this syntax: <code>[Observation: CC."Heart rate"]</code>. Does anyone know if this syntax loops through all the observations one by one to pick out the heart rates and create a new list? Or is it using a hashmap or some other way to more efficiently grab the selected observations?</p>
+<p>Here is our full function, which has helper functions making sure the observation is verified and is within our lookback period:</p>
+<div class="codehilite"><pre><span></span><code>define &quot;Heart Rate Observations&quot;:
+  C3F.ObservationLookBack(
+    C3F.Verified([Observation: CC.&quot;Heart rate&quot;]),
+    VitalSignsLookbackPeriod)
+</code></pre></div>
+
+
+
+<a name="247454103"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Looping%20through%20observations/near/247454103" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Looping.20through.20observations.html#247454103">(Jul 28 2021 at 12:53)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="386541">@Marisa Hoenig</span>.  The JavaScript engine uses the <code>Array.filter</code> javascript function to find the matching records from the full set of records.  In fact, first it filters on <em>all</em> the resources in the bundle looking for a match on the dataype (e.g., <code>Observation</code>) and then it filters on the results of that to find matches based on the code or value set (e.g., <code>"Heart rate"</code>). I would guess that most JavaScript engines implement <code>Array.filter</code> as a loop, so yes, it is looping through.</p>
+<p>TBH, I was not surprised it was using <code>Array.filter</code> to match on the codes, but I <em>was</em> surprised it was using <code>Array.filter</code> to match on the datatype.  I actually assumed it was using a map there (and would like to ask the several-years-ago me why I did not use a map!).  So, there is probably some room for improvement (and we happily accept pull requests).</p>
+<p>Relevant code:</p>
+<ul>
+<li><a href="https://github.com/cqframework/cql-exec-fhir/blob/master/src/fhir.js#L298-L309">filtering on datatype</a></li>
+<li><a href="https://github.com/cqframework/cql-execution/blob/master/src/elm/external.js#L17-L27">filtering on code</a></li>
+</ul>
+
+
+
+<a name="247473574"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Looping%20through%20observations/near/247473574" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Marisa Hoenig <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Looping.20through.20observations.html#247473574">(Jul 28 2021 at 15:22)</a>:</h4>
+<p>Hey <span class="user-mention" data-user-id="191469">@Chris Moesel</span> ! Thank you so much for all the info. We are taking a look at the code now. </p>
+<p>In terms of filtering on datatype, does this happen no matter what, every time you are searching through a bundle? For example, in our use case, our bundle is purely Observations, so we don't need to loop through for datatype — only for codes.</p>
+
+
+
+<a name="247475095"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Looping%20through%20observations/near/247475095" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Looping.20through.20observations.html#247475095">(Jul 28 2021 at 15:34)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="386541">@Marisa Hoenig</span>.  Yes, I think it's going to attempt to filter by datatype every time, even if your bundle has all the same datatype.  If that bit of code (in <code>cql-exec-fhir</code>) stored the bundle entries as a map (w/ resourceType as key), then it would prevent that repetitive looping.  That kind of change seems feasible, but I'm not sure we'll have a chance to really look at it until September.  My team's August schedule is very tight.  I also don't know how much of a real impact that will have; it probably depends on the number of resources and how often the CQL is calling into that (i.e., how many retrieves you have).  The only way to guess the impact would be to try it (or do some performance profiling on the existing code).</p>
+
+
+
+<a name="247647856"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Looping%20through%20observations/near/247647856" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Marisa Hoenig <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Looping.20through.20observations.html#247647856">(Jul 29 2021 at 22:09)</a>:</h4>
+<p>Thanks for all the help, <span class="user-mention" data-user-id="191469">@Chris Moesel</span>! We are looking more closely at our CQL and seeing where we can reduce the number of times we're looping through all observations. We'll see if there's any spot for us to improve the code and submit a PR. We've done some initial profiling of the CQL to identify where the problem is, so hopefully we can resolve it soon.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

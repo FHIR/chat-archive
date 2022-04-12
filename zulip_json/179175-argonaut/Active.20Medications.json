@@ -1,0 +1,506 @@
+[
+    {
+        "content": "<p><strong>Objective</strong><br>\nDocument guidance in IG on how to retrieve active medications.</p>\n<p><strong>History</strong><br>\nIn US-Meds IG (STU3), the active medication list was retrieved by querying MedicationStatement exclusively where status = active.</p>\n<p>In STU3, MedicationStatement had two elements for taken (Boolean) and status.<br>\n•   Taken was used to represent the medication usage (in the past)<br>\n•   Status was used to infer whether the medication should be on the “active meds list” (i.e. whether the patient <em>should</em> be taking the medication going forward) </p>\n<p>In R4, MedicationStatement added not-taken into the status value set (and removed the taken Boolean).  </p>\n<p>In R4, MedicationRequest was enhanced to add a new reported[x] element that indicates whether the MedicationRequest was reported (insert definition).</p>\n<p><strong>The Problem</strong><br>\nUsing MedicationStatement exclusively in R4 doesn’t work since we lost the ability to use MedicationStatement.status to convey whether a not-taken medication is on the active med list (i.e. should be taken).  Some not-taken medications are associated with active orders/prescriptions while other not-taken statements are associated with old orders/prescriptions that have since been completed or stopped.  </p>\n<p>Using MedicationRequest exclusively in R4 raises some questions about whether it is scoped to handle patient statements about their over-the-counter (OTC) medication usage since there often isn’t an underlying prescription or request.</p>\n<p>Using both MedicationStatement and MedicationRequest introduces patient safety risk if an application made a false assumption that all active medications were returned from a single resource.</p>\n<p>Furthermore, the boundaries between MedicationStatement and a <em>reported</em> MedicationRequest present a challenge for systems that don’t make that fine distinction.  For example, the following use cases are often handled in the <em>same</em> way:</p>\n<ul>\n<li>Patient conveys to provider A that another provider B prescribed a given medication </li>\n<li>Patient conveys they took an OTC medication </li>\n<li>The system programmatically learns of an existing medication and makes a non-authoritative copy </li>\n</ul>\n<p>By contrast, systems <em>can</em> differentiate between:</p>\n<ul>\n<li>What the patient said about their medication usage (taken vs not taken)</li>\n<li>Whether the provider wants to keep the recorded MedicationRequest or MedicationStatement on the active medication list</li>\n</ul>\n<p>In sum, we have a bit of a catch 22 where:</p>\n<ul>\n<li>We can’t use MedicationStatement exclusively (when status = not-taken), nor can we use MedicationStatement to convey status of what was ordered (when usage differs order/request status)</li>\n<li>We can’t use MedicationRequest exclusively (when scoped to exclude patient statements about OTC medications)</li>\n<li>Systems often don’t differentiate between <em>reported</em> MedicationRequests vs MedicationStatements, so the boundaries are challenging to honor.</li>\n</ul>\n<p><strong>Proposal</strong><br>\nArgonaut / US-Core IGs propose using MedicationRequest exclusively to get all active meds</p>\n<p>Any concerns with the Argonaut proposal to use MedicationRequest exclusively (which includes OTC medications)?  <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> <span class=\"user-mention\" data-user-id=\"191321\">@David Hay</span> <span class=\"user-mention\" data-user-id=\"191759\">@Melva Peters</span></p>",
+        "id": 167418126,
+        "sender_full_name": "Michelle (Moseman) Miller",
+        "timestamp": 1559760257
+    },
+    {
+        "content": "<p>Just to check whether I understand the background: we're saying that a record of the fact that a medication wasn't taken (say, like one skipped dose?) is (sometimes) a fact that belongs on a patient's \"active medication list\"?</p>",
+        "id": 167419376,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559761034
+    },
+    {
+        "content": "<p>We have to be clear about what we mean when we say active med list here:  it means meds prescribed and self-prescribed and not a statement of patient compliance.</p>",
+        "id": 167420910,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1559761953
+    },
+    {
+        "content": "<p>In that case, why would a \"not taken\" statement ever appears on this list?</p>",
+        "id": 167420974,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559761991
+    },
+    {
+        "content": "<p>before with med statement we had an 'active' list of all med prescribed and self-prescribed <em>AND</em> compliance status.  This is a change in expectations and definition.</p>",
+        "id": 167421180,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1559762122
+    },
+    {
+        "content": "<p>Yes I have concerns.  A MedicationRequst is not an appropriate resource for non- ordered meds.  To get a complete meds list, you need to look at both MedicationRequest and MedicationStatement.  To be safe, taking a look at MedicationDispense too.  If that's a safety issue, it needs to be resolved through education - or better yet, moving to use List.  Cramming stuff into a single resource is not an appropriate solution.</p>",
+        "id": 167422315,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559762889
+    },
+    {
+        "content": "<p>/poll I'm still unclear about whether a \"not taken\" statement would ever appear as an entry on an \"active medication list\".  Who thinks it can or can't?</p>",
+        "id": 167427714,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559766704
+    },
+    {
+        "content": "<p>It could if the patient is supposed to be but isn't (because there's at least a chance they could change their mind - also you wouldn't want it Re- prescribed)</p>",
+        "id": 167428994,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559767747
+    },
+    {
+        "content": "<p>Okay, so the fact is that this med belongs on their active medication list.  There may also (distinct from this) be a recording of the fact that the patient isn't taking the medication. And presumably there's some clinical process to detect and respond to the gap (talk to the patient; remove the med if they don't want it, etc).</p>",
+        "id": 167429267,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559767974
+    },
+    {
+        "content": "<p>Though there are PRN (as required - eg for a migraine) meds on the active list...</p>",
+        "id": 167431422,
+        "sender_full_name": "David Hay",
+        "timestamp": 1559769702
+    },
+    {
+        "content": "<p>Yes,  \"not taken\" medications can appear on the active medication list for many reasons.  As David said, PRN is one specific reason, but it really applies to any and all active orders.  The underlying active order means that the provider is still telling the patient to take the medication (regardless of the patient being non-compliant with those instructions).  We keep those active orders on the active meds list (regardless of compliance) due to clinical decision support (e.g. interaction checking) since the patient could start conforming with the provider's instructions.  When medication reconciliation is done, the patient is asked about ALL \"home medications\" -- that includes OTC (self-prescribed), prescriptions that this provider wrote, as well as any other medications prescribed from other (external) providers.</p>",
+        "id": 167486084,
+        "sender_full_name": "Michelle (Moseman) Miller",
+        "timestamp": 1559831108
+    },
+    {
+        "content": "<p>Lloyd said</p>\n<blockquote>\n<p>A MedicationRequst is not an appropriate resource for non- ordered meds</p>\n</blockquote>\n<p>Not sure what the definition of \"non-ordered meds\" is, but I will just add that MedicationRequest does support MedicationRequest.requester = Patient and MedicationRequest.reportedReference =Patient.  Why isn't OTC considered in scope as a self-prescribed / patient-initiated medication?</p>",
+        "id": 167488735,
+        "sender_full_name": "Michelle (Moseman) Miller",
+        "timestamp": 1559832817
+    },
+    {
+        "content": "<p>MedicationRequest is about an authorization to dispense/administer.  MedicationStatement is a summary view of \"what is that patient taking\" (or occasionally, \"not taking\").  In an OTC, there is no authorization (or alternatively there's an implicit authorization for \"everything\", which would be equally meaningless).  What you're tracking there is \"what is the patient taking\" - which is the purpose of MedicationStatement.  You can use MedicationStatement exclusively to represent \"what is the patient taking\" - whether prescribed or not.  But as soon as you want to get into authorizations or the notion of compliance, you'll need to add MedicationRequest into the mix.</p>",
+        "id": 167500689,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559840909
+    },
+    {
+        "content": "<p>Doesn't this boil down to whether systems actually implement these boundaries?  At least in our system, the following \"reported\" medications are undifferentiated:</p>\n<ul>\n<li>OTC \"reported\" by the patient (no order)</li>\n<li>OTC \"reported\" by the patient that was prescribed by another (external) provider, perhaps for insurance or reimbursement purposes</li>\n<li>Any external order \"reported\" by the patient - prescribed by another (external) provider</li>\n</ul>\n<p>The last two bullets above are included in the scope of MedicationRequest, so we're only debating the first bullet above.  However, we can't honor those boundaries if the system doesn't make that differentiation.</p>\n<blockquote>\n<p>This resource covers all type of orders for medications for a patient. This includes inpatient medication orders as well as community orders (whether filled by the prescriber or by a pharmacy). It also includes <strong>orders for over-the-counter medications (e.g. Aspirin)</strong>, total parenteral nutrition and diet/ vitamin supplements. It may be used to support the order of medication-related devices. It is not intended for use in prescribing particular diets, or for ordering non-medication-related items (eyeglasses, supplies, etc.). In addition, the <strong>MedicationRequest may be used to report orders/request from external systems that have been reported for informational purposes and are not authoritative and are not expected to be acted upon (e.g. dispensed or administered).</strong></p>\n</blockquote>",
+        "id": 167514017,
+        "sender_full_name": "Michelle (Moseman) Miller",
+        "timestamp": 1559849036
+    },
+    {
+        "content": "<blockquote>\n<p>Yes, \"not taken\" medications can appear on the active medication list for many reasons. As David said, PRN is one specific reason, but it really applies to any and all active orders. </p>\n</blockquote>\n<p>I understand the use case of PRN meds, and of documenting non-compliance. I'm just struggling to understand what might be an implicit approach to modeling these things -- normally, I'd think a PRN med would be documented on the active list, with a dosage indicating Dosage.asNeeded; and a medication that the patient misses sometimes/often/always would be documented on their active list, with additional resources to capture information about the fact that they sometimes/often/always/just-on-tuesdays skip a dose.</p>",
+        "id": 167522459,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559854870
+    },
+    {
+        "content": "<p>I understand that this information about missed doses, or general non-compliance is important, and needs to be documented and saved. What I'm unclear about is why this latter information would be part of the \"active medication list\".</p>",
+        "id": 167522505,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559854917
+    },
+    {
+        "content": "<p>If you don't differentiate these different OTC records and don't have anything that would differentiate and say \"hey, I'm actually an order\" (such as a prescriber, prescription number, dispense authorization information, dispense records, etc.) that you want to expose, then all of that information can show up in MedicationStatement.  But the full-blown non-OTC orders you have would still need to show up as MedicationRequest rather than MedicaitonStatement because you're going to need to expose things like prescribers, authorized quantity, etc.  I.e. you're going to have two separate resources.</p>",
+        "id": 167528590,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559859827
+    },
+    {
+        "content": "<p>On the last Argonaut call, a couple vendors said that implementing MedStatement is a lower priority if we can use MedRequest exclusively to get active meds.  We need MedRequest to convey \"active medication orders\" that have a MedStatement.status = not-taken.  To Josh's point, most use cases just want the active meds list and don't care about the MedStatement.status (of not-taken), which is why some of the Argonaut vendors are prioritizing MedRequest above MedStatement.</p>",
+        "id": 167529942,
+        "sender_full_name": "Michelle (Moseman) Miller",
+        "timestamp": 1559861269
+    },
+    {
+        "content": "<p>You can get active meds with just MedicationStatement - but you can't get any prescription details.  You <em>can't</em> get all active meds with MedicationRequest because not all meds will be prescriptions.</p>",
+        "id": 167534499,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559866560
+    },
+    {
+        "content": "<p>I'm fundamentally confused about</p>\n<blockquote>\n<p>We need MedRequest to convey \"active medication orders\" that have a MedStatement.status = not-taken.  </p>\n</blockquote>\n<p>That doesn't sound like the only way to model (partial) non-adherence. There are a lot of nuanced things we might want to say about adherence, none of which detract from the fact that a medication belongs on someone's active list with the status of active.</p>",
+        "id": 167539230,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559872897
+    },
+    {
+        "content": "<p>Catching up on this: </p>\n<blockquote>\n<p>Using both MedicationStatement and MedicationRequest introduces patient safety risk if an application made a false assumption that all active medications were returned from a single resource.</p>\n</blockquote>\n<p>Applications can make false assumptions in sorts of directions in this area. I think that we should not make false assumptions more likely in other regards in order to minimise this one - and this is clearly an area where we have real potential for confusion, from reading the thread. </p>\n<p>I'm concerned that no one from the pharmacy committee are part of this discussion. <span class=\"user-mention\" data-user-id=\"191759\">@Melva Peters</span> <span class=\"user-mention\" data-user-id=\"192080\">@John Hatem</span> <span class=\"user-mention\" data-user-id=\"192166\">@Jean Duteau</span> <span class=\"user-mention\" data-user-id=\"191402\">@Scott Robertson</span> ? </p>\n<p>Note that we can, if it helps, define a single query that returns all the appropriate medication request and statements - defining that in the argonaut spec could be very clarifying - and since it's signature is quite distinct, you could automatically check that an app was using the combined query or not</p>",
+        "id": 167547859,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559884208
+    },
+    {
+        "content": "<p>MedicationRequest does not have a way to say \"not taken\". (Nor should it.) So the Argonaut proposal leaves no way to record \"not taken\".<br>\nIf Argonaut has no requirement to record \"not take\", just exclude \"not taken\" from the Argonaut-permitted values for MedicationStatement.status and keep using MedicationStatement.</p>",
+        "id": 167548142,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1559884578
+    },
+    {
+        "content": "<p>We had several sessions with Pharmacy. I sat in on the Montreal session.  Brett on several before then.  We have to rewrite the guide to reflect the real world decisions by US Vendor community to implement meds in R4 FHIR.  I don't see or hear any realistic alternatives that have not already been discussed.  Michelle is providing a CYA service here so that there is less of a din when its published.</p>",
+        "id": 167550035,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1559886884
+    },
+    {
+        "content": "<p>This thread makes it seem like Argonaut want to avoid using MedicationStatement and are using the \"not taken\" element as an excuse.</p>",
+        "id": 167552649,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1559890105
+    },
+    {
+        "content": "<p>If you as an app sees MedStatement with \"notTaken\" - how do you know if they are going to continue taking it? It's active? It's suspended?</p>",
+        "id": 167575163,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559913159
+    },
+    {
+        "content": "<p>there's no way to represent all of that in MedStatement anymore (there use to be, before notTaken became a status and not its own field in MedStatement)</p>",
+        "id": 167575188,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559913185
+    },
+    {
+        "content": "<p>If you see a MedStatement with \"not taken\", then it's a med that they're not taking at all (and have no known intention of ever starting).  It would generally be record of a med that decision support or good practice would suggest they <em>should</em> be taking but, for whatever reason, they're not.  MedicationStatement doesn't imply anything at all about what's prescribed/authorized.   The problem is that there are two distinct concepts in EMRs - proper prescriptions and \"other meds\" and argonaut is trying to cram them into a single resource.  That's not going to work well because they have very different purposes.</p>",
+        "id": 167583118,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559918827
+    },
+    {
+        "content": "<p>That wasn't the representation of the previous not taken -  Med Statement represents a single moment in time. IE: at the time they spoke to the doc, they weren't taking it</p>",
+        "id": 167584768,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559919988
+    },
+    {
+        "content": "<p>Med statement cannot currently represent the granularity that compliance needs to represent the difference between that and \"never taking/no intent\"</p>",
+        "id": 167584801,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559920021
+    },
+    {
+        "content": "<p>EG: if they've temporarily suspended it for some reason (and might start taking, or may decide the cost is no longer as much of a barrier due to new insurance... etc), there is no way to say that vs. never</p>",
+        "id": 167584848,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559920061
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> I think one  of the things being missed or ignored is that many systems do NOT make the differentiation b/t meds you are taking OTC b/c you decided you needed it vs a doctor telling you or formally prescribing it but in another system/country/etc</p>",
+        "id": 167584925,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559920116
+    },
+    {
+        "content": "<p>IE: the distinction you're trying to make isn't one a system may be capable of making</p>",
+        "id": 167584941,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559920129
+    },
+    {
+        "content": "<p>It's totally fine to capture meds a doctor outside the system has prescribed as MedicationStatement - so long as you're willing to toss information related to the authorization.  In fact, if you're willing to toss information about authorization, you can even expose information about your own prescriptions via MedicationStatement.  However, you can't talk about compliance if you're not dealing with MedicationRequest because there's no expectation/authorization to be compliant 'to'.  One MedicationStatement could cover a period of 10+ years over which there could have been 20 prescriptions.  Or none.</p>",
+        "id": 167585187,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559920299
+    },
+    {
+        "content": "<p>The problem that we hit with MedicationStatement was that there was a desire to capture order/authorization type information in it.  Once you're in that space you need to supplement (not replace) with MedicationRequest.</p>",
+        "id": 167585265,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559920350
+    },
+    {
+        "content": "<p>It's concerning to me that even among the very-well-informed crowd here, there's really not a consistent understanding of the semantics of these resources, statuses, elements, etc. We have quite a lot of resources in this space, which means a lot of expressive capability (likely too much for us to arrive at a common understanding).</p>",
+        "id": 167585338,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559920420
+    },
+    {
+        "content": "<p>So I do think whatever simplifications / consistency Argonaut can agree to here would be a big help.</p>",
+        "id": 167585418,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559920456
+    },
+    {
+        "content": "<p>Things I'd like to see addressed, if it's not too late:</p>\n<p>1) Can we establish that \"sometimes I don't take X\" is a statement that's important, but the statement itself is not part of a patient's \"active medication list\" (though X may be a part of the patient's active list).</p>\n<p>2) Can we clarify that \"one API call\" vs \"2+ API calls\" is not a requirement for safe application behavior? (Or if a single API call is seen as a requirement, let's just define a custom operation with all the semantics we can agree to baked in -- like, <code>/Patient/:id/$argonaut-active-med-details</code>: \"return a Bundle with all statements and requests that are considered relevant for understanding the patient's active meds\")</p>",
+        "id": 167585745,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559920698
+    },
+    {
+        "content": "<p>Josh  - for #1 there's a tracker for R5 that is adding a more \"compliance-like\" field to Med statement<br>\neg: taking as prescribe, not currently taking, no plans etc</p>",
+        "id": 167587340,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559921937
+    },
+    {
+        "content": "<p>Would compliance not be tracked against something that's actually ordered?</p>",
+        "id": 167587396,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559921993
+    },
+    {
+        "content": "<p>for #2, so far in argonaut, I'm not sure if there are systems that can make the differentiation that Lloyd is calling out as necessary in med req (and it's not clear from the definition that was the  intent, which will be another hole we need to close).</p>",
+        "id": 167587482,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922027
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  yes, it would be called out against an order <em>placed and authorized in the existing system</em> but not requests we know about for meds outside the system that may have been rx/ordered/not OTC</p>",
+        "id": 167587531,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922071
+    },
+    {
+        "content": "<p>in our system :)</p>",
+        "id": 167587552,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922093
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191403\">@Michelle (Moseman) Miller</span>  or <span class=\"user-mention\" data-user-id=\"191357\">@Andrew Torres</span>  correct me if I'm wrong... I'm trying to remember how the historical/patient reported workflows work</p>",
+        "id": 167587701,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922197
+    },
+    {
+        "content": "<p>Ok.  But if you're capturing compliance information, that implies that you know: a) that it was ordered; b) enough information about the expected dosing to be able to assess compliance.  Is that information captured in discrete form (so that you could differentiate and say 'this is definitely an order') as opposed to a record that someone takes garlic twice a day for which no conformance statement is appropriate/relevant (because no one told them to take it at all, let alone how much)?</p>",
+        "id": 167587722,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559922221
+    },
+    {
+        "content": "<p>I thought  they just modified the patient reported orders (also, a lot of this depends a great deal on how  much info the patient gives you)</p>",
+        "id": 167587725,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922226
+    },
+    {
+        "content": "<p>We can differentiate between things physicians ordered or prescribed in our system vs. things patients told us were prescribed or they decided they took</p>",
+        "id": 167587811,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922265
+    },
+    {
+        "content": "<p>we cannot differentiate reliably between things a patient told me they were prescribed by physician X that are prescriptions vs things that they took</p>",
+        "id": 167587851,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922298
+    },
+    {
+        "content": "<p>Ok - then why are you capturing compliance information about those things?</p>",
+        "id": 167587885,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559922319
+    },
+    {
+        "content": "<p>b/c someone randomly told them it was a good idea (eg: my physician saying, find a good Vitamin D supplement vs them writing an rx for that)</p>",
+        "id": 167587905,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922334
+    },
+    {
+        "content": "<p>I'm not</p>",
+        "id": 167587917,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922341
+    },
+    {
+        "content": "<p>I'm capturing compliance about the things ordered and prescribed in my system, and then the list of meds the patient is taking from outside (either another doc or their own choice) so that I can safely determine \"active meds\" and do clinical checking against that list</p>",
+        "id": 167588006,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922388
+    },
+    {
+        "content": "<p>Ok.  I'm not hearing an issue with \"things ordered in my system = MedicationRequest\", \"things not ordered in my system (possibly ordered elsewhere, possibly not ordered at all) = MedicationStatement\"</p>",
+        "id": 167588039,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559922418
+    },
+    {
+        "content": "<p>Is there an issue with that division?</p>",
+        "id": 167588070,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559922442
+    },
+    {
+        "content": "<p>I'm now looking to pharmacy to clarify, but I thought that the whole reason we added patient reported to med req was to capture those other things in there</p>",
+        "id": 167588084,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922457
+    },
+    {
+        "content": "<p>Otherwise I have no idea why the idea of \"reported\" and \"patient source\" exists in that resource</p>",
+        "id": 167588096,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922472
+    },
+    {
+        "content": "<p>and all of this was partially driven by the long and fun conversations around the \"not taken\" status on med statement, so this was the recommendation that I thought we were given to resolve that issue</p>",
+        "id": 167588207,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922530
+    },
+    {
+        "content": "<p>Ok, lets chat about \"not-taken\" wrt medications \"from outside\" - We have a MedicationStatement.status of \"notTaken\".  Is that insufficient?  (And if so, how?)</p>",
+        "id": 167588291,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559922589
+    },
+    {
+        "content": "<p>(we in that case being pharmacy and argonaut stake holders)</p>",
+        "id": 167588297,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922598
+    },
+    {
+        "content": "<p>I think Michelle's summary at the top calls this challenge out</p>",
+        "id": 167588372,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922628
+    },
+    {
+        "content": "<p>Med statement is a single instance in time</p>",
+        "id": 167588395,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922643
+    },
+    {
+        "content": "<p>Just because you're \"not taking\" something currently does not mean it's not active</p>",
+        "id": 167588403,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922655
+    },
+    {
+        "content": "<p>in prior versions of med statement, you could say notTaken = y/n/unknown</p>",
+        "id": 167588447,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922677
+    },
+    {
+        "content": "<p>and also have a status of \"active\" \"completed\" \"stopped\" etc</p>",
+        "id": 167588459,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922692
+    },
+    {
+        "content": "<p>So active and \"not taking\" means I'm not currently taking it (but could in the future, might have recently)</p>",
+        "id": 167588487,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922713
+    },
+    {
+        "content": "<p>Right.  So the issue is that you want to say \"They're not taking this external medication, but I still want it in the active list\" - but you don't want a List resource that lets you maintain which non-taken stuff should appear in the active list and which shouldn't.</p>",
+        "id": 167588540,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559922723
+    },
+    {
+        "content": "<p>that is no longer possible to represent after pharm was told to move not taken to status</p>",
+        "id": 167588558,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922729
+    },
+    {
+        "content": "<p>How about this:</p>",
+        "id": 167588585,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922744
+    },
+    {
+        "content": "<p>What is \"reported\" and the patient source <em>intended</em> to represent in med req?</p>",
+        "id": 167588612,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922760
+    },
+    {
+        "content": "<p>let's ignore active med list for now</p>",
+        "id": 167588629,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922773
+    },
+    {
+        "content": "<p>When am I as a system expected to use that?</p>",
+        "id": 167588649,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559922783
+    },
+    {
+        "content": "<p>It's intended to represent \"this is an actual order created somewhere and I've received enough information about the 'order' aspect (e.g. how much was authorized, where it's to be dispensed, etc.) that I actually want to track that capturing it just as a statement isn't sufficient.  (E.g. I want to record compliance information against an order that isn't 'mine' because I'm helping to manage the patient's care and their compliance with their psychiatrist-prescribed meds is still a concern for me as their GP.)</p>",
+        "id": 167588799,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559922885
+    },
+    {
+        "content": "<p>Your system might have received that information by querying or receiving a push from another system or through a patient's PHR.  In some cases, the patient might have brought in a copy of the prescription or their pill bottles which provide enough information (e.g. dispenses remaining).</p>",
+        "id": 167588874,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559922960
+    },
+    {
+        "content": "<p>Our system doesn't currently make that distinction - ie, if the nurse looked at a pill bottle and has enough to be confident</p>",
+        "id": 167589264,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559923204
+    },
+    {
+        "content": "<p>I'm curious if there are systems out there that do</p>",
+        "id": 167589292,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559923214
+    },
+    {
+        "content": "<p>And that wasn't really the usage as described by the pharmacy WG</p>",
+        "id": 167589321,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559923239
+    },
+    {
+        "content": "<p>Our system  may not capture compliance of another systems orders (still looking for some other confirmation that I'm not nuts there) but it <em>does</em> use those for clinical/interaction checking logic</p>",
+        "id": 167589396,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559923287
+    },
+    {
+        "content": "<p>So we do assume it's relatively accurate. IE: that the patient is a pretty good and reliable source of information</p>",
+        "id": 167589430,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1559923309
+    },
+    {
+        "content": "<p>If you're not capturing authorization-type information (remaining dispenses, days supply, compliance) with external meds, then there's no real reason to use MedicationRequest.</p>",
+        "id": 167590183,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559923845
+    },
+    {
+        "content": "<p>From an \"in the active list or not\", what should show up in the active list is going to be business-rule driven.  Some not-taken meds (whether local or external) meds should be in the active list for some period of time - possibly a long period of time.  Others, not.  Neither MedicationRequest nor MedicationStatement have any flags about whether they should appear in the (an?) Active Medication List because the expectation was that if you're getting to the point of actively managing what should appear on the list vs. not, that the List resource would be used.</p>",
+        "id": 167590359,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1559924001
+    },
+    {
+        "content": "<p>For external meds (including OTC), we are capturing a request status of sorts (<em>separate</em> from the compliance status of taken or not) -- We determine the active meds list based on request status -- not compliance status.  That is what pushed us to use MedicationRequest following the breakfast in Cologne with Melva, Lloyd, and I, which is when we learned we shouldn't be using an event status (i.e. MedicationStatement.status) to convey the request status.  Request status is what drives it being on the active meds list.  Would it be possible to meetup at FHIR DevDays to discuss in person?  It might be more efficient than Zulip.</p>",
+        "id": 167592523,
+        "sender_full_name": "Michelle (Moseman) Miller",
+        "timestamp": 1559925808
+    },
+    {
+        "content": "<p>Well I won't be at FHIR Dev Days, and not sure about other Pharmacy Co-Chairs, so keep us informed.  I have read the entire Active Medications chat.  To me there are several questions we need clear answers for:  How to differentiate/represent Medication orders that are authorized ( use Medication Request); How to capture Medication orders that come from outside of my control ( I didn't authorize them, but I know about them) (I thought this was Medication Statement but after the above discussion I don't know); How to represent patient or other persons statements about my taking or not taking a medication ( I believe this is a Medication Statement); How to query for the Active Medications for a patient, where Active Medications has meaning that can be described by the Argonaut folks? ( I thought this was a combined query for both Med Requests and Med Statements); How to query for Active Medications for a patient, where the Active Medication has meaning different than what Argonaut uses e.g. what are the active meds for the patient as reported by the patient ( I believe this is a list of Medication Statements); you will notice I have not used the word \"compliance\" I think this is the area where we have the most difficulty and warrant further discussion.  I need a clear definition of compliance.</p>",
+        "id": 167604045,
+        "sender_full_name": "John Hatem",
+        "timestamp": 1559934134
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191403\">@Michelle (Moseman) Miller</span> is doing an active medications pop-up session today at 4:40p at DevDays</p>",
+        "id": 167768532,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1560180325
+    },
+    {
+        "content": "<p>By way of an update following the pop-up session today at DevDays, we covered much of what was already discussed above.  Our primary conclusion was that Argonaut / US Core IGs should add a disclaimer to indicate that the discussions are still occurring, such that the decisions for the R4 IG are subject to change in subsequent releases (e.g. R5).</p>",
+        "id": 167814987,
+        "sender_full_name": "Michelle (Moseman) Miller",
+        "timestamp": 1560222391
+    },
+    {
+        "content": "<p>Fun. Did the outcome of the pop-up match your proposal 75+ zulips ago <span aria-label=\"sunglasses\" class=\"emoji emoji-1f60e\" role=\"img\" title=\"sunglasses\">:sunglasses:</span></p>",
+        "id": 167977460,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1560366217
+    }
+]

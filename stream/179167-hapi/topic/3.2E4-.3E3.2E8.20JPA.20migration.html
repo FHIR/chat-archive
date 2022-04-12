@@ -1,0 +1,63 @@
+---
+layout: page
+title: "FHIR Chat  · 3.4-&gt;3.8 JPA migration · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/3.2E4-.3E3.2E8.20JPA.20migration.html">3.4-&gt;3.8 JPA migration</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="176932687"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/3.4-%3E3.8%20JPA%20migration/near/176932687" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Seth Rylan Gainey <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/3.2E4-.3E3.2E8.20JPA.20migration.html#176932687">(Sep 30 2019 at 13:41)</a>:</h4>
+<p>We're preparing a HAPI 3.4 to 3.8 JPA database migration, and a I have a few questions.</p>
+<ol>
+<li>Running the HAPI CLI with <code>migrate-database -x no-migrate-350-hashes -d ORACLE_12C -f V3_4_0 -t V3_8_0</code> will upgrade the JPA schema to 3.6, but is missing columns expected in 3.7+ </li>
+</ol>
+<div class="codehilite"><pre><span></span>Schema-validation: missing column [REINDEX_COUNT] in table [HFJ_RES_REINDEX_JOB]
+Schema-validation: missing column [SEARCH_DELETED] in table [HFJ_SEARCH]
+Schema-validation: missing column [SEARCH_PARAM_MAP] in table [HFJ_SEARCH]
+Schema-validation: missing column [HASH_IDENTITY] in table [HFJ_SPIDX_STRING]
+Schema-validation: missing column [PARENT_PIDS] in table [TRM_CONCEPT]
+Schema-validation: missing column [CS_VER_PID] in table [TRM_CONCEPT_DESIG]
+Schema-validation: missing column [CS_VER_PID] in table [TRM_CONCEPT_PROPERTY]
+Schema-validation: missing sequence [SEQ_RES_REINDEX_JOB]
+</pre></div>
+
+
+<p>Is this simply a gap in the migrator tasks? If so, we can add a PR to fix it.</p>
+<p>2) What is the purpose of  <code>CalculateHashesTask</code> run on the second pass without <code>-x no-migrate-350-hashes</code>? As far as I can tell, there should be a hash value for for all resources after <code>mark-all-resources-for-reindexing</code>.</p>
+
+
+
+<a name="176963882"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/3.4-%3E3.8%20JPA%20migration/near/176963882" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/3.2E4-.3E3.2E8.20JPA.20migration.html#176963882">(Sep 30 2019 at 19:13)</a>:</h4>
+<ol>
+<li>
+<p>That does sound like a gap. We do have a unit test that should catch any such deficiencies at this point, but it only came into effect as of the 3.7.0 release. PRs welcome for sure..</p>
+</li>
+<li>
+<p>The second pass is basically just a failsafe check, to ensure that no hashes were missed anywhere in the process. If you confirm that none are missing anywhere, you can skip it.</p>
+</li>
+</ol>
+
+
+
+<a name="176989054"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/3.4-%3E3.8%20JPA%20migration/near/176989054" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Seth Rylan Gainey <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/3.2E4-.3E3.2E8.20JPA.20migration.html#176989054">(Oct 01 2019 at 01:04)</a>:</h4>
+<p>Thanks, that makes sense. Another line of questioning regarding the reindexing process. We run HAPI in a k8s cluster with scaled deployments; is it safe for multiple JPA servers  to run against a single database during reindexing? If the JPA server crashes/restarts during reindexing, will it pick up where it left off? My read of the code is that it the reindex will run on the API server it was called on, and that it should restart reindexing after calling <code>$perform-reindexing-pass</code>.</p>
+
+
+
+<a name="177090983"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/3.4-%3E3.8%20JPA%20migration/near/177090983" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/3.2E4-.3E3.2E8.20JPA.20migration.html#177090983">(Oct 01 2019 at 19:49)</a>:</h4>
+<p>On a clustered server you need to ensure that scheduled tasks are disabled via the DaoConfig on all but one of the nodes- Otherwise all nodes in your cluster will try to reindex and you'll have pretty big problems. </p>
+<p>That caveat aside, yes, it's completely safe.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

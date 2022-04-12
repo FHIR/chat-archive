@@ -1,0 +1,98 @@
+---
+layout: page
+title: "FHIR Chat  · Serializing error · dotnet"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/index.html">dotnet</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serializing.20error.html">Serializing error</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="272632118"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serializing%20error/near/272632118" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dennis Brox <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serializing.20error.html#272632118">(Feb 21 2022 at 02:04)</a>:</h4>
+<p>When creating a Person resource, I can do the following:</p>
+<div class="codehilite"><pre><span></span><code>        Period period = new Period()
+        {
+            Start = DateTime.MinValue.ToString(),
+            End = DateTime.MaxValue.ToString()
+        };
+        var address = new Address()
+        {
+            . . . ,
+            Period = period
+        };
+</code></pre></div>
+
+<p>to set the Person address.  If I then use FHIRserialize to serialize the resource and then use a  FhirJsonParser to recreate the patient,  I get an<br>
+error thrown indicating it can't deserialize the period I set.  What's wrong with the period?</p>
+
+
+
+<a name="272650379"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serializing%20error/near/272650379" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dennis Brox <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serializing.20error.html#272650379">(Feb 21 2022 at 07:25)</a>:</h4>
+<p>Forget this.  Got it working by just forcing the date format to the FHIR standard.  It was confusing when an error  doesn't get thrown on the serialize - - not nice to be able to create garbage and not know about it until you try to read it back.</p>
+
+
+
+<a name="272652379"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serializing%20error/near/272652379" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serializing.20error.html#272652379">(Feb 21 2022 at 07:51)</a>:</h4>
+<p>There's an extension method .ToFhirDate() that you can use for those conversions.</p>
+
+
+
+<a name="272740424"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serializing%20error/near/272740424" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dennis Brox <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serializing.20error.html#272740424">(Feb 21 2022 at 22:23)</a>:</h4>
+<p>Maybe this is the same type of problem but more severe.  Using code:</p>
+<div class="codehilite"><pre><span></span><code>            var serializer = new FhirJsonSerializer();
+            var jo = serializer.SerializeToString(o);
+
+            var parser = new FhirJsonParser();
+            o =  parser.Parse&lt;Observation&gt;(jo);
+</code></pre></div>
+
+<p>You can see what gets serialized:<br>
+jo<br>
+"{\"resourceType\":\"Observation\",\"id\":\"f6174e82-f7f5-4ee0-ae61-1c37882bb27d\",\"text\":{\"div\":\"&lt;xml&gt;&lt;value&gt;blood pressure&lt;/value&gt;&lt;/xml&gt;\"},\"subject\":{\"reference\":\"52095\"},\"effectiveDateTime\":\"2022-01-16T11:28:16+00:00\",\"component\":[{\"code\":{\"text\":\"Systolic blood pressure\"},\"valueDecimal\":130},{\"code\":{\"text\":\"Diastolic blood pressure\"},\"valueDecimal\":80}]}"</p>
+<p>And I get the following error i.e. it won't deserialize, whereas of course it works fine where there are no FHIR types.</p>
+<p>Hl7.Fhir.ElementModel.StructuralTypeException<br>
+  HResult=0x80131537<br>
+  Message=Type checking the data: Choice element 'valueDecimal' is suffixed with unexpected type 'decimal' (at Observation.component[0].valueDecimal[0])<br>
+  Source=Hl7.Fhir.Support</p>
+
+
+
+<a name="272741948"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serializing%20error/near/272741948" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serializing.20error.html#272741948">(Feb 21 2022 at 22:46)</a>:</h4>
+<p>Yes, decimal is not a valid type for component.value, and the serializer does not check those things, it serializes whatever type it finds in the class (...and there is no easy C# way to prevent the assignment in the first place, that would be the 'right' solution)</p>
+
+
+
+<a name="272742333"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serializing%20error/near/272742333" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serializing.20error.html#272742333">(Feb 21 2022 at 22:52)</a>:</h4>
+<p>Yup, in Observation you're meant to use Quantity for numeric data (so that you apply the appropriate units too)</p>
+
+
+
+<a name="272751740"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serializing%20error/near/272751740" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dennis Brox <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serializing.20error.html#272751740">(Feb 22 2022 at 01:45)</a>:</h4>
+<p>But the problem is  that in component.value it is  valueQuantity that must be used and it is a Quantity.  In Quantity, value is decimal and nothing else can be entered except FHIRDecimal ?</p>
+
+
+
+<a name="272757180"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serializing%20error/near/272757180" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serializing.20error.html#272757180">(Feb 22 2022 at 03:44)</a>:</h4>
+<p>That's correct.</p>
+
+
+
+<a name="272757333"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Serializing%20error/near/272757333" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Serializing.20error.html#272757333">(Feb 22 2022 at 03:47)</a>:</h4>
+<p>Your example above just had decimal in the component.value, not in component.valueQuantity.valueDecimal</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

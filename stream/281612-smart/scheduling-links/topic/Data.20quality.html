@@ -1,0 +1,211 @@
+---
+layout: page
+title: "FHIR Chat  · Data quality · smart/scheduling-links"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/index.html">smart/scheduling-links</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html">Data quality</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="235034749"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/235034749" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#235034749">(Apr 18 2021 at 01:56)</a>:</h4>
+<p>Just to highlight the challenge of limiting to coarse-grained data: as long as there's better, more accurate data available from scraping than from a published API, folks will scrape. <a href="https://www.vaccinespotter.org/WI">https://www.vaccinespotter.org/WI</a> has excellent content, but it's fragile!</p>
+
+
+
+<a name="235418306"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/235418306" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Brackett <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#235418306">(Apr 20 2021 at 21:17)</a>:</h4>
+<p>As a general strawman for aggregation, I put together <a href="http://getmyvax.org/smart-scheduling/$bulk-publish">http://getmyvax.org/smart-scheduling/$bulk-publish</a> from data USDR is starting to gather across states (it lists all states, but only a few have data — I suggest looking at NJ).</p>
+<p>It exhibits a lot of the issues around coarse data that I think are reasonably well known, but maybe worth listing here:</p>
+<ul>
+<li>We pull in data from a variety of sources that might not have an authoritative URI for identifiers, so if we don’t have one, we list the identifier’s <code>system</code> as <code>https://fhir.usdigitalresponse.org/identifiers/&lt;SIMPLE_NAME&gt;</code>:</li>
+</ul>
+<div class="codehilite"><pre><span></span><code>&quot;identifier&quot;: [
+  {
+    // CVS Store number
+    &quot;system&quot;: &quot;https://fhir.usdigitalresponse.org/identifiers/cvs&quot;,
+    &quot;value&quot;: &quot;01929&quot;
+  },
+  {
+    // New Jersey Immunization Information System
+    &quot;system&quot;: &quot;https://fhir.usdigitalresponse.org/identifiers/nj_iis&quot;,
+    &quot;value&quot;: &quot;NJ96820&quot;
+  }
+]
+</code></pre></div>
+<p>(Similar, but slightly different from Nick Robison's approach with <code>http://usds.gov/vaccine/source-identifier</code>)</p>
+<ul>
+<li>
+<p>In many cases, we have "unknown" availability for a location. We handle that by having a slot with <code>0</code> capacity, but it’s a bit hacky. On the other hand, an original slot publisher should probably never need this kind of feature, so it might be aggregator-specific, and maybe not worth supporting directly in the spec.</p>
+</li>
+<li>
+<p>In many cases, we only know a location has (no) available appointments at some time in the future, so we can’t define a good slot time or capacity. For slot time, we currently just set <code>start</code> and <code>end</code> to cover an 8-hour period in the future, but it might be nice if those could just be omitted to indicate there’s capacity, but at no particular date.</p>
+</li>
+<li>
+<p>In many cases, we only know a location has &gt; 0 available slots, so we list a capacity of 1. CVS is doing something similar, but it might be nice if we had a way (maybe a different extension than capacity).</p>
+</li>
+</ul>
+<p>^ A lot of these issues are not cases we should expect a first-party slot publisher to encounter, or features we would not want to encourage them to use, so I also understand if we don’t think the spec should account for them. But I do think aggregators that use any non-SMART-Scheduling-Links sources will have trouble totally complying with the standard without something to address these.</p>
+
+
+
+<a name="235433248"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/235433248" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#235433248">(Apr 20 2021 at 23:45)</a>:</h4>
+<p>Thanks for this report <span class="user-mention" data-user-id="398591">@Rob Brackett</span>! A few quick thoughts and questions:</p>
+<blockquote>
+<p>We pull in data from a variety of sources that might not have an authoritative URI for identifiers, so if we don’t have one, we list the identifier’s system</p>
+</blockquote>
+<p>Great! In the case where you're aggregating data that originate through SMART Scheduling Links, you might also consider populating Meta.source with a URL pointing back to the base URL of the system where these data originated (e.g., "<a href="https://github.com/jmandel/wba-appointment-fetch/blob/gh-pages">https://github.com/jmandel/wba-appointment-fetch/blob/gh-pages</a>" for my sample data).</p>
+<blockquote>
+<p>In many cases, we have "unknown" availability for a location. </p>
+</blockquote>
+<p>I want to understand the intended semantics here. Is this for things like "source API is down right now, so we don't have any current data"? If so, it might be worth annotating the <em>schedule</em> rather than creating a placeholder slot.</p>
+<blockquote>
+<p>In many cases, we only know a location has (no) available appointments at some time in the future</p>
+</blockquote>
+<p>If there's no timing information known, we might again think about annotating the Schedule with this kind of information (e.g., a <code>some-availability</code> extension or a <code>no-availability</code> extension), since there's not much Slot-like to say.</p>
+<blockquote>
+<p>In many cases, we only know a location has &gt; 0 available slots, </p>
+</blockquote>
+<p>From an aggregator perspective, a workaround might be to populate a custom extension like <code>capacity-unknown</code> to indicate &gt;0; would want to be clear that original publishers shouldn't annotate slots this way, though. Alternatively, we could switch our estimates from valueInteger to valueRange (so there could be a lower and upper bound), or <code>capacity-min</code> and <code>capacity-max</code> extensions. I'm worried about providing too much sophistication here though.</p>
+
+
+
+<a name="235444246"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/235444246" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Brackett <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#235444246">(Apr 21 2021 at 02:18)</a>:</h4>
+<p>Oh, thanks for the <code>Meta.source</code> pointer. I remember seeing that earlier, and then totally forgot about it.</p>
+<blockquote>
+<blockquote>
+<p>In many cases, we have "unknown" availability for a location. </p>
+</blockquote>
+<p>I want to understand the intended semantics here. Is this for things like "source API is down right now, so we don't have any current data"? If so, it might be worth annotating the <em>schedule</em> rather than creating a placeholder slot.</p>
+</blockquote>
+<p>We actually have 2 flavors of unknown to represent some nuance here:</p>
+<ol>
+<li>We have no source (e.g. Dept. of Health knows about this location, but we don’t have a way to get detailed availability).</li>
+<li>Our data source broke in some way (API is down, message format changed so we can’t parse, etc.).</li>
+</ol>
+<p>Functionally, these are pretty similar for end users (there might be appointments, so you should check unless another location nearby has definite available slots). I think annotating the schedule would be totally reasonable in both cases (especially since either of these flavors of unknown might lead to us showing different, more generic schedules than we otherwise would — i.e. without product/dose info).</p>
+<p>There’s actually a related case this reminded me of that’s not handled well: walk-in clinics. They don’t really have any slots (or there might be walk-ins allowed in addition to the appointment slots), so we probably need something modeled on the schedule level. (In our other APIs, we’re only talking about COVID, so we can annotate this data on the location itself, but that’s probably not reasonable here.)</p>
+<blockquote>
+<blockquote>
+<p>In many cases, we only know a location has (no) available appointments at some time in the future</p>
+</blockquote>
+<p>If there's no timing information known, we might again think about annotating the Schedule with this kind of information (e.g., a <code>some-availability</code> extension or a <code>no-availability</code> extension), since there's not much Slot-like to say.</p>
+</blockquote>
+<p><span aria-label="thumbs up" class="emoji emoji-1f44d" role="img" title="thumbs up">:thumbs_up:</span></p>
+<blockquote>
+<p>From an aggregator perspective, a workaround might be to populate a custom extension like <code>capacity-unknown</code> to indicate &gt;0; would want to be clear that original publishers shouldn't annotate slots this way, though. Alternatively, we could switch our estimates from valueInteger to valueRange (so there could be a lower and upper bound), or <code>capacity-min</code> and <code>capacity-max</code> extensions. I'm worried about providing too much sophistication here though.</p>
+</blockquote>
+<p>The range is pretty neat, but I think you’re right; that’s getting unnecessarily complex.</p>
+
+
+
+<a name="236437921"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236437921" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Brackett <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236437921">(Apr 28 2021 at 01:56)</a>:</h4>
+<p><span class="user-mention" data-user-id="191315">@Josh Mandel</span> I begged off drafting spec language for these cases today, but I think I might have time to write them up tomorrow. Just to make sure we’re roughly on the same page:</p>
+<ol>
+<li>
+<p>Is it worth adding guidance about <code>Meta.source</code> to the spec? It’s already part of FHIR and is really only useful to aggregators, so it also seems fair if not.</p>
+</li>
+<li>
+<p>An extension for slots with a url like <code>"http://fhir-registry.smarthealthit.org/StructureDefinition/slot-capacity-unknown"</code>. It doesn’t need a <code>value[whatever]</code> field because the extension’s presence implies enough.</p>
+</li>
+<li>
+<p>Thinking about it more, I’m not sure <code>some-availability/no-availability</code> is especially useful. While the timeframe wouldn’t be completely honest, an agggregator could publish a coarse-timeframe slot (e.g. covering the next 14 days) with the above <code>slot-capacity-unknown</code> extension. That would cut down on too many special cases in the spec and I <em>think</em> be just as clear. (Downside: there’s some data savings in putting this info on the schedule, since we don’t need to publish <em>any</em> slots for these schedules.)</p>
+</li>
+</ol>
+<p>Since we want to be extra careful to discourage first-party publishers from using these features, would it be better to add an appendix or separate section for aggregators and put these there, rather than directly in with the definitions for Locations, Schedules, and Slots? (Should we be so strict as to say first-party slot publishers SHALL not use these?)</p>
+
+
+
+<a name="236438705"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236438705" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236438705">(Apr 28 2021 at 02:06)</a>:</h4>
+<p>Thanks <span class="user-mention" data-user-id="398591">@Rob Brackett</span>!  For (2) I just added <a href="https://github.com/smart-on-fhir/smart-scheduling-links/pull/35">https://github.com/smart-on-fhir/smart-scheduling-links/pull/35</a>  before I saw this. I'd rather use a valueBoolean to give you the option of explicitly saying "no" (but omitting it is of course fine if the aim is to say "we don't know")</p>
+
+
+
+<a name="236438858"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236438858" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Brackett <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236438858">(Apr 28 2021 at 02:09)</a>:</h4>
+<p>That’s covering (3) more than (2), right?</p>
+
+
+
+<a name="236438903"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236438903" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236438903">(Apr 28 2021 at 02:09)</a>:</h4>
+<p>For (1) I think you can just populate Meta.source as you see fit. Happy to take a PR if you want to put this together, as an optional field for aggregators. There's a question of whether to populate it with a server URL (e.g., <code>https://fhir.example.com</code>) or a specific resource URL (e.g., <code>https://fhir.example.com/Slot/123</code>). I think the full resource URL makes it easier to trace/debug, if the data are coming from a SMART Scheduling Links implementation.</p>
+
+
+
+<a name="236438983"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236438983" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236438983">(Apr 28 2021 at 02:10)</a>:</h4>
+<p>Oh yes, my PR was indeed about (3) :-)</p>
+
+
+
+<a name="236439033"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236439033" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236439033">(Apr 28 2021 at 02:11)</a>:</h4>
+<p>I like the idea of putting this into an "Appendix for Aggregators", for sure. We could move the has-availability extension there too  if you wind up putting a PR together for (1) or (2).</p>
+
+
+
+<a name="236439124"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236439124" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Brackett <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236439124">(Apr 28 2021 at 02:13)</a>:</h4>
+<p>I think I got a bit mixed up with (2). Thinking back, did we wind up at: it probably isn’t a good idea to directly support (2) in order to discourage publishers from doing it, and consumers should not worry about distinguishing between "capacity=1 really means &gt;0" and something that’s a real estimate?</p>
+
+
+
+<a name="236439143"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236439143" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Brackett <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236439143">(Apr 28 2021 at 02:13)</a>:</h4>
+<p>At least that’s where we were somewhere in the middle of the discussion. That was probably when Keith popped in. <span aria-label="wink" class="emoji emoji-1f609" role="img" title="wink">:wink:</span></p>
+
+
+
+<a name="236439284"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236439284" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236439284">(Apr 28 2021 at 02:16)</a>:</h4>
+<p>Yeah, that was where we got on the call -- I wouldn't mind having aggregator-specific guidance for this but don't think we'd want to trouble source publishers with it.</p>
+
+
+
+<a name="236439374"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236439374" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Brackett <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236439374">(Apr 28 2021 at 02:17)</a>:</h4>
+<p>OK, so nothing to add for (2). For <a href="https://github.com/smart-on-fhir/smart-scheduling-links/pull/35/files">https://github.com/smart-on-fhir/smart-scheduling-links/pull/35/files</a>, would you like me to update it by moving it to an aggregator’s appendix, or do that as a separate PR?</p>
+
+
+
+<a name="236439484"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236439484" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236439484">(Apr 28 2021 at 02:19)</a>:</h4>
+<p>Whatever is easiest for you! (The commit history won't be too complicated here.)</p>
+
+
+
+<a name="236439501"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236439501" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236439501">(Apr 28 2021 at 02:19)</a>:</h4>
+<p>Thanks for your help with this.</p>
+
+
+
+<a name="236439670"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236439670" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Brackett <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236439670">(Apr 28 2021 at 02:21)</a>:</h4>
+<p>No problem. :)</p>
+
+
+
+<a name="236439694"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236439694" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Brackett <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236439694">(Apr 28 2021 at 02:21)</a>:</h4>
+<p>Actually, since I don’t have write access, it’s probably better if I do the appendix as a follow-on PR.</p>
+
+
+
+<a name="236765541"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/281612-smart/scheduling-links/topic/Data%20quality/near/236765541" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/281612-smart/scheduling-links/topic/Data.20quality.html#236765541">(Apr 29 2021 at 23:59)</a>:</h4>
+<p>Thanks for the PR -- I still owe you a response (on my TODO list)</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

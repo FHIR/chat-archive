@@ -1,0 +1,115 @@
+---
+layout: page
+title: "FHIR Chat  · Tagging Batched/Included Resources · subscriptions"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/index.html">subscriptions</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Tagging.20Batched.2FIncluded.20Resources.html">Tagging Batched/Included Resources</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="247618930"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Tagging%20Batched/Included%20Resources/near/247618930" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> adam strickland <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Tagging.20Batched.2FIncluded.20Resources.html#247618930">(Jul 29 2021 at 17:57)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="222054">@Gino Canessa</span> , I've been thinking about the tagging scenarios we spoke about yesterday and had some ideas. Overall these are the scenarios we're trying to cover:</p>
+<ol>
+<li>Batching - where you send multiple events as a single notification</li>
+<li>Including - where you conduct _include directives for every notification and add to the notification</li>
+<li>Including and Batching at the same time!</li>
+</ol>
+<p>We're starting with the assumption that you cannot list a given resource more than once in a bundle, and so needing to reference a resource more than once in a bundle means you need to tag that resource somehow (I'm going with an <code>id-only</code> perspective for now, but unclear how more/less complex 'Full Resource' is).</p>
+<p>I have some ideas/examples in this <a href="https://gist.github.com/madaster97/0bdfd92c0ed336700c3db48aa84bf24c">gist</a> based on your focus/grouping examples. Let me know what you think.</p>
+
+
+
+<a name="247621041"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Tagging%20Batched/Included%20Resources/near/247621041" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Tagging.20Batched.2FIncluded.20Resources.html#247621041">(Jul 29 2021 at 18:14)</a>:</h4>
+<p>Hi Adam, thanks!  Though one of us has the logic backwards   =).  My understanding is:</p>
+<ul>
+<li>
+<p>The <code>focus</code> is needed if there are included resources.  E.g., if the focus is an Encounter, but additional Encounter instances are included, a receiver has no way of knowing which one triggered the notification.  Because this is a very lightweight addition, I am leaning towards making this 'always' instead of 'sometimes', in order to simplify usage.</p>
+</li>
+<li>
+<p>Tagging <code>Bundle.entry</code> with an event number is only needed if you are batching multiple events together (so that a receiver can tell which resource / resources belong to which event).  Since this is an 'advanced' scenario (e.g., a server that wants to batch requires additional logic anyway), I am leaning towards leaving this extension as 'optional'.</p>
+</li>
+</ul>
+<p>Does that sound correct?</p>
+
+
+
+<a name="247638719"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Tagging%20Batched/Included%20Resources/near/247638719" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> adam strickland <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Tagging.20Batched.2FIncluded.20Resources.html#247638719">(Jul 29 2021 at 20:44)</a>:</h4>
+<p>Yeah I accidentally flipped the logic compared to what you initially wrote, for 2 reasons:</p>
+<ol>
+<li>We need the <code>focus</code> for batched notifications, in the case where a single resource needs to be included more than once (IE, the focus of multiple events in the bundle). The resource would show up multiple times in the <code>focus</code>, but only once in the entry. Unclear how <code>focus</code> would handle versioning for <code>full resource</code> payload types though.</li>
+<li>If we insist on focus being present for batched notifications, we no longer need to tag focus entries with an event. We can know immediately that a resource was the topic for a specific event. We could then just use a tag when a resource was included, and for which event.</li>
+</ol>
+<p>I'm not sure if my re-structuring is any better <span aria-label="grinning" class="emoji emoji-1f600" role="img" title="grinning">:grinning:</span> . To clarify, in your scheme how do we indicate in a batch that a resource was the focus of more than 1 event?</p>
+
+
+
+<a name="247722040"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Tagging%20Batched/Included%20Resources/near/247722040" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> adam strickland <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Tagging.20Batched.2FIncluded.20Resources.html#247722040">(Jul 30 2021 at 15:19)</a>:</h4>
+<p>I think there's a third option as well. Instead of <code>focus</code> and entry-tagging as 2 separate handles, we could introduce 2 different entry tags:</p>
+<ol>
+<li>A <code>foucs-for-event</code> tag that tells you this was the focus of a given event, and could be repeated multiple times if  a resource was the focus of multiple</li>
+<li>An <code>included-for-event</code> tag that tells you this was included for a given event, and similarly could be repeated multiple times.</li>
+</ol>
+<p>I feel like having these 2 tags is generic enough for both the <code>id-only</code> and <code>full resource</code> use cases, since we don't have to figure out how to include versioning in the <code>focus</code> header.</p>
+
+
+
+<a name="247741264"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Tagging%20Batched/Included%20Resources/near/247741264" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Tagging.20Batched.2FIncluded.20Resources.html#247741264">(Jul 30 2021 at 17:55)</a>:</h4>
+<p>Yes, I think I like the two extensions better too.  To be clear, I <em>don't</em> like two extensions, just that it gives the best usability.  Also, if we get enough experience with them in R4, we may be able to propose adding them to R5 as STU elements on bundle instead of extensions (particularly if we make them generic enough).</p>
+<p>To that end, how do you feel about something like <code>focus-of-group</code> and <code>in-group</code>?</p>
+<p>edit: with the group being the event number in this case</p>
+
+
+
+<a name="247743068"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Tagging%20Batched/Included%20Resources/near/247743068" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Tagging.20Batched.2FIncluded.20Resources.html#247743068">(Jul 30 2021 at 18:09)</a>:</h4>
+<p>I think something like <code>subscription-notification-focus-for-event</code> and <code>subscription-notification-included-for-event</code> (or... something that adds words like "notification" or "event" that align with the concepts we define in our docs) would be good. (e.g., we have a property called <code>SubscriptionStauts.eventsInNotification</code>, and we should ideally re-use some of these words)</p>
+
+
+
+<a name="247743266"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Tagging%20Batched/Included%20Resources/near/247743266" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Tagging.20Batched.2FIncluded.20Resources.html#247743266">(Jul 30 2021 at 18:11)</a>:</h4>
+<p>Fair</p>
+
+
+
+<a name="247744193"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Tagging%20Batched/Included%20Resources/near/247744193" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Tagging.20Batched.2FIncluded.20Resources.html#247744193">(Jul 30 2021 at 18:20)</a>:</h4>
+<p>(To be clear, I'm not suggesting these super-long names directly; they're a bit of a mouthful ;))</p>
+
+
+
+<a name="247745344"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Tagging%20Batched/Included%20Resources/near/247745344" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Tagging.20Batched.2FIncluded.20Resources.html#247745344">(Jul 30 2021 at 18:29)</a>:</h4>
+<p>Yep - I was thinking about trying to name them in generic ways as a favor to 'future me', when I want to propose making them either standard extensions or trying to add a set to Bundle.  But in reality, that's irrelevant to the current use case so would be better to deal with in the future.</p>
+
+
+
+<a name="247767164"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Tagging%20Batched/Included%20Resources/near/247767164" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Steve Atwood <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Tagging.20Batched.2FIncluded.20Resources.html#247767164">(Jul 30 2021 at 21:57)</a>:</h4>
+<p>FWIW, I feel like some of the awkwardness here stems from the fact that the Bundle is trying to represent a collection of "events" along with related resources, but there isn't actually a great representation of the event itself.  For my implementation, we are internally using the AuditEvent resource type to model the actual event itself, which provides a natural grouping structure since it can include a list of references to the "focus" resource as well as any related resources.  This also allows us to capture additional metadata about the event itself (rather than the focus resource) such as timestamp, event id, etc.  Admittedly, AuditEvent is a bit heavy, has too many required fields, and is not really optimized for this use case, but just wanted to put that out there as food for thought.  I feel like the lack of a structure to separate the "event" from the "resource" is part of the challenge here.</p>
+
+
+
+<a name="247772504"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Tagging%20Batched/Included%20Resources/near/247772504" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Tagging.20Batched.2FIncluded.20Resources.html#247772504">(Jul 30 2021 at 23:16)</a>:</h4>
+<p>That's interesting. Do you have examples (or could you sketch one) of how you use AuditEvent to represent a focus + related other resources?</p>
+
+
+
+<a name="248915219"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Tagging%20Batched/Included%20Resources/near/248915219" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Steve Atwood <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Tagging.20Batched.2FIncluded.20Resources.html#248915219">(Aug 09 2021 at 22:09)</a>:</h4>
+<p><span class="user-mention" data-user-id="191315">@Josh Mandel</span> sorry for the slow response - was on vacation last week.  I mocked up a fake example of a subscription bundle with AuditEvent payload here:  <a href="https://pastebin.com/15SqXM1V">https://pastebin.com/15SqXM1V</a> .  The "entity" array provides a way to group multiple resource references for the single event and the "entity.role" allows us to identify the role played by each resource.  I also like that the FHIR reference data type used in "entity.what" offers flexibility to use a "logical identifier" (e.g. patient SSN in my fake example) for scenarios where we don't have a literal reference to a resolvable FHIR resource but still want to convey some useful information for the recipient to look up that entity by some other means (FHIR or non-FHIR).</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

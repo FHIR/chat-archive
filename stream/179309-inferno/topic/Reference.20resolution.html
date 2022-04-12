@@ -1,0 +1,159 @@
+---
+layout: page
+title: "FHIR Chat  · Reference resolution · inferno"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/index.html">inferno</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html">Reference resolution</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="264172565"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264172565" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264172565">(Dec 08 2021 at 15:35)</a>:</h4>
+<p>Most data classes in Inferno have a "Every reference within &lt;ResourceName&gt; resources can be read" test.  For example, USCAI-09, USCCT-09, etc.</p>
+<p>I'm thinking about submitting an Inferno issue on this, but wanted a little discussion first, since at first glance, this sort of validation seems reasonable.  However, here are some reasons why I think it isn't an obviously correct validation to do:</p>
+<p><strong>Dynamic scope selection</strong><br>
+ With dynamic scope selection, patients might deselect a scope that covers a reference.  In that case, servers have two options: 1) dynamically hide references to resources that are not scoped or 2) return the references, but fail due to scope authorization checks when that reference is resolved.</p>
+<p><strong>Contextual support</strong><br>
+Some systems might support some resource types in some contexts (e.g. user/ or system/), but not in other contexts (e.g., patient/).  Similar to dynamic scoping, the server can either dynamically hide references that are not supported in a given context, or return those references, but fail when the client attempts to resolve them.</p>
+<p>For both of these cases there is a "data leakage" consideration.  Including a reference at all imparts knowledge of its existence to the client, even if the client can't retrieve the reference.  However, in many cases that knowledge is not really sensitive (a client inferring that a Patient resource exists because DiagnosticReport has a reference to Patient that doesn't resolve isn't really a major info leak).</p>
+<p>So folks have opinions about whether we should remove or reduce the reference resolution checks for Inferno Program sequences?</p>
+
+
+
+<a name="264174067"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264174067" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264174067">(Dec 08 2021 at 15:44)</a>:</h4>
+<p>Hiding references might make the resource invalid</p>
+
+
+
+<a name="264174286"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264174286" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264174286">(Dec 08 2021 at 15:46)</a>:</h4>
+<p>Inferno knows about which scope have been selected so it should not try to resolve references to resource types that have not been authorized</p>
+
+
+
+<a name="264188112"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264188112" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Stephen MacVicar <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264188112">(Dec 08 2021 at 17:17)</a>:</h4>
+<p>I think these are largely non-issues because the reference resolution tests run in a specific context where Inferno must have received authorization to access all of the USCDI resources. If Inferno can't access everything that is in USCDI, then it can't say that a system meets the g10 criteria.</p>
+<p>The way the reference resolution tests work is that Inferno tries to read every reference in the resources it's received. If Inferno is unable to read a reference to a USCDI resource, the test will fail. The test will not fail if Inferno is unable to read a reference to a non-USCDI resource. If Inferno is failing a reference resolution test because it can't read a non-USCDI resource, that's a bug and you should let us know.</p>
+<p>There is a separate set of tests for a user dynamically denying specific scopes. Those tests are very basic and don't follow any references. You should not dynamically deny scopes for the main set of tests.</p>
+
+
+
+<a name="264189366"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264189366" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264189366">(Dec 08 2021 at 17:26)</a>:</h4>
+<p>Do Inferno tests only try to read references to USCDI resources? How does it know if a reference is to a USCDI resource  vs. a non-USCDI resource)?  My understanding is that it is trying to read all references.  But even if it were trying to only read references for resources that are used for USCDI data classes, some resources (e.g. Observation) may be USCDI or not USCDI depending on what the actual Observation is.</p>
+
+
+
+<a name="264192986"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264192986" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Stephen MacVicar <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264192986">(Dec 08 2021 at 17:49)</a>:</h4>
+<p>It tries to read them all, but if it fails on a reference which it can determine is a non-USCDI resource, then that failure is ignored. You created a github issue about this which we addressed: <a href="https://github.com/onc-healthit/inferno-program/issues/330">https://github.com/onc-healthit/inferno-program/issues/330</a></p>
+
+
+
+<a name="264216912"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264216912" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Yunwei Wang <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264216912">(Dec 08 2021 at 20:39)</a>:</h4>
+<p>Here is a list of resource that Inferno request for read permission: </p>
+<div class="codehilite"><pre><span></span><code>Patient, AllergyIntolerance, CarePlan, CareTeam, Condition, Device, DiagnosticReport, DocumentReference,
+Encounter, Goal, Immunization, Location, Medication, MedicationRequest, Observation, Organization,
+Practitioner, PractitionerRole, Procedure, Provenance, RelatedPerson, Person
+</code></pre></div>
+<p>Most of them are USCDI related and the last two are SMART id token related.</p>
+<p>If server does not grant these permission, Inferno could not run certain tests which is bigger problem than reference check. For example, if server does not grant <code>patient/Condition.read</code>, then Inferno cannot run <code>USCC-01</code>. Similarly, if server does not grant <code>(patient|user)/Organization.read</code>, then Inferno cannot test <code>USCO-01</code>.  So the tester must set the request scope correctly to ensure the following tests could run.</p>
+<p>After server grants permission to all these resources, then server should allow reference read to these resource types.</p>
+<p>For reference to FHIR resource types other than the above listed, Inferno does not fail the test even if server reject reference read. For example, ServiceRequest is not in the list. So it is nice if server returns 200 but it is also ok if server returns 40x.</p>
+<p>When we say "USCDI resources", what we mean is "FHIR resource types mapped to USCDI data elements in US Core section 2.1.1.1"</p>
+<p>It doesn't matter if a specific Observation category is USCDI related or not since SMART grants permission on resource level at least in SMART v1.  If <code>patient/Observation.read</code> is granted, Inferno should be able to read any Observation for this patient, USCDI observation or not.</p>
+
+
+
+<a name="264220628"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264220628" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264220628">(Dec 08 2021 at 21:08)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191506">Yunwei Wang</span> <a href="#narrow/stream/179309-inferno/topic/Reference.20resolution/near/264216912">said</a>:</p>
+<blockquote>
+<p>It doesn't matter if a specific Observation category is USCDI related or not since SMART grants permission on resource level. If <code>patient/Observation.read</code> is granted, Inferno should be able to read any Observation for this patient, USCDI observation or not.</p>
+</blockquote>
+<p>I don't think this is necessarily true.  Inferno should be able to read any (most?) Observations that contains USCDI content, but if we have an Observation for eye-color, that isn't USCDI, so it seems like it should be fine for the server to prevent Inferno from reading that Observation.  This discussion is very much related to the fine-grained scope problem that SMARTv1 has.  Because SMARTv1 only has resource-level scopes, Epic had to implement a different tier of API scoping internally.  Basically, we let the patient select scopes based on our targeted scopes, then we "dumb down" those scopes to the SMARTv1 scopes when we send them over the wire.  We've spent a lot of time making sure this approach is compatible with SMARTv1 and g10 (i.e. we commented on the proposed rule to make sure this was allowed).</p>
+<p>I'm realizing that I probably didn't think hard enough when we were looking at <a href="https://github.com/onc-healthit/inferno-program/issues/330">Issue 330</a>.  But I do think it is reasonable that a FHIR server may not allow you to have access to an specific Observation resource, even if you have a SMARTv1 scope for it.</p>
+<p>Another example is a sensitive data.  If a provider flags a data element as "do not share with patient" due to an individualized patient-harm assessment, then even though the patient approved the overall scope covering that resource, the server may very well block access to it.  And if exposing the fact that the reference exists isn't a data leak, then it seems fine to have a reference to a USCDI resource that is not resolvable.</p>
+
+
+
+<a name="264225569"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264225569" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert Scanlon <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264225569">(Dec 08 2021 at 21:48)</a>:</h4>
+<p>Right, SMART gives broad authority to servers to deny access using its own internal rules, and mappings to SMART scopes may be crude. Just because <code>patient/Observation.read</code> is granted it doesn't mean the system has to provide all observations tagged to the patient.</p>
+
+
+
+<a name="264226256"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264226256" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Yunwei Wang <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264226256">(Dec 08 2021 at 21:54)</a>:</h4>
+<p>Hmm. Interesting. I didn't know that. Learn something new everyday. <span aria-label="grinning face with smiling eyes" class="emoji emoji-1f601" role="img" title="grinning face with smiling eyes">:grinning_face_with_smiling_eyes:</span></p>
+
+
+
+<a name="264226416"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264226416" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert Scanlon <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264226416">(Dec 08 2021 at 21:55)</a>:</h4>
+<p>Just in the name of completeness in your example, which US Core profiled-resource is referencing the eye color Observation?</p>
+
+
+
+<a name="264229408"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264229408" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264229408">(Dec 08 2021 at 22:19)</a>:</h4>
+<p>Eye color is just the typical example I've heard for random Observation data.  It isn't something we actually work with.  More real-world set of examples would Observations for Lines/Drains/Airways/Wounds, or Obstetric Details like lactation status, etc.  Those don't currently have US Core profiles.</p>
+
+
+
+<a name="264308871"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264308871" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert Scanlon <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264308871">(Dec 09 2021 at 14:29)</a>:</h4>
+<p>So this may be extremely obvious, so I hesitate to ask, but exactly which US Core profiled Resource type (and reference element within that type) is referencing those Observation Lines/Drains/Airways/Wounds in those cases for you?</p>
+
+
+
+<a name="264311144"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264311144" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert Scanlon <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264311144">(Dec 09 2021 at 14:45)</a>:</h4>
+<p>We view this as more of a failure to meet the pre-condition of the test (please test against patient records where the bearer token is given access to everything you are referencing), and not that you are doing anything invalid necessarily.  But we really should try to keep those types of pre-conditions to a minimum to make this as broadly useful as possible.  And make it more clear that is why the test is failing.</p>
+
+
+
+<a name="264311712"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264311712" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert Scanlon <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264311712">(Dec 09 2021 at 14:49)</a>:</h4>
+<p>I know it is theoretically possible for this to come up (e.g. Procedure.partOf can point to an Observation), but at the time we figured it would be unlikely that real situations would come up, which is why we were thinking "if it does come up, well, just test against different data, or authenticate with a user with very broad permissions".  But the fact you are bringing this up makes me think we should back off on this further and downgrade it to a warning or informational (as long as it isn't a MUST SUPPORT element, maybe).</p>
+
+
+
+<a name="264319503"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264319503" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264319503">(Dec 09 2021 at 15:45)</a>:</h4>
+<p>Yeah, the thing we are nervous about is the idea that there is a clear "fence" around USCDI content.  We have a lot of USCDI and non-USCDI content mixed together, and we think that is a <em>good</em> thing.  If we have to do work to segregate all the non-USCDI content, that would be a bunch of work on our part that we think would really only apply to contrived certification contexts.</p>
+<p>The interesting thing about references is that the more FHIR resources (and references between them) a system supports, the more likely those are to be populated (though with authorization and possibly contextual support).  So as the interoperability capabilities of a system increases, the ability to pass the Inferno reference checks can decrease <span aria-label="grinning" class="emoji emoji-1f600" role="img" title="grinning">:grinning:</span>.</p>
+<p>And I'm kinda dodging your question about LDAs for the moment.  We're currently reviewing the references we're failing, and I want to get that done so I can provide an accurate list of what is actually causing us problems.  I started this thread once we knew we were having issues, but I didn't come armed with fully fleshed out examples, so I've been providing theoretical examples rather than real-world examples.  We do have real world examples, I just don't have them yet.</p>
+
+
+
+<a name="264319823"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264319823" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264319823">(Dec 09 2021 at 15:47)</a>:</h4>
+<blockquote>
+<p>the thing we are nervous about is the idea that there is a clear "fence" around USCDI content. We have a lot of USCDI and non-USCDI content mixed together, and we think that is a good thing.</p>
+</blockquote>
+<p>I agree with this so strongly, <span class="user-mention" data-user-id="191764">@Cooper Thompson</span> .</p>
+
+
+
+<a name="264319950"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264319950" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264319950">(Dec 09 2021 at 15:48)</a>:</h4>
+<p>It's important that conformance testing be careful to avoid <em>slowing</em> or <em>impairing</em> open standards-based access to data (e.g., by unintentionally penalizing implementations for going beyond basic requirements).</p>
+
+
+
+<a name="264332631"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179309-inferno/topic/Reference%20resolution/near/264332631" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert Scanlon <a href="https://fhir.github.io/chat-archive/stream/179309-inferno/topic/Reference.20resolution.html#264332631">(Dec 09 2021 at 17:08)</a>:</h4>
+<p>No disagreement here, the last thing I want is to have a negative impact on data sharing.  As always, I appreciate the feedback so we can address it in the tests, instead of modifying your system for the worse.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

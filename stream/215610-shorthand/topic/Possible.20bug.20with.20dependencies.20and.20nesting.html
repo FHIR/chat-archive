@@ -1,0 +1,119 @@
+---
+layout: page
+title: "FHIR Chat  · Possible bug with dependencies and nesting · shorthand"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/index.html">shorthand</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Possible.20bug.20with.20dependencies.20and.20nesting.html">Possible bug with dependencies and nesting</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="216789359"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Possible%20bug%20with%20dependencies%20and%20nesting/near/216789359" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Reynolds <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Possible.20bug.20with.20dependencies.20and.20nesting.html#216789359">(Nov 15 2020 at 12:22)</a>:</h4>
+<p>Nesting after creating an instance from a dependency results in the following error:</p>
+<div class="codehilite"><pre><span></span><code>Cannot read property &#39;length&#39; of undefined
+</code></pre></div>
+<p>Repro:</p>
+<ul>
+<li>create a tank with a Profile (let's call it the "profile" tank)</li>
+<li>run the publisher on the "profile" tank (to get a local package)</li>
+<li>create another tank (let's call it the "instance" tank) and add a dependency to the "profile" tank (using dev to get the local "profile" package)</li>
+<li>add an Instance to the "instance" tank with an InstanceOf the Profile from the "profile" tank</li>
+<li>build the "instance" tank with sushi</li>
+</ul>
+<p>The result is the above error.  Using sushi v0.16.0.</p>
+<p>Code for a Repro:<br>
+"profile" tank:</p>
+<div class="codehilite"><pre><span></span><code>Profile: ReproPlanDefinition
+Parent: PlanDefinition
+</code></pre></div>
+<p>"instance" tank:</p>
+<div class="codehilite"><pre><span></span><code>Instance: ReproPlanDefinitionInstance
+InstanceOf: ReproPlanDefinition
+* status = #draft
+* action.title = &quot;Repro Title&quot;
+* action.action[0].title = &quot;Repro SubTitle One&quot;
+* action.action[1].title = &quot;Repro SubTitle Two&quot;
+//explicit index on the action doesn&#39;t fix
+* action[1].title = &quot;Repro Title&quot;
+* action[1].action[0].title = &quot;Repro SubTitle One&quot;
+* action[1].action[1].title = &quot;Repro SubTitle Two&quot;
+</code></pre></div>
+<p>result:</p>
+<div class="codehilite"><pre><span></span><code>error Cannot read property &#39;length&#39; of undefined
+  File: C:\src\fsh-sandbox\SandboxContentIG\fsh\ReproPlanDefinitionInstance.fsh
+  Line: 5
+error Cannot read property &#39;length&#39; of undefined
+  File: C:\src\fsh-sandbox\SandboxContentIG\fsh\ReproPlanDefinitionInstance.fsh
+  Line: 6
+error Cannot read property &#39;length&#39; of undefined
+  File: C:\src\fsh-sandbox\SandboxContentIG\fsh\ReproPlanDefinitionInstance.fsh
+  Line: 9
+error Cannot read property &#39;length&#39; of undefined
+  File: C:\src\fsh-sandbox\SandboxContentIG\fsh\ReproPlanDefinitionInstance.fsh
+  Line: 10
+error Cannot read property &#39;length&#39; of undefined
+</code></pre></div>
+<p>Also, when you do the same thing in a single tank, it doesn't error.<br>
+add to the "instance" tank:</p>
+<div class="codehilite"><pre><span></span><code>Profile: WorkaroundPlanDefinition
+Parent: PlanDefinition
+
+Instance: WorkaroundPlanDefinitionInstance
+InstanceOf: WorkaroundPlanDefinition
+* status = #draft
+* action.title = &quot;Workaround Title&quot;
+* action.action[0].title = &quot;Workaround SubTitle One&quot;
+* action.action[1].title = &quot;Workaround SubTitle Two&quot;
+* action[1].title = &quot;Workaround Title&quot;
+* action[1].action[0].title = &quot;Workaround SubTitle One&quot;
+* action[1].action[1].title = &quot;Workaround SubTitle Two&quot;
+</code></pre></div>
+<p>result: no errors</p>
+
+
+
+<a name="216903592"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Possible%20bug%20with%20dependencies%20and%20nesting/near/216903592" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Kramer <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Possible.20bug.20with.20dependencies.20and.20nesting.html#216903592">(Nov 16 2020 at 17:27)</a>:</h4>
+<p>The dependencies rely on npm packages. I don't know that FSH has a way to specify a dependency to a local directory.</p>
+
+
+
+<a name="216905934"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Possible%20bug%20with%20dependencies%20and%20nesting/near/216905934" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Possible.20bug.20with.20dependencies.20and.20nesting.html#216905934">(Nov 16 2020 at 17:44)</a>:</h4>
+<p>If you've built the project using the IG Publisher locally, it should put the <code>dev</code> version into the local FHIR cache and SUSHI <em>should</em> be able to pick it up if the dependency version is specified as <code>dev</code>.  Tagging <span class="user-mention" data-user-id="239822">@Nick Freiter</span> to confirm (and see if he has any ideas what might be going on here).</p>
+
+
+
+<a name="216932952"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Possible%20bug%20with%20dependencies%20and%20nesting/near/216932952" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Possible.20bug.20with.20dependencies.20and.20nesting.html#216932952">(Nov 16 2020 at 21:13)</a>:</h4>
+<blockquote>
+<p>I don't know that FSH has a way to specify a dependency to a local directory</p>
+</blockquote>
+<p>if you do, you should do it the same way as the java tools - the version is a file name. See <a href="https://docs.npmjs.com/cli/v6/configuring-npm/package-json#local-paths">https://docs.npmjs.com/cli/v6/configuring-npm/package-json#local-paths</a></p>
+
+
+
+<a name="217061054"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Possible%20bug%20with%20dependencies%20and%20nesting/near/217061054" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Nick Freiter <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Possible.20bug.20with.20dependencies.20and.20nesting.html#217061054">(Nov 17 2020 at 20:52)</a>:</h4>
+<p>Looked into this, and it seems like it wasn't a problem with dependencies, but rather an issue with how we handled <code>contentReference</code> elements (<code>PlanDefinition.action.action</code> in this case). The definition generated by the Publisher was using a slightly different format for a <code>contentReference</code> than the format we have been assuming in SUSHI. I've added a fix <a href="https://github.com/FHIR/sushi/pull/671">here</a>, so once that is merged and released this should no longer be an issue. Thanks for the report!</p>
+
+
+
+<a name="217515583"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Possible%20bug%20with%20dependencies%20and%20nesting/near/217515583" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Reynolds <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Possible.20bug.20with.20dependencies.20and.20nesting.html#217515583">(Nov 21 2020 at 19:40)</a>:</h4>
+<p>That fixed it!  Thank you!</p>
+
+
+
+<a name="217936700"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Possible%20bug%20with%20dependencies%20and%20nesting/near/217936700" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Possible.20bug.20with.20dependencies.20and.20nesting.html#217936700">(Nov 25 2020 at 20:41)</a>:</h4>
+<p><span class="user-mention" data-user-id="217210">@Rob Reynolds</span> -- this fix was just released in SUSHI version 1.0.2.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

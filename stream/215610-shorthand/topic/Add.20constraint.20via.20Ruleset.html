@@ -1,0 +1,61 @@
+---
+layout: page
+title: "FHIR Chat  · Add constraint via Ruleset · shorthand"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/index.html">shorthand</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Add.20constraint.20via.20Ruleset.html">Add constraint via Ruleset</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="244728337"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Add%20constraint%20via%20Ruleset/near/244728337" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Simone Heckmann <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Add.20constraint.20via.20Ruleset.html#244728337">(Jul 02 2021 at 16:43)</a>:</h4>
+<p>We have a situation where we need to add Constraints that do length checks to a lot of fields. The length varies, so we'd need to create a lot of different invariants for a lot of different length. <br>
+So the idea was to just use a RuleSet instead an let it create inline invariants with dynamic length like this:</p>
+<div class="codehilite" data-code-language="BBCode"><pre><span></span><code>RuleSet: assertLength (length)
+* ^constraint.human = "Value must be shorter than {length}"
+* ^constraint.expression = "length({length})"
+* ^constraint.severity = #error
+
+Profile: Test
+Parent: Patient
+Id: Test
+Title: "Test"
+Description: ""
+* name.family
+  * insert assertLength(10)
+</code></pre></div>
+<p>However, this gives an error: <br>
+<code>A rule that does not use a path cannot be indented to indicate context. The rule will be processed as if it is not indented.</code><br>
+Adding the indentation to the RuleSet instead returns<br>
+<code>Errors parsing insert rule with parameterized RuleSet assertLength</code><br>
+<code>- The first rule of a definition cannot be indented. The rule will be processed as if it is not indented.</code></p>
+<p>I'm at a loss. How can I create a RuleSet that adds lines relative to the current path of where the RuleSet is inserted...?</p>
+
+
+
+<a name="244733597"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Add%20constraint%20via%20Ruleset/near/244733597" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Nick Freiter <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Add.20constraint.20via.20Ruleset.html#244733597">(Jul 02 2021 at 17:26)</a>:</h4>
+<p>Support for creating a RuleSet that adds rules relative to the path of an <code>insert</code> rule was only added in the most recent release of SUSHI, <a href="https://github.com/FHIR/sushi/releases/tag/v2.0.0-beta.2">SUSHI 2.0.0-beta.2</a>. In that version, you can indent an <code>insert</code> rule to give it context. </p>
+<p>However, there is actually a bug we've just learned of today in this <a href="#narrow/stream/215610-shorthand/topic/Caret.20paths.20in.20.22deeply.20inserted.22.20rulesets">thread</a> which prevents application of an <code>insert</code> rules path when the rules that path is being applied to are <code>^</code> rules without a path (as is the case in your example). So unfortunately SUSHI 2.0.0-beta.2 won't quite work in that case just yet. We have a fix for it in progress <a href="https://github.com/FHIR/sushi/pull/866">here</a>, but it likely won't be until next week that we can release a new version of SUSHI that fixes this bug. </p>
+<p>There is a workaround you can use that <span class="user-mention" data-user-id="217988">@Martin Höcker</span> displays in this <a href="#narrow/stream/215610-shorthand/topic/Caret.20paths.20in.20.22deeply.20inserted.22.20rulesets">thread</a>, and that is to treat the path as another input to the <code>RuleSet</code>. So here is how that looks for the example you gave:</p>
+<div class="codehilite"><pre><span></span><code>RuleSet: assertLength (path, length)
+* {path} ^constraint.human = &quot;Value must be shorter than {length}&quot;
+* {path} ^constraint.expression = &quot;length({length})&quot;
+* {path} ^constraint.severity = #error
+
+Profile: Test
+Parent: Patient
+Id: Test
+Title: &quot;Test&quot;
+Description: &quot;&quot;
+* insert assertLength(name.family, 10)
+</code></pre></div>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,86 @@
+[
+    {
+        "content": "<p>Hi there,</p>\n<p>I'm not sure which is the best stream to ask this, but I am implementing my own storage mechanism in fhir, and I'm trying to work out the best way to deal with some data my users have questioned me about.</p>\n<p>The system I work on reads csv data and transforms it into fhir, such that each observation in the csv becomes one fhir resource.  I've made up an example here which is less convoluted than the actual case I'm trying to fix:</p>\n<p>I have a csv file provided which contains identifiers and date of birth for various patients.  In the column for DOB, they occasionally have a code for missing, the problem is that they have multiple classifications for missing (e.g. certificate destroyed, Not given, Unknown).  They would like to keep these orders of missing, rather than just mapping everything to null, as it's more informative to the analysts.  The problem I'm having is that in this case, DOB is a date, whilst the missing values are instances of code/coding/codeableconcept (yet to decide), meaning that I can't store them at Patient.birthDate.  I know I can create an extension for patient which stores this information, but because of the nature of where I read my data, any column of the csv file could contain exception codes like this, therefore any address in the fhir resource could be an exception code.  This would mean that my extension would also need to contain the xpath of the property.</p>\n<p>Is there a better approach to this?  My main problem with this approach is that it's a lot of indirection when I come to export the data (the program looks in the resource for the element it wants, if it's null, it then has to look through all extensions until it finds one with a corresponding xpath), I'm pretty worried about the performance of modelling it like this, as a typical data extract for me contains in the region of  millions to billions of resources.</p>",
+        "id": 153920403,
+        "sender_full_name": "Andrew Broadbent",
+        "timestamp": 1511195523
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192995\">@Andrew Broadbent</span>, you might consider using a FHIR Data Absent Reason extension: <a href=\"http://www.hl7.org/fhir/extension-data-absent-reason.html\" target=\"_blank\" title=\"http://www.hl7.org/fhir/extension-data-absent-reason.html\">http://www.hl7.org/fhir/extension-data-absent-reason.html</a></p>",
+        "id": 153920406,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1511196946
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191393\">@Igor Sirkovich</span> Is there any chance you could provide a basic example of its usage?  I'm not really clear on how you relate it to the property which is missing.</p>",
+        "id": 153920407,
+        "sender_full_name": "Andrew Broadbent",
+        "timestamp": 1511197457
+    },
+    {
+        "content": "<p>If you are using JSON, have a look at <a href=\"http://www.hl7.org/fhir/json.html#primitive\" target=\"_blank\" title=\"http://www.hl7.org/fhir/json.html#primitive\">http://www.hl7.org/fhir/json.html#primitive</a> to see how to handle extensions on the primitive data types (e.g. date)</p>",
+        "id": 153920408,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1511197470
+    },
+    {
+        "content": "<p>For example, if you don't know DoB, in JSON, you might have <br>\n \"_birthDate\": {<br>\n   \"extension\" : [ {<br>\n      \"url\" : \"<a href=\"http://hl7.org/fhir/StructureDefinition/data-absent-reason\" target=\"_blank\" title=\"http://hl7.org/fhir/StructureDefinition/data-absent-reason\">http://hl7.org/fhir/StructureDefinition/data-absent-reason</a>\",<br>\n      \"valueCode\" : \"not-asked\"<br>\n   }]</p>",
+        "id": 153920409,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1511197602
+    },
+    {
+        "content": "<p>In XML, this would be<br>\n &lt;birthDate&gt;<br>\n   &lt;extension url=\"<a href=\"http://hl7.org/fhir/ValueSet/data-absent-reason\" target=\"_blank\" title=\"http://hl7.org/fhir/ValueSet/data-absent-reason\">http://hl7.org/fhir/ValueSet/data-absent-reason</a>\"&gt;<br>\n     &lt;valueCode value=\"not-asked\"/&gt;<br>\n   &lt;/extension&gt;<br>\n &lt;/birthDate&gt;</p>",
+        "id": 153920410,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1511197679
+    },
+    {
+        "content": "<p>Since the binding to the Value Set (<a href=\"http://www.hl7.org/fhir/valueset-data-absent-reason.html\" target=\"_blank\" title=\"http://www.hl7.org/fhir/valueset-data-absent-reason.html\">http://www.hl7.org/fhir/valueset-data-absent-reason.html</a>) is required, but might not satisfy your requirements, you might need to define your own extension, which would be similar to this standar one, but will bind to your own terminology.</p>",
+        "id": 153920411,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1511197793
+    },
+    {
+        "content": "<p>Oh!  I did not realise that dates (and other types) could be extended themselves, ok that makes more sense now.</p>",
+        "id": 153920412,
+        "sender_full_name": "Andrew Broadbent",
+        "timestamp": 1511197840
+    },
+    {
+        "content": "<p>I think this is more of a hapi issue, I've posted a separate discussion in there, but it's worth a try here.</p>\n<p>When I upload a resource that contains a birth date like <span class=\"user-mention\" data-user-id=\"191393\">@Igor Sirkovich</span>  suggested to a hapi database, it is accepted, but when I request the resource back, the birth date is missing.  This is the same functionality of when I upload a property with a null value (and no extension).  I'm assuming that hapi trims all properties which have a null value?</p>",
+        "id": 153921017,
+        "sender_full_name": "Andrew Broadbent",
+        "timestamp": 1511357324
+    },
+    {
+        "content": "<p>Not sure if this might be a question for <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span></p>",
+        "id": 153921018,
+        "sender_full_name": "Andrew Broadbent",
+        "timestamp": 1511357356
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192995\">@Andrew Broadbent</span> This should absolutely work.. I just had a look with the example you emailed me though and I see the same behaviour you do<br>\n One sec, let me try in a unit test</p>",
+        "id": 153921047,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1511364830
+    },
+    {
+        "content": "<p>This has been fixed.</p>",
+        "id": 153921211,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1511402981
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span>  Can I just confirm what version it was fixed in?  I'm running 2.6-snapshot of the jpa-example-server.</p>",
+        "id": 153921303,
+        "sender_full_name": "Andrew Broadbent",
+        "timestamp": 1511448977
+    },
+    {
+        "content": "<p>I've just pulled latest from the hapi-fhir repo.  I'm running 3.0.0, after uploading the following, I get this back:</p>\n<p>&lt;Patient xmlns=\"<a href=\"http://hl7.org/fhir\" target=\"_blank\" title=\"http://hl7.org/fhir\">http://hl7.org/fhir</a>\"&gt;<br>\n    &lt;extension url=\"<a href=\"https://purl.org/elab/fhir/network/StructureDefinition/1/BirthWeight\" target=\"_blank\" title=\"https://purl.org/elab/fhir/network/StructureDefinition/1/BirthWeight\">https://purl.org/elab/fhir/network/StructureDefinition/1/BirthWeight</a>\"&gt;<br>\n       &lt;valueDecimal&gt;<br>\n          &lt;extension url=\"<a href=\"http://www.hl7.org/fhir/extension-data-absent-reason.html\" target=\"_blank\" title=\"http://www.hl7.org/fhir/extension-data-absent-reason.html\">http://www.hl7.org/fhir/extension-data-absent-reason.html</a>\"&gt;<br>\n             &lt;valueCoding&gt;<br>\n                &lt;system value=\"http://hl7.org/fhir/ValueSet/birthweight\"/&gt;<br>\n                &lt;code value=\"Underweight\"/&gt;<br>\n                &lt;userSelected value=\"false\"/&gt;<br>\n             &lt;/valueCoding&gt;<br>\n          &lt;/extension&gt;<br>\n       &lt;/valueDecimal&gt;<br>\n    &lt;/extension&gt;<br>\n    &lt;identifier&gt;<br>\n       &lt;system value=\"https://purl.org/elab/fhir/network/StructureDefinition/1/EuroPrevallStudySubjects\"/&gt;<br>\n       &lt;value value=\"1\"/&gt;<br>\n    &lt;/identifier&gt;<br>\n    &lt;gender value=\"female\"/&gt;<br>\n &lt;/Patient&gt;</p>\n<p>{<br>\n    \"resourceType\": \"Patient\",<br>\n    \"id\": \"187\",<br>\n    \"text\": {<br>\n      \"status\": \"generated\",<br>\n      \"div\": \"&lt;div xmlns=\\\"http://www.w3.org/1999/xhtml\\\"&gt;&lt;table class=\\\"hapiPropertyTable\\\"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;Identifier&lt;/td&gt;&lt;td&gt;1&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;\"<br>\n    },<br>\n    \"extension\": [<br>\n      {<br>\n        \"url\": \"<a href=\"https://purl.org/elab/fhir/network/StructureDefinition/1/BirthWeight\" target=\"_blank\" title=\"https://purl.org/elab/fhir/network/StructureDefinition/1/BirthWeight\">https://purl.org/elab/fhir/network/StructureDefinition/1/BirthWeight</a>\"<br>\n      }<br>\n    ],<br>\n    \"identifier\": [<br>\n      {<br>\n        \"system\": \"<a href=\"https://purl.org/elab/fhir/network/StructureDefinition/1/EuroPrevallStudySubjects\" target=\"_blank\" title=\"https://purl.org/elab/fhir/network/StructureDefinition/1/EuroPrevallStudySubjects\">https://purl.org/elab/fhir/network/StructureDefinition/1/EuroPrevallStudySubjects</a>\",<br>\n        \"value\": \"1\"<br>\n      }<br>\n    ],<br>\n    \"gender\": \"female\"<br>\n  }</p>\n<p>It still seems to be missing the actual contents of the extension in 3.0.0?</p>",
+        "id": 153921306,
+        "sender_full_name": "Andrew Broadbent",
+        "timestamp": 1511451247
+    }
+]

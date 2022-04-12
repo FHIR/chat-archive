@@ -1,0 +1,438 @@
+---
+layout: page
+title: "FHIR Chat  · JWS for authenticating FHIR resources · Security and Privacy"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/index.html">Security and Privacy</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html">JWS for authenticating FHIR resources</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="254598901"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254598901" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254598901">(Sep 23 2021 at 20:22)</a>:</h4>
+<p>Work in SMART Health Cards has given us some experience creating JWS signatures over FHIR bundles. It'd be nice to have similar capabilities of signing over any resource that a REST API server returns, to make data verifiable when re-sharing downstream. There are some practical challenges though...</p>
+<p><a href="https://hackmd.io/1LG5WJfcTnGP8JtYIAAyFA">https://hackmd.io/1LG5WJfcTnGP8JtYIAAyFA</a> has a brief write-up re: working with JWS in FHIR Signatures. No show-stoppers but it's a bit awkward. Issues include:</p>
+<ul>
+<li>Mandatory fields in the <code>Signature</code> datatype (<code>when</code>, <code>who</code>) overlap with JWS claims and aren't authenticated; why require non-authenticated elements, when they can get out of sync with the authenticated claims?</li>
+<li>Same story for <code>Provenance.agent</code> if the only purpose for a Provenance resource is to convey a signature</li>
+<li>Data needs to be base64binary, but a JWS is already encoded as a string (base64url segments separated by <code>.</code>), so this creates overhead and potential confusion</li>
+</ul>
+<p>Have others thought through some of these issues? (I have a proposal for a "cheap hack" alternative at the bottom of the doc ;-))</p>
+
+
+
+<a name="254649249"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254649249" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eric Haas <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254649249">(Sep 24 2021 at 04:30)</a>:</h4>
+<p>I was just going to ask about this topic...  Where is your  "Work in SMART Health Cards has given us some experience creating JWS signatures over FHIR bundles" documented.</p>
+
+
+
+<a name="254649568"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254649568" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eric Haas <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254649568">(Sep 24 2021 at 04:35)</a>:</h4>
+<p>did the same issues you document above apply to bundle.signature...?</p>
+
+
+
+<a name="254700514"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254700514" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254700514">(Sep 24 2021 at 13:09)</a>:</h4>
+<p>Josh, I would love to discuss these. Seems these are questions againt the Signature datatype? Or is this questions about how to do JWS signatures over bundles? --- Note I want both. <br>
+I will respond expecting these are questions against the Signature datatype.</p>
+
+
+
+<a name="254701518"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254701518" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254701518">(Sep 24 2021 at 13:15)</a>:</h4>
+<p>The elements in Signature are NOT expected to be covered by the non-repudiation of the signature. They are there in FHIR format using FHIR datatypes to make them easy to understand. For those use-cases that need to confirm they are valid, it is expected they will be in the signature blob. This is true of XML-Signatures, and as you note they are also inside the JWS content. Thus for someone needing non-repudiation, they should use the values inside the signature blobs. <br>
+Note that there is a comment on these elements indicating that "This should agree with the information in the signature."<br>
+Note that the comment on the Signature element indicates that " <br>
+The elements of the Signature Resource are for ease of access of these elements. For digital signatures (Xml DigSig, JWS), the non-repudiation proof comes from the Signature validation, which includes validation of the referenced objects (e.g. Resources) (a.k.a., Content) in the XML-Signature Detached form."<br>
+This should likely be more prominent, as today it is only viewable when hovering over "Signature" or clicking on "Signature"</p>
+
+
+
+<a name="254701879"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254701879" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254701879">(Sep 24 2021 at 13:17)</a>:</h4>
+<p>the data element.... Yes, we likely should figure out a better and more friendly way to do this.  We didn't have much experience to base our datatype choice, and base64Binary is always going to be safe. But as you point out it is a bit inconvenient.</p>
+
+
+
+<a name="254703294"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254703294" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254703294">(Sep 24 2021 at 13:27)</a>:</h4>
+<p><span class="user-mention" data-user-id="191315">@Josh Mandel</span> it seems a bigger problem to me. For a start, where is the JSON canonicalization method?</p>
+
+
+
+<a name="254703333"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254703333" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254703333">(Sep 24 2021 at 13:27)</a>:</h4>
+<p><a href="http://build.fhir.org/datatypes.html#JSON">http://build.fhir.org/datatypes.html#JSON</a> ?</p>
+
+
+
+<a name="254703447"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254703447" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254703447">(Sep 24 2021 at 13:28)</a>:</h4>
+<p>no. <a href="http://build.fhir.org/json.html#canonical">http://build.fhir.org/json.html#canonical</a></p>
+
+
+
+<a name="254703513"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254703513" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254703513">(Sep 24 2021 at 13:28)</a>:</h4>
+<p>Why do you put the JWS in the resource, and not in an http header?</p>
+
+
+
+<a name="254703722"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254703722" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254703722">(Sep 24 2021 at 13:30)</a>:</h4>
+<p>are we discussing the Signature datatype, or the JWS signature method? I think they are both needed, but different.</p>
+
+
+
+<a name="254703885"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254703885" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254703885">(Sep 24 2021 at 13:31)</a>:</h4>
+<p>well, I want to talk about the JWS itself first, because I want to know why Signature is relevant, and what the purpose of the signature is</p>
+
+
+
+<a name="254710117"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254710117" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254710117">(Sep 24 2021 at 14:09)</a>:</h4>
+<p>Sorry for the shorthand, when I wrote canonicalization I meant specifically <a href="https://datatracker.ietf.org/doc/rfc8785/">https://datatracker.ietf.org/doc/rfc8785/</a></p>
+
+
+
+<a name="254710274"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254710274" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254710274">(Sep 24 2021 at 14:10)</a>:</h4>
+<p>(this is a scheme with pretty broad library support and of course it is standardized.)</p>
+
+
+
+<a name="254710612"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254710612" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254710612">(Sep 24 2021 at 14:12)</a>:</h4>
+<p>(the signatures could go in a resource or in a header or wherever. A challenge with headers in particular is that we don't have a good way to represent arbitrary headers in a bundle response today, so if I'm getting a bundle of resources back from a batch or a search, I don't have a way to provide specific headers for each one.)</p>
+
+
+
+<a name="254721359"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254721359" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254721359">(Sep 24 2021 at 15:21)</a>:</h4>
+<p>do you need a signature for each resource in a bundle?</p>
+
+
+
+<a name="254721432"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254721432" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254721432">(Sep 24 2021 at 15:21)</a>:</h4>
+<p>And you missed the point with canonicalization. The question is what parts of the resource are you signing?</p>
+
+
+
+<a name="254735800"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254735800" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254735800">(Sep 24 2021 at 16:52)</a>:</h4>
+<p>I think it's pretty important for a lot of use cases to be able to mix and match resources; so if I do a search for all labs to pull data into a consumer app, I would like to have individual signatures on them so I can decide to share subsets of labs downstream.</p>
+
+
+
+<a name="254735952"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254735952" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254735952">(Sep 24 2021 at 16:53)</a>:</h4>
+<p>For canonicalization, I don't have firm answers. My initial thought was just to include the full resource contents except for of course the element that contains the signature (whether that's a contained province resource or a tag or whatever -- details TBD). The idea would be if I'm giving you this resource together with a signature, there is some well-specified and not extremely complicated set of steps you can follow to verify the signature.</p>
+
+
+
+<a name="254736131"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254736131" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254736131">(Sep 24 2021 at 16:54)</a>:</h4>
+<p>(of course with fhir graphs, the whole story of signatures across links is very complicated. I'm not trying to do anything on this front right now. This is a place where rdf might shine... But it's a problem I'm trying to avoid for now.)</p>
+
+
+
+<a name="254846850"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254846850" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eric Haas <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254846850">(Sep 25 2021 at 15:10)</a>:</h4>
+<p>I think what <span class="user-mention" data-user-id="191404">@John Moehrke</span> is / has suggesting it  wrap whatever you want in a signature envelope and point to the binary with docref.  Instead of the target type. Forget about bundle.sig  or provenance  or some meta element.  I may be misrepresenting him so I welcome his feedback.</p>
+
+
+
+<a name="254972602"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254972602" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254972602">(Sep 26 2021 at 23:54)</a>:</h4>
+<blockquote>
+<p>share subsets with signatures</p>
+</blockquote>
+<p>Well, you've got complicated right there. Have you got any references for other protocols doing anything like that?</p>
+
+
+
+<a name="254976597"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/254976597" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#254976597">(Sep 27 2021 at 00:57)</a>:</h4>
+<p>It's just a set of signed resources -- if you attach signature to each, you allow the recipient to select and re-share whatever subset they like. Of course many protocols do more complicated things (e.g., ISO mobile driver's license signs a set of hashes, so then you can selectively reveal a subset of pre-images).</p>
+
+
+
+<a name="255038426"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255038426" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255038426">(Sep 27 2021 at 12:23)</a>:</h4>
+<p>The technology for signing can support anything you want. However each signing methodology has strengths and weaknesses. Eric is referring to the strength of a document signature, that is a signature where the thing being signed is fully self-contained, thus not relying on references to outside stuff. When you have a signature relying on references to outside resources, you have the risk that what you are pointing at is either originally wrong, or in the future wrong. With partial signatures, excluding the signature element from the signature because you need to put the signature blob there later, you leave room for unsigned elements to be inserted. Encapsulating signatures are handy when you know that all uses of the data must validate the signature first, where as detached signatures are more handy when the signatures are only needed occasionally. etc...</p>
+
+
+
+<a name="255038904"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255038904" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255038904">(Sep 27 2021 at 12:27)</a>:</h4>
+<p>I look forward to the JWS signature method used in the vaccine credential to be made more broadly usable. I like it for use-cases where all/most uses of the data have business rules need to validate the signature. They should also inspect the signature element for unexpected elements.</p>
+
+
+
+<a name="255040135"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255040135" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255040135">(Sep 27 2021 at 12:37)</a>:</h4>
+<p>I think the topic is moving toward signatures that are intentionally sub-sets of the data. Possible, but warning I think this will add risks and complexity that will not be justified by the use-cases. A blind prediction, yes. One based on many years of seeing gleam in geek eyes only to have reality kill the elegant solution due to overwhelming administrative overhead and complexity. (I worked on the project that digitally signed the original USA e-Sign act back in 2000) -- as one can imagine, stopping this with a prediction is neither possible or good. Yes, you can have many signatures in the blob, but they each must be a full signature including the exclusions. each with a who/what/when/why that can standalone.</p>
+
+
+
+<a name="255097811"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255097811" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eric Haas <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255097811">(Sep 27 2021 at 18:34)</a>:</h4>
+<p>I’m just saying use the Smart vaccine passport model  for any FHIR payload as envelope anything that needs to be signed…you want it signed? Fine, here it is but you get it as a docref reference binary where the payload is the FHIR object. I’m no authority but signing something that contains the signature is hard to get my head around.</p>
+
+
+
+<a name="255099752"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255099752" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255099752">(Sep 27 2021 at 18:47)</a>:</h4>
+<p>Signing something that contains the signature is straight-forward.  All that matters is that the canonicalization for the signature excludes the signature element.  You don't want to turn the data into a binary because that makes it difficult/impossible to use with search.  It also locks it into a single syntax, and there are times when you might need to share the content in alternative syntaxes.</p>
+
+
+
+<a name="255102692"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255102692" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255102692">(Sep 27 2021 at 19:05)</a>:</h4>
+<p>the problem with all this is that if you're signing subsets of data you assembled from elsewhere, then you might have to fiddle the ids for integrity, and the integrity of the links is exactly what you're trying to convey onwards</p>
+
+
+
+<a name="255102758"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255102758" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255102758">(Sep 27 2021 at 19:05)</a>:</h4>
+<p>signing linked pieces means you must hash the ids.</p>
+
+
+
+<a name="255106069"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255106069" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255106069">(Sep 27 2021 at 19:28)</a>:</h4>
+<p>correct. If you are signing individual Resources, you likely need to exclude other things like the .id and .meta.. once you start excluding these things you are getting less and less value out of the signature.</p>
+
+
+
+<a name="255107264"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255107264" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255107264">(Sep 27 2021 at 19:36)</a>:</h4>
+<p>My initial question was about the ergonomics of Signature to convey a JWS over a single Resource version  in real-world usage. This might be a non-goal for Signature</p>
+
+
+
+<a name="255107935"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255107935" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255107935">(Sep 27 2021 at 19:40)</a>:</h4>
+<p>I'll probably proceed with prototyping based on JWS in <a href="http://meta.security">meta.security</a>; will continue to share experience here.</p>
+
+
+
+<a name="255108014"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255108014" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255108014">(Sep 27 2021 at 19:41)</a>:</h4>
+<p>anything is possible. There is certainly a theory where all Create/Update will have a calculated signature added to the Provenance for that version. In this case I would expect the signature would cover THAT instance. In that case it does not need to exclude anything.</p>
+
+
+
+<a name="255108262"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255108262" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255108262">(Sep 27 2021 at 19:43)</a>:</h4>
+<p>so you are looking to add a signature element as an extension on .meta.security that covers the rest of the resource?</p>
+
+
+
+<a name="255108316"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255108316" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255108316">(Sep 27 2021 at 19:43)</a>:</h4>
+<p>I am still not clear on what it is you are trying to achieve. i think I understand how you are achieving it, but I don't know what "it" is that you are accomplishing.</p>
+
+
+
+<a name="255113562"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255113562" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255113562">(Sep 27 2021 at 20:19)</a>:</h4>
+<p>"it" is providing a JWS to authenticate an individual FHIR resource. And yes, I'm looking at one approach which is to provide it in-line, so the approach can work with any method of sharing a FHIR resource (without depending on any specific envelope or package context).</p>
+
+
+
+<a name="255113678"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255113678" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255113678">(Sep 27 2021 at 20:20)</a>:</h4>
+<p>as long as it is retrieved in json</p>
+
+
+
+<a name="255113860"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255113860" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255113860">(Sep 27 2021 at 20:21)</a>:</h4>
+<p>but what do you think the signature is conveying? if all you want is a hash, that is different than a signature. A signature needs to have a WHO signed it, WHY did they sign it, WHEN did they sign it...etc... all have a purpose. Hence why signature is not just a cryptographic hash, hence why I ask what you are trying to achieve.</p>
+
+
+
+<a name="255113993"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255113993" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255113993">(Sep 27 2021 at 20:22)</a>:</h4>
+<p>I fear, you are a kid with a tool, and you want to hit everything you can see with this tool (aka hammer).</p>
+
+
+
+<a name="255114521"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255114521" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255114521">(Sep 27 2021 at 20:26)</a>:</h4>
+<p>I am not saying I object to a signature being in the header of every resource. But I am unclear on why it should be there, who would put it there, when would it be put there, who is expected to validate it, what should be allowed to change without breaking the signature... etc... all things that a use-case analysis would define.</p>
+
+
+
+<a name="255114612"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255114612" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255114612">(Sep 27 2021 at 20:27)</a>:</h4>
+<p>Thanks :-) I want to convey information according to the JWT data model -- minimally the ability for a consuming application to pass along a non-repudiable authenticated resource such that a receiving party knows that it hasn't been altered since the intermediary received it.</p>
+
+
+
+<a name="255114641"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255114641" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255114641">(Sep 27 2021 at 20:27)</a>:</h4>
+<p>note if you had this use-case analysis, it would be good to assess this on a general Proveance use... then, I think you are just looking for contained Provenance with signature.</p>
+
+
+
+<a name="255114690"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255114690" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255114690">(Sep 27 2021 at 20:27)</a>:</h4>
+<p>Not saying this is "in every resource" -- just saying that it's a common need and convenient to have an approach for.</p>
+
+
+
+<a name="255114768"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255114768" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255114768">(Sep 27 2021 at 20:28)</a>:</h4>
+<p>I tried the contained Provenance with signature; that's what the majority of my write-up was focused on.</p>
+
+
+
+<a name="255114776"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255114776" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255114776">(Sep 27 2021 at 20:28)</a>:</h4>
+<p>well, this broad set of use-cases are why Provenance.signature exists</p>
+
+
+
+<a name="255114886"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255114886" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255114886">(Sep 27 2021 at 20:29)</a>:</h4>
+<p>I was concerned with the ergonomics and the risk of conveying unauthenticated copies of signature metadata that are already in the JWS (it creates an opportunity for confusion if the values inside and outside are discordant).</p>
+
+
+
+<a name="255115029"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255115029" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255115029">(Sep 27 2021 at 20:30)</a>:</h4>
+<p>are you refering to the Signature elements?</p>
+
+
+
+<a name="255115057"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255115057" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255115057">(Sep 27 2021 at 20:30)</a>:</h4>
+<p>Correct</p>
+
+
+
+<a name="255115216"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255115216" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255115216">(Sep 27 2021 at 20:31)</a>:</h4>
+<p>they (.type, .when, .who, .onBehalfOf) are there for the convienence of the app that understands FHIR... and doesn't want to have to call upon a signature processing system. BUT they are not to be held as trusted, if you need the trustable who/what/where/why, then you must look inside the signature.</p>
+
+
+
+<a name="255115349"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255115349" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255115349">(Sep 27 2021 at 20:32)</a>:</h4>
+<p>these elements are useful to apps, especially those that will use a signature service to give a YES/NO on the signature.</p>
+
+
+
+<a name="255115365"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255115365" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255115365">(Sep 27 2021 at 20:32)</a>:</h4>
+<p>I'm just saying I wish they were optional</p>
+
+
+
+<a name="255115388"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255115388" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255115388">(Sep 27 2021 at 20:33)</a>:</h4>
+<p>Because I'd like to be able to profile them out</p>
+
+
+
+<a name="255115407"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255115407" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255115407">(Sep 27 2021 at 20:33)</a>:</h4>
+<p>well, put in a CR.</p>
+
+
+
+<a name="255115467"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255115467" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255115467">(Sep 27 2021 at 20:33)</a>:</h4>
+<p>I will; it'll also cover Provenance.agent</p>
+
+
+
+<a name="255115483"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255115483" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255115483">(Sep 27 2021 at 20:33)</a>:</h4>
+<p>this is exactly why Signature is STU.</p>
+
+
+
+<a name="255115567"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255115567" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255115567">(Sep 27 2021 at 20:34)</a>:</h4>
+<p>how do you have any useful Provenance without an agent?</p>
+
+
+
+<a name="255115777"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255115777" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255115777">(Sep 27 2021 at 20:35)</a>:</h4>
+<p>in your CR, please explain. as so far we struggle with any useful Provenance without a "WHO".</p>
+
+
+
+<a name="255115904"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255115904" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255115904">(Sep 27 2021 at 20:36)</a>:</h4>
+<p>similarly, a signature without a reason for the signature, a timestamp, and a signer.... without these you just have a checksum</p>
+
+
+
+<a name="255116027"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255116027" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255116027">(Sep 27 2021 at 20:37)</a>:</h4>
+<p>remember, some apps still use XML... so forcing them to have json capability just to read your JWS is not helpful.</p>
+
+
+
+<a name="255116060"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255116060" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255116060">(Sep 27 2021 at 20:37)</a>:</h4>
+<p>that is why these elements exist in Signature</p>
+
+
+
+<a name="255116460"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255116460" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255116460">(Sep 27 2021 at 20:40)</a>:</h4>
+<p>I am not discouraging you, just trying to get the 'persuasive' argument in the CR rather than not.</p>
+
+
+
+<a name="255116468"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255116468" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255116468">(Sep 27 2021 at 20:41)</a>:</h4>
+<p>I'll explain in the CR -- essentially all the semantics are already covered in the JWS including the who.</p>
+
+
+
+<a name="255116506"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255116506" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255116506">(Sep 27 2021 at 20:41)</a>:</h4>
+<p>but not if I ask for XML FHIR</p>
+
+
+
+<a name="255116542"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255116542" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255116542">(Sep 27 2021 at 20:41)</a>:</h4>
+<p>or CSV FHIR</p>
+
+
+
+<a name="255116734"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255116734" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255116734">(Sep 27 2021 at 20:43)</a>:</h4>
+<p>the replication is for the convenience of the preferred mime-type of the requester. JWS is only friendly to those that like json. Those that like JWS can ignore the values in these elements, and go right to the JWS.</p>
+
+
+
+<a name="255122236"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255122236" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255122236">(Sep 27 2021 at 21:20)</a>:</h4>
+<p>The point is that in this scheme, the other properties would be unreliable. It's not a question of what you like or what you don't, but a question of what you can count on as authentic. Absolutely within this kind of scheme there is a design choice that limits scope of usage. But it also provides a simplified developer experience, or at least it should. That's the nature of the trade-off.</p>
+
+
+
+<a name="255237797"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179247-Security%20and%20Privacy/topic/JWS%20for%20authenticating%20FHIR%20resources/near/255237797" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179247-Security-and-Privacy/topic/JWS.20for.20authenticating.20FHIR.20resources.html#255237797">(Sep 28 2021 at 15:39)</a>:</h4>
+<p>Submitted <a href="http://jira.hl7.org/browse/FHIR-34021">FHIR-34021</a></p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

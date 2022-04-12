@@ -1,0 +1,86 @@
+[
+    {
+        "content": "<p>We are running into a rather unexpected issue that we need some guidance on. The situation:</p>\n<ol>\n<li>I authenticate myself with a care provider (not SMART on FHIR, but that is irrelevant)</li>\n<li>\n<p>I send a query to the domain with my OAuth token:<br>\n     GET <a href=\"http://domain.nl/fhir/Resource\">http://domain.nl/fhir/Resource</a></p>\n</li>\n<li>\n<p>As response I receive:<br>\n    Content-location: <a href=\"http://someotherdomain.nl/Resource\">http://someotherdomain.nl/Resource</a></p>\n<p>&lt;Bundle with link and fullUrl pointing to <a href=\"http://someotherdomain.nl/\">someotherdomain.nl/</a>&gt;</p>\n</li>\n</ol>\n<p>My questions:</p>\n<ul>\n<li>\n<p>How am I to understand the identity of the resources contained in the response? It would seem that the only possible response is that the resources belong to a server I never authenticated with (<a href=\"http://someotherdomain.nl\">someotherdomain.nl</a>). Relative reference are thus to be understood relative to Content-location (if present)?</p>\n</li>\n<li>\n<p>If I authenticate with FHIR facade/proxy X: should the facade then be allowed to reroute me to an unknown secondary server that allows me to bypass that same facade/proxy upon subsequent requests? </p>\n</li>\n<li>\n<p>Should I assume this next server understands the same security context that I was in at the facade/proxy?</p>\n</li>\n</ul>",
+        "id": 200883592,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1592225049
+    },
+    {
+        "content": "<p>I would expect that when you try to GET those resources at <a href=\"http://someotherdomain.nl\">someotherdomain.nl</a> you will need to satisfy THAT domain's security / privacy needs. It is possible that is the same security, or might be aligned security in a federation, or might be totally different.</p>",
+        "id": 200887669,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1592227227
+    },
+    {
+        "content": "<p>In the IHE cases of federations, one would get a Bundle of resources from <a href=\"http://domain.nl\">domain.nl</a>; and these resources might have elements that point at <a href=\"http://someotherdomain.nl\">someotherdomain.nl</a>.  That is to say that it would be unusual to query <a href=\"http://domain.nl\">domain.nl</a> and get back a Bundle containing Resources with .id located at <a href=\"http://someotherdomain.nl\">someotherdomain.nl</a>.  So it seems you have something more like a api gateway proxy that is not re-writing the resources to the api gateway location (<a href=\"http://domain.nl\">domain.nl</a>).</p>",
+        "id": 200888456,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1592227625
+    },
+    {
+        "content": "<p>do you think they are expecting you to continue to address <a href=\"http://domain.nl\">domain.nl</a> when trying to retrieve the resources at <a href=\"http://someotherdomain.nl\">someotherdomain.nl</a>?</p>",
+        "id": 200888520,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1592227662
+    },
+    {
+        "content": "<p>Well, if one has a FHIR gateway of sorts that just (without any persistence layer of its own) routes requests to multiple backend servers and bundles the responses, that just means that the requester would have to know that there is a gateway that acts as a (security-) proxy to the systems it represents. I would not assume you'd get access to <a href=\"http://someotherdomain.nl\">someotherdomain.nl</a> at all. That after all is what the proxy is for. <br>\nBu what's new? Bundles have always had the capability contain resources that may have fullURLs that point to multiple different servers, so to me this sounds like an extension of that mechanism.</p>",
+        "id": 200889224,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1592228025
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span> rewriting is indeed not done here which is why we're considering how that works out. In IHE XDS/MHD using FHIR Documents everything is contained in the Bundle so there would no need to go back to any secondary system based on fullUrl or reference (my assumption). I believe IHE XDS/MHD has an edge here in those cases. Otherwise you are in my boat exactly. If the proxy at <a href=\"http://domain.nl\">domain.nl</a> would rewrite the Bundle we would not have these questions. However: what would you rewrite to if the proxy serves multiple back-ends with potential overlapping resource ids? Would it not be costly to really rewrite a potentially large Bundle?</p>\n<p>Another thing is that while Content-location is in the HTTP standard, there is no explicit reference in the FHIR API to it. I think it would help here. Maybe a ticket is in order?</p>\n<p><span class=\"user-mention\" data-user-id=\"191372\">@René Spronk</span> This is a MedMij DVZA talking to a care provider back end (XIS). You authenticate with the DVZA as proxy for a care provider based on a domain on a white list. When you then get data from an unknown domain (i.e. not white listed) with no know relationship to that same care provider, the security implication on the client side is also unknown. Why did I get data from <a href=\"http://someotherdomain.nl\">someotherdomain.nl</a>? Do the same policies apply? Am I still talking to the same care provider here?</p>",
+        "id": 200896219,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1592231266
+    },
+    {
+        "content": "<p>(related) What if a care provider has multiple systems that support FHIR APIs ? Are they then allowed to use different server URLs or does MedMij force them to use one single server URL?</p>",
+        "id": 200897436,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1592231776
+    },
+    {
+        "content": "<p>Not entirely sure, but it seems the latter. MedMij Afsprakenstelsel only recognizes DVZA/Gegevensdienst, not the backend care provider systems. On the other hand: DVZA operates under responsibility of the care provider, so logically speaking it does not matter. It's just that the location (url) is hard to match against the logical entity</p>",
+        "id": 200903007,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1592234197
+    },
+    {
+        "content": "<p>if we look at a specific use-case, such as a patient specific CarePlan. This CarePlan resource will point at many other resources that have been contributed to the CarePlan from various  locations. Thus I would expect a CarePlan to have many divergent resource pointers. These contributions would all be published within different resource servers. (For example the surgery published in the resource server of the surgery center, physical therapy in the resource server at the physical therapy site, patient contrutions such as regular home measurements of blood presure published in the patient specific (or device specific) resource server. <br>\nIf I query on the CarePlan and ask for _include; would the results be pulled from the other resource server and included in the one bundle?<br>\nIf this is done, would provenance be clear? If this is done, would access control be clear? If this is done would audit logging represent facts of who got access?</p>",
+        "id": 200911542,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1592237798
+    },
+    {
+        "content": "<blockquote>\n<p>If I query on the CarePlan and ask for _include; would the results be pulled from the other resource server and included in the one bundle?</p>\n</blockquote>\n<p>I expect so if the CarePlan server respects _include (which is server discretion afaik)</p>\n<blockquote>\n<p>If this is done, would provenance be clear? </p>\n</blockquote>\n<p>I'd expect fullUrls pointing to different sources. Would that satisfy this question or would you expect inclusion of a Provenance resource?</p>\n<blockquote>\n<p>If this is done, would access control be clear?</p>\n</blockquote>\n<p>If the server respects my _include, it can only do so if my security context that allowed me access to the CarePlan, holds for the things it points to as well?</p>\n<blockquote>\n<p>If this is done would audit logging represent facts of who got access?</p>\n</blockquote>\n<p>Good question... if the CarePlan server queried the third party systems for the _include data, you could probably preserve original context. In practice I'd expect that for the third party systems it's as if the CarePlan system requests data on its own?</p>",
+        "id": 200912324,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1592238184
+    },
+    {
+        "content": "<p>understood.. note that I twisted the orginal question into a specific example where I could see a proxy service could act as a front-door for many respositories... This might not be the case originally... But I feel more concrete is sometimes more clear to discuss.</p>",
+        "id": 200912585,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1592238311
+    },
+    {
+        "content": "<p>so, I agree that the _include implementation would be dependent on lots of things... hence why it is a good example of why one would get a bundle with multiple sourced resources.</p>",
+        "id": 200912709,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1592238362
+    },
+    {
+        "content": "<p>and even in the CarePlan case, there is not guarantee that to pull an instance of an Observation that is referenced by the CarePlan will succeed as a direct GET or as a query to that resource server.</p>",
+        "id": 200912858,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1592238446
+    },
+    {
+        "content": "<p>this careplan example has been tested at multiple FHIR Connectathons, so they might have experience. <span class=\"user-mention\" data-user-id=\"191990\">@Emma Jones</span> <span class=\"user-mention\" data-user-id=\"193282\">@Bo Dagnall</span> ?</p>",
+        "id": 200913039,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1592238540
+    }
+]

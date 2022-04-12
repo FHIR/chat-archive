@@ -1,0 +1,279 @@
+---
+layout: page
+title: "FHIR Chat  · messaging and subscriptions · subscriptions"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/index.html">subscriptions</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html">messaging and subscriptions</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="234334571"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234334571" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234334571">(Apr 13 2021 at 14:26)</a>:</h4>
+<p>If one subscribes to a stream of FHIR messages, MessageHeader.eventUri will be equal to SubscriptionTopic.url . (1) I'm not sure what the impact of 'payload types' would be in case of messaging (<a href="http://build.fhir.org/subscription.html#payloads">http://build.fhir.org/subscription.html#payloads</a>).. (2) what will the messaging trigger events be for the various kinds of subscription messages (heartbeat, event-notification,..) (3) in case of an event-notification, we'll have a Bundle (of type message) which contains a Bundle (of type subscription-notification) which contains a series of Bundles (for individual messages related to the event one subscribes to). Right?</p>
+
+
+
+<a name="234348255"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234348255" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234348255">(Apr 13 2021 at 15:28)</a>:</h4>
+<p>So far, we have looked at FHIR Messaging as another envelope around the notification data.  So a message bundle would have a normal subscription notification bundle as the contents.  In that light:</p>
+<ol>
+<li>The contents of the notification bundle match what the subscription asked for (e.g., MessageBundle.entry[1].entry[0] is a Subscription status, other contents of that bundle are defined by the subscription).</li>
+<li>I would assume this depends on the messaging implementation.  E.g., if you have a generic event such as <code>subscription-notification</code>, it would likely use that same event for all message types.  If the events are broken down to be more granular, that should work just as well.</li>
+<li>Almost - as it stands now there would be generally only be two levels.  The outer bundle is the FHIR Messaging bundle, and it contains one (or more) subscription notification bundles, which may contain other resources.  It is possible that the notification is another bundle, but so far implementations have the resources in that bundle directly (e.g., it may have multiple encounters, but the are just entries 1..n).</li>
+</ol>
+<p>There is an example in the build, <a href="http://build.fhir.org/notification-message-id-only.html">Notification-message-id-only</a> that shows a FHIR Message bundle containing a subscription notification bundle that is set to the 'id-only' payload type.  I plan to add more examples as well, and PRs are welcome =).</p>
+
+
+
+<a name="234417824"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234417824" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vassil Peytchev <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234417824">(Apr 13 2021 at 23:30)</a>:</h4>
+<p>I think René's question is the opposite of using a FHIR Messaging as an envelope. Since FHIR Subscription is designed for resources available through the RESTfull API, I don't think it's appropriate to (ab)use it for "a stream of FHIR messages".</p>
+
+
+
+<a name="234449725"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234449725" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234449725">(Apr 14 2021 at 06:52)</a>:</h4>
+<p><span class="user-mention" data-user-id="192685">@Vassil Peytchev</span> The subscription mechanism in FHIR, like almost all functionality, should not be REST specific in any way shape or form. REST is not required by FHIR, and also not for subscriptions.</p>
+<p>However, you are correct in that the current mechanism (with a heartbeat, with messages encapsulated in subscription notification bundles) is effectively a port of something that works well in a REST environment [my kudos for the work in R5] to messaging. The diagram in section <a href="http://build.fhir.org/subscription.html#messaging">http://build.fhir.org/subscription.html#messaging</a> even mentions $process-message, so its author did assume that we'd use REST as a transport. With messaging one can't assume any specific transport protocol. The diagram also assumes that the subscription is done using REST, and that responses/notifications will be messages. Why would one have to mix paradigms? </p>
+<p>For messaging I'd propose the following (taking a pure message based viewpoint on things):</p>
+<ol>
+<li>Send a subscription-request message (focal resource: Subscription, additional resources: related to any parameters one uses in the Subscription resource) to a FHIR Server [using whatever transport]</li>
+<li>Server sends an 'subscription-accept' application acknowledgement back to the sender of the subscription request (focus: Subscription, additional resources: OperationOutcome in case of issues). Note that MessageHeader already contains a reference to OperationOutcome)</li>
+</ol>
+<p>Note that 1 and 2 may be implicit, in that the configuration as to what system subscribes to which events may be done manually on the server, as is typically the case with messaging today. Message 1 can also be used by the client to update the status of the subscription (e.g. set to 'off')</p>
+<ol start="3">
+<li>If and when the server changes the status of the subscription [not at the subscribers request], it sends a 'subscription-status-notification' (focal resource: SubscriptionStatus)</li>
+<li>Upon an event, the server sends a message-bundle, with MessageHeader.eventUri set to SubscriptionTopic.url, and with SubscriptionStatus as one of the resources in the message body (but not as a focal resource) - No bundles of messages please, batching isn't terribly popular when it comes to messages.  </li>
+</ol>
+<p>We shouldn't forget that messaging already has an ack mechanism, and error handling, and meta information related to the event. As such there's no need for SubscriptionStatus to be the focus of a notification bundle.  </p>
+<p>Key point: messaging isn't REST, so porting a solution that works well for REST to messaging isn't necessarily the best way to move forward.</p>
+
+
+
+<a name="234488635"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234488635" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234488635">(Apr 14 2021 at 12:24)</a>:</h4>
+<p>I think the subscription mechanism is a fine way for a recipient to identify as wanting a messaging feed. IHE did this in the PMIR profile for a patient history feed.</p>
+
+
+
+<a name="234488701"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234488701" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234488701">(Apr 14 2021 at 12:25)</a>:</h4>
+<p><a href="https://www.ihe.net/uploadedFiles/Documents/ITI/IHE_ITI_Suppl_PMIR.pdf">https://www.ihe.net/uploadedFiles/Documents/ITI/IHE_ITI_Suppl_PMIR.pdf</a></p>
+
+
+
+<a name="234488949"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234488949" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234488949">(Apr 14 2021 at 12:27)</a>:</h4>
+<p>IHE also expects that sometimes configuration (not subscription) will be used to identify message recipients. Adding the subscription is a nice automation to the very manual process of configuring a messaging web.</p>
+
+
+
+<a name="234550552"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234550552" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234550552">(Apr 14 2021 at 18:29)</a>:</h4>
+<p>Rene, this is great feedback!  It looks to me that you are "filling out" more of the Messaging description - I am by no means an expert at FHIR Messaging, so was leaning on phrases like "An example workflow" (which references <code>$process-message</code>) - perhaps too heavily.</p>
+<p>In my goal of keeping the workflows easy to read, I also appear to have elevated the <code>handshake</code> and <code>heartbeat</code> messages beyond their necessity.  My <em>intention</em> was to show them as optional (same as in the email channel).  I am wary of excluding them since whatever system is <em>processing</em> the subscription messages may want/need them for error detection (more later).</p>
+<p>For 1. and 2., should there also be a form of <code>subscription-reject</code>, or is it more that one message serves as a <code>subscription-request-response</code> and everything is described in OperationOutcome?  If there is an example of this documented somewhere, that would be helpful.</p>
+<p>Regarding the note, that is a good point - I tried to show that by separating the actors for the Client and the Endpoint, but it should probably be more specific.</p>
+<p>On 3., I agree but we need to refine the definition.  For example, right now the event count is part of the SubscriptionStatus, so as written this would generate a message each time a new message was sent.  I believe your intention is to trigger when at least the status field changes, but there may be others.</p>
+<p>On 4., if you wouldn't mind providing a mock-up for discussion, I would appreciate it (even a diff from the existing messaging example).  A few notes though:</p>
+<ul>
+<li>There was a fair amount of discussion on this last year, a variety of examples are on <a href="https://github.com/argonautproject/subscriptions/tree/master/packaging-examples">GitHub</a>.<ul>
+<li>The overall decision was that a subscription bundle should be the same across any channel.</li>
+<li>I can try and hunt down the call info / notes, but the changes were rolled into what is in R5 now.</li>
+<li>Part of that decision was that if people wanted more custom definitions, additional channels can be defined.</li>
+</ul>
+</li>
+<li>One of the 'priority' changes for the R5 revamp was the ability for servers to batch notifications as desired (e.g., in high frequency scenarios, the server may want to send one notification every second / 'n' seconds with all of the events over that period).<ul>
+<li>I am not sure how that could be represented with another resource as the focus (e.g., there are 3 event notifications in this bundle).</li>
+<li>If you are asking for the Messaging channel to override the subscription batching rules, that needs to be a larger discussion.</li>
+</ul>
+</li>
+</ul>
+<p>For the general statement at the end, I would argue both yes and no.  From what I can tell, there are many implementations of Messaging, which vary greatly in capability.  For example, in the <a href="https://www.hl7.org/fhir/messaging.html#reliable">Absence of Reliable Messaging</a> section I don't see anything about when the communications channel is broken (e.g., no messages are being received).  If you have a system operating in that mode, you would likely still want heartbeat messages.</p>
+<p>For the key point, I hope that we have not done so.  I know that I have tried to keep the subscriptions framework consistent across all channels (e.g., a client receiving a notification should not care if it was transmitted over REST, WebSockets, Messaging, FTP, <a href="https://tools.ietf.org/html/rfc2549">RFC 2549</a>, or some combination of them).  Part of that consideration is that a client may need to subscribe to multiple servers using different mechanisms - they should be able to parse and process them all in the same way.</p>
+<p>I think this would be a good topic for discussion on one of the subscription calls (every other Wednesday, hosted by FHIR-I and Argonaut).  If there are more people that should be invited, we can make sure to pick a specific meeting so we can get everyone there.</p>
+<p>Also, if you wouldn't mind creating tickets for these I would appreciate it (or if you prefer to wait on more discussion, I understand as well).</p>
+
+
+
+<a name="234561768"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234561768" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vassil Peytchev <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234561768">(Apr 14 2021 at 19:39)</a>:</h4>
+<p>Gino and René, I still think you are talking past each other. </p>
+<p>From what I understand, René is looking for subscribing for messages, where there are no RESTful capabilities whatsoever (e.g. FHIR messages are passed around using SOAP).</p>
+<p>The FHIR Subscriptions work that Gino is moving forward is specifically for the cases where the data that is being subscribed to is available via the FHIR RESTful API. To a certain extent, one of the goals of FHIR Subscriptions (as they are defined now) is to allow certain data exchange patterns in a way that avoids the use of FHIR Messaging.</p>
+<p>That doesn't mean that there is no need for subscriptions for FHIR Messaging, just that what René is proposing is for a completely different use case (and I think it belongs in FHIR Messaging, not in FHIR Subscriptions). This will be similar to HL7 v2 Chapter 5, section 7, and it will re-use the resources defined in FHIR subscriptions (as appropriate).</p>
+<p>Am I missing the main points?</p>
+
+
+
+<a name="234649394"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234649394" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234649394">(Apr 15 2021 at 10:11)</a>:</h4>
+<p>One of the problems is that Messaging is seen as a 'transport', but it's actually a dimension independent from the actual transport. CRUD/Messaging/Documents are exchange architectures, which could each leverage various transports. CRUD can be done using REST/HTTP, but could be implemented using Webservices if one chooses to do so. Documents could be exchanged by Fax, by REST/HTTP, IHE XDS, there are many many options.</p>
+<p>Certainly if one goes for CRUD as an exchange architecture, consistency between implementations that leverage REST of those that leverage Webservices is desirable.  But consistency need only be partial when we compare CRUD to Messaging or Documents. I expect that it will be necessary to provide specific guidance for the various exchange architectures. </p>
+<p>How one deals with subscriptions is mostly influenced by the exchange architecture, and by some lesser degree to the transport used. So yes, my response is focused on Messaging as an exchange mechanism, irrespective of the transport layer used, and mixing in some of the typical transports used for messaging, and the way that messaging is being used today. We can't really go much beyond what is currently supported by 80% of messaging based systems out there, or the spec will fall flat on its face.  </p>
+<p><span class="user-mention" data-user-id="192685">@Vassil Peytchev</span> We should certainly aim for consistency when it comes to the resources used (Subscription*). These may however be leveraged in slightly different ways by the various exchange paradigms. As for your suggestion to document this as part of Messaging: (tongue in cheek) if we have to do so, then the current wording related to subscriptions would have to be moved to the HTTP.html page in the FHIR spec? The aim is for FHIR not to be REST-specific in any way shape or form..</p>
+
+
+
+<a name="234649944"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234649944" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234649944">(Apr 15 2021 at 10:16)</a>:</h4>
+<p>The focus of the current subscription approach is on managing the Subscription, it's status, the Subscription resource is at the hart of / the focus of / all of the exchanges. This could be encapsulated in a  specific set of subscription messages (as currently defined). IMHO most systems that exchange messages don't have an interest in putting the focus on the subscription process, they want the focus to be on the result of that subscription, e.g. the Message with the Lab result, where as a footnote to that message one also receives the status of a subscription. In that sense <span class="user-mention" data-user-id="192685">@Vassil Peytchev</span>  is right in that the focus of my suggestion is a different one than the currently documented solution.</p>
+
+
+
+<a name="234650521"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234650521" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234650521">(Apr 15 2021 at 10:21)</a>:</h4>
+<p><span class="user-mention" data-user-id="222054">@Gino Canessa</span> I'm always mindful of constraints when one uses messaging: one good use case are systems used by Inuit GPs in Northern Canada: GPs dial into a centralized server once each day via satellite phone, and pull down any messages, and send their own messages. That's it. Any solution one comes up with has to work in such a minimalist setting. One can build optional nice features on top of any solution, but simple use-cases have to be simple to implement.</p>
+
+
+
+<a name="234650757"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234650757" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234650757">(Apr 15 2021 at 10:23)</a>:</h4>
+<p>To me SubscriptionTopic = Message trigger event, so there's a lot of overlap between messaging and subscriptions. Like me, the INM WG has plenty of messaging experts who could pitch in ..</p>
+
+
+
+<a name="234665389"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234665389" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234665389">(Apr 15 2021 at 12:25)</a>:</h4>
+<p>as Rene says, Subscription should not be limited to REST.</p>
+
+
+
+<a name="234682748"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234682748" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234682748">(Apr 15 2021 at 14:13)</a>:</h4>
+<p>I'm reviewing the threat up to this point, and I have to admit I'm perplexed by the level of abstraction. <span class="user-mention" data-user-id="191372">@René Spronk</span> is it possible you could propose specific language or concrete adjustments to the way Subscriptions are defined in the current build, so that we (or at least: I) could get a more concrete sense of what you're driving at?</p>
+
+
+
+<a name="234683378"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234683378" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234683378">(Apr 15 2021 at 14:16)</a>:</h4>
+<p>It would also help if you could comment on the history a bit: are these concerns that would have applied all the way back to when we introduced subscriptions in r2 (and are just becoming more important now as subscriptions gain more focus), or rather, are these new concerns specific to the nature of how subscriptions are being updated to support a topic based model?</p>
+
+
+
+<a name="234691991"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234691991" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234691991">(Apr 15 2021 at 15:01)</a>:</h4>
+<p><span class="user-mention" data-user-id="191372">@René Spronk</span> , that is a good use case.</p>
+<p>I fully understand where the request is coming from and (I believe) what you are asking for.  I do not think it is such a matter of subscriptions being tied to REST, but rather that it is not 'fully' messaging.  What you have described (and has been discussed in the past) is an approach to subscriptions for messaging which would fully integrate the two aspects to make "the way subscriptions should be in messaging" (e.g., using SubscriptionTopics to trigger FHIR Messages).</p>
+<p>My responses above are centered around trying to find a compromise between what is currently written (which you do not approve of for this use case) and what you are requesting, in part because I believe what you are asking for is a <em>major</em> project.</p>
+<p>Changing subscriptions for messaging in such a way invalidates many sections of the specification as it stands.  E.g.:</p>
+<ul>
+<li>the notification format itself will be different </li>
+<li>payload options will need to be different</li>
+<li>error detection and handling will need to be different</li>
+<li>etc.</li>
+</ul>
+<p>This is both a lot of work (which is fine, I just want to make it clear), and causes divergence between "FHIR Messaging" and "any other FHIR Implementation" (which I am not a fan of).  Perhaps that divergence is necessary to come to the best solution.  Either way, I think something of this scope would probably need a PSS and a community group to commit to seeing it through.</p>
+
+
+
+<a name="234697769"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234697769" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vassil Peytchev <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234697769">(Apr 15 2021 at 15:26)</a>:</h4>
+<blockquote>
+<p>We should certainly aim for consistency when it comes to the resources used (Subscription*). These may however be leveraged in slightly different ways by the various exchange paradigms. As for your suggestion to document this as part of Messaging: (tongue in cheek) if we have to do so, then the current wording related to subscriptions would have to be moved to the HTTP.html page in the FHIR spec? The aim is for FHIR not to be REST-specific in any way shape or form.</p>
+</blockquote>
+<p>The very first sentence of the <a href="http://build.fhir.org/subscriptions.html">subscriptions.html</a> page states "Subscriptions are used to establish proactive event notifications from a FHIR server to another system." This is the current scope - for FHIR servers that implement the FHIR RESTful API. </p>
+<p>I definitely don't agree that  "the aim is for FHIR not to be REST-specific in any way shape or form" - without the FHIR RESTful API, FHIR would not have had the success we see today. In my opinion, the aim is for FHIR to be RESTful as much as possible, and for the cases where that is not possible, there are other exchange mechanisms like messaging, documents, services, bulk, etc.</p>
+<p>Also, in my opinion, subscriptions are by definition tied to an underlying exchange paradigm and transport (e.g.  <a href="https://www.w3.org/Submission/WS-Eventing/">ws-eventing</a> for SOAP), and therefore subscriptions for FHIR Messaging will look and work differently than subscriptions for FHIR servers.</p>
+<p>And on the point of scope, if FHIR messaging uses a transport that already provides a pub/sub mechanism (e.g. SOAP), wouldn't it make sense to use that underlying mechanism instead of using FHIR messaging subscription? How many implementations of HL7 V2 subscriptions are there?</p>
+
+
+
+<a name="234704766"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234704766" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234704766">(Apr 15 2021 at 16:04)</a>:</h4>
+<blockquote>
+<p>I definitely don't agree that "the aim is for FHIR not to be REST-specific in any way shape or form" - without the FHIR RESTful API, FHIR would not have had the success we see today. </p>
+</blockquote>
+<p>+1 -- we need to be careful about where and how we introduce abstractions</p>
+
+
+
+<a name="234842496"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234842496" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234842496">(Apr 16 2021 at 12:17)</a>:</h4>
+<p><span class="user-mention" data-user-id="192685">@Vassil Peytchev</span> See <a href="http://build.fhir.org/exchange-module.html">http://build.fhir.org/exchange-module.html</a> , where does it indicate a preference for REST over other options? There is no such preference, all options are (officially at least) on the same footing. It is quite fundamental that they are, and that we don't paint us in a corner when it comes to transport/exchange options. Some years from now REST will have been replaced by something different, so one has to keep ones options open. The resource definitions are much more important than the underlying exchange mechanisms.</p>
+<p>"without the FHIR RESTful API, FHIR would not have had the success we see today." - absolutely, no disagreements there, but that's not relevant to the question at hand.</p>
+
+
+
+<a name="234842806"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234842806" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234842806">(Apr 16 2021 at 12:20)</a>:</h4>
+<p><span class="user-mention" data-user-id="191315">@Josh Mandel</span> Years ago I already commented on the overlap between Messaging and Subscriptions, but those working on the spec were not interested at that point in time in exploring that overlap - they wanted to move forward on RESTful Subscriptions. I don't blame them for wishing to posh since forward, but now that ideas have been more fleshed out in R5 the overlap with messaging (trigger events) pops up once again.</p>
+
+
+
+<a name="234843878"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234843878" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234843878">(Apr 16 2021 at 12:28)</a>:</h4>
+<p><span class="user-mention" data-user-id="222054">@Gino Canessa</span> Yes, it's different from the approach used for REST, it would be a 'tweak on the messaging paradigm' to support subscriptions. I'm aware that probably FHIR-I is the owner of 'Messaging', it would be nice to get INM on board. Me (as one single person) noticing that there is an overlap between subscriptions and messaging doesn't mean anything, if others with a messaging background don't see the need to explore/document the issue.    <span class="user-mention" data-user-id="191749">@Anthony(Tony) Julian</span>  <span class="user-mention" data-user-id="220686">@Nick Radov</span></p>
+
+
+
+<a name="234853932"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234853932" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Anthony(Tony) Julian <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234853932">(Apr 16 2021 at 13:36)</a>:</h4>
+<p>@rene InM is &lt;supposed&gt; to own messageHeader, and messageDefinition</p>
+
+
+
+<a name="234862678"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234862678" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234862678">(Apr 16 2021 at 14:29)</a>:</h4>
+<p>The 'preference' for REST is that, where the business objectives can be met by REST or messaging and all other things are equal, REST is the better choice - because it requires the least negotiation between the participants.  That's intrinsic to the nature of how REST works in FHIR and how messaging works generally.  It also reflects what the community has done, by and large.  You can do SMART and CDS Hooks on top of REST, but doing it on top of messaging would be hard/impossible.</p>
+<p>Messaging tends to have been implemented in a small number of 'closed' environments.  That doesn't mean it's not useful or we shouldn't support it.  A key to FHIR design is that we require resources be REST-friendly.  That shouldn't interfere with their ability to be used in a messaging environment if needed.</p>
+
+
+
+<a name="234872971"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/234872971" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#234872971">(Apr 16 2021 at 15:23)</a>:</h4>
+<p>InM does own those resources, but is appears FHIR-I owns the <a href="https://www.hl7.org/fhir/messaging.html">Messaging</a> page.  <span aria-label="shrug" class="emoji emoji-1f937" role="img" title="shrug">:shrug:</span>  There is a lot of overlap between "Infrastructure" and "Infrastructure and Messaging"  =).</p>
+<p>I don't believe this is an issue of committee ownership any more than the current discussions about content exchange in FHIRcast are.  In theory, it would be great to have everyone interested in every topic all the time, but that is not practical.  All of the work (for all of these projects) is well publicized and open.  People that want to participate at any stage can, and the publication checkpoints provide ample opportunity for the community "at large" to catch up on anything that has been missed.</p>
+<p>My concern is what I stated above - with the overlap, the "best" solution for Subscriptions in Messaging is likely going to be quite a bit different from the core (or rest) of Subscriptions.  One good example of this is configurable payload levels - it is a <em>requirement</em> for a lot of use cases, but I think nonsensical in Messaging.  In Messaging, every notification should be <code>full-resource</code>.</p>
+<p>If our goal is to only define the lowest common denominator, payload types should be removed.  However, if our goal is to design for the most common use cases, it needs to be present.</p>
+<p>At this point, I wonder if the best way forward might be to pull 'messaging' from the channel types and have another home for "Subscriptions in Messaging" (either an IG or docs in the 'messaging' space).  That way, it can be fully integrated into Messaging, with clear direction on where it varies from the specification (without the confusion of trying to do both in the same place).  I am happy to contribute work for it, though I would defer to people more involved with Messaging (InM) for direction on the topic, and I assume we would cross-link in either case.</p>
+<p>Thoughts?</p>
+
+
+
+<a name="235151601"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/235151601" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#235151601">(Apr 19 2021 at 09:27)</a>:</h4>
+<p>If INM is willing to take this up on their agenda ( <span class="user-mention" data-user-id="191749">@Anthony(Tony) Julian</span>  ) then let's have a separate discussion on messaging. If they're not interested I'll let it rest (pun intended).</p>
+
+
+
+<a name="235228959"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/235228959" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Anthony(Tony) Julian <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#235228959">(Apr 19 2021 at 18:44)</a>:</h4>
+<p>In order to schedule the discussion we need at least three(3) active members from disparate entities who are proponents of messaging.  Previous meetings scheduled to discuss it have had few participants, and no volunteers to host  a messaging track in the connect-a-thon. </p>
+<p>The FHIR folks made it clear from the start that support for messages/messaging would take a backseat to  REST.  I think that there is a use case for both, especially with the billion$ already invested in messaging infrastructure.</p>
+<p>I have a problem with the phrase "requires the least negotiation between the participants". Every interface/exchange is a negotiation - as it always has been, complicated by FHIR accepting "Z" segments.</p>
+
+
+
+<a name="235279013"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/235279013" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#235279013">(Apr 20 2021 at 02:35)</a>:</h4>
+<p>It's not so much that messaging has a back seat, as that use-cases that can be satisfied with REST produce lower overall cost to the community than those that require messaging - which means that messaging tends to be more of a fall-back than a primary solution - except in environments that are constrained to messaging because of legacy solutions that don't support capturing resource identity.  Messaging still has a place in FHIR and is definitely used in some environments.</p>
+
+
+
+<a name="235327124"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/235327124" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#235327124">(Apr 20 2021 at 11:30)</a>:</h4>
+<p><span class="user-mention" data-user-id="191749">@Anthony(Tony) Julian</span>  OK, so let's look for other interested parties..</p>
+
+
+
+<a name="259727157"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/259727157" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chidamber Kumar <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#259727157">(Oct 30 2021 at 12:03)</a>:</h4>
+<p>Hello Community <br>
+A quick question: why most servers will require end point to be whitelisted and the same thing may not be required for any other channel type?</p>
+<p>The statement about whitelisting is mentioned under this section: <a href="http://hl7.org/fhir/subscription.html#2.46.7.4">http://hl7.org/fhir/subscription.html#2.46.7.4</a></p>
+
+
+
+<a name="259860740"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/messaging%20and%20subscriptions/near/259860740" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> David Pyke <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/messaging.20and.20subscriptions.html#259860740">(Nov 01 2021 at 13:04)</a>:</h4>
+<p>If it's sent by email or SMS, whitelisting doesn't apply.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

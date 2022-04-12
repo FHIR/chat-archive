@@ -1,0 +1,230 @@
+[
+    {
+        "content": "<p>According to the <a href=\"https://www.hl7.org/fhir/search.html\" target=\"_blank\" title=\"https://www.hl7.org/fhir/search.html\">FHIR search specification</a> searching for decimal values always involves ranges:</p>\n<blockquote>\n<p>Searches are always performed on values that are implicitly or explicitly a range.</p>\n</blockquote>\n<p>However under <a href=\"https://www.hl7.org/fhir/search.html#number\" target=\"_blank\" title=\"https://www.hl7.org/fhir/search.html#number\">number</a> in the table for the example <code>[parameter]=gt100</code> it says:</p>\n<blockquote>\n<p>Values that are greater than exactly 100</p>\n</blockquote>\n<p>and further down:</p>\n<blockquote>\n<p>When a comparison prefix in the set lgt, lt, ge, le, sa &amp; eb is provided, the implicit precision of the number is ignored, and they are treated as if they have arbitrarily high precision</p>\n</blockquote>\n<p>I have drawn an figure which shows how I interpret the spec:</p>\n<p><a href=\"/user_uploads/10155/lzx0rVW83g9-_Asg2MZLEOzm/gt.png\" target=\"_blank\" title=\"gt.png\">gt.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/lzx0rVW83g9-_Asg2MZLEOzm/gt.png\" target=\"_blank\" title=\"gt.png\"><img src=\"/user_uploads/10155/lzx0rVW83g9-_Asg2MZLEOzm/gt.png\"></a></div><p>In the figure above values spread along the Y-axis starting at low values on top of the figure and increase to the bottom of the figure. The search value is red and has a thickness which corresponds to their precision. For example if the search value is 2.0 its lower boundary (LwBd) would be 1.95 and it's upper boundary (UpBd) would be 2.05. In green there is the \"range above the value\" which reaches from the exact search value 2.00000 up to infinity. On the right there is one possible matching target value in black. Its precision is lower so it stretches more along the Y-axis.</p>\n<p>So instead of saying</p>\n<blockquote>\n<p>Values that are greater than exactly 100</p>\n</blockquote>\n<p>I would say that the upper boundary of the target value has to be greater than or equal the exact search value.</p>\n<p>One example:</p>\n<p>The search value is 2.2 and the target value is 2 which has a range of [1.5,2.5). According to my interpretation the target value 2 would match a search of <code>gt2.2</code> but according to the simple rule from the table in the numbers section, it would not.</p>\n<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191676\">@Lee Surprenant</span></p>",
+        "id": 188110024,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1581603736
+    },
+    {
+        "content": "<p>I had the same confusion at one point and I think the problem is this slightly ambiguous phrase:  \"Searches are always performed on values that are implicitly or explicitly a range.\"<br>\nBut if you handle both the query value AND the target value as ranges, you get really odd results (like gt2.2 returning values of 2).  Instead, our decision was to handle only the query value as an implicit range (and not the extracted numerical values).  IMHO this is the interpretation that yields the most sane results.</p>",
+        "id": 188112157,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1581605178
+    },
+    {
+        "content": "<p>I remember asking <span class=\"user-mention\" data-user-id=\"208951\">@John Stairs</span> a similar question at devdays last summer and I think they had a similar interpretation</p>",
+        "id": 188112532,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1581605393
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191676\">@Lee Surprenant</span> If you view a value of 2 as the result of a measurement of something, all you can say is, that the real value you measured is in the interval of [1.5, 2.5). So it is quite possible that the real value is more like 2.3. If you then ask for all values greater than 2.2, you have to return the 2 because it is possible that its really 2.3. Doing so would also satisfy the rule to return more results rather than returning less.</p>",
+        "id": 188114332,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1581606417
+    },
+    {
+        "content": "<blockquote>\n<p>Searches are always performed on values that are implicitly or explicitly a range.</p>\n</blockquote>\n<p>This is a general statement that is always true: things are always a range.</p>",
+        "id": 188142466,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1581622808
+    },
+    {
+        "content": "<blockquote>\n<p>When a comparison prefix in the set lgt, lt, ge, le, sa &amp; eb is provided, the implicit precision of the number is ignored, and they are treated as if they have arbitrarily high precision</p>\n</blockquote>\n<p>We say this specifically to deal with the question you raise, and it's quite specific and meaningful. The values are all still ranges, note, but we specified how it is to be interpreted. </p>\n<p>It was quite the argument, btw, with the mathematicians agreeing with you (and also my mathematical half) but the engineers said that 2 is not in &gt; 2.2. It becomes particularly relevant with dates rather than numbers, btw. So we specifically fixed this rule in place</p>",
+        "id": 188142610,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1581622921
+    },
+    {
+        "content": "<p>I still think there is some ambiguity in this part of the spec.  I think it stems from the fact that there are two different \"values\" involved in each search.  The value passed in the search query (what I call the query value for clarity) and the target value (from the resource being searched).</p>\n<blockquote>\n<p>Searches are always performed on values that are implicitly or explicitly a range.</p>\n</blockquote>\n<p>I [apparently correctly] understood this as a general statement and perhaps the reasoning behind the specified behavior where a query value of 2 should actually be interpreted as a search for a value in the range [1.5,2.5).<br>\nBut originally I shared Alexander's interpretation that both the query value AND target value must always be handled as ranges.  But then when would these search prefixes EVER have the non-range interpretations listed at <a href=\"https://www.hl7.org/fhir/search.html#prefix\" target=\"_blank\" title=\"https://www.hl7.org/fhir/search.html#prefix\">https://www.hl7.org/fhir/search.html#prefix</a> ?</p>\n<blockquote>\n<p>When a comparison prefix in the set lgt, lt, ge, le, sa &amp; eb is provided, the implicit precision of the number is ignored, and they are treated as if they have arbitrarily high precision</p>\n</blockquote>\n<p>Is this a statement about the query value or the target value?  My original interpretation was that this would only apply to the query value and so a search of gt2.2 <em>would</em> return a resource with a target value of 2--which has implicit range [1.5,2.5).<br>\nHowever, for some reason I changed my interpretation of this in the past (and I can't seem to find why now)...maybe it was the result of this previous conversation on the topic?</p>",
+        "id": 188218021,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1581695381
+    },
+    {
+        "content": "<p>possibly.</p>",
+        "id": 188269541,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1581742939
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> I opened an issue to further investigate this: <a href=\"https://jira.hl7.org/browse/FHIR-26311\" target=\"_blank\" title=\"https://jira.hl7.org/browse/FHIR-26311\">https://jira.hl7.org/browse/FHIR-26311</a></p>",
+        "id": 188390407,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1581956239
+    },
+    {
+        "content": "<p>I tried an experiment on a couple publicly available test servers and I think it proves the point.<br>\nFirst, I posted a simple Observation that has a body temperature value of 100 F</p>\n<div class=\"codehilite\"><pre><span></span>&quot;valueQuantity&quot;: {\n          &quot;value&quot;: 100,\n          &quot;unit&quot;: &quot;F&quot;,\n          &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,\n          &quot;code&quot;: &quot;[degF]&quot;\n        }\n</pre></div>\n\n\n<p>On <code>test.fhir.org</code>, a search with <code>value-quantity=gt100|http://unitsofmeasure.org|[degF]</code> DOES return the resource.<br>\nOn <code>hapi.fhir.org</code>, it does not.</p>\n<p>I tried similar searches on <code>vonk.fire.ly</code> and <code>wildfhir4.aegis.net</code> but I couldn't get those ones to produce reasonable results at all.</p>",
+        "id": 188567945,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1582134973
+    },
+    {
+        "content": "<p>On <a href=\"http://test.fhir.org\" target=\"_blank\" title=\"http://test.fhir.org\">test.fhir.org</a>, <code>gt100.49</code> also returns the resource, whereas <code>gt100.5</code> does not...which is consistent with the range interpretation</p>",
+        "id": 188568152,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1582135095
+    },
+    {
+        "content": "<p>+1 to the section in <a href=\"http://jira.hl7.org/browse/FHIR-26311\" target=\"_blank\" title=\"http://jira.hl7.org/browse/FHIR-26311\">J#26311</a> that we need conformance tests for this or the implementations will never be consistent!</p>\n<p>(Google does not return the resource.)</p>",
+        "id": 188573080,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1582138478
+    },
+    {
+        "content": "<p>I went and re-read the specification carefully on this.</p>",
+        "id": 188599623,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1582157735
+    },
+    {
+        "content": "<p>the date search is quite specific about this, with examples</p>",
+        "id": 188599637,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1582157751
+    },
+    {
+        "content": "<blockquote>\n<p>[parameter]=lt2013-01-14T10:00    <br>\n2013-01-14 matches, because it includes the part of 14-Jan 2013 before 10am<br>\n[parameter]=gt2013-01-14T10:00    <br>\n2013-01-14 matches, because it includes the part of 14-Jan 2013 after 10am</p>\n</blockquote>",
+        "id": 188599685,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1582157764
+    },
+    {
+        "content": "<p>the equivalent with numbers is :</p>",
+        "id": 188599703,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1582157778
+    },
+    {
+        "content": "<blockquote>\n<p>so a search of gt2.2 would return a resource with a target value of 2--which has implicit range [1.5,2.5).</p>\n</blockquote>",
+        "id": 188599712,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1582157797
+    },
+    {
+        "content": "<p>glad my server behaves this way ;-)</p>",
+        "id": 188599714,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1582157805
+    },
+    {
+        "content": "<p>we do not have a test suite for servers - we've never figured out how to make tests that are both robust and useful (it seems to be an either/or thing)</p>",
+        "id": 188599901,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1582157900
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> : For numbers, it also says: [parameter]=gt100  Values that are greater than exactly 100<br>\nI interpret that to mean that a search like Lee's would <em>not</em> include the resource where the value is 100. If that is not the case, imho the specs should include some examples there to make it more clear.<br>\n<span class=\"user-mention\" data-user-id=\"191676\">@Lee Surprenant</span> : Can you explain what you mean by saying that the Vonk server does not produce reasonable results at all? I can get the resource out just fine when I change 'gt' to 'ge', or when I remove the prefix.</p>",
+        "id": 188649836,
+        "sender_full_name": "Mirjam Baltus",
+        "timestamp": 1582213792
+    },
+    {
+        "content": "<p>sure, i sent some private messages to Christiaan in case something wasn't working quite right, but happy to share my experience here (or anywhere else as well)...is there a vonk-specific stream?</p>",
+        "id": 188651084,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1582214470
+    },
+    {
+        "content": "<p>No, there's no Vonk stream. But you can send your results to <a href=\"mailto:vonk@fire.ly\" title=\"mailto:vonk@fire.ly\">vonk@fire.ly</a> so they will reach a larger part of the team, if you want.</p>",
+        "id": 188651727,
+        "sender_full_name": "Mirjam Baltus",
+        "timestamp": 1582214869
+    },
+    {
+        "content": "<p>for me, the create worked fine in Vonk.  then <code>gt100</code> didn't find it and I thought maybe it was just behaving like HAPI.  But then I tried this and still 0 results</p>\n<div class=\"codehilite\"><pre><span></span>curl &#39;https://vonk.fire.ly:443/Observation?code=http://loinc.org|8310-5&amp;value-quantity=gt99|http://unitsofmeasure.org|[degF]&#39;\n</pre></div>\n\n\n<p>And, what is really odd to me, is that this one does return it:</p>\n<div class=\"codehilite\"><pre><span></span>curl &#39;https://vonk.fire.ly:443/Observation?code=http://loinc.org|8310-5&amp;value-quantity=gt1|http://unitsofmeasure.org|[degF]&#39;\n</pre></div>",
+        "id": 188651815,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1582214911
+    },
+    {
+        "content": "<p>Yes, those results are unexpected! I did not try different values, so it seemed to work correctly. We'll look into this, thank you for pointing this out!</p>",
+        "id": 188652443,
+        "sender_full_name": "Mirjam Baltus",
+        "timestamp": 1582215360
+    },
+    {
+        "content": "<p>if it was working as intended, would it honor the range semantics outlined above by graham?  i'm thinking to update my implementation to follow the range interpretation as well...</p>",
+        "id": 188653951,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1582216468
+    },
+    {
+        "content": "<p>At the moment I think it does not honor ranges - at least not for the gt100 search, since we probably looked at the table about prefixes on numbers. But we want to follow the specs, so will have a discussion about that in the team. As was mentioned by others, a test set would be really helpful here.</p>",
+        "id": 188654764,
+        "sender_full_name": "Mirjam Baltus",
+        "timestamp": 1582217089
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191347\">@Mirjam Baltus</span> </p>\n<blockquote>\n<p>For numbers, it also says: [parameter]=gt100 Values that are greater than exactly 100</p>\n</blockquote>\n<p>We could certainly clarify that, but the numbers are greater than exactly 100 if their range of possible values includes values greater than <em>exactly</em> 100</p>",
+        "id": 188676260,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1582231853
+    },
+    {
+        "content": "<p>If I read this thread correctly, people seem to be indicating that the implicit ranges should apply to both the resource value and the search parameter. <br>\nSo if the resource value is 2. A search of gt2.2 would return it. </p>\n<p>But there's another side to that. A search of eq2.0 now will not return the resource with a value of '2'. </p>\n<p>Implicit precision of resource value 2: [1.5,2.5)<br>\nImplicit precision of search param 2.0: [1.95,2.05)</p>\n<p>The  range of the search param value is narrower than the range of the resource value, and therefore  <em>the range of the search value fully contains the range of the target value</em> is false. <br>\nIs that the intent, or am I misunderstanding something?</p>",
+        "id": 236766460,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1619741339
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span></p>",
+        "id": 236767151,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1619741874
+    },
+    {
+        "content": "<p>I updated the Jira issue with some thoughts:<br>\n<a href=\"https://jira.hl7.org/browse/FHIR-26311\">https://jira.hl7.org/browse/FHIR-26311</a><br>\nI will repeat them here in the interest of wider visibility and discussion: </p>\n<p>So there are 3 possible interpretations for number searches, I believe:</p>\n<p>1) apply implicit precision to both the resource value and the search parameter value.<br>\nThis gives you incorrect evaluations such as :<br>\n2 = 2.0 -&gt; false [resource: 2, searchparam eq2.0]</p>\n<p>Implicit precision of resource value 2: [1.5,2.5)<br>\nImplicit precision of search param 2.0: [1.95,2.05)<br>\nThe range of the search param does not fully contain the range of the target value, so 2.0 != 2.<br>\nThat can't be right.</p>\n<p>2) apply the implicit precision to the resource value only.<br>\nThe precision is controlled then by the resource author and clients have no control when searching to narrow results.<br>\nWith this you still have some funny cases - and this is hard to implement because you have to index 3 values - the actual value for lt/gt searches, and the implicit boundaries for eq searches.<br>\nWith this and (1) you could not make compliant/performant FHIR APIs on top of existing data stores which would not have the pre-calculated implicit bounds stored.</p>\n<p>3) apply the implicit precision to the search param only<br>\nThis allows clients to control the precision. They can tighten the precision to narrow the results returned to a smaller set if desired. It's easier to implement and it allows compliant FHIR APIs on top of non-FHIR-native datastores.</p>\n<p>It seems to me that (3) is the only interpretation that makes sense. </p>\n<p>I'd be interested to hear other thoughts, especially if I've misunderstood something.</p>",
+        "id": 237088545,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1619992741
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span></p>",
+        "id": 237090533,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1619994641
+    },
+    {
+        "content": "<p>well, firstly, it's better to find than to not find.</p>",
+        "id": 237267702,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1620103382
+    },
+    {
+        "content": "<blockquote>\n<p>The range of the search param value is narrower than the range of the resource value, and therefore the range of the search value fully contains the range of the target value is false.</p>\n</blockquote>\n<p>Yes I think you are. </p>\n<blockquote>\n<p>Implicit precision of resource value 2: [1.5,2.5)<br>\nImplicit precision of search param 2.0: [1.95,2.05)</p>\n</blockquote>\n<p>So the resource value implicit range (target) fully contains the implicit range of the search vlaue</p>",
+        "id": 237268180,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1620103908
+    },
+    {
+        "content": "<p>The search spec for <strong>eq</strong> says <em>the range of the search value fully contains the range of the target value</em>.  I think you have it flipped. But even so the problem remains. Either you search for eq2.0  and don't find 2, or you search for eq2 and don't find 2.0, depending on which range you put on the outside. And this case works for any number - n.0 != n, n.00 != n.0, etc.  If the goal is to find more stuff applying implicit precision to both sides fails the test in a dangerous way. We're not just returning more data that may or may not be relevant to the searcher - we're holding back data that most definitely is. </p>\n<p>And my other point that implicit precision cannot be applied on the resource side to non-native FHIR systems I think is valid as well. If I'm adding a FHIR API on top of an existing system, how would I apply implicit precision to the existing values? It's not practical to include a function in the search query as it would result in a table scan. You could not create a compliant FHIR API without first altering the existing data to pre-calculate the implicit precision.</p>\n<p>edit to add: applying implicit precision to only the search parameter still accomplishes the goal of returning more stuff. You take the value the searcher supplied, and you widen it a bit with implicit precision to return things that are close to that value. It does not have any cases where it doesn't return something relevant because the outside range (the range of the search parameter) is the only range that is being widened. I think the spec needs to be clarified that this is how it should be done - as many systems have done it the other way.</p>",
+        "id": 237323158,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1620134786
+    },
+    {
+        "content": "<p>I need a sanity check here.  <br>\nTo put it in a way that's easier (for me) to think about. <br>\nThere are two ranges involved in a numeric equals search - the search parameter range and the target/resource value range. <br>\nThe spec says: <strong>the range of the search value fully contains the range of the target value</strong></p>\n<p>In other words, the search parameter range boundaries must be outside of (or equal to) the target value range boundaries for the values to be considered equal. </p>\n<p>So if the above is true, then: <br>\n1) If you widen the search param range (outside range), more values will potentially be within it and match. <br>\n2) If you widen the target ranges (inside range), fewer values will potentially match. <br>\n3) If you widen them both equally, it should cancel out</p>\n<p>But if you widen both ranges with implicit precision, the number of decimal places in the values determine how much you widen each by. In cases where a target/resource value has fewer decimal places than the search parameter, the target range is widened more than the search range is and it then fails to match values which are clearly equal. </p>\n<p><span class=\"user-mention\" data-user-id=\"191676\">@Lee Surprenant</span> , you were looking closely at this at one point. <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> ? Thoughts? <br>\nI'm failing to see a flaw in my logic.</p>",
+        "id": 237515399,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1620228414
+    },
+    {
+        "content": "<p>that logic looks correct to me, I think the issue comes into play when we are adding both search range and precision requirements into the same medium of the search value's precision. You could only want values with as much precision as 2.0 (where eq2.0 not returning 2 is a good thing) but also where you don't necessarily care about the precision of the resource's values (say your legacy data example) but you only want values from 1.95 to 2.05 where you may want 2 to be returned on an eq2. I guess the argument is you could always do a ge1.95&amp;le2.05 search if you wanted to include 2 without precision but that seems rather un-intuitive (but I've already run into situations where I've called these prefix'd searches un-intuitive but haven't won those arguments either)</p>",
+        "id": 237558800,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1620245915
+    },
+    {
+        "content": "<blockquote>\n<p>You could only want values with as much precision as 2.0 (where eq2.0 not returning 2 is a good thing) </p>\n</blockquote>\n<p>In my opinion, eq2.0 not returning 2 is <strong>never</strong> a good thing. I followed this thread, and previous threads on decimal comparisons, and I only see the potential of patient harm. </p>\n<p>To me this is a clear violation of the 80/20 rule - you want eq2.0 to return 2 at least 99% of the time, as this is basic arithmetic. Applying set comparisons as the default behavior is mind boggling...</p>",
+        "id": 237562719,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1620247677
+    },
+    {
+        "content": "<blockquote>\n<p>@Lee Surprenant , you were looking closely at this at one point.</p>\n</blockquote>\n<p>yes, although I don't have much to add beyond what I said above in this thread.  originally we interpretted this section the way you are thinking.<br>\nour justification for this interpretation was that this interpretation yeilds the most intuitive results.</p>\n<p>however after the discussion and investigation mentioned above, we changed to the range interpretation in which we consider both the query value and the target value to be ranges.  if you consider a measured value of 2 to be the range [1.5, 2.5), then this could indeed fall outside of the range [1.95, 2.05).  For semantics of \"any overlapping\" range, you can us the <code>ap</code> prefix.</p>",
+        "id": 237662530,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1620309683
+    }
+]

@@ -1,0 +1,108 @@
+---
+layout: page
+title: "FHIR Chat  · Patient group scopes · smart"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179170-smart/index.html">smart</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html">Patient group scopes</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="245441787"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/Patient%20group%20scopes/near/245441787" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Nikolai Schwertner <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html#245441787">(Jul 09 2021 at 13:18)</a>:</h4>
+<p><span class="user-mention" data-user-id="193430">@Alexander Zautke</span>  and I have been discussing the available approaches in SMART for a client to request access to a specific group of patients and their observation with certain LOINC codes. Initially we were looking into leveraging SMART v2 granular scopes to ask for user-level scopes for patients belonging to a certain study group and observations with specific loinc codes. It's not clear however how one can limit the observations scope to the patients from the patients scope. If interpreted literally, this set of scopes (such as <code>user/Patient.rs?_has:Group:member:identifier=&lt;identifier&gt; user/Observation.rs?code=http://loinc.org|code1,http://loinc.org|code2,...</code>)  would enable access to the patients in the group but also to all the Observations with the specified codes available to the user (not just the observations for the patients in the group). So that appears to be a dead end (unless there is something we are missing).</p>
+<p>We are looking at somewhat simpler (but less transparent) approach where the client requests <code>user/Patient.rs user/Observation.rs?code=http://loinc.org|code1,http://loinc.org|code2,...</code> where the end user gets a set of user credentials each linked to a different group (so that depending on which login is used, the "user" scope limits to a specific group). A variation would be that the authorization server will ask the user to select the limiting group at authorization time (but then the identitiy of the limiting group won't be origininating from the client, which is not ideal). That feels like a hacky approach however with account management overhead, so we are not super happy with it either.</p>
+<p>Finally, we are thinking of introducing a new scope type "group/" which is a subset of the "user/" scope limiting the data set to a specific group of patients. This however has the issues that it is: a. outside the current SMART scopes standard b. it's not clear how the client will communicate the identifier of the group that it is requesting (perhaps via a custom authorize parameter?).</p>
+<p>Has anyone done anything like this before? Which approach would make most sense in the context of FHIR? Is there another way to approach this?</p>
+
+
+
+<a name="245444914"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/Patient%20group%20scopes/near/245444914" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html#245444914">(Jul 09 2021 at 13:45)</a>:</h4>
+<p>Thanks for the question and the detail here. It's worth talking through the use case a bit more. For background, see the proposed disposition on <a href="http://jira.hl7.org/browse/FHIR-32251">FHIR-32251</a> --  SMART provides a way to delegate the access that some authorized user or client already has. In your case, what is the underlying method of deciding the full set of data a given client is allowed to delegate? Where and how do you model this, and is it tied to specific groups or data types? One way of asking this: if your client requests an access token with h <code>system/*.rs</code> scopes ("generated access token that's able to read and search everything I can"), what data will they in fact be able to export? Is this something you track client by client, and how is it managed?</p>
+
+
+
+<a name="245444980"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/Patient%20group%20scopes/near/245444980" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html#245444980">(Jul 09 2021 at 13:45)</a>:</h4>
+<p>The most common scenario we have seen in production so far is a client at registration time is granted access to certain patient groups. Any access token the client request at that point will be limited to data in those groups.</p>
+
+
+
+<a name="245445116"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/Patient%20group%20scopes/near/245445116" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html#245445116">(Jul 09 2021 at 13:46)</a>:</h4>
+<p>Over time we might push more and more of this into a structured computable language (a permission layer, below the delegation layer) but we have not tried to standardize that yet.</p>
+
+
+
+<a name="245448981"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/Patient%20group%20scopes/near/245448981" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Nikolai Schwertner <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html#245448981">(Jul 09 2021 at 14:17)</a>:</h4>
+<p>Thanks for the input, <span class="user-mention" data-user-id="191315">@Josh Mandel</span> Indeed this use case does not quite match the pattern of the user-level scopes that we have in SMART.  More specifically, here the user has access to a set of patient groups (say group A, B, and C), then the client requests access to the patients and their observations within group B [id = g9245] only. This is a scope at a level between <code>user\</code> and 'patient\' that we don't have yet. It could looks something like <code>group[g9245]\Patient.rs</code> or <code>group[g9245]\Observation.rs?code=123</code>.</p>
+
+
+
+<a name="245455710"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/Patient%20group%20scopes/near/245455710" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html#245455710">(Jul 09 2021 at 15:11)</a>:</h4>
+<p>And you doing bulk export, or using the regular FHIR REST API?</p>
+<p>In <em>theory</em> you could have a client request a scope like</p>
+<div class="codehilite"><pre><span></span><code>Observation.rs?
+  code:in=http://server.example.org/my-value-set&amp;
+  patient._has=Group:member:_id=g9245
+</code></pre></div>
+
+
+
+<a name="245455841"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/Patient%20group%20scopes/near/245455841" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html#245455841">(Jul 09 2021 at 15:12)</a>:</h4>
+<p>The semantics of that scope kind of get at what you'd want for "Allow access to all observations for a given valueset, for members of a given group", but in practice we do <em>not</em> expect servers would be able to manage/parse/enforce such complex scopes on the fly.</p>
+
+
+
+<a name="245460211"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/Patient%20group%20scopes/near/245460211" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Nikolai Schwertner <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html#245460211">(Jul 09 2021 at 15:48)</a>:</h4>
+<p>I believe we are talking about the FHIR REST API (is that right <span class="user-mention" data-user-id="193430">@Alexander Zautke</span> ?) Yes, this scope does get close to what the use case would need, I think. It is rather complex though and indeed would present a challenge for the underlying server to evaluate in real time if it is not translated into a more comprehensible higher level scope restriction. Then again, I don't know how common this particular use case is to warrant such an extension to the protocol.</p>
+
+
+
+<a name="246203621"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/Patient%20group%20scopes/near/246203621" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Zautke <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html#246203621">(Jul 16 2021 at 09:46)</a>:</h4>
+<p>Yes, we are taking about the FHIR REST API here. For our implementation it wouldn't be too much trouble to interpret such a code. However, it pushing the syntax to it's limits (excluding _filter as a even more advanced feature for now). Soon you would like to additionally add a check that the patient within the group also has a reference to a valid Consent resource. Or some other checks. That's the part where it would stop working. The main issue for us, in implementing it in Firely Server, is that we don't have any out-of-the-box solution for the permissions layer. Therefore we see users trying to push as much as possible into the SMART scopes. Anything else would currently be a custom implementation.</p>
+
+
+
+<a name="246203686"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/Patient%20group%20scopes/near/246203686" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Zautke <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html#246203686">(Jul 16 2021 at 09:47)</a>:</h4>
+<p>I would be incredibly interested in helping out when you start discussing on how such a standardized  permissions layer could look like.</p>
+
+
+
+<a name="246203950"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/Patient%20group%20scopes/near/246203950" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Zautke <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html#246203950">(Jul 16 2021 at 09:50)</a>:</h4>
+<p>BTW, I really like the resolution in <a href="http://jira.hl7.org/browse/FHIR-32251">FHIR-32251</a>. Hopefully, it'll help to make users aware that we are talking about different layers here.</p>
+
+
+
+<a name="246234691"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/Patient%20group%20scopes/near/246234691" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Nikolai Schwertner <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html#246234691">(Jul 16 2021 at 15:00)</a>:</h4>
+<p>This is a good point, <span class="user-mention" data-user-id="193430">@Alexander Zautke</span> The scope expression complexity can get rather high in some otherwise benign scenarios. The pattern is: a client needs access to a selection of resources related to patients that match a constraint  (in this case - group membership). Expressing the common constraint as chained query parameters for each scope element is bound to result in inefficiency (both in terms of verbosity but also in terms of computation optimization). The best possible scenario for processing when faced with a scopes set with such a constraint expressed as chained queries is a sophisticated evaluation engine which analyzes the entire list of scopes together, recognizes that all the scopes contian a common/linked constraint, evaluates and caches the  common constraint result set (for example, the list of IDs of the Patient resources that match the constraint), then reuses the cache across all security evaluations. But that is really too much of a sophistication to expect.</p>
+<p>For optimal expressiveness and evaluation, it would be ideal if the common constraint is expressed as such in a generalized way and then applied to all the scopes that require it. Then the evaluation is much easier to optimize. We are already doing this in practice via the <code>patient\</code> and <code>user\</code> constraints (always with respect to the Patient resources set). The question is, would it be useful to extend the standard such that it is possible for the client to provide a constraint expression for establishing a custom  scope different from <code>patient\</code> and <code>user\</code>?</p>
+
+
+
+<a name="246244982"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/Patient%20group%20scopes/near/246244982" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html#246244982">(Jul 16 2021 at 16:18)</a>:</h4>
+<p>Right now this can be done in extension space (OAuth scopes are extensible!); I'd say if a couple of servers want to experiment with this, try out some ideas, and bring back a proposal, it'd be a good way to move things ahead.</p>
+
+
+
+<a name="246245192"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/Patient%20group%20scopes/near/246245192" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/Patient.20group.20scopes.html#246245192">(Jul 16 2021 at 16:20)</a>:</h4>
+<p>My <em>suspicion</em> is that servers actually want to model permissions at a lower level in the stack (where having some constraint language is also helpful but it may look quite different from our scopes language, which is designed for per-token delegation).</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

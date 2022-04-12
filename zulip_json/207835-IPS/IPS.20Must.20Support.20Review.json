@@ -1,0 +1,200 @@
+[
+    {
+        "content": "<p>In late 2021 and at the January 2022 HL7 FHIR connectathon (IPS track), there was significant discussion around Must Support in IPS. In the current CI-build, there are over 400 Must Support assignments on various resource profiles which have accumulated over years in the FHIR IPS standard. There has also been previous discussion about Must Support in IPS and national adaptation under the IPS stream on <a href=\"http://chat.fhir.org\">chat.fhir.org</a> </p>\n<p>A proposal to reduce Must Support in IPS was to look back at the ISO 27269 IPS dataset and limit the assignment of Must Support to items where “Required if Known (RK)” was assigned for the element and remove Must Support statements from optional sections / resources. A branch has been created to reduce Must Support based on the above proposal. That branch is here: <a href=\"https://github.com/HL7/fhir-ips/tree/must-support-review\">https://github.com/HL7/fhir-ips/tree/must-support-review</a> The spreadsheet supporting that branch which has extensive data element analysis is here: <a href=\"https://docs.google.com/spreadsheets/d/15hNGV7Hol76pA73C5XCx_rHOoSYfG8E56PboF3ij9-k/edit#gid=942346437\">https://docs.google.com/spreadsheets/d/15hNGV7Hol76pA73C5XCx_rHOoSYfG8E56PboF3ij9-k/edit#gid=942346437</a> (view only)  </p>\n<p>Over the next few days, I hope to get an exact count on the reduction of Must Support assignments in the IPS. This branch removes a meaningful number although leaves many as-is given the logic above. Before this review is finalized, there were a few open concerns to be discussed before this branch is ready to merge:  </p>\n<ol>\n<li>\n<p>All IPS resources currently refer back to the patient. Some of these are tagged with Must Support and 1..1 cardinality. Others have different cardinality and Must Support assignment. These references are not directly addressed in ISO IPS standard. Do patient references need Must Support? I think having a cardinality of 1..1 for all these items is sufficient, but would like to make a global change, so welcome discussion.  </p>\n</li>\n<li>\n<p>In several resources, status isn’t specified in IPS ISO dataset. Is it ok to also remove Must Support status from IPS (e.g. immunization status: <a href=\"http://build.fhir.org/ig/HL7/fhir-ips/StructureDefinition-Immunization-uv-ips.html\">http://build.fhir.org/ig/HL7/fhir-ips/StructureDefinition-Immunization-uv-ips.html</a>)? It might be preferable to be consistent on this across resources.   </p>\n</li>\n<li>\n<p>What is the role of Device (Observer/Performer) in IPS (<a href=\"http://build.fhir.org/ig/HL7/fhir-ips/StructureDefinition-Device-observer-uv-ips.html\">http://build.fhir.org/ig/HL7/fhir-ips/StructureDefinition-Device-observer-uv-ips.html</a>)? Does this require Must Support? I would think that a system could reasonably support IPS generation without this, but want to open to discuss.  </p>\n</li>\n<li>\n<p>Should data provenance elements always be flagged (or not flagged) with Must Support in IPS? </p>\n</li>\n</ol>\n<p>I propose to discuss these on the weekly 3/23 IPS call (I am at HIMSS and will not be able to join the entire call on 3/16) . Thanks to all for feedback</p>",
+        "id": 275463401,
+        "sender_full_name": "John D'Amore",
+        "timestamp": 1647401123
+    },
+    {
+        "content": "<p>One comment about (1) - it's more about the cardinality than the Must-Support flag, but is connected to it. In many IPS profiles, not only <code>subject</code> but also <code>subject.reference</code> has cardinality <code>1..1</code> (and are both flagged as Must Support). In my current project (an EU-wide data exchange project), the latter prevented us from using IPS directly as a \"toolbox\" because we often had only a logical reference (business ID) to the patient and hence could not fill <code>subject.reference</code>. This was due to restrictions coming from data privacy and technology - we use an E2E encrypted platform, so the server is \"blind\" (no access to unencrypted data)  and many things have to work differently than in a typical FHIR server set-up.</p>\n<p>Based on that, we would find it desirable to remove the <code>1..1</code> from <code>subject.reference</code> and just leave it on <code>subject</code>. However, in that case it might actually make sense to <em>keep</em> the Must Support on <code>subject.reference</code> to signal that it should be filled if at all possible, although it is not required.</p>",
+        "id": 275479595,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1647419687
+    },
+    {
+        "content": "<p>In IPS, the Patient is part of the Bundle, so the reference needs to be resolved.  If you're encrypting resources within the IPS Bundle, then you might be IPS-informed, but you're not IPS-conformant.</p>",
+        "id": 275512818,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1647438751
+    },
+    {
+        "content": "<p>Yes, the requirement absolutely makes sense inside a Bundle. However, my understanding is that the IPS IG also aims to support use cases  different from that of the self-contained patient summary. In particular, that would include use cases that only re-use specific individual profiles (\"IPS as a toolbox\"), cf. this quote from the IG landing page:</p>\n<blockquote>\n<p>The IPS document is composed by a set of robust, well-defined and potentially reusable sets of core data items (indicated as IPS library in the figure below). The tight focus of the IPS on unplanned care is in this case not a limitation, but, on the contrary, facilitates their potential re-use beyond the IPS scope.</p>\n</blockquote>\n<p>My understanding is would include use cases in which the resources are perhaps exchanged individually and not as part of a Bundle. I think there is tremendous value in that for projects like ours that involve cross-border exchange. It allows us to start from a solid, tested, and truly global \"common denominator\" and then derive more detailed profiles from that. And I think it has indeed worked very well in our case, except for small issues like the one I mentioned. It could be that I'm wrong in my assumption about the supported scope, but in that case I think it's a great pity.</p>",
+        "id": 275517611,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1647440743
+    },
+    {
+        "content": "<p>Just to clarify: our issue with <code>subject.reference</code> being required was that we were profiling data which is not exchanged inside bundles and that, in our particular scenario, we often did not have a literal reference for the patient upon ingestion (which was otherwise not a problem for us). The lack of a literal Patient reference happened to stem from particular security &amp; technical constraints (including encryption) in our case, but there could have been other reasons for it.</p>",
+        "id": 275519285,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1647441373
+    },
+    {
+        "content": "<p>I think those non-IPS use-cases are intended to be handled by IPA?  I don't think it makes sense for IPS (which is a document IG) to loosen its specification to support non-document use-cases.  That would then open up the spec to broken document implementations.</p>",
+        "id": 275542893,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1647449837
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span> You are certainly correct about the intention for IPS to support use cases that re-use the specific individual profiles (\"IPS as a toolbox\").  As Lloyd said, in the document case the reference needs to be resolved.  But since the profiles are intended to support both types of use, probably setting 1..1 cardinality on <code>subject.reference</code> is most likely a step farther than what was necessarily intended (since we were originally focusing on the IPS document) or where we should be with it now.  So I think that we should consider removing it, and we may want to put that on the agenda for discussion (at least to begin it) next week.</p>",
+        "id": 275555701,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1647454651
+    },
+    {
+        "content": "<p>If IPS is supporting non-document use-cases, what's the relationship with IPA which is doing the same thing?</p>",
+        "id": 275556197,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1647454827
+    },
+    {
+        "content": "<p>The primary difference and relationship, in my opinion, is that IPA deals primarily with data access (for patient-facing apps, in particular) and IPS deals with the content to be exchanged for specific data elements that are appropriate in a summary of important clinical data for use in subsequent care scenarios.  Others can weigh in.</p>",
+        "id": 275587129,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1647470990
+    },
+    {
+        "content": "<p>I'm not really seeing a difference.  IPS and IPA are both providing data access - though with different mechanisms for doing so.  Both are primarily focused on the key clinical data for use in subsequent care scenarios I believe?</p>",
+        "id": 275588222,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1647471745
+    },
+    {
+        "content": "<p>Like Rob's, my impression was also that that IPA was primarily about providing an API (<em>how</em> to exchange) and the IPS about the content (<em>what</em> to exchange). But looking at the IPA IG now, it seems the relation is more complicated. On the one hand, the <a href=\"http://build.fhir.org/ig/HL7/fhir-ipa/ips-relationship.html\">documentation of the IPA-IPS relationship in the IPA IG</a> seems to support this split:</p>\n<blockquote>\n<p>[IPA and IPS] are doing different things - one is making provision for access to a record, and the other is making rules about the content found in the record.</p>\n</blockquote>\n<p>On the other hand,  the IPA also specifies its own profiles for a few resources - the above documentation states that they include only a subset of the IPS constraints. Overall, there are 3 basic specification elements at play:</p>\n<ol>\n<li>A basic \"vocabulary\" of profiles for international data exchange of core patient data</li>\n<li>A basic API for retrieval of such core data</li>\n<li>A self-contained summary of core patient data (as a FHIR document)</li>\n</ol>\n<p>Clearly, IPS provides (3) and IPA (2), but each of them now has its own version of (1) (one being a weaker version of the other). Given that IPS is the more mature standard, I had assumed that the IPS profiles formed a \"universal (1)\". I would be very interested in understanding why the IPA did not simply re-use the IPS profiles, maybe  <span class=\"user-mention\" data-user-id=\"192917\">@Mikael Rinnetmäki</span> would know? Certainly, it seems it would be good to clarify the relation between these IGs. E.g. could one \"factor out\" the shared lowest common denominator to provide a basis that both the IPA and IPS profiles are explicitly based (re-profiled) on &amp; which can be used to for new use cases?</p>\n<p>(<span class=\"user-mention\" data-user-id=\"197638\">@John D'Amore</span> apologies for taking this in a different direction than the initial post, let us know if we should branch of into a different thread)</p>",
+        "id": 275617143,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1647503967
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span> a great formulation, thanks! The reason for not to reuse IPS profiles was that we assumed IPS is focused on a specific use case and aiming to ensure the content is usable in patient referrals, for instance. We considered the baseline IPA to have a much broader scope (give access to all possible data there is, and leave it up to apps to figure out what of it is useful).</p>",
+        "id": 275618625,
+        "sender_full_name": "Mikael Rinnetmäki",
+        "timestamp": 1647505041
+    },
+    {
+        "content": "<p>We have all the time thought we'd have a baseline IPA specification that sets as little requirements as possible (or reasonable) for the content. And we have foreseen further IG's to be built on top of that baseline specification, for instance an IG for IPA that imposes further constraints and requires that servers expose data that the IPS specification requires, in a format that the IPS specification defines.</p>",
+        "id": 275618628,
+        "sender_full_name": "Mikael Rinnetmäki",
+        "timestamp": 1647505044
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/207835-IPS/topic/IPS.20Must.20Support.20Review/near/275588222\">said</a>:</p>\n<blockquote>\n<p>Both are primarily focused on the key clinical data for use in subsequent care scenarios I believe?</p>\n</blockquote>\n<p>For me the key use case for IPA is \"gimme <strong>all</strong> my data\", not focused just on <em>key clinical data</em>, and also not limited to <em>care scenarios</em>. My own review of the data and plain backup of the data are key use cases too.</p>",
+        "id": 275618952,
+        "sender_full_name": "Mikael Rinnetmäki",
+        "timestamp": 1647505299
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"194703\">Morten Ernebjerg</span> <a href=\"#narrow/stream/207835-IPS/topic/IPS.20Must.20Support.20Review/near/275617143\">said</a>:</p>\n<blockquote>\n<p>Certainly, it seems it would be good to clarify the relation between these IGs. E.g. could one \"factor out\" the shared lowest common denominator to provide a basis that both the IPA and IPS profiles are explicitly based (re-profiled) on &amp; which can be used to for new use cases?<br>\n(<span class=\"user-mention silent\" data-user-id=\"197638\">John D'Amore</span> apologies for taking this in a different direction than the initial post, let us know if we should branch of into a different thread)</p>\n</blockquote>\n<p>I would hope the set of profiles in IPA is such a lowest common denominator. If not, my first approach would be to try to relax any restrictions IPA has that are not compatible with IPS.</p>",
+        "id": 275619660,
+        "sender_full_name": "Mikael Rinnetmäki",
+        "timestamp": 1647505713
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192917\">@Mikael Rinnetmäki</span> Thanks a lot for the explanation!</p>\n<blockquote>\n<p>The reason for not to reuse IPS profiles was that we assumed IPS is focused on a specific use case and aiming to ensure the content is usable in patient referrals, for instance</p>\n</blockquote>\n<p>Would this argument still stand if IPS is indeed intended for \"toolbox use\" (use case open)? Supposing there are arguments in favour of making IPS more \"toolboxy\", I'm wondering how many differences between the IPA and \"neutral\" IPS profiles would actually be left in the end. (I'm of course not arguing against the IPS \"self-contained doc\" use case and the associated constraints, just wondering if they could be extracted leaving smt. that could be <em>explicitly</em> shared by IPS and IPA in order to avoid \"parallel profiles\").</p>",
+        "id": 275626797,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1647510075
+    },
+    {
+        "content": "<p>Well, how about making IPS more \"toolboxy\" and calling that IPA, and also preserving the \"self-contained doc\" use case and calling that IPS? ;-)</p>",
+        "id": 275633312,
+        "sender_full_name": "Mikael Rinnetmäki",
+        "timestamp": 1647513735
+    },
+    {
+        "content": "<p>And avoiding \"parallel profiles\" by ensuring that IPA allows anything IPS wants to specify, thereby not having the profiles as parallels, rather IPS building on top of IPA.</p>",
+        "id": 275633392,
+        "sender_full_name": "Mikael Rinnetmäki",
+        "timestamp": 1647513800
+    },
+    {
+        "content": "<p>If something like that were achievable, it sounds good to me.</p>",
+        "id": 275635220,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1647514840
+    },
+    {
+        "content": "<p>I agree that we should consider and discuss this - or something similar.  Which I don't think in reality is probably too far from where we are right now.  It's maybe (mostly?) that we have come at it from the two somewhat different perspectives and haven't quite fully meshed in the middle yet.</p>",
+        "id": 275637590,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1647516204
+    },
+    {
+        "content": "<p>I added a session on Connectathon 30 for both IPS and IPA tracks. May 3 at 2 pm to 3 pm ET. <span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span> will you be attending the Connectathon, and if so, does the time suit you?</p>",
+        "id": 275638287,
+        "sender_full_name": "Mikael Rinnetmäki",
+        "timestamp": 1647516622
+    },
+    {
+        "content": "<p>No need to postpone discussion that far, though. Perhaps we can already validate implementations at that time?</p>",
+        "id": 275638381,
+        "sender_full_name": "Mikael Rinnetmäki",
+        "timestamp": 1647516706
+    },
+    {
+        "content": "<p>I have recommended from the start that there be a third IG that holds the set of useful profiles. IPA then just focuses on RESTful access independent of these profiles, but enabling use of those profiles. IPS focuses on a useful FHIR-Document(s) made up of those profiles. I expected this would be hard to implement from the beginning, as getting the vision across all participants is hard, but I expected that there would come a time when this modularity would be beneficial.</p>",
+        "id": 275639677,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1647517485
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192917\">@Mikael Rinnetmäki</span> I will not be at the Connectathon (but DevDays, virtually <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span> ). Given that such ideas seem to be already floating around , my particular input is probably not crucial anyway (though I'm happy to contribute). My main goal as an implementer would be to have a single set profiles (across IPA &amp; IPS) that give a use case neutral, international basis but still leverage the mature structure of the IPS IG as far as possible.</p>",
+        "id": 275643526,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1647519755
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span> !<br>\nRegarding maturity, may I point out that the IPA spec is built on the success of the US Core, which derives from the US Argonaut project and has years of wide scale production use and is therefore considered to be very mature. IPA just aims to generalize parts of the US Core that can be generalized. <br>\nFrom this perspective, then, both the IPS and the US Core are use cases sitting on top of the single set of profiles of neutral, international basis.</p>",
+        "id": 275644376,
+        "sender_full_name": "Mikael Rinnetmäki",
+        "timestamp": 1647520229
+    },
+    {
+        "content": "<p>This is a really useful/helpful/insightful thread! <span aria-label=\"+1\" class=\"emoji emoji-1f44d\" role=\"img\" title=\"+1\">:+1:</span> Please can I introduce one important \"<em>sociotechnical</em>\" aspect related to our IPS vs IPA discussion? At present, IPS is being co-curated by a <strong>cross-SDO group including CEN, ISO, HL7, IHE, and SNOMED</strong>. This xSDO group represents a very useful collaboration... and one which we do not enjoy on the IPA side. The IPS work agenda is progressed at the standards meetings of <strong>all</strong> of these collaborators. Setting up this joint governance was non-trivial. Rather than try to replicate it for IPA... do we want to instead consider leveraging the <em>existing</em> IPS xSDO governance group to address these important questions regarding scope and roadmap?</p>",
+        "id": 275650110,
+        "sender_full_name": "Derek Ritz",
+        "timestamp": 1647522907
+    },
+    {
+        "content": "<p>In my mind, IPA documents an API and the minimal constraints on resources necessary to enable that API (e.g., patient's need to have an MRN and a name). IPA gives minimal expectations that any patient-facing app can have of any compliant server, focusing primarily on search/retreive functionality.</p>\n<p>IPS documents, well, the content of a single kind of document. It has relatively strict constraints on what will be found in that document so that when that document is received in asynchronous cross-border situations there all of the necessary content will be there, with minimal chance of misinterpretation.</p>\n<p>When I think of IPS as a toolbox, I think of modifying IPS so that it can be used to create other kinds of documents with similar clarity.</p>\n<p>I also think that we should separate the content of IPS from any API involved in sending, receiving, or creating them.</p>",
+        "id": 275751858,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1647568828
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191380\">@Elliot Silver</span> That's pretty much the idea, I think.  The least clarity at the moment is around what the \"toolbox\" is and the contexts where it will be used.  That might benefit from some additional discussion and further clarity.  I don't think it's necessarily limited to only documents - but otherwise I think the ideas are pretty close.</p>",
+        "id": 275752623,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1647569730
+    },
+    {
+        "content": "<p>When you move away from documents you start talking about APIs, or establishing expectations of APIs, or content necessary to support APIs. Sticking with documents allows you to focus IPS+ on content and stay away from APIs.</p>",
+        "id": 275752804,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1647569964
+    },
+    {
+        "content": "<p>It's a good point that it's impossible to cleanly separate data specifications and API. However, I don't think the coupling is so strong that IPS should stay away from non-document use cases. I believe there are scenarios where it makes sense to first specify the data needs to be exchanged and then separately consider the details of how to exchange it (our project in one example). Of course, one then has to deal with whatever restriction the data specs impose on the APIs, but the API-data-match debate has to come up at some point anyway.</p>\n<p><span class=\"user-mention\" data-user-id=\"191380\">@Elliot Silver</span> raises a good point about the \"technical nature\" of the IPA profiles (i.e. that they are mainly there to ensure the API functionality). If I understand that correctly, then it sounds like the IPA profiles are not really suitable as basis for other use case-focussed IGs. Or rather: they could be used, but unlike the IPS profiles they are not focussed on providing best practices for the transmission of specific sorts of medical information. For me, that would be an argument in favor of opening IPS  for a broader class of use cases - including non-document ones - to give more IGs the option of starting from such a best-practice basis. Of course, it will still not work for every project - that would require far too much watering down of IPS. But my feeling is that there are still enough cases where it would be useful. Having such a shared basis will also make it easier to later connect such systems (unlike the case where everyone starts from scratch).</p>",
+        "id": 275771652,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1647591944
+    },
+    {
+        "content": "<p>I think that's pretty much on target, <span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span>.</p>",
+        "id": 275784170,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1647599302
+    },
+    {
+        "content": "<p>In Norway we think of IPS as a data model, and the primary use (national (un)planned encounter) would be via REST API (or portal...). We have a central service for a portion of IPS today (\"Kjernejournal\"). Some need only a portion of IPS, like substance allergy intolerance. </p>\n<p>Sharing an IPS document for the international/European use case would be the secondary use. With a good IPS API, you can genereate an up to date IPS document on demand.</p>",
+        "id": 277247866,
+        "sender_full_name": "Espen Stranger Seland",
+        "timestamp": 1648715240
+    },
+    {
+        "content": "<p>that sounds line IPA</p>",
+        "id": 277274911,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1648730963
+    }
+]

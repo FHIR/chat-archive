@@ -1,0 +1,104 @@
+[
+    {
+        "content": "<p>I keep running into the same issue with every STU3 validator that does schematron: the implementation of Observation invariant obs-7 is broken. The intent is clear:</p>\n<p><code>obs-7: If code is the same as a component code then the value element associated with the code SHALL NOT be present</code></p>\n<p>But the implementation in schematron is off:</p>\n<p><code>  not(exists(f:value)) or not(count(\n    for $coding in f:code/f:coding \n    return  parent::*/f:component/f:code/f:coding[f:code/@value=$coding/f:code/@value and f:system/@value=$coding/f:system/@value]\n  )=0)</code></p>\n<p>I'm assuming the fhirpath implementation of \"value.empty() or code!=component.code\" is correct as I don't see complaints there. Imo the correct implementation in xpath/schematron would be:</p>\n<p><code>  not(exists(f:value)) or count(\n    for $coding in f:code/f:coding \n    return  parent::*/f:component/f:code/f:coding[f:code/@value=$coding/f:code/@value and f:system/@value=$coding/f:system/@value]\n  )</code></p>\n<p>I can fix my own environment, but if every implementation of FHIR STU3 might have the same issue then interoperability would be a guessing game.</p>\n<p>Am I interpreting this correctly? Recommendations?</p>",
+        "id": 153975088,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1531471864
+    },
+    {
+        "content": "<p>I agree, it is broken. I override obs-7 with this java code:</p>\n<div class=\"codehilite\"><pre><span></span><span class=\"k\">return</span> <span class=\"o\">(</span><span class=\"n\">obs</span><span class=\"o\">.</span><span class=\"na\">hasComponent</span><span class=\"o\">()</span> <span class=\"o\">&amp;&amp;</span> <span class=\"o\">!</span><span class=\"n\">obs</span><span class=\"o\">.</span><span class=\"na\">hasValue</span><span class=\"o\">())</span> <span class=\"o\">||</span> <span class=\"o\">(</span><span class=\"n\">obs</span><span class=\"o\">.</span><span class=\"na\">hasValue</span><span class=\"o\">()</span> <span class=\"o\">&amp;&amp;</span> <span class=\"o\">!</span><span class=\"n\">obs</span><span class=\"o\">.</span><span class=\"na\">hasComponent</span><span class=\"o\">());</span>\n</pre></div>",
+        "id": 153975190,
+        "sender_full_name": "Jason Walonoski",
+        "timestamp": 1531509093
+    },
+    {
+        "content": "<p>Which probably isn't right either. But I can't figure out what that invariant is supposed to do.</p>",
+        "id": 153975191,
+        "sender_full_name": "Jason Walonoski",
+        "timestamp": 1531509254
+    },
+    {
+        "content": "<p>I get the invariant: you don't want the same code in Observation.code and Observation.component.code and potentially have the value in .value and/or .component.value. It is effectively saying that if you 'have to' have the same code in .code and .component.code, the value shall be under component.</p>",
+        "id": 153975211,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1531514179
+    },
+    {
+        "content": "<p>I don't understand the proposed fix, but I don't understand that xpath anyway. <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> ?</p>",
+        "id": 153975306,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1531698586
+    },
+    {
+        "content": "<p>I agree with getting rid of the not()</p>",
+        "id": 153975341,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1531707488
+    },
+    {
+        "content": "<p>want to fix it?</p>",
+        "id": 153975342,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1531707524
+    },
+    {
+        "content": "<p>It looks like R4 is already fixed.  This is an R3 issue.  What's the mechanism for fixing that?</p>",
+        "id": 153975345,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1531707711
+    },
+    {
+        "content": "<p>wel, the only one is a technical correction, but I think it's not justified in this case</p>",
+        "id": 153975348,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1531708330
+    },
+    {
+        "content": "<p>It's in the way for sending/uploading instances from/to Touchstone, <span class=\"user-mention\" data-user-id=\"191370\">@Richard Ettema</span> : would you feel comfortable fixing this one manually?</p>",
+        "id": 153975414,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1531737852
+    },
+    {
+        "content": "<blockquote>\n<p>I don't understand the proposed fix, but I don't understand that xpath anyway. </p>\n</blockquote>\n<p>I'm assuming you do understand the fix and that is a typo. The xpath tests for equivalence of any Observation.code.coding to any Observation.component.coding. I'm assuming you would need to do the same thing upon implementing the fhirpath expression?</p>",
+        "id": 153975418,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1531738023
+    },
+    {
+        "content": "<p>I don't understand why removing =0 makes any useful difference</p>",
+        "id": 153975430,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1531743746
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191375\">@Alexander Henket</span>, yes, to support the Nictiz testing use case I can update the STU3 obs-7 invariant. I'll let you know when it's available via JIRA.</p>",
+        "id": 153975449,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1531747834
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> it’s not about removing =0 but about removing not(). The way it is, it is a double negative not(count(...)=0)</p>",
+        "id": 153975464,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1531748704
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191370\">@Richard Ettema</span> thanks. Now let’s hope no systems we test suffer the same issue.</p>",
+        "id": 153975467,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1531748770
+    },
+    {
+        "content": "<p>The =0 still needs to be there.  (The removal of the =0 was a typo in Alexander's proposed solution, which makes me feel slightly less bad about getting the original wrong... :))</p>",
+        "id": 153975605,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1531782360
+    },
+    {
+        "content": "<p>Ah... now I get the confusion... sorry about that. :-)</p>",
+        "id": 153975684,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1531816652
+    }
+]

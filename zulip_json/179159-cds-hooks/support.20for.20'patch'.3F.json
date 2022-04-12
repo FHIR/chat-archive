@@ -1,0 +1,104 @@
+[
+    {
+        "content": "<p>One of the types of things we'd like to do with CRD is to be able to 'amend' an order - specifically to add a note to an order (e.g. \"Service not covered by coverage ABC\", \"Service covered at 80%, no authorization needed\", \"Prior authorization pre-emptively granted - auth #12345\", etc.)</p>\n<p>We can (and currently are planning to) use the 'update' action, however that requires updating the entire order.  That has two issues:</p>\n<ul>\n<li>it's possible when using the 'order select' hook that the user has continued to type between the hook firing and the user clicking on the \"add note\" card to perform the action.  We don't want to wipe out that new information with the update</li>\n<li>allowing a complete replacement creates an increased risk of things messing up and perhaps a higher risk.  An EHR might be more comfortable with a patch that just adds a note rather than performing a complete replacement</li>\n</ul>\n<p>Is it reasonable to add explicit support for 'patch' as an action?</p>",
+        "id": 252487535,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1631117214
+    },
+    {
+        "content": "<blockquote>\n<p>it's possible when using the 'order select' hook that the user has continued to type between the hook firing and the user clicking on the \"add note\" card to perform the action. We don't want to wipe out that new information with the update</p>\n</blockquote>\n<p>Patch semantics are nice, and could be useful. But for this <em>specific</em> rationale: if the order has changed, it's possible your patch is no longer valid/safe/correct, so I'm not sure patch is any \"safer\" than update.</p>\n<blockquote>\n<p>allowing a complete replacement creates an increased risk of things messing up and perhaps a higher risk. An EHR might be more comfortable with a patch that just adds a note rather than performing a complete replacement</p>\n</blockquote>\n<p>This is more compelling; still of course an EHR needs to evaluate a patch request and determine whether it's safe, and whether it applies to a \"known current\" state. It's not super different from what an EHR needs to do when evaluating an arbitrary update. Again, I'm not against this, just want to be realistic about the \"gain\". When we looked at this for Argonaut's PAMA Imaging Guidance, we decided to just go with updates, stipulating in our IG that EHRs were free to reject updates if they did anything other than adding a \"PAMA Guidance Evaluation\" extension.</p>",
+        "id": 252490453,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1631118336
+    },
+    {
+        "content": "<p>Once upon a time I worked on implementing the \"patch\" interaction, and one thing that was never clear to me was what to do about the narrative section of the resource, because carrying out the patch could invalidate the contents of the narrative. I see the spec has since been updated to acknowledge this, though it's still not very prescriptive about what to do about it: <a href=\"https://www.hl7.org/fhir/http.html#patch\">https://www.hl7.org/fhir/http.html#patch</a><br>\nWhich really isn't a CDS Hooks issue, though it does make me wonder how many FHIR server implementations actually support patch. If a Hooks service could return a card that suggests a patch interaction, I wonder if it would make sense to declare that somehow, perhaps in the discovery response.</p>",
+        "id": 252500454,
+        "sender_full_name": "Jorge de la Garza",
+        "timestamp": 1631122110
+    },
+    {
+        "content": "<p>In my particular circumstance, the patch is relatively safe - add an additional note.  However, agree that patch could generally be problematic if any of the data has changed.  And because it's an \"in-memory\" object, we won't have an e-tag to help detect collisions.  Thoughts on how to make updates 'safer' would be welcome too.</p>\n<p>In terms of narrative, agree that's probably outside the CDS Hooks spec, though it may at least be worth mentioning the issue.</p>",
+        "id": 252511137,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1631126235
+    },
+    {
+        "content": "<p>I am seriously concerned that we're now talking <code>patch</code> vs. <code>update</code> which essentially becomes 'many ways to skin the same cat' and inherently creates incompatibilities in the standard. </p>\n<p>For example, the CDS Service supports patch but not update, and the EHR supports update but not patch =&gt; both ends are standards compliant, but they don't work together!</p>",
+        "id": 252526455,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631132397
+    },
+    {
+        "content": "<p>Also, if the scenario <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  cites of a user \"continuing to type\" while the CDS Hooks request is in flight, the Card itself may be invalid/inappropriate by the time it is displayed! I don't think this is realistic!</p>",
+        "id": 252526824,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631132570
+    },
+    {
+        "content": "<p>CDS Hooks specification itself is synchronous because the card may not be valid once the data changes.<br>\n<a href=\"/user_uploads/10155/JQrviQcHILEIisrQZrSih6PB/image.png\">image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/JQrviQcHILEIisrQZrSih6PB/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/JQrviQcHILEIisrQZrSih6PB/image.png\"></a></div>",
+        "id": 252528495,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631133345
+    },
+    {
+        "content": "<p>The call/response is synchronous, but the invoking of hooks calls to service providers is absolutely not 'blocking' so far as I'm aware.  My understanding of the way 'order-select' works is that it can fire continuously as the user is filling out an order and thus could provide information at any point.  It's certainly good to know that a drug isn't covered or will likely cause an allergy before you've finished typing all of the dosage instructions.  My understand was that hooks would fire in the background, not that the user would type some things and then have to wait and see what cards came back.  It's certainly true that if a user types one drug, then changes their mind, that the card for the previous drug might show up, at least momentarily.</p>",
+        "id": 252531733,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1631134754
+    },
+    {
+        "content": "<p>I was in the discussion where we made <code>order-select</code> have the option to be called multiple times. As I remember it, while it was allowed, I don't know if people thought it very realistic that it would be invoked for every change to the order given the performance penalty that such an implementation will have. In our implementation, we only invoke <code>order-select</code> on the initial selection of the order - subsequent changes do not invoke <code>order-select</code>.</p>",
+        "id": 252615615,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631190171
+    },
+    {
+        "content": "<p>Also, regardless of that, the concern around many ways to do the same thing still stands. Especially, if the card has become stale, creating <code>patch</code> with an intention of allowing content from stale cards to be used, is not safe to do either.</p>",
+        "id": 252615939,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631190270
+    },
+    {
+        "content": "<p>To be clear, EHRs can manage the stale update problem (or the stale patch problem) by refusing to apply updates (or patches) any time the resource has changed from what was sent to the CDS service. We don't need inline version numbers or etags to accomplish this.</p>",
+        "id": 252620554,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1631192349
+    },
+    {
+        "content": "<p>I agree with Matt's point about managing stale cards</p>",
+        "id": 252620613,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1631192373
+    },
+    {
+        "content": "<p>It seems that there should be explicit guidance about this in the spec?</p>",
+        "id": 252643094,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1631200429
+    },
+    {
+        "content": "<p>To the tune that ehrs SHALL NOT apply updates unless they are confident that it is safe to do so? (I wouldn't want come down so hard as to say updates are 100% unsafe to apply in the presence of any change at all, but that would seem like a reasonable conservative policy for implementers to follow.)</p>",
+        "id": 252652747,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1631204032
+    },
+    {
+        "content": "<p>this really seems like an unnecessary thing to say</p>",
+        "id": 252653043,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1631204161
+    },
+    {
+        "content": "<p>not that I am an advocate for unsafe things.. but more that this falls strongly in the systems design and policy; and starting to say things like this will lead to needing to say all other kinds of functional and non-functional requirements</p>",
+        "id": 252653224,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1631204225
+    },
+    {
+        "content": "<p>We say lots of things in our specifications that are 'unnecessary' if someone's really thought through all of the ramifications.  We say them anyhow because it turns out that lots of people implement to the letter of the specification and aren't necessarily that good at thinking through all of the ramifications.  A simple statement that \"If an 'update' action applies to one of the resources passed as context to a CDS service, the hook client should ensure that resource is either unchanged or that the update is 'safe' given any changes that have since occurred to the instance.\" would be suffice.  Not heavy-handed, but enough to draw attention to the issue.</p>",
+        "id": 252662399,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1631207969
+    }
+]

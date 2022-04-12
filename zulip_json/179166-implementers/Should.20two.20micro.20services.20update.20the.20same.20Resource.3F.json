@@ -1,0 +1,134 @@
+[
+    {
+        "content": "<p>I have a question about FHIR data modelling in a world of Micro Services. Specifically, I'm thinking about a case if different micro services should be allowed to update the same FHIR Resource.</p>\n<p>Let's take an AllergyIntolerance as an example. A Patient fills in a Questionnaire about their allergies and a \"PatientService\" creates a rather sparse AllergyIntolerance in a FHIR Server. A \"ClinicianService\" reads this resource and shows it to a Clinician. After gaining more knowledge (e.g. questions to the patient, lab tests etc) the Clinician can now enter more information about the Patient's allergy. The question is - should we update the existing AllergyIntolerance or create a new one? Originally I had hoped to update the existing one, but I'm starting to doubt it. Reasons:</p>\n<ul>\n<li>To show that the updated data comes from the Clinician, we would probably want to update the AllergyIntolerance.asserter field to be the Clinician</li>\n<li>However, this means the Clinician now vouches for all the fields in the Resource, not just the ones the ClinicianService might have read &amp; updated (above is provided we PATCH, if we instesad do a PUT, the data from the Patient is \"lost\", see below).</li>\n<li>After the update, the first version of the resource is sort of soft-deleted. If you query the FHIR Server for AllergyIntolerances asserted by the Patient it no longer exists, unless you know the exact version.</li>\n</ul>\n<p>If we instead create a new Resource, how would you suggest linking them together? Using the Linkage Resource? Provenance Resource?</p>",
+        "id": 241766661,
+        "sender_full_name": "Håkan MacLean",
+        "timestamp": 1623068082
+    },
+    {
+        "content": "<p>I'm thinking <span class=\"user-mention\" data-user-id=\"365674\">@Myles Bell</span> might have thought about these things :). Or might talk about them on Wednesday?</p>",
+        "id": 241766778,
+        "sender_full_name": "Håkan MacLean",
+        "timestamp": 1623068135
+    },
+    {
+        "content": "<p>I don't think the example with AllergyIntolerance is a good one:</p>\n<ul>\n<li>there would be an AllergyIntollerance resource for each allergy.</li>\n<li>in my experience patient reported allergies, once recorded, are never dismissed by  clinicians. They can be marked as 'refuted\" if some kind of testing is performed to demonstrate that there isn't actually an allergy.</li>\n</ul>\n<p>For the general question, whether different micro services should update the same FHIR resource, I'd say yes (unless there is a clear use case why that would cause problems). Use of the Provenance or AuditEvent resource would likely be a must if there is a need to distinguish which parts of the original resource were modified by which service.</p>",
+        "id": 241772200,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1623070794
+    },
+    {
+        "content": "<p>Thanks for chiming in <span class=\"user-mention\" data-user-id=\"192685\">@Vassil Peytchev</span> !</p>\n<p>In my simple example above, I'm thinking we're only talking about *one * allergy.</p>\n<p>Can you think if of an example where it really does make sense for say a Patient and Clinician service to update the same resource? With my bullets above I'm starting to question it. Even if you use Provenance or AuditEvent to show which fields were modified, we still have the problem of the Patient version being soft-deleted.</p>",
+        "id": 241780107,
+        "sender_full_name": "Håkan MacLean",
+        "timestamp": 1623074307
+    },
+    {
+        "content": "<p>I think its reasonable for different services to update a resource if that is known, tested, and your services understand the more complex provenance. It certainly increases the complexity of the system though, as you describe, so I would avoid it if possible. So I would probably choose to link the two somehow in this case or ensure that the clinicians at least verify all fields.<br>\nPreferably micro services would own their own data and be the only ones making changes to their own data directly, to make them as decoupled as possible. Having services set up around products is much more common than around domains though so being able to decouple the services is a long term goal rather than practical thing you can do now. Having separate domains is very briefly mentioned in my talk but not in any depth in the 15 mins</p>",
+        "id": 241785879,
+        "sender_full_name": "Myles Bell",
+        "timestamp": 1623076622
+    },
+    {
+        "content": "<p>In general, users are only going to want to see one authoritative entry for each allergy in the record.  More than that produces cognitive load of trying to figure out which record is 'accurate.  You certainly wouldn't want a patient to record an allergy and a clinician not to be able to see it.  If a patient records something and a provider marks it as refuted, that's a legitimate thing to happen.  Certainly better than creating a new record.</p>",
+        "id": 241786046,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1623076684
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179166-implementers/topic/Should.20two.20micro.20services.20update.20the.20same.20Resource.3F/near/241786046\">said</a>:</p>\n<blockquote>\n<p>In general, users are only going to want to see one authoritative entry for each allergy in the record.  More than that produces cognitive load of trying to figure out which record is 'accurate.  You certainly wouldn't want a patient to record an allergy and a clinician not to be able to see it.  If a patient records something and a provider marks it as refuted, that's a legitimate thing to happen.  Certainly better than creating a new record.</p>\n</blockquote>\n<p>The clinician would definitely be able to see the resource. But I'm starting to think if it's better that they see it and then create a new Resource and then we somehow link them together. If the Clinician creates a v2, then the version created by the Patient can no longer be found when quering the FHIR server for AllergieIntolerances created by the patient. And if the Patient then updates the resource yet again with new info, suddenly the EMR can no longer find any AllergyIntolerances that have been \"asserted\" by a Clinician.</p>",
+        "id": 242106912,
+        "sender_full_name": "Håkan MacLean",
+        "timestamp": 1623262112
+    },
+    {
+        "content": "<p>Why does the EMR need to find an AllergyIntolerance asserted by the physician? Maybe there are assumptions that I am missing.</p>\n<p>From what I can tell, you are concerned with the following sequence of events, with my assumptions added:</p>\n<ol>\n<li>Patient creates an AllergyIntolerance resource on a FHIR server, different from the EMR.</li>\n<li>The physician, using his EMR, is reviewing the patient's record, and via querying the FHIR server, sees the patient-created AllergyIntolerance information obtained from he FHIR resource.</li>\n<li>The physician, using his EMR, reviews the AllergyIntolerance  information, updates, and asserts it, and the EMR updates the AllergyIntolerance resource on the FHIR server.</li>\n<li>Patient views the newly updated AllergyIntollerance resource, and makes additional updates.</li>\n</ol>\n<p>As far as the EMR is concerned, the patient-updated AllergyIntolerance resource is perfectly fine, because the physician-asserted information (and the original patient-entered information, for that matter) are already within the EMR. If the EMR needs to get the latest version of the AllergyIntolerance resource, it can do that, and alert the physician of the differences within the EMR, allowing him to re-assert the information, and update the resource again.</p>",
+        "id": 242126437,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1623271093
+    },
+    {
+        "content": "<p>Nothing stops you from having two sets of AllergyIntolerance records - one managed by the Patient and one by the Practitioner.  You could use extensions to link them.  However, that wouldn't be a 'typical' workflow.  More common would be patients being able to put 'unverified' allergies directly into the clinical record.  They might also be able to add notes to existing allergies.  Providers would modify the same records to verify or refute them.  History and Provenance would allow you to go back and see who did what.</p>",
+        "id": 242220694,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1623337182
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179166-implementers/topic/Should.20two.20micro.20services.20update.20the.20same.20Resource.3F/near/242220694\">said</a>:</p>\n<blockquote>\n<p>Nothing stops you from having two sets of AllergyIntolerance records - one managed by the Patient and one by the Practitioner.  You could use extensions to link them.  </p>\n</blockquote>\n<p>You mean like creating a custom <a href=\"https://www.hl7.org/fhir/extensibility.html\">extension</a>? I would have thought the Linkage resource be the perfect fit for this use case?</p>\n<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179166-implementers/topic/Should.20two.20micro.20services.20update.20the.20same.20Resource.3F/near/242220694\">said</a>:</p>\n<blockquote>\n<p>More common would be patients being able to put 'unverified' allergies directly into the clinical record.  </p>\n</blockquote>\n<p>Hmm, maybe this is the use-case I'm trying to solve, but this is where I get confused. How would we go about creating this unverified state in practice on a FHIR server? If we allow the Patient to update the same resource, we are effectivey overwriting the verified Clinician version in the FHIR Server. If someone then queries the FHIR server for <em>verified</em> AllergyIntolerances, they would get 0 hits after the Patient update? <br>\n(Even though the ClinicianService/EMR would could of course still have its verified version of the AllergyIntolerance)</p>",
+        "id": 242236003,
+        "sender_full_name": "Håkan MacLean",
+        "timestamp": 1623343540
+    },
+    {
+        "content": "<p>If someone needs the <em>verified</em> AllergyIntolerance, could they query the ClinicalService/EMR for it?</p>",
+        "id": 242251393,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1623350167
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"192685\">Vassil Peytchev</span> <a href=\"#narrow/stream/179166-implementers/topic/Should.20two.20micro.20services.20update.20the.20same.20Resource.3F/near/242251393\">said</a>:</p>\n<blockquote>\n<p>If someone needs the <em>verified</em> AllergyIntolerance, could they query the ClinicalService/EMR for it?</p>\n</blockquote>\n<p>In theory, yes. However, the point of this project is to decouple services from each other. So instead of quering the EMR directly, we want services to communicate through events and the FHIR Server, that aggergates all events, should be seen as the \"ground truth\" for health data. So, in practice, no :).</p>",
+        "id": 242252138,
+        "sender_full_name": "Håkan MacLean",
+        "timestamp": 1623350520
+    },
+    {
+        "content": "<p>In this case, the requirements for the FHIR server go <em>waaaaaay</em> beyond the requirements for data exchange. Full history, provenance and AuditEvent support for every possible resource is just the bare minimum. With that bare minimum, getting the <em>verified</em> AllergyIntolerance  based on the Provenence record is not hard.</p>",
+        "id": 242255851,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1623352335
+    },
+    {
+        "content": "<p>Linkage would certainly be an option.  To my knowledge, no one's actually implemented it though...</p>",
+        "id": 242297325,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1623382058
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"192685\">Vassil Peytchev</span> <a href=\"#narrow/stream/179166-implementers/topic/Should.20two.20micro.20services.20update.20the.20same.20Resource.3F/near/242255851\">said</a>:</p>\n<blockquote>\n<p>In this case, the requirements for the FHIR server go <em>waaaaaay</em> beyond the requirements for data exchange. Full history, provenance and AuditEvent support for every possible resource is just the bare minimum. With that bare minimum, getting the <em>verified</em> AllergyIntolerance  based on the Provenence record is not hard.</p>\n</blockquote>\n<p>Ah, brilliant. Never thought of that. I.e. search through Provenances to find AllergyIntolerances that have been created by Clinicians. <br>\nHow would one go about this? Create some <code>SearchParameter</code> resource with FHIRPath to query for Provenance records that have been created by Clinicans that point to AllergyIntolerances? <br>\nOr is there a way to search through the <em>history</em> of a certain Resource instance?</p>",
+        "id": 242339528,
+        "sender_full_name": "Håkan MacLean",
+        "timestamp": 1623415596
+    },
+    {
+        "content": "<p>A \"brute-force\" way to find the <em>verified</em> version might look something like this:</p>\n<ol>\n<li>Obtain the AlleregyIntolerance resource. If that is verified, you are done. Otherwise</li>\n<li>GET [base]/Provenance?target=[base]/AllergyIntolerance/[id]$activity=4</li>\n<li>Go through the set of Provenence resources, and find the latest AllergyIntollerance version</li>\n</ol>\n<p>For 2. I am assuming that a search parameter of type Reference will match versioned references. Or do we need a :below modifier?</p>",
+        "id": 242352229,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1623421462
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"192685\">Vassil Peytchev</span> <a href=\"#narrow/stream/179166-implementers/topic/Should.20two.20micro.20services.20update.20the.20same.20Resource.3F/near/242352229\">said</a>:</p>\n<blockquote>\n<p>For 2. I am assuming that a search parameter of type Reference will match versioned references. Or do we need a :below modifier?</p>\n</blockquote>\n<p>From the <a href=\"https://www.hl7.org/fhir/search.html#versions\">search</a> spec:</p>\n<blockquote>\n<p>When searching on versioned references, the following rules apply:</p>\n<ul>\n<li>If a resource has a reference that is versioned, and chaining is performed, the criteria should ideally be evaluated against the version referenced, but most systems will not be capable of this because search is only defined to function against the current version of a resource</li>\n<li>Where a search does not act on the referenced version, search results SHOULD contain a OperationOutcome with a warning that indicates the discrepancy</li>\n<li>If a resource has a reference that is versioned and _include is performed, the specified version SHOULD be provided.</li>\n</ul>\n</blockquote>\n<p>Doesn't look like we call out searching against all versions.</p>",
+        "id": 242361927,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1623425621
+    },
+    {
+        "content": "<p>Shouldn't the :below modifier work:<br>\nObtain the current version of the resource (plain non-versioned search).<br>\nGet the latest version from the ETag<br>\ndo a GET [base]/Provenance?target:below=[base]/AllergyIntolerance/[id]/_history/[current version]</p>",
+        "id": 242371640,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1623429859
+    },
+    {
+        "content": "<p>I don't think :below applies to that kind of reference search. It applies to a bunch of cases (canonicals, uris, hierarchies) but there's no indication in the spec that it applies to versions.</p>",
+        "id": 242372253,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1623430164
+    },
+    {
+        "content": "<p>Shouldn't it?</p>",
+        "id": 242372572,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1623430306
+    },
+    {
+        "content": "<p>hmm, I guess if you're searching by the fullURL it makes sense because that's like the URI case?</p>\n<p>If you're searching for a local ref AllergyIntolerance/[id]/_history/[version] I think that would be a new assumption.</p>",
+        "id": 242372758,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1623430396
+    },
+    {
+        "content": "<p>I will start a new topic to see what can be clarified, maybe I am missing something.</p>",
+        "id": 242374329,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1623431062
+    }
+]

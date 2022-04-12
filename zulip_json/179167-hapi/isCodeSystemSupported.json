@@ -1,0 +1,110 @@
+[
+    {
+        "content": "<p>I have a class implementing IValidationSupport and have started to receive UUID's on the isCodeSystemSupported interface.</p>\n<p>It's also failing to validate Codes, getting errors like:</p>\n<p>The value provided ('official') is not in the value set <a href=\"https://fhir.hl7.org.uk/STU3/ValueSet/CareConnect-NameUse-1\" target=\"_blank\" title=\"https://fhir.hl7.org.uk/STU3/ValueSet/CareConnect-NameUse-1\">https://fhir.hl7.org.uk/STU3/ValueSet/CareConnect-NameUse-1</a> (<a href=\"https://fhir.hl7.org.uk/STU3/ValueSet/CareConnect-NameUse-1\" target=\"_blank\" title=\"https://fhir.hl7.org.uk/STU3/ValueSet/CareConnect-NameUse-1\">https://fhir.hl7.org.uk/STU3/ValueSet/CareConnect-NameUse-1</a>, and a code is required from this value set) (error message = Unknown code[official] in system[(none)])</p>\n<p>Suspect these are related (will investigate further)</p>",
+        "id": 181032116,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1574095338
+    },
+    {
+        "content": "<p>believe this is also occurring on <br>\npublic &lt;T extends IBaseResource&gt; T<br>\n    fetchResource(FhirContext theContext, Class&lt;T&gt; theClass, String theUri) {</p>",
+        "id": 181032196,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1574095410
+    },
+    {
+        "content": "<p>The GUID seems to be Constants.CODESYSTEM_VALIDATE_NOT_NEEDED</p>",
+        "id": 181032613,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1574095611
+    },
+    {
+        "content": "<p>On 4.1.0</p>",
+        "id": 181033068,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1574095897
+    },
+    {
+        "content": "<p>Yup, it would be that constant.</p>\n<p>That GUID is used as a standin for the codesystem being validated when a field is being validated that doesn't have an explicit codeystem (i.e. a field that is of type <code>code</code> instead of <code>coding</code>). There will always be a VS URI in that case which scopes what the CS could be.</p>\n<p>I don't know that I love the current design of that API- That GUID is confusing I would agree.</p>",
+        "id": 181036347,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1574097900
+    },
+    {
+        "content": "<p>I can say that <span class=\"user-mention\" data-user-id=\"191376\">@Jim Steel</span> and I really do not like these false system URIs - since the trigger for these is a code-typed field the system URI should be known and thus should be providable?</p>",
+        "id": 181054685,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1574110535
+    },
+    {
+        "content": "<p>What I believe is happening:</p>\n<p>My isCodeSystemSupported is called and responds false (as CodeSystem = c73c77eb-f4b9-49ae-a5c9-6eb727811615)<br>\nSo the calling ValidationSupportChain class doesn't then call my validateCode<br>\n(line 220 public CodeValidationResult validateCode in ValidationSupportChain</p>\n<p>Does IsCodeSystemSupported need changing to also pass over the ValueSetUrl</p>",
+        "id": 181062043,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1574115114
+    },
+    {
+        "content": "<p>Think this is the issue. DefaultProfileValidation support is trying to Validate the Code but it doesn't understand the ValueSet.</p>\n<p><a href=\"/user_uploads/10155/nzDI1I_C6CwTCDcMC75ggju1/Screenshot-2019-11-19-at-06.32.28.png\" target=\"_blank\" title=\"Screenshot-2019-11-19-at-06.32.28.png\">Screenshot-2019-11-19-at-06.32.28.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/nzDI1I_C6CwTCDcMC75ggju1/Screenshot-2019-11-19-at-06.32.28.png\" target=\"_blank\" title=\"Screenshot-2019-11-19-at-06.32.28.png\"><img src=\"/user_uploads/10155/nzDI1I_C6CwTCDcMC75ggju1/Screenshot-2019-11-19-at-06.32.28.png\"></a></div>",
+        "id": 181085959,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1574145217
+    },
+    {
+        "content": "<p>and so fails</p>",
+        "id": 181086007,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1574145252
+    },
+    {
+        "content": "<p>My IsSystemSupported fails because the UUID in the image above is passed in as the CodeSystem url</p>",
+        "id": 181086103,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1574145416
+    },
+    {
+        "content": "<blockquote>\n<p>I can say that @Jim Steel and I really do not like these false system URIs - since the trigger for these is a code-typed field the system URI should be known and thus should be providable?</p>\n</blockquote>\n<p>Well, there is a bit of a chicken and egg thing. When the validator goes to validate <code>Patient.gender</code> all it knows is the code without a system, and the ValueSet that the code is bound to. Sure, the validator could figure out what the system is since there is a valueset binding, but it would have to expand the valueset to do that and then it's basically duplicating the term service's job.</p>\n<p>FWIW: the UUID was a solution to a rather glaring bug in HAPI's validator: Prior to 4.1.0, you could omit the system entirely on a Coding field and it would validate correctly if the code was appropriate for the bound VS.</p>\n<p>The intent with the UUID was to solve the problem of there being 3 possible states: Code+System provided, Code provided but no system because the field is a code, Code provided but system was left blank in the resource being validated.</p>\n<p>Probably the right solution here is to either add a new overload to validateCode, or to create some kind of value type for the system that can distinguish between those 3 states...</p>",
+        "id": 181148501,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1574193533
+    },
+    {
+        "content": "<p>I beginning to think the problem I'm seeing is an error in UK Profiles and has come to light because of this change.</p>",
+        "id": 181151126,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1574195474
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> I'll do that, and start using it.</p>",
+        "id": 181179556,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1574225056
+    },
+    {
+        "content": "<p>I think I've found what is causing my issue. In ValidationSupportChain line 213-221</p>\n<div class=\"codehilite\"><pre><span></span>        ```while(var6.hasNext()) {\n            next = (IValidationSupport)var6.next();\n            if (theCodeSystem != null &amp;&amp; next.isCodeSystemSupported(theCtx, theCodeSystem)) {\n                result = next.validateCode(theCtx, theCodeSystem, theCode, theDisplay, theValueSetUrl);\n                continue label23;\n            }\n\n            ourLog.debug(&quot;Chain item {} does not support code system {}&quot;, next, theCodeSystem);\n        }```\n</pre></div>\n\n\n<p>The code checks to see if the CodeSystem is supported BUT doesn't check if the ValueSet is supported. <br>\nSo the validateCode function of the first validator in the chain will always be called.</p>",
+        "id": 181901202,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1574758830
+    },
+    {
+        "content": "<p>Have worked around this (and also worked the second problem <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> mentions).</p>",
+        "id": 181914241,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1574769701
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191687\">@Kevin Mayfield</span>  Interesting... This hasn't been an issue for any \"normal\" JPA server since there is only one implementation that handles custom codesystems and valuesets (the main term svc). I can see why this logic wouldn't work though if you have anything more fancy.</p>\n<p>How did you work around it? Do we need an <code>isValueSetSupported</code> method?</p>",
+        "id": 181917712,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1574772718
+    },
+    {
+        "content": "<p>It wasn't clean, I reordered my validation chain, moving DefaultProfileValidation support to last. (and then added core fhir support into my first validator). </p>\n<p>I think ValidationSupportChain should only call a ValidationSupport class that supports the ValueSet.</p>",
+        "id": 181921405,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1574775537
+    },
+    {
+        "content": "<p>I say I think - I've had to do some other workarounds with a number of UK profiles, codes and values. So I might have come to this incorrectly.</p>",
+        "id": 181921473,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1574775601
+    }
+]

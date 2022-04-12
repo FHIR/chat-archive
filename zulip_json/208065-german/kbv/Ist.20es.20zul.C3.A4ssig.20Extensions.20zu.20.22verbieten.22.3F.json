@@ -1,0 +1,92 @@
+[
+    {
+        "content": "<p>Macht es eigentlich Sinn, ein System wie FHIR zu verwenden, das von sich aus einen großen Wert auf universelle Erweiterbarkeit legt (Extensions) aber dann gleichzeitig jegliche Erweiterung fremder Extensions zu verbieten?</p>\n<p>Ich denke da an die KBV Verordnungssoftware-Schnittstelle (<em>Anforderungskatalog Verordnungssoftware-Schnittstelle nach § 291d Absatz 1a Satz 1 Nr. 1 SGB V</em>)</p>\n<p>Hier werden diverse Profile und Extensions vorgegeben, allerdings mit folgender der Einschränkung:</p>\n<blockquote>\n<p>Die KBV-Profile müssen ohne jegliche Modifikation eingesetzt werden. ... Bei der Realisierung der VoS müssen die KBV-Profile, -Extensions, -ValueSets und -CodeSystems eingesetzt werden. <strong>Einschränkungen, Erweiterungen und jegliche Modifikationen dieser Dokumente sind nicht erlaubt.</strong></p>\n</blockquote>\n<p>(Hervorhebung von mir)</p>\n<p>Meiner Meinung nach steht das im Widerspruch zu <a href=\"https://www.hl7.org/fhir/extensibility.html#2.5.0\">Kapitel 2.5.0 in der FHIR Dokumentation</a>, insbesondere im zweiten Abschnitt:</p>\n<blockquote>\n<p>As such, extensibility is a fundamental part of the design of this specification. Every element in a resource can have extension child elements to represent additional information that is not part of the basic definition of the resource. <strong>Applications should not reject resources merely because they contain extensions,</strong> though they may need to reject resources because of the specific contents of the extensions.</p>\n</blockquote>\n<p>(Hervorhebung von mir)</p>\n<p>Wenn ich hier den letzten Abschnitt richtig lese bedeutet das doch daß man Extension nicht per se zurückweisen darf (also nur weil sie da sind), sondern höchstens weil etwas mit den vorhandenen Daten nicht in Ordnung ist. Bei ValueSets und CodeSystems würde ich eine solche Einschränkung verstehen aber bei Extensions finde ich macht diese Einschänkung wenig Sinn.</p>\n<p>Oder habe ich da etwas falsch verstanden?</p>",
+        "id": 216074660,
+        "sender_full_name": "Volker Wick",
+        "timestamp": 1604923172
+    },
+    {
+        "content": "<p>Aus meiner Sicht lässt sich diese Frage nur aus dem Anwendungskontext heraus beantworten. Generell ist natürlich immer korrekterweise drauf hinzuweisen, dass Extensions in FHIR nicht als etwas \"Spezielles\" zu werten sind, sondern wie jedes anderen Element auch verarbeitet werden sollte. Jedoch befinden wir uns im KBV Kontext in einer sehr tiefen Ableitungshierarchie. Diese Profile sind Use-Case spezifisch. Und in diesem konkreten Fall sind Erweiterungen nicht vorgesehen, aus div. nachvollziehbaren Gründen. Genau aus diesem Grund steht in der FHIR Spezifikation ein SHOULD und kein MUST NOT. Solange gute Gründe vorliegen darf ein Implementation Guide Einschränkungen vornehmen.</p>",
+        "id": 216076390,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1604924361
+    },
+    {
+        "content": "<p>Vielleicht mag jemand anders noch ein wenig auf die Gründe eingehen :)</p>",
+        "id": 216076406,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1604924378
+    },
+    {
+        "content": "<p>Diese Flexibilität ist genau das Problem für IGs. Wir arbeiten gerade an speziellen Extensions für mustSupport, die hier dann Näheres regeln, d.h. wann man was machen darf. Die vielen IGs haben hier eine derartige Komplexität entwickelt, die sich im Narrativ versteckt. Das muss formalisiert werden, damit man das in den Griff bekommt.<br>\nIn sofern hat Alexander Recht, dass das use case spezifisch entschieden werden muss. Es ist mehr als legitim, das mitunter auch zu verbieten.</p>",
+        "id": 216078867,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1604925995
+    },
+    {
+        "content": "<p>Für die VoS-Schnittstelle kann ich es jetzt konkret nicht beantworten, beim eRezept war die (nachvollziehbare) Begründung für das rigorose verbieten von allem, was nicht ausdrücklich in der Spezifikation steht, dass auf dem eRezept aus Gründen des Datenschutzes und der Datensparsamkeit nichts draufstehen darf, was nicht auch auf dem Papierrezept stand. Klar widerspricht das der Philosophie von FHIR, die versucht, eine möglichst offene und interoperable Basis vorzugeben, aber Philosophie ist halt kein Gesetz und \"Offenheit\" beinhaltet eben auch, dass der Standard auch für extrem reglementierte Bereiche nutzbar ist.</p>",
+        "id": 216222883,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1605020149
+    },
+    {
+        "content": "<p>Ich verstehe aber, dass genau diese Einschränkungen die Entwickler in Zukunft viel Nerven kosten werden. Insbesondere da dies zu Inkompatibilitäten zwischen verschiedenen Spezifikationen führt.</p>\n<p>Daher mein Tipp:<br>\nImplementiert FHIR immer so, dass ihr das Maximum dessen, was euer System an Daten liefern kann, liefert.<br>\nBaut euch einmal ein Skript/Modul/Microservice (was auch immer), das folgendes tut:</p>\n<ul>\n<li>\n<p>es nimmt zwei Parameter entgegen:</p>\n<ol>\n<li>Instanz einer Ressource die \"bereinigt\" werden soll</li>\n<li>Profil auf das bereinigt werden muss</li>\n</ol>\n</li>\n<li>\n<p>in den Profilen (StructureDefinitions) steht in einfacher, maschinenlesbarer Form drin, wie die Kardinalitäten der einzelnen Elemente lauten<br>\nDas Skript muss also das Profil lesen, und aus der Instanz alles entfernen, was eine Kardinalität von 0..0 hat.</p>\n</li>\n<li>\n<p>Die Rückgabe ist die bereinigte Ressource</p>\n</li>\n</ul>\n<p>Das funktioniert dann mit x-beliebigen FHIR-Ressourcen und x-beliebigen Profilen. Einmal programmiert, kann man dann künftigen restriktiven Spezifikationen einigermaßen entspannt entgegenblicken. <br>\nFür jeden neuen Kommunikationskanal muss dem Skript dann bloß noch ein neues Zielprofil als Parameter übergeben werden.</p>\n<p>Der/die erste, der/die das macht und es open source stellt, kriegt ein Eis von mir <span aria-label=\"smiley\" class=\"emoji emoji-1f603\" role=\"img\" title=\"smiley\">:smiley:</span></p>",
+        "id": 216224255,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1605020651
+    },
+    {
+        "content": "<p>Problematisch könnte an den o.g. Einschränkungen der VoS allerdings sein, wenn diese nur in Prosa im IG stehen, aber nicht maschinenlesbar im Profil. Muss ich mir mal anschauen...</p>",
+        "id": 216224357,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1605020705
+    },
+    {
+        "content": "<p>So einfach wird es nicht werden - das gilt nur für lineare Einschränkungen wie von dir beschrieben. Profile führen auch andere Einschränkungen  ein, die sich zT gegenseitig ausschließen und nicht additiv wirken.</p>",
+        "id": 216227344,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1605022118
+    },
+    {
+        "content": "<p>Hast du ein Beispiel?</p>",
+        "id": 216250294,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1605031715
+    },
+    {
+        "content": "<p>Kodierungen, weitere oder alternative Extensions, Kardinalitäten, ..</p>",
+        "id": 216287408,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1605049685
+    },
+    {
+        "content": "<p>Das maximal Lieferbare muss ja auch nicht immer ein Superset sein...</p>",
+        "id": 216287488,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1605049742
+    },
+    {
+        "content": "<p>Es ist auch eine Frage, ob die Semantik der Instanz zum Profil passt...</p>",
+        "id": 216288005,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1605050091
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191549\">Frank Oemig</span> <a href=\"#narrow/stream/208065-german.2Fkbv/topic/Ist.20es.20zul.C3.A4ssig.20Extensions.20zu.20.22verbieten.22.3F/near/216287408\">said</a>:</p>\n<blockquote>\n<p>Kodierungen, weitere oder alternative Extensions, Kardinalitäten, ..</p>\n</blockquote>\n<p>Alternative Kodierungen/Bindings stellen keine Inkompatibilität dar, so lange das Superset die entsprechende Mehrfachkodierung enthält.<br>\nAlternative Extensions dto.<br>\nWeitere Extensions sind bei der Validierung generell unproblematisch, (außer im o.g. Fall der KBV)<br>\nKardinalitäten wurden ja genannt. Eine besondere Herausforderung könnte es jedoch sein, wie man in dem Skript mit begrenzenten Max-Kardinalitäten &gt; 0 umgeht. Wenn die Anzahl der Adressen beim Patienten z.B. von 3 auf 1 reduzieren muss, weil das Zielprofil nur eine Adresse erlaubt.<br>\nDabei müsste man dann eine qualifizierte Entscheidung treffen, <em>welche</em> Adressen gelöscht werden und welche das Zielproblem braucht.</p>\n<p>Müsste aber technisch auch lösbar sein, sofern man im (HAPI-) Code eine Möglichkeit hat, einzelne Elemente gegen einzelne ElementDefinitions zu validieren, bzw. zu ermitteln, welches Element auf ein Slice passt. Ich meine, dass das geht, bin mir aber nicht 100% sicher...</p>",
+        "id": 216318214,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1605083434
+    },
+    {
+        "content": "<p>Das erfordert eine semantische Beschreibung, um was es sich genau handelt. So bezweifele ich, dass irgendeine Observation gemäß eines beliebigen Profils einfach reduziert werden kann - und dann validiert es.<br>\nIch muss zumindest ein Basisprofil haben. Dazu müssten wir aber Profilhierarchien einführen - wie ich es seit Jahren fordere. Aktuell sehe ich das aber nicht. Vielleicht kann man mir den Link mal geben...</p>",
+        "id": 216319834,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1605084742
+    },
+    {
+        "content": "<p>Vielen Dank an alle für das Feedback. Besonders der Vorschlag von Simone klingt ziemlich interessant. (Wenn wir die Zeit für einen solchen Bereinigungs-Service hätten würden wir es sicher angehen...)<br>\nIn der Zwischenzeit werden wir die \"verbotenen\" Extensions erstmal wieder rauswerfen und fürs nächste Mal entsprechend vorsichtiger sein.</p>",
+        "id": 216437312,
+        "sender_full_name": "Volker Wick",
+        "timestamp": 1605168080
+    }
+]

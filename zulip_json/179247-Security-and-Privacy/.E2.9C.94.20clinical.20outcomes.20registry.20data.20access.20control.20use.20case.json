@@ -1,0 +1,182 @@
+[
+    {
+        "content": "<p>I'm seeking feedback and/or guidance on how to best implement a data-level access control policy for a clinical outcomes registry's FHIR API ...</p>\n<p>Observational research is the registry's primary purpose.</p>\n<p>The outcomes registry receives data from multiple provider organizations.</p>\n<p>Consequently, the registry's FHIR API will be accessible by multiple provider organizations.</p>\n<p>The user credential for the FHIR API is an OAuth bearer token (JWT) which indicates the organizational affiliation of the user.</p>\n<p>The FHIR API must limit the accessibility of data so that each provider organization is only able to interact with its own data.  This is an essential access control policy that must be enforced by the FHIR API.</p>\n<p>To implement this data access control policy, a mechanism for computing the organizational affiliation of each FHIR resource is needed.  Listed below are a few thoughts about potential mechanisms.</p>\n<p>1. CareTeam<br>\nMechanism:  Use CareTeam to describe connection between Patient and provider organization, and to indicate organization members are authorized to access data in Patient compartment.  For access to resources within Patient Compartment, require user credential to indicate membership in provider organization referenced by an active Patient CareTeam. </p>\n<p>2. Consent<br>\nMechanism:  Use Consent to describe connection between FHIR resource and provider organization.  Because Consent can reference any FHIR resource, it could describe access control restrictions more granular than those of the Patient Compartment.  However, granular access control restrictions could impose additional costs and complexity.</p>\n<p>3. Provenance<br>\nMechanism:  Use Provenance to describe connection between FHIR resource and provider organization.  Provenance can reference any FHIR resource.  However, Provenance is intended to track activity affecting a resource, and is not intended to describe data access policy per se.</p>\n<p>4. Security Tags (Resource.meta.security)<br>\nMechanism:  Extend security labels value set to include a set of organization identifiers.  Use security tags to describe connection between FHIR resource and provider organization.  However, this could also be considered a surprising and unorthodox use of security labels.</p>\n<p>5. Tags (Resource.meta.tag)<br>\nMechanism:  Use resource tag to describe connection between FHIR resource and provider organization.  However, shoehorning an organization identifier into a resource tag Coding could be considered unorthodox (although perhaps less offensive than abusing a security tag).</p>\n<p>6. Extension<br>\nMechanism:  Create a custom extension to describe connection between FHIR resource and provider organization.</p>\n<p>Some of the above are just brainstorming ideas, listed only for purposes of illustration (and because I may have briefly considered them).</p>\n<p>At the moment, I'd favor using a (Patient + CareTeam + Organization) construct to support data access control decisions related to the Patient compartment in our system.   This seems to fit our use case, to strike a good balance between complexity &amp; maintainability, and to follow a natural approach in its use of FHIR resources.</p>\n<p>Does this look like a reasonable way to start implementing a data-level access control policy?</p>\n<p>Have others encountered similar use cases involving FHIR data?  </p>\n<p>Other comments, feedback, or guidance?</p>",
+        "id": 173403339,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1565985746
+    },
+    {
+        "content": "<p>You missed one. There is a similar structure to what you have, but rather than using #4; you would use .meta.source. Given that every organization sources their own data, and they are the only ones that should be able to change it; then this element identifies which organization sourced the data, and the Oauth token identifies where the user is associated.</p>",
+        "id": 173439338,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1566043541
+    },
+    {
+        "content": "<p>The most close to \"Attribute Based Access Control\" (ABAC) is your #4. This is NOT unusual. You will see on the security labels <a href=\"http://build.fhir.org/security-labels.html\" target=\"_blank\" title=\"http://build.fhir.org/security-labels.html\">http://build.fhir.org/security-labels.html</a> page that the HCS includes \"Compartment Category\". What you describe as \"a set of organisation identifiers\" is a \"set of compartment codes\". Thus each resource can be tagged with one (or more) compartment codes. Where these compartment codes identify the organization(s) that have rights to change the data.  This is how many REST systems operate. You do need to manage a valueset of compartment codes, and the policy that links compartment codes to organizations that have access.  This would be very typical of a situation like yours, or a Provider Directory, etc.<br>\nBy using compartment, rather than .meta.source,  you can support when a resource has more than one compartment. <br>\nI have intended to write an article on this... now might be the time.</p>",
+        "id": 173439552,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1566043969
+    },
+    {
+        "content": "<p>of course your Create pathway does need to check that the compartment is legitimate for the organization writing. (which all of them need)<br>\nAnd the OAuth tokens must come with an authoritative assertion of organization affiliation (which all of them need)<br>\nAnd audit logging everything, with regular inspection of the logs to see that everyone is behaving and that the rules are working as expected. (using AuditEvent)</p>",
+        "id": 173439614,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1566044134
+    },
+    {
+        "content": "<p>note that this is security-tag level \"compartment\"... somewhat related, but not the same, as the relational-level \"compartment\" such as in the FHIR specification under \"patient compartment\", or defined under CompartmentDefinition <a href=\"http://build.fhir.org/compartmentdefinition.html\" target=\"_blank\" title=\"http://build.fhir.org/compartmentdefinition.html\">http://build.fhir.org/compartmentdefinition.html</a>. This is more powerful than just tags, but using just tags requires less introspection and doesn't need to have data element relationships to be grouped in a compartment. The tag level security compartment could be defined in a CompartmentDefinition if that brings useful functionality (such as search grouping)</p>",
+        "id": 173439972,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1566044817
+    },
+    {
+        "content": "<p>Regarding Meta.source, I had also considered using that, but forgot to include it in the above list.  It would be possible to define a mapping between recognized Meta.source base URLs and a provider organization indicated by the user credential.  However, Meta.source cardinality is limited to 0..1, and there are some cases where we might need to grant access by multiple provider organizations to the same resource.</p>\n<p>Thanks very much for the explanation of how \"Compartment Category\" is an orthodox (and unsurprising) usage of security labels.  #4 now looks like the best option for implementing our use case.</p>",
+        "id": 173483216,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1566127727
+    },
+    {
+        "content": "<p>I would like to work with you to come up with some good documentation for this.. no need to be formal. Just best to have someone with a voice of 'actually did this in production'...</p>",
+        "id": 173494317,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1566147943
+    },
+    {
+        "content": "<p>Good idea.  If you're also attending the Atlanta WGM, that could be a good time to discuss in person.</p>",
+        "id": 173496847,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1566152589
+    },
+    {
+        "content": "<p>The \"Compartment Category\" use case for security labels is a pattern that may be relevant to many systems.  It could be considered an example of a valid extension to the Meta.security / SecurityLabels (Extensible) value set binding.   Considering the gaps in my initial understanding, I think it would be good to find a way to give this pattern more exposure (and/or exposition).</p>",
+        "id": 173546595,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1566223806
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span> <span class=\"user-mention\" data-user-id=\"191926\">@Joel Schneider</span>  did you continue on this?<br>\nWe are facing the same problem atm for our tumor board software.</p>\n<p>Every Member of the tumor board is allowed to read all data but only the creator of a record is allowed to edit existing resources.</p>",
+        "id": 187257899,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1580733597
+    },
+    {
+        "content": "<p>Our initial plan was to use the security label \"compartment\", but as security labels are like a key value store this isn't possible.<br>\nSo we will end up with our own CodeSystem, containing all participating organizations</p>",
+        "id": 187261220,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1580736347
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 187261376,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1580736453
+    },
+    {
+        "content": "<p>Defining your own CodeSystem for this seems reasonable to me.</p>",
+        "id": 187272851,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1580744189
+    },
+    {
+        "content": "<p>What i really dislike about this approach: The security \"tag/label\" is contained inside of the resources to be protected. So a user which is allowed to PUT/update a resource could change the meta part and change the compartment.</p>",
+        "id": 187274016,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1580744942
+    },
+    {
+        "content": "<p>Or even get rid of the security tag. Filtering this in hapi will be hard i guess.</p>",
+        "id": 187274135,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1580745035
+    },
+    {
+        "content": "<p>So provenance, added to the server automatically via an Interceptor which reads the access token seems the nicer option. No user gets the right to modify provenance resources. Strict distinction between medical content and a resource used for access management.</p>",
+        "id": 187274229,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1580745109
+    },
+    {
+        "content": "<p>For our system, the user credential (OAuth bearer token) required to access the FHIR API is a JWT (JSON Web Token) which indicates the access privileges of the client via scopes &amp; claims.</p>\n<p>The server evaluates the user credential before executing any API request.</p>",
+        "id": 187311786,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1580768840
+    },
+    {
+        "content": "<p>To me, keeping a security tag on the resource itself seems simpler than evaluating 0..n associated Provenance records.</p>",
+        "id": 187312387,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1580769207
+    },
+    {
+        "content": "<p>Enforcement of policies related to security tags can also be done by an interceptor.</p>",
+        "id": 187312971,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1580769573
+    },
+    {
+        "content": "<p>My understanding is that tags are not considered part of the resource content for purposes of digital signatures, etc.</p>",
+        "id": 187313207,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1580769743
+    },
+    {
+        "content": "<p>Couple of points to unpack.<br>\n1) Yes you can use compartment in that way, and you would then have a local code-system for each compartment. This is indeed one way to solve it. This model is more simple, but has issues (see 2)<br>\n2) Yes you could choose to use policy pointing at the data that policy controls. This is more classic security model, and does have the big benefit of having the policy in a different CRUD domain from the clinical content, and having the ability to change policy without revising the clinical content. I tend to prefer this model for these reasons. The policy pointing could be direct from a policy language, indirectly by way of Consent or Provenance, or indirectly by way of a potential new resource we will be discussing this week (Permission)<br>\n3) There is some hints in the specification that the normal REST interface for CREATE and UPDATE would not be allowed to change the .meta.security, and that this element must be modified only by way of the meta operations.<br>\n4) There are some digital signature canonicalization recommendations that skip the .meta.security, but that is not always the right solution. Ignoring .meta.security in the digital signature is likely most appropriate for clinical integrity purposes, as the clinical use doesn't care about the .meta.security; and by ignoring this the .meta.security can change over time for various policy reasons.  So there is good reason to ignore this element, and good reasons to include it. The core spec doesn't define which you should choose</p>",
+        "id": 187315142,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1580771224
+    },
+    {
+        "content": "<p>thanks for your inputs. Using 2) with Provenance to keep track about the creator of a resource works fine for us.<br>\n<span class=\"user-mention\" data-user-id=\"191926\">@Joel Schneider</span> how do you prevent the manipulation of the security tag? Just did a quick check in hapi, i can modify security tags within a resources using PUT</p>",
+        "id": 187360037,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1580824652
+    },
+    {
+        "content": "<p>Our solution is  web based frontend using OIDC/Oauth against all backends. If someone uses our application, extracts the bearer, uses Postman directly against the FHIR Server: then he could manipulate, e.g. remove security tags</p>",
+        "id": 187360208,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1580824772
+    },
+    {
+        "content": "<p>Only for resources he was granted access to before, but after the manipulation everyone would have access to these resources.</p>",
+        "id": 187360302,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1580824809
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191451\">@Patrick Werner</span> The AuthorizationInterceptor that parses the JWT could enforce policies related to security tags.  It might read and inspect the resource before processing the PUT or, alternatively, require/use conditional update criteria consistent with the JWT scopes/claims.</p>\n<p>(Our current setup implements these policies in a separate service that sits in front of the FHIR server.)</p>",
+        "id": 187364127,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1580827658
+    },
+    {
+        "content": "<p>yes, the prevention of improper modification of the .meta.security (or any element) is a server side enforcement. Client tools are not something to be trusted to enforce policy, so server must enforce.</p>",
+        "id": 187396176,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1580847483
+    },
+    {
+        "content": "<p>or as Joel points... some security layer intermediary...</p>",
+        "id": 187403150,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1580852225
+    },
+    {
+        "content": "<p>This is a common use-case in SaaS applications where you want to offer a standard API at a single endpoint while ensuring that from the client's perspective, it \"seems\" like as if they are the only users of the API, e.g., when they do a <code>GET /api/fhirBase/Patient</code> they only see the patient belonging to that organization. </p>\n<ul>\n<li>Two crucial factors for the this use-case are a) efficiency/scalability and b) strict compartmentalization. You want to be able to return the response without too much computational overhead and you want to make sure you'll never confuse one organization's data with another. </li>\n<li>Access must not be tied to the user id in the JWT because normally organizations want to have multiple users (perhaps with different fine-grained scopes and definitely delineated audit logs) but all of the users belonging to that organization need to be able to \"experience\" the API as if it's exclusive to that organization.</li>\n</ul>\n<p>Because of these concerns, in my experience, you need a more cut-and-dry mechanism to efficiently leverage the org-id attribute in the JWT to determine quickly and efficiently whether a FHIR resource belongs to an organization. So, I think using mechanisms such as security labels or provenance resources could ultimately create scalability and efficiency issues unless they (provenance or compartment labels) are directly mapped into the low-level query mechanism.  <br>\nMy choice in a similar project was to directly have a column at the database level to record the org-id and ensure that a simple SQL <code>WHERE</code> clause can quickly (as fast as the DB can possibly do) narrow down the scope to the resources belonging to a given organization. <br>\nConsider, for example, that you have 20 million patient resources only 10 of which belong to organization A. If a client from org-A sends a <code>GET /api/fhirBase/Patient</code> the logic for computing which patients belong to this organization must be efficient at a low-level, otherwise these queries are going to a take a long time to fulfill. My point is that whether or not compartments or provenance is used for this purpose, they must be tied to the low-level query mechanism to ensure scalablity.</p>",
+        "id": 187415803,
+        "sender_full_name": "Mohammad Jafari",
+        "timestamp": 1580863703
+    },
+    {
+        "content": "<p>For efficient handling of security mechanisms involving FHIR resources &amp; APIs, it may be interesting to consider the use of  conditional create, update, etc. operations, e.g.<br>\n<a href=\"http://hl7.org/fhir/http.html#cond-update\" target=\"_blank\" title=\"http://hl7.org/fhir/http.html#cond-update\">http://hl7.org/fhir/http.html#cond-update</a></p>",
+        "id": 187502416,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1580942095
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191926\">Joel Schneider</span> has marked this topic as resolved.</p>",
+        "id": 246369906,
+        "sender_full_name": "Notification Bot",
+        "timestamp": 1626602559
+    }
+]

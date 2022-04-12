@@ -1,0 +1,317 @@
+---
+layout: page
+title: "FHIR Chat  · ValueSet $expand questions · terminology"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/index.html">terminology</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html">ValueSet $expand questions</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="195617116"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/195617116" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Tim Dunnington <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#195617116">(Apr 28 2020 at 19:53)</a>:</h4>
+<p>Hey all, I have a bunch of questions about the $expand operation that boil down to determinism: how do I know, and how can I prove, that my expand operation is working properly in all cases. I've read the documentation, and there are a lot of areas that are not completely clear (at least to me).</p>
+<p>I started this discussion on the implementers stream and was directed to this stream by another user, so I'm hoping you all can help me fill in the blanks.</p>
+<p>My first question is very basic (I think). I've been told that an expansion is supposed to be a flattened list of codes. But if that's the case, why does the ValueSet.expand.contains also have child contains (implying that it's not a flat list)? How would I know, given an input value set, that the expansion in one case is supposed to be a flattened list of codes, but in the other case the hierarchy is to be preserved?</p>
+
+
+
+<a name="195618736"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/195618736" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#195618736">(Apr 28 2020 at 20:03)</a>:</h4>
+<p>There's no <em>supposed to be</em>. First of all, the client can ask for flattened or not (forUI), but the server doesn't need to return a heirarchy unless it can</p>
+
+
+
+<a name="195622479"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/195622479" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Tim Dunnington <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#195622479">(Apr 28 2020 at 20:29)</a>:</h4>
+<p>The reason I started looking into this issue was around a specific value set. We've been adding code set validation to our server implementation over time. We started with our organization-specific code sets first, which were pretty straightforward, so our expand operation served us well for the past year or 2. But then today we added validation for an HL7 standard valueset (in this case, Location.type, which requires value set <a href="http://hl7.org/fhir/ValueSet/v3-ServiceDeliveryLocationRoleType" title="http://hl7.org/fhir/ValueSet/v3-ServiceDeliveryLocationRoleType">http://hl7.org/fhir/ValueSet/v3-ServiceDeliveryLocationRoleType</a>).</p>
+<p>My expand operation can't handle this value set, but that's fine, I'm happy to add support for the filters that will make it work.</p>
+<p>However, I'm left with the following dilemma:</p>
+<ul>
+<li>I would like to preserve hierarchy, it's actually easier than trying to flatten the list. In this value set, I would copy the _ServiceDeliveryLocationRoleType node to the expansion. The "is-a" rule says that all descendants, and the node itself, get copied to the expansion. If that's the case, wouldn't I have an expansion with a single item (the _ServiceDeliveryLocationRoleType and its descendants)? </li>
+<li>But if I do that, the exclude rule would seem to remove the same node I added in the include rule.</li>
+<li>If instead the "is-a" condition means "copy the children to the expansion", then the root node (_ServiceDeliveryLocationRoleType) wouldn't even be in the expansion, so why the exclude rule? And doesn't that conflict with the "is-a" definition?</li>
+</ul>
+<p>I can see that if I implement expand on these filters one way, it'll work for some value sets and not others, and vice versa. So I'm worried I'm in a catch-22 here...if you see what I mean.</p>
+
+
+
+<a name="195623985"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/195623985" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Tim Dunnington <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#195623985">(Apr 28 2020 at 20:41)</a>:</h4>
+<p>Here is the valueset for Location.type, for reference</p>
+<div class="codehilite"><pre><span></span><code>{
+  &quot;resourceType&quot;: &quot;ValueSet&quot;,
+  &quot;id&quot;: &quot;282724b1-95a5-42fd-bd9d-e79e5ad3bd12&quot;,
+  &quot;meta&quot;: {
+    &quot;versionId&quot;: &quot;1&quot;,
+    &quot;lastUpdated&quot;: &quot;2019-12-11T21:02:30.851+00:00&quot;,
+    &quot;profile&quot;: [
+      &quot;http://hl7.org/fhir/StructureDefinition/valueset-shareable-definition&quot;
+    ]
+  },
+  &quot;text&quot;: {
+    &quot;status&quot;: &quot;generated&quot;,
+    &quot;div&quot;: &quot;&lt;div xmlns=\&quot;http://www.w3.org/1999/xhtml\&quot;&gt;Narrative removed to reduce size&lt;/div&gt;&quot;
+  },
+  &quot;extension&quot;: [
+    {
+      &quot;url&quot;: &quot;http://hl7.org/fhir/StructureDefinition/valueset-oid&quot;,
+      &quot;valueUri&quot;: &quot;urn:oid:2.16.840.1.113883.1.11.17660&quot;
+    }
+  ],
+  &quot;url&quot;: &quot;http://hl7.org/fhir/ValueSet/v3-ServiceDeliveryLocationRoleType&quot;,
+  &quot;version&quot;: &quot;2014-03-26&quot;,
+  &quot;name&quot;: &quot;ServiceDeliveryLocationRoleType&quot;,
+  &quot;status&quot;: &quot;active&quot;,
+  &quot;experimental&quot;: false,
+  &quot;publisher&quot;: &quot;HL7 v3&quot;,
+  &quot;compose&quot;: {
+    &quot;include&quot;: [
+      {
+        &quot;system&quot;: &quot;http://hl7.org/fhir/v3/RoleCode&quot;,
+        &quot;filter&quot;: [
+          {
+            &quot;property&quot;: &quot;concept&quot;,
+            &quot;op&quot;: &quot;is-a&quot;,
+            &quot;value&quot;: &quot;_ServiceDeliveryLocationRoleType&quot;
+          }
+        ]
+      }
+    ],
+    &quot;exclude&quot;: [
+      {
+        &quot;system&quot;: &quot;http://hl7.org/fhir/v3/RoleCode&quot;,
+        &quot;concept&quot;: [
+          {
+            &quot;code&quot;: &quot;_ServiceDeliveryLocationRoleType&quot;
+          }
+        ]
+      }
+    ]
+  }
+}
+</code></pre></div>
+
+
+
+<a name="195625654"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/195625654" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#195625654">(Apr 28 2020 at 20:55)</a>:</h4>
+<p>so if you doing value set validation, flatter is easier for the consumer of the expansion. The java validator explicitly asks for flat value sets rather than hierarchical ones - it's easier</p>
+
+
+
+<a name="195625765"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/195625765" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#195625765">(Apr 28 2020 at 20:56)</a>:</h4>
+<p>but you can do it using heirarchical value sets, until you run into one defined like this, which doesn't have a sensible heirarchy.</p>
+
+
+
+<a name="195625937"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/195625937" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#195625937">(Apr 28 2020 at 20:58)</a>:</h4>
+<p>well, it does; you just omit the code and elevate it's descendents up a level, but the algorithm starts to break down as more sophisticated excludes get included. So I didn't bother; if I see any exludes, I just stop trying to do the expand heirarchically in the first place</p>
+
+
+
+<a name="195626026"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/195626026" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#195626026">(Apr 28 2020 at 20:58)</a>:</h4>
+<blockquote>
+<p>The "is-a" rule says that all descendants, and the node itself, get copied to the expansion</p>
+</blockquote>
+<p>yes. the value set would be a lot simpler if it was defined this way:</p>
+
+
+
+<a name="195626138"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/195626138" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#195626138">(Apr 28 2020 at 20:59)</a>:</h4>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span>
+  <span class="nt">&quot;resourceType&quot;</span><span class="p">:</span> <span class="s2">&quot;ValueSet&quot;</span><span class="p">,</span>
+  <span class="nt">&quot;id&quot;</span><span class="p">:</span> <span class="s2">&quot;282724b1-95a5-42fd-bd9d-e79e5ad3bd12&quot;</span><span class="p">,</span>
+  <span class="nt">&quot;meta&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="nt">&quot;versionId&quot;</span><span class="p">:</span> <span class="s2">&quot;1&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;lastUpdated&quot;</span><span class="p">:</span> <span class="s2">&quot;2019-12-11T21:02:30.851+00:00&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;profile&quot;</span><span class="p">:</span> <span class="p">[</span>
+      <span class="s2">&quot;http://hl7.org/fhir/StructureDefinition/valueset-shareable-definition&quot;</span>
+    <span class="p">]</span>
+  <span class="p">},</span>
+  <span class="nt">&quot;text&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;generated&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;div&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;div xmlns=\&quot;http://www.w3.org/1999/xhtml\&quot;&gt;Narrative removed to reduce size&lt;/div&gt;&quot;</span>
+  <span class="p">},</span>
+  <span class="nt">&quot;extension&quot;</span><span class="p">:</span> <span class="p">[</span>
+    <span class="p">{</span>
+      <span class="nt">&quot;url&quot;</span><span class="p">:</span> <span class="s2">&quot;http://hl7.org/fhir/StructureDefinition/valueset-oid&quot;</span><span class="p">,</span>
+      <span class="nt">&quot;valueUri&quot;</span><span class="p">:</span> <span class="s2">&quot;urn:oid:2.16.840.1.113883.1.11.17660&quot;</span>
+    <span class="p">}</span>
+  <span class="p">],</span>
+  <span class="nt">&quot;url&quot;</span><span class="p">:</span> <span class="s2">&quot;http://hl7.org/fhir/ValueSet/v3-ServiceDeliveryLocationRoleType&quot;</span><span class="p">,</span>
+  <span class="nt">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;2014-03-26&quot;</span><span class="p">,</span>
+  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;ServiceDeliveryLocationRoleType&quot;</span><span class="p">,</span>
+  <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;active&quot;</span><span class="p">,</span>
+  <span class="nt">&quot;experimental&quot;</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+  <span class="nt">&quot;publisher&quot;</span><span class="p">:</span> <span class="s2">&quot;HL7 v3&quot;</span><span class="p">,</span>
+  <span class="nt">&quot;compose&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="nt">&quot;include&quot;</span><span class="p">:</span> <span class="p">[</span>
+      <span class="p">{</span>
+        <span class="nt">&quot;system&quot;</span><span class="p">:</span> <span class="s2">&quot;http://hl7.org/fhir/v3/RoleCode&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;filter&quot;</span><span class="p">:</span> <span class="p">[</span>
+          <span class="p">{</span>
+            <span class="nt">&quot;property&quot;</span><span class="p">:</span> <span class="s2">&quot;concept&quot;</span><span class="p">,</span>
+            <span class="nt">&quot;op&quot;</span><span class="p">:</span> <span class="s2">&quot;descendent-of&quot;</span><span class="p">,</span>
+            <span class="nt">&quot;value&quot;</span><span class="p">:</span> <span class="s2">&quot;_ServiceDeliveryLocationRoleType&quot;</span>
+          <span class="p">}</span>
+        <span class="p">]</span>
+      <span class="p">}</span>
+    <span class="p">]</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+
+<a name="195626156"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/195626156" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#195626156">(Apr 28 2020 at 20:59)</a>:</h4>
+<p>that means the same thing.</p>
+
+
+
+<a name="195630225"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/195630225" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Tim Dunnington <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#195630225">(Apr 28 2020 at 21:34)</a>:</h4>
+<p>Thank you thank you! You're on my page here, and this was very helpful!</p>
+<p>I can see I have some options to consider:</p>
+<ul>
+<li>Given your comment on the java client preferring a flattened expansion, that alone is probably a good reason for me to go with that model and flatten the expansions.</li>
+<li>If I want to support hierarchies, I could do that with the the forUI parameter (although I'm on DSTU2, there's nothing to stop me from implementing it anyway, wouldn't break anything).</li>
+<li>I could create a new version of the value set above in my server, and remove the exclude statement as you suggest. For that matter, if I run into another case like this, where the value set is a bit iffy, I can correct it without breaking anything.</li>
+</ul>
+<p>Any thoughts about handling/validation of abstract codes? This value set includes a whole bunch of abstract codes, that are basically there to create hierarchies and subsets of codes. I suppose including abstract codes on the expansion is not going to hurt anything, but again in this example you'd have a bunch of codes that really aren't valid to use in a coding.</p>
+
+
+
+<a name="195634016"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/195634016" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#195634016">(Apr 28 2020 at 22:07)</a>:</h4>
+<p>well, have you looked at the expansion operation parameters?</p>
+
+
+
+<a name="195710130"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/195710130" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Tim Dunnington <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#195710130">(Apr 29 2020 at 13:42)</a>:</h4>
+<p>I'd been focused on the DSTU2 implementation and its parameters, but I'll take a closer look at the R4 parameters at your suggestion here. Thanks Grahame.</p>
+
+
+
+<a name="197694150"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197694150" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Pavlushkin <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197694150">(May 15 2020 at 13:54)</a>:</h4>
+<p>Hello, I have a question about value set expansion. There are quite a few implicit SNOMED CT value sets that I get from a Snowstorm server using ECL expressions. These value sets are intended for a patient e-health app. Is there an opportunity to get patient-friendly terms in these value sets? Thank you!</p>
+
+
+
+<a name="197726164"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197726164" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197726164">(May 15 2020 at 17:37)</a>:</h4>
+<p>how are SI distributing the patient friendly terms? It's a different edition? or a supplement?</p>
+
+
+
+<a name="197730113"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197730113" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Jordan <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197730113">(May 15 2020 at 18:05)</a>:</h4>
+<p>(deleted)</p>
+
+
+
+<a name="197730886"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197730886" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197730886">(May 15 2020 at 18:11)</a>:</h4>
+<p>sounds like a supplement to me, then?</p>
+
+
+
+<a name="197731926"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197731926" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Jordan <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197731926">(May 15 2020 at 18:20)</a>:</h4>
+<p>Apologies - needed coffee! Yes patient-friendly terms could be viewed as a supplement (my initial reply related to the GPS). In the NZ Edition, patient-friendly terms are distributed as additional descriptions and a language reference set.</p>
+
+
+
+<a name="197739423"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197739423" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197739423">(May 15 2020 at 19:12)</a>:</h4>
+<p>they have a use code then? (in FHIR terms)</p>
+
+
+
+<a name="197742652"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197742652" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Jordan <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197742652">(May 15 2020 at 19:32)</a>:</h4>
+<p>We don't have a designation use code for patient-friendly terms as yet. It's been discussed at Vocabulary, but not added to the FHIR ValueSet. For SCT expansions, I currently place the NZ Reference Set ID in the Designation Token passed in the useContext parameter, i.e. <a href="http://snomed.info/sct|281000210109">http://snomed.info/sct|281000210109</a>... but we need a solution for all Code Systems.</p>
+
+
+
+<a name="197743104"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197743104" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197743104">(May 15 2020 at 19:36)</a>:</h4>
+<p>I'm pretty sure that we agreed (voted) to add it.  I need to pull up the Jira task</p>
+
+
+
+<a name="197751557"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197751557" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Pavlushkin <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197751557">(May 15 2020 at 20:59)</a>:</h4>
+<p>It's looks like we can find at least one patient-friendly synonym that already exists in the SNOMED edition (we use the NZ edition). And in some cases we can't find an appropriate definition and should provide it.</p>
+
+
+
+<a name="197752338"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197752338" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Pavlushkin <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197752338">(May 15 2020 at 21:06)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191364">Peter Jordan</span> <a href="#narrow/stream/179202-terminology/topic/ValueSet.20.24expand.20questions/near/197731926">said</a>:</p>
+<blockquote>
+<p>Apologies - needed coffee! Yes patient-friendly terms could be viewed as a supplement (my initial reply related to the GPS). In the NZ Edition, patient-friendly terms are distributed as additional descriptions and a language reference set.</p>
+</blockquote>
+<p>Thank you!</p>
+
+
+
+<a name="197762527"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197762527" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197762527">(May 15 2020 at 23:12)</a>:</h4>
+<p>We still need to apply this in the spec - <a href="http://jira.hl7.org/browse/FHIR-19960">J#19960</a>.  It looks like we didn't ever decide what the new code for "consumer friendly" terms should be.  It's also not clear to me how robust this solution is of adding "consumer friendly" to the value set.  Is "consumer friendly" a subtype of 'Synonym' - or not?</p>
+
+
+
+<a name="197769182"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197769182" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Pavlushkin <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197769182">(May 16 2020 at 01:24)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191405">Rob Hausam</span> <a href="#narrow/stream/179202-terminology/topic/ValueSet.20.24expand.20questions/near/197762527">said</a>:</p>
+<blockquote>
+<p>We still need to apply this in the spec - <a href="http://jira.hl7.org/browse/FHIR-19960">J#19960</a>.  It looks like we didn't ever decide what the new code for "consumer friendly" terms should be.  It's also not clear to me how robust this solution is of adding "consumer friendly" to the value set.  Is "consumer friendly" a subtype of 'Synonym' - or not?</p>
+</blockquote>
+<p>I suppose yes.</p>
+
+
+
+<a name="197778274"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197778274" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197778274">(May 16 2020 at 05:32)</a>:</h4>
+<p>Perhaps we should also have a debate about the need for "consumer friendly" terms?</p>
+
+
+
+<a name="197795288"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197795288" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Daniel Vreeman <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197795288">(May 16 2020 at 13:16)</a>:</h4>
+<p>The LOINC community has had a fair bit of discussion about this, but I suspect that like <span class="user-mention" data-user-id="191343">@Michael Lawley</span> ,  it doesn't feel settled. Presently, LOINC uses the label "Consumer Name", which is partly for historical reasons (it's been there a while, so harder to change). The agreed rules around its construction explicitly omit key distinguishing term attributes, which is great for its intended context of use (display to end users) but not for others (i.e. mapping). Some have argued these names would work nicely for "generalist" clinicians and so the distinction should really be between domain generalists and specialists, not providers and consumers. (We heard this from knowledge vendors that make their content available publicly to all). Despite all this, I'm good with "consumer" because it is evocative of the intended context of use...not because it's perfect. </p>
+<p>We could always make synonyms for "consumer name" <span aria-label="grinning face with smiling eyes" class="emoji emoji-1f601" role="img" title="grinning face with smiling eyes">:grinning_face_with_smiling_eyes:</span></p>
+
+
+
+<a name="197797363"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197797363" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197797363">(May 16 2020 at 14:09)</a>:</h4>
+<p>I agree that some further discussion and looking at known use cases seems warranted.  I'm inclined to do that before applying this change (or any other related changes) to the spec.</p>
+
+
+
+<a name="197815827"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197815827" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Jordan <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197815827">(May 16 2020 at 21:23)</a>:</h4>
+<p>To some extent, this debate has already taken place in some countries - driven by a switch in emphasis from a reactive system of healthcare interventions to a consumer-driven health and wellness approach. While I understand terminologists' concerns in this area, my view is that consumer requirements need to be addressed. In NZ, I would be very surprised if our SNOMED NRC withdrew the 'Patient-Friendly' terms already in use as that would be in contravention of the overall NZ Health Strategy.</p>
+
+
+
+<a name="197816299"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/ValueSet%20%24expand%20questions/near/197816299" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/ValueSet.20.24expand.20questions.html#197816299">(May 16 2020 at 21:35)</a>:</h4>
+<p>I agree we need it - just thinking about the details of how we address it in FHIR.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,98 @@
+[
+    {
+        "content": "<p>Inferno's single patient API tests use the codes returned by one successful query in subsequent queries. In particular, the various Observation (vitals) tests query first by code=&lt;some LOINC code&gt; then use the first code returned in the response (in Observation.code) as a search parameter in the next request.</p>\n<p>The problem we're hitting is that we don't necessarily support searching by all the codes we return. Some are internal and we explicitly prevent searching on for security reasons. We <em>do</em>, however,  support searching by LOINC codes, as USCore requires :(<a href=\"https://www.hl7.org/fhir/us/core/StructureDefinition-us-core-vital-signs.html\">https://www.hl7.org/fhir/us/core/StructureDefinition-us-core-vital-signs.html</a>). </p>\n<p>Can Inferno look for a LOINC code in the response, instead of just picking the first code we return? It seems odd that just by switching the order of the codes we return, we could \"pass\" the Inferno tests.</p>",
+        "id": 245375428,
+        "sender_full_name": "Matt Schwartz",
+        "timestamp": 1625780106
+    },
+    {
+        "content": "<blockquote>\n<p>It seems odd that just by switching the order of the codes we return, we could \"pass\" the Inferno tests.</p>\n</blockquote>\n<p>Yes, Inferno's US Core Tests are designed to test capabilities at least once  (e.g. search Observation by a code), and does not test capabilities with all possible inputs (e.g. search Observation by every possible code).  A test system could be much more thorough, but that kind of testing would be time consuming / expensive.  An obvious downside of our approach is that we do not expose every 'bug' that might exist in a system, so you may pass or fail depending on what inputs (codes in this case) Inferno happens to try.</p>",
+        "id": 245448689,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1625840090
+    },
+    {
+        "content": "<p>One thing that is a little confusing now is that the ONC certification criteria requires US Core v3.1.1, but the link you provided is for us Core v4.0.0.  There is no US Core-specific vital signs profile in v3.1.1 (it uses the one in the base FHIR spec).</p>",
+        "id": 245450324,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1625840931
+    },
+    {
+        "content": "<p>Our logic here is that you are required to support search by patient + code, as stated <a href=\"http://hl7.org/fhir/us/core/STU3.1.1/CapabilityStatement-us-core-server.html#observation\">here</a>.  And we know that you have an observation with that code for this patient, and that we have access to seeing that code for this Observation for this patient, because you have provided it to us.  Therefore, if we search observations for this patient by that code we expect the search to work and to receive that data back.</p>",
+        "id": 245451404,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1625841387
+    },
+    {
+        "content": "<p>On the other hand, in looking at the actual profiles, they are explicit about which code you need to support searching by.  <a href=\"http://hl7.org/fhir/us/core/STU3.1.1/StructureDefinition-us-core-smokingstatus.html\">For example</a>. Does this imply you do not need to support searching by other codes that are present in your data for these profiles?</p>",
+        "id": 245452139,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1625841756
+    },
+    {
+        "content": "<p>The FHIR spec may give servers the flexibility to do this, I'm not quite sure.  If it does, then from a client perspective it seems hard to have any confidence that any search would work.</p>",
+        "id": 245454403,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1625842889
+    },
+    {
+        "content": "<p>I think this is really a fun problem with US Core (or profiling search param requirements in general).  US Core requires support for the \"code\" search param.  In the base FHIR spec, the FHIRPath expression for the \"code\" search parameter is just Obesrvation.code.  So US Core does imply that a server needs to support searching for all codes, regardless of whether those codes are part of the value set bindings in the US Core profiled resource.  </p>\n<p>This does put servers in an odd position.  The easy way for us to be compliant with US Core is to just not return (probably useful) codes that we don't support searching for.  However this goes against the spirit, as we are <em>removing</em> useful information from our API in order to be compliant.  </p>\n<p>One solution would be for US Core to define their own SearchParameter instead of using \"code\" from the base FHIR spec, and have the FHIRpath expression for that parameter limit itself to only the specified value sets.  But that seems really annoying and I don't like that either.</p>",
+        "id": 245454957,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1625843154
+    },
+    {
+        "content": "<blockquote>\n<p>The easy way for us to be compliant with US Core is to just not return (probably useful) codes that we don't support searching for.</p>\n</blockquote>\n<p>Right, failing servers for presenting extra information but not supporting searching by that extra information might be a technically correct failure but it discourages systems from doing anything other than the absolute minimum.</p>",
+        "id": 245457616,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1625844357
+    },
+    {
+        "content": "<p>So what's acceptable behavior when someone searches based on a non-uscdi-specified code? Presumably an error response would be okay, or a correct search response with matching resources would be okay -- but a 200 response with an empty Bundle wouldn't be okay.</p>",
+        "id": 245458360,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1625844725
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> , that's the approach we take today (responding with an error). I also think that's an acceptable behavior, as the current behavior discourages anything other than the absolute minimum -- as Robert said.</p>",
+        "id": 245471711,
+        "sender_full_name": "Matt Schwartz",
+        "timestamp": 1625851316
+    },
+    {
+        "content": "<p>We're considering asking ONC for a clarification here, probably suggesting that for g10 certification, we'd only be required to support searching on the terminologies defined by USCDI.  I can see this request being a bit controversial, so I'm interested if folks are generally ok with that, or have objections?  I get the value of searching on non-USCDI codes, but for very practical reasons, that can just be hard.  Do folks have strong feelings on way or another here?</p>",
+        "id": 246754110,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1626889501
+    },
+    {
+        "content": "<p>I'd also like to hear if others have an opinion on this.  I think it's reasonable to have the tests stick to specific named requirements as much as possible, but I also don't want to reorganize tests to avoid requirements that are inconvenient/difficult for one implementation or another.</p>",
+        "id": 246761197,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1626892781
+    },
+    {
+        "content": "<p>If this behavior is ok as long as you provide an error response, then I think we should definitely reorganize the test to stick to codes that you shouldn't be allowed to return an error response for.  But it is a little more difficult if you are doing something non-conformant here (though we may still want to reorganize the test anyhow to stick to the queries that are explicitly named within the guide).</p>",
+        "id": 246762696,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1626893524
+    },
+    {
+        "content": "<p>On the one hand, I would find the following behavior very puzzling as a client developer:</p>\n<ul>\n<li>Server gives me an Observation with code XYZ</li>\n<li>Server claims to support searching Observations by code</li>\n<li>Server gives me an error or empty Bundle when searching Observations by code XYZ</li>\n</ul>\n<p>On the other hand, if I wanted to search for particular types of Observations, I'd use the codes referenced in the IG rather than random codes that I received but don't necessarily understand.</p>",
+        "id": 246763321,
+        "sender_full_name": "Stephen MacVicar",
+        "timestamp": 1626893840
+    },
+    {
+        "content": "<blockquote>\n<p>I'd also like to hear if others have an opinion on this. I think it's reasonable to have the tests stick to specific named requirements as much as possible,</p>\n</blockquote>\n<p>This Zulip channel is monitored by folks building certified EHR systems;  the community with a perspective is going to be <em>consuming</em> these APIs. but not necessarily watching here.</p>",
+        "id": 246773434,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1626899026
+    },
+    {
+        "content": "<p>(I don't see a huge issue if searches with non-standardized vocabularies aren't supported, <em>but</em> getting the errors right is important -- I sure would want  this to fail loudly.)</p>",
+        "id": 246773526,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1626899066
+    }
+]

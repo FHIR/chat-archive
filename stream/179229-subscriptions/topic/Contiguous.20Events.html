@@ -1,0 +1,74 @@
+---
+layout: page
+title: "FHIR Chat  · Contiguous Events · subscriptions"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/index.html">subscriptions</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Contiguous.20Events.html">Contiguous Events</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="253101906"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Contiguous%20Events/near/253101906" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> adam strickland <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Contiguous.20Events.html#253101906">(Sep 13 2021 at 14:47)</a>:</h4>
+<p>Is there anywhere in the spec that says the events referenced in a subscriptionStatus need to be contiguous? In all the example scenarios/payloads I've seen that has been the case, but I'm wondering if we need to make that explicit somewhere. </p>
+<p>The reason this has come up is that the addition of the <code>notificationEvent</code> element provides the flexibility to include discontiguous events (I can put 38 and 36 in the list, but not 37) and that this might break clients that were relying on <code>eventsSinceSubscriptionStart</code> and <code>eventsInNotification</code> to tell them which events were included before even parsing <code>notificationEvent</code>.</p>
+<p>In the example of sending 38 and 36, the current spec would say the <code>eventsSinceSubscriptionStart</code> is 38 and <code>eventsInNotification</code> is 2, and the client may conclude that you've sent events 38 and 37. If the client already received those events (but not 36), it may not realize you've included an event it is interested in.</p>
+<p>If others agree this is an issue, then I think the solution is to make a rule saying <code>notificationEvent</code> should be contiguous (I have an idea for a FHIRPath query for this), and that it's length should equal to <code>eventsInNotification</code>.</p>
+<p>I think the story for $events and $status is a bit more complicated, but before going into that I'd like some feedback on the above. I've run into the above issue and more while trying to write a generic state machine for a subscription client that covers the lastReceived event, the current connection status and any known (but missing) events.</p>
+
+
+
+<a name="253113629"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Contiguous%20Events/near/253113629" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Contiguous.20Events.html#253113629">(Sep 13 2021 at 15:54)</a>:</h4>
+<p>This touches on our "reliable delivery" discussion from last week's call. I agree <span class="user-mention" data-user-id="372206">@adam strickland</span> that for all of the channels we have defined in the spec, and for all future channels that don't assume reliable delivery, notification events should be contiguous.</p>
+
+
+
+<a name="253113846"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Contiguous%20Events/near/253113846" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Contiguous.20Events.html#253113846">(Sep 13 2021 at 15:56)</a>:</h4>
+<p>I don't know how to formalize that as a constraint without enumerating channel types that it applies to as part of a constraint expression -- but even without that detail, I'm curious about your fhirpath expression idea; it's a cool puzzle and may well turn out to be useful!)</p>
+
+
+
+<a name="253121295"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Contiguous%20Events/near/253121295" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> adam strickland <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Contiguous.20Events.html#253121295">(Sep 13 2021 at 16:41)</a>:</h4>
+<p>Thanks Josh, I was thinking something like this:<br>
+eventsInNotification.exists() implies contiguous..., where contiguous means: </p>
+<ol>
+<li>Select a collection of  event numbers from eventsInNotification</li>
+<li>Create a collection of expected numbers based on max value in event numbers and eventsInNotification</li>
+<li>Insist the events numbers collection is a superset and subset of expected numbers</li>
+</ol>
+<p>If we wanted to be more strict and say that eventsInNotification is contiguous and descending order, we could probably streamline this. I think that would be worth doing.</p>
+
+
+
+<a name="253135385"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Contiguous%20Events/near/253135385" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> adam strickland <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Contiguous.20Events.html#253135385">(Sep 13 2021 at 18:17)</a>:</h4>
+<p><span class="user-mention" data-user-id="359703">@Steve Atwood</span>  what do you think about the above? Before putting a restriction on <code>notificationEvent.eventNumber</code> I wanted to make sure that doesn't conflict with your use case. If it doesn't, then it makes defining this much easier.</p>
+
+
+
+<a name="253137515"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Contiguous%20Events/near/253137515" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Steve Atwood <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Contiguous.20Events.html#253137515">(Sep 13 2021 at 18:32)</a>:</h4>
+<p>Thanks <span class="user-mention" data-user-id="372206">@adam strickland</span> .  I think Gino's recommended workaround for my "reliable distributed channel" use case was just to assign relative sequential eventNumbers in the notificationEvent element, so I believe that would still be compatible with the constraint you are outlining.  For example, if I have a notification with three events, I guess I would set eventsInNotification=3, eventsSinceSubscriptionStart=3, and notificationEvent.eventNumber=[1,2,3].  The event numbers in this case would obviously be meaningless outside the context of that particular notification but I think it would satisfy the constraint.</p>
+
+
+
+<a name="253153241"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Contiguous%20Events/near/253153241" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Contiguous.20Events.html#253153241">(Sep 13 2021 at 20:16)</a>:</h4>
+<p>Oh that's even better, Steve. Keeps the numbers consistent with our existing scheme at least within a message, even if they're don't have all the same behaviors across messages arriving within a short timespan.</p>
+
+
+
+<a name="253153297"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Contiguous%20Events/near/253153297" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Contiguous.20Events.html#253153297">(Sep 13 2021 at 20:16)</a>:</h4>
+<p>And that means we don't need to insert channel type logic into Adam 's  fhirpath expression.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

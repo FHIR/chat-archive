@@ -1,0 +1,106 @@
+---
+layout: page
+title: "FHIR Chat  · ExceptionHandling - OperationOutcome is null at client side · dotnet"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/index.html">dotnet</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/ExceptionHandling.20-.20OperationOutcome.20is.20null.20at.20client.20side.html">ExceptionHandling - OperationOutcome is null at client side</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153847008"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/ExceptionHandling%20-%20OperationOutcome%20is%20null%20at%20client%20side/near/153847008" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Harald Sømnes Hanssen <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/ExceptionHandling.20-.20OperationOutcome.20is.20null.20at.20client.20side.html#153847008">(Sep 12 2016 at 12:59)</a>:</h4>
+<p>We're using the Hl7.DSTU2.Core version 0.90.6.26409</p>
+<p>When an exception response is sent from the server, we are currently experiencing that the client gets an OperationOutcome which is null. We can see in fiddler that there is an OperationOutcome object sent with the exception, so it must be on the client side. Is there a setting or something we should be aware of?</p>
+<p>Currently we're only using the DSTU2 client for integrationtests, however, the tests will be used by third parties as examples of how to communicate with our implementation of a given service with the client.</p>
+<p>Query which will fail:</p>
+<div class="codehilite"><pre> [Test]
+    public void ThisTest_WillHaveAnException()
+    {
+        var url = &quot;http://fhirtest.uhn.ca/baseDstu2/&quot;;
+        var uri = new Uri(url);
+        var _client = new FhirClient(uri);
+
+        var searchParams = new SearchParams();
+        searchParams.Add(&quot;bogus&quot;, &quot;dude&quot;);
+        var result = Assert.Throws&lt;FhirOperationException&gt;(() =&gt; _client.Search&lt;CommunicationRequest&gt;(searchParams));
+
+        Assert.IsTrue(result.Outcome != null, &quot;Why is this null?&quot;);
+    }
+</pre></div>
+
+
+<p>The result will contain an error, however the result.OperationOutcome will be null.</p>
+<p>Anyone else experienced this? Are we using the exceptionhandling wrong on the client side?</p>
+
+
+
+<a name="153847133"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/ExceptionHandling%20-%20OperationOutcome%20is%20null%20at%20client%20side/near/153847133" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/ExceptionHandling.20-.20OperationOutcome.20is.20null.20at.20client.20side.html#153847133">(Sep 12 2016 at 22:19)</a>:</h4>
+<p>What you are doing is mostly right.<br>
+The return type of the Search is a Bindle, so can't be an OperationOutcome too.<br>
+To get the operation outcome from the failed call you need to:<br>
+<code>OperationOutcome operationOutcome = client.LastBodyAsResource as OperationOutcome;</code></p>
+
+
+
+<a name="153847151"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/ExceptionHandling%20-%20OperationOutcome%20is%20null%20at%20client%20side/near/153847151" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Harald Sømnes Hanssen <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/ExceptionHandling.20-.20OperationOutcome.20is.20null.20at.20client.20side.html#153847151">(Sep 13 2016 at 07:09)</a>:</h4>
+<p>Updated the code, but the OperationOutcome is still null when we add your snippet. So something is odd.</p>
+<div class="codehilite"><pre>  [Test]
+    public void ThisTest_WillHaveAnException()
+    {
+        var url = &quot;http://fhirtest.uhn.ca/baseDstu2/&quot;;
+        var uri = new Uri(url);
+        var _client = new FhirClient(uri);
+
+        var searchParams = new SearchParams();
+        searchParams.Add(&quot;bogus&quot;, &quot;dude&quot;);
+        var result = Assert.Throws&lt;FhirOperationException&gt;(() =&gt; _client.Search&lt;CommunicationRequest&gt;(searchParams));
+        var operationOutcome = _client.LastBodyAsResource as OperationOutcome;
+
+        Assert.IsTrue(operationOutcome != null, &quot;Why is this null?&quot;);
+        var json = JsonConvert.SerializeObject(operationOutcome);
+
+        Console.WriteLine(json);
+    }
+</pre></div>
+
+
+<p>Edit: I think I found the culprit. It is the client. The dstu2 core version we are using due to be compatible with Sparks.Engine, has some bugs which aren't critical on the server side, however, on the client side it is differently. As soon as I updated from alpha-1 to alpha-5, the operationoutcome isn't null anymore.</p>
+
+
+
+<a name="153847152"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/ExceptionHandling%20-%20OperationOutcome%20is%20null%20at%20client%20side/near/153847152" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/ExceptionHandling.20-.20OperationOutcome.20is.20null.20at.20client.20side.html#153847152">(Sep 13 2016 at 07:20)</a>:</h4>
+<p>Yes, there were some issues with the older versions.<br>
+That latest prerelease is pretty good.<br>
+(and assuming you mean the fhirclient rather than spark.engine)</p>
+
+
+
+<a name="153847185"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/ExceptionHandling%20-%20OperationOutcome%20is%20null%20at%20client%20side/near/153847185" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Harald Sømnes Hanssen <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/ExceptionHandling.20-.20OperationOutcome.20is.20null.20at.20client.20side.html#153847185">(Sep 13 2016 at 08:29)</a>:</h4>
+<p>Yeah, I'm talking about the fhirclient (or HL7.DSTU2.Core)</p>
+<p>I'm hoping that the spark.engine will be updated soon since there are a lot of breaking changes with the new core. My project uses spark.engine for some of the functionality. Luckily consumers of the FHIR server endpoint do not have to depend on the alpha-1 release of the core.</p>
+
+
+
+<a name="153847186"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/ExceptionHandling%20-%20OperationOutcome%20is%20null%20at%20client%20side/near/153847186" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/ExceptionHandling.20-.20OperationOutcome.20is.20null.20at.20client.20side.html#153847186">(Sep 13 2016 at 08:33)</a>:</h4>
+<p>Yes, my server needed quite a bit of updating too.<br>
+Still haven't pushed an updated version public yet either.</p>
+
+
+
+<a name="153847187"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/ExceptionHandling%20-%20OperationOutcome%20is%20null%20at%20client%20side/near/153847187" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/ExceptionHandling.20-.20OperationOutcome.20is.20null.20at.20client.20side.html#153847187">(Sep 13 2016 at 08:34)</a>:</h4>
+<p>(Though I have pushed my STU3 version today - complete with some Fluentpath new additions)</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

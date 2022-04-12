@@ -1,0 +1,83 @@
+---
+layout: page
+title: "FHIR Chat  · FHIRPath and new library · dotnet"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/index.html">dotnet</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FHIRPath.20and.20new.20library.html">FHIRPath and new library</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="154019284"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FHIRPath%20and%20new%20library/near/154019284" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Richard Kavanagh <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FHIRPath.20and.20new.20library.html#154019284">(Nov 16 2018 at 20:09)</a>:</h4>
+<p>Having recently updated my Nuget package I am having to try and deal with some of the changes in the API.</p>
+<p>When evaluating FHIRPath expressions previously, I had code a bit like this....</p>
+<div class="codehilite"><pre><span></span>       Resource res
+       FhirPathCompiler compiler = new FhirPathCompiler();
+        CompiledExpression xps = compiler.Compile(&quot;Bundle.repeat(children())&quot;);
+        var inputNav = new PocoNavigator(res);
+        var prepopulatedValues = xps(inputNav, new EvaluationContext(inputNav));
+
+        _refOut = new ObservableCollection&lt;ModelRefOut&gt;();
+        foreach (PocoNavigator item in prepopulatedValues.Where(x =&gt; x.Type == &quot;Reference&quot;))
+        {
+         ........
+        }
+</pre></div>
+
+
+<p>Now that PocoNavigator is obsolete how d you evaluate  FHIRPath's.</p>
+
+
+
+<a name="154019587"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FHIRPath%20and%20new%20library/near/154019587" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ewout Kramer <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FHIRPath.20and.20new.20library.html#154019587">(Nov 19 2018 at 15:34)</a>:</h4>
+<p>Hi Richard, the problem with the code you are using is that it involves working with the quite low-level CompiledExpression classes. In the 1.0 release of the API, a compiled FhirPath expression takes an <code>ITypedElement</code> as input (and not an <code>IElementNavigator</code>).  We have added backwards-compatibility overloads that take an <code>IElementNavigator</code> to make your code compile and run.</p>
+<p>However, the code above assumes too much intimate knowledge of the internals of the API, since you are assuming the result of the evaluation to be PocoNavigator instances. This was indeed the case in the previous versions of the API, but is no longer the case in the 1.0 version.</p>
+<p>All you know is that you are going to input ITypedElement, and the result will be ITypedElement.  So if you want to stick with calling the CompiledExpression explicitly, here's what you do:</p>
+<div class="codehilite"><pre><span></span>            <span class="kt">var</span> <span class="n">tpXml</span> <span class="p">=</span> <span class="n">TestData</span><span class="p">.</span><span class="n">ReadTextFile</span><span class="p">(</span><span class="s">&quot;fp-test-patient.xml&quot;</span><span class="p">);</span>
+            <span class="kt">var</span> <span class="n">patient</span> <span class="p">=</span> <span class="p">(</span><span class="k">new</span> <span class="n">FhirXmlParser</span><span class="p">()).</span><span class="n">Parse</span><span class="p">&lt;</span><span class="n">Patient</span><span class="p">&gt;(</span><span class="n">tpXml</span><span class="p">);</span>
+
+            <span class="n">FhirPathCompiler</span> <span class="n">compiler</span> <span class="p">=</span> <span class="k">new</span> <span class="n">FhirPathCompiler</span><span class="p">();</span>
+            <span class="n">CompiledExpression</span> <span class="n">xps</span> <span class="p">=</span> <span class="n">compiler</span><span class="p">.</span><span class="n">Compile</span><span class="p">(</span><span class="s">&quot;Patient.repeat(children())&quot;</span><span class="p">);</span>
+            <span class="kt">var</span> <span class="n">input</span> <span class="p">=</span> <span class="n">patient</span><span class="p">.</span><span class="n">ToTypedElement</span><span class="p">();</span>
+
+            <span class="kt">var</span> <span class="n">prepopulatedValues</span> <span class="p">=</span> <span class="n">xps</span><span class="p">(</span><span class="n">input</span><span class="p">,</span> <span class="k">new</span> <span class="n">EvaluationContext</span><span class="p">(</span><span class="n">input</span><span class="p">));</span>
+
+            <span class="k">foreach</span> <span class="p">(</span><span class="kt">var</span> <span class="n">item</span> <span class="k">in</span> <span class="n">prepopulatedValues</span><span class="p">.</span><span class="n">Where</span><span class="p">(</span><span class="n">x</span> <span class="p">=&gt;</span> <span class="n">x</span><span class="p">.</span><span class="n">InstanceType</span> <span class="p">==</span> <span class="s">&quot;Reference&quot;</span><span class="p">))</span>
+            <span class="p">{</span>
+                <span class="kt">var</span> <span class="n">reference</span> <span class="p">=</span> <span class="n">item</span><span class="p">.</span><span class="n">ToPoco</span><span class="p">&lt;</span><span class="n">ResourceReference</span><span class="p">&gt;();</span>
+                <span class="n">Debug</span><span class="p">.</span><span class="n">Print</span><span class="p">(</span><span class="n">reference</span><span class="p">.</span><span class="n">Reference</span><span class="p">);</span>
+
+                <span class="c1">// Alternative that does not require parsing:</span>
+                <span class="c1">// var reference = item.Children(&quot;reference&quot;).Single();</span>
+                <span class="c1">// Debug.Print(reference.Value as string);</span>
+            <span class="p">}</span>
+</pre></div>
+
+
+<p>As you can see, we're turning the POCO patient into an ITypedElement by calling ToTypedElement() on the POCO object.  Now you can call the compiled expression <code>xps()</code> with the correct inputs. </p>
+<p>On the output side, you would see that the items returned are indeed <code>IEnumerable&lt;ITypedElement&gt;</code>.  Now, depending on whether you really need to work with POCO's, you can either turn each <code>ITypedElement</code> back into a poco by parsing it with <code>ToPoco()</code>.  Alternatively, you can stay in the POCO-less domain, and navigate to "reference" and get the values (shown in the comments).</p>
+
+
+
+<a name="154019588"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/FHIRPath%20and%20new%20library/near/154019588" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ewout Kramer <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/FHIRPath.20and.20new.20library.html#154019588">(Nov 19 2018 at 15:37)</a>:</h4>
+<p>But that's assuming you actually need to go that low-level.  There are much more user-friendly methods available!</p>
+<p>The code below will do the same, but in far less lines of code:</p>
+<div class="codehilite"><pre><span></span> <span class="kt">var</span> <span class="n">tpXml</span> <span class="p">=</span> <span class="n">TestData</span><span class="p">.</span><span class="n">ReadTextFile</span><span class="p">(</span><span class="s">&quot;fp-test-patient.xml&quot;</span><span class="p">);</span>
+ <span class="kt">var</span> <span class="n">patient</span> <span class="p">=</span> <span class="p">(</span><span class="k">new</span> <span class="n">FhirXmlParser</span><span class="p">()).</span><span class="n">Parse</span><span class="p">&lt;</span><span class="n">Patient</span><span class="p">&gt;(</span><span class="n">tpXml</span><span class="p">);</span>
+
+  <span class="kt">var</span> <span class="n">prepopulatedValues</span> <span class="p">=</span> <span class="n">patient</span>
+                <span class="p">.</span><span class="n">Select</span><span class="p">(</span><span class="s">&quot;Patient.repeat(children())&quot;</span><span class="p">)</span>
+                <span class="p">.</span><span class="n">OfType</span><span class="p">&lt;</span><span class="n">ResourceReference</span><span class="p">&gt;()</span>
+                <span class="p">.</span><span class="n">Select</span><span class="p">(</span><span class="n">rr</span> <span class="p">=&gt;</span> <span class="n">rr</span><span class="p">.</span><span class="n">Reference</span><span class="p">);</span>
+</pre></div>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

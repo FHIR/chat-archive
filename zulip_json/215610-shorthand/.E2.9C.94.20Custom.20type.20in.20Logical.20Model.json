@@ -1,0 +1,80 @@
+[
+    {
+        "content": "<p>Hi - how would one set the type of a new element to a custom (logical) data type? Expecting:</p>\n<div class=\"codehilite\"><pre><span></span><code>Alias: WidgetLogicalType = http://example.com/far/far/away/widget\n\nLogical: Basket\n* contents 0..* WidgetLogicalType &quot;Widgets in the basket&quot;\n</code></pre></div>\n<p>But alas, error!</p>",
+        "id": 252820015,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1631294379
+    },
+    {
+        "content": "<p>Also:</p>\n<div class=\"codehilite\"><pre><span></span><code>Logical: Basket\n* contents 0..* &quot;http://example.com/far/far/away/widget&quot; &quot;Widgets in the basket&quot;\n</code></pre></div>\n<p>is no-go...</p>",
+        "id": 252820140,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1631294427
+    },
+    {
+        "content": "<p>A new element is implemented as an Extension: <a href=\"https://www.hl7.org/fhir/extensibility.html\">https://www.hl7.org/fhir/extensibility.html</a></p>",
+        "id": 252820264,
+        "sender_full_name": "David Pyke",
+        "timestamp": 1631294491
+    },
+    {
+        "content": "<p>I don't think I need to use an extension in a logical model, no?</p>",
+        "id": 252820878,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1631294764
+    },
+    {
+        "content": "<p>Interestingly enough, this:</p>\n<div class=\"codehilite\"><pre><span></span><code>      {\n        &quot;id&quot;:&quot;Member.name&quot;,\n        &quot;path&quot;:&quot;Member.name&quot;,\n        &quot;min&quot;:0,\n        &quot;max&quot;:&quot;*&quot;,\n        &quot;type&quot;: [{\n          &quot;code&quot;:&quot;http://example.com/mbr&quot;\n        }]\n      }\n</code></pre></div>\n<p>reverses into this FSH:</p>\n<div class=\"codehilite\"><pre><span></span><code>* name 0..* http://example.com/mbr\n</code></pre></div>\n<p>but errors on a round-trip.</p>",
+        "id": 252820952,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1631294810
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> Thoughts?</p>",
+        "id": 252825692,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1631296942
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191351\">@Chris Grenz</span> - Hmmm... If the logical model is defined in your IG, then you can directly refer to it by name:</p>\n<div class=\"codehilite\"><pre><span></span><code>Logical: WidgetLogicalType\n// ...\n\nLogical: Basket\n* contents 0..* WidgetLogicalType &quot;Widgets in the basket&quot;\n</code></pre></div>\n<p>If the logical model is outside of your IG, then it ideally should exist in one of your declared dependencies.  If it does, then the alias approach should work as long as the URL is correct.  You can also use the name/id of the logical model (again, only if it is in one of your declared dependency packages).</p>\n<p>If the logical model is outside of your IG <em>and</em> it is not in one of your dependencies, then SUSHI will not process it because it doesn't know how to apply it.  <code>ElementDefinition.type</code> has <code>code</code>, <code>profile</code>, and <code>targetProfile</code> properties -- and those get populated differently depending on what the target type is (LM, profile, etc). SUSHI needs to be able to resolve the URL to a definition to determine what it is and how it gets encoded into the <code>ElementDefinition.type</code> -- but if the alias doesn't point to something inside the IG or its dependencies, SUSHI can't resolve it to a definition.</p>\n<p>All that said, there is a hack you could apply to get what you want (maybe I should have led with that?).  Basically declare a supported type first and then use a caret rule to overwrite the type in the <code>ElementDefinition</code>.  E.g.:</p>\n<div class=\"codehilite\"><pre><span></span><code>Alias: WidgetLogicalType = http://example.com/far/far/away/widget\n\nLogical: Basket\n// Initially declare w/ a supported type to meet SUSHI&#39;s syntax requirements\n* contents 0..* Element &quot;Widgets in the basket&quot;\n// Then use a caret rule to overwrite the type in the element\n* contents ^type.code = WidgetLogicalType\n</code></pre></div>\n<p><a href=\"https://fshschool.org/FSHOnline/#/share/3hmGk86\">Above example in FSH Online</a></p>\n<p>But... if you try to constrain anything in the WidgetLogicalType, you'll run into problems again since SUSHI doesn't know anything about that type at all if it isn't in your IG or dependencies.</p>",
+        "id": 252834270,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1631300695
+    },
+    {
+        "content": "<p>I'm not sure I'm convinced that a URL in type.code would create problems in creating the JSON StructureDefinition. You don't need any information about the type to refer to it. If you constrain it, yes. If you extend it, yes. But not just to give an element a type...</p>",
+        "id": 252835245,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1631301136
+    },
+    {
+        "content": "<p>Effectively<br>\n<code>* contents 0..* http://example.com/far/far/away/widget</code><br>\nshould just act like the \"hack\" IMO. No error unless you \"go inside\" the type you can't resolve.</p>",
+        "id": 252835401,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1631301206
+    },
+    {
+        "content": "<p>In any case, thank you!</p>",
+        "id": 252835490,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1631301246
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191351\">Chris Grenz</span> has marked this topic as resolved.</p>",
+        "id": 252844280,
+        "sender_full_name": "Notification Bot",
+        "timestamp": 1631305020
+    },
+    {
+        "content": "<p>Maybe I did not explain myself well.  Let me try again...</p>\n<p>If the type of an element is a logical model or resource, then its URL goes in <code>type.code</code>.  But if the type of an element is a profile, then the profile's base type goes in <code>type.code</code> and the profile URL goes in <code>type.profile</code>.   If I only have a URL, I do not know if it is a profile, so I do not know if the URL goes in <code>type.code</code> or <code>type.profile</code> (and if the latter, then without a definition, I have no idea what should go in <code>type.code</code>).</p>\n<p>For example, consider the (intentionally strange) FSH below:</p>\n<div class=\"codehilite\"><pre><span></span><code>Alias: QuantityType = http://hl7.org/fhir/StructureDefinition/Quantity\nAlias: SimpleQuantityType = http://hl7.org/fhir/StructureDefinition/SimpleQuantity\n\nLogical: MyLogical\n* quantity 0..1 QuantityType &quot;Quantity&quot;\n* simpleQuantity 0..1 SimpleQuantityType &quot;SimpleQuantity&quot;\n</code></pre></div>\n<p>The resulting <code>quantity</code> element has <code>\"type\": { \"code\": \"Quantity\" }</code>.</p>\n<p>The resulting <code>simpleQuantity</code> element has <code>\"type\": { \"code\": \"Quantity\", \"profile\": [\"http://hl7.org/fhir/StructureDefinition/SimpleQuantity\"] }</code>.</p>\n<p>If SUSHI blindly put URLs just in <code>target.code</code>, then <code>simpleQuantity</code> would be wrong.  It needs to know the definition behind the URL to distinguish where the URL goes in the <code>type</code>.</p>\n<p>The above example can be loaded in FSH Online <a href=\"https://fshschool.org/FSHOnline/#/share/3hmbaOc\">here</a>, but if you prefer an example that does not use core FHIR types, I've also made a contrived example with LM's <a href=\"https://fshschool.org/FSHOnline/#/share/3tuYzx1\">here</a> that also shows why the details of the type being assigned to the element matters.</p>",
+        "id": 252845835,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1631305750
+    },
+    {
+        "content": "<p>Thanks Chris - makes sense. I'd still default to just taking the value as <code>type.code</code> if it can't be resolved to open up the default case, maybe with a warning.</p>",
+        "id": 253106756,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1631546129
+    }
+]

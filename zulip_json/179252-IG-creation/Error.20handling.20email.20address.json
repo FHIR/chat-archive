@@ -1,0 +1,140 @@
+[
+    {
+        "content": "<p>I get a lot of (thousands) of messages in qa.html that read:</p>\n<p><code>The link 'info@nictiz.nl' for \"Nictiz\" cannot be resolved</code></p>\n<p>This is probably based on our contact data in every ig and conformance resource:</p>\n<div class=\"codehilite\"><pre><span></span><span class=\"nt\">&lt;contact&gt;</span>\n    <span class=\"nt\">&lt;name</span> <span class=\"na\">value=</span><span class=\"s\">&quot;Nictiz&quot;</span><span class=\"nt\">/&gt;</span>\n    <span class=\"nt\">&lt;telecom&gt;</span>\n        <span class=\"nt\">&lt;system</span> <span class=\"na\">value=</span><span class=\"s\">&quot;email&quot;</span><span class=\"nt\">/&gt;</span>\n        <span class=\"nt\">&lt;value</span> <span class=\"na\">value=</span><span class=\"s\">&quot;info@nictiz.nl&quot;</span><span class=\"nt\">/&gt;</span>\n        <span class=\"nt\">&lt;use</span> <span class=\"na\">value=</span><span class=\"s\">&quot;work&quot;</span><span class=\"nt\">/&gt;</span>\n    <span class=\"nt\">&lt;/telecom&gt;</span>\n<span class=\"nt\">&lt;/contact&gt;</span>\n</pre></div>\n\n\n<p>Is it necessary to include mailto: with that value when the system already clearly says it is an email address?</p>",
+        "id": 188198817,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1581680891
+    },
+    {
+        "content": "<p>Hmm, we get same problem. Looking at the code it appears that <code>HTLMLInspector.java</code> is checking all HTML <code>a</code> <code>href</code>s and thus I suspect it is the template that is failing to insert the <code>mailto:</code> prefix.</p>",
+        "id": 188263677,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1581730659
+    },
+    {
+        "content": "<p>I suspect this line in the page-end template is the culprit:</p>\n<div class=\"codehilite\"><pre><span></span>IG <span class=\"ni\">&amp;#169;</span> {{site.data.info.copyrightyear}} <span class=\"p\">&lt;</span><span class=\"nt\">a</span> <span class=\"na\">style</span><span class=\"o\">=</span><span class=\"s\">&quot;color: #81BEF7&quot;</span> <span class=\"na\">href</span><span class=\"o\">=</span><span class=\"s\">&quot;{{site.data.fhir.ig.contact[0].telecom[0]}}&quot;</span><span class=\"p\">&gt;</span>{{site.data.fhir.ig.publisher}}<span class=\"p\">&lt;/</span><span class=\"nt\">a</span><span class=\"p\">&gt;</span>.  Package {{site.data.fhir.packageId}}#{{site.data.fhir.igVer}} based on <span class=\"p\">&lt;</span><span class=\"nt\">a</span> <span class=\"na\">style</span><span class=\"o\">=</span><span class=\"s\">&quot;color: #81BEF7&quot;</span> <span class=\"na\">href</span><span class=\"o\">=</span><span class=\"s\">&quot;{{site.data.fhir.path}}&quot;</span><span class=\"p\">&gt;</span>FHIR {{site.data.fhir.version}}<span class=\"p\">&lt;/</span><span class=\"nt\">a</span><span class=\"p\">&gt;</span>. Generated <span class=\"p\">&lt;</span><span class=\"nt\">span</span> <span class=\"na\">title</span><span class=\"o\">=</span><span class=\"s\">&quot;{{site.data.fhir.genDate}}&quot;</span><span class=\"p\">&gt;</span>{{site.data.fhir.genDate | date: &quot;%Y-%m-%d&quot;}}<span class=\"p\">&lt;/</span><span class=\"nt\">span</span><span class=\"p\">&gt;</span>\n</pre></div>\n\n\n<p>As it assumes the first <code>telecom</code> in the first <code>contact</code> is a URL.</p>\n<p>The simplest work-around would be to add a URL <code>telecom</code> before the email one.</p>",
+        "id": 188264249,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1581731752
+    },
+    {
+        "content": "<p>I looked into this-  the problem is not in the resource, but in the template that assumes that the email address has a mailto:prefix, when it doesn't. <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> I think that's the base template</p>",
+        "id": 188265480,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1581733981
+    },
+    {
+        "content": "<p>Is email allowed to have the mailto: prefix or do I need to add logic that checks if it's already there?  (It would be nice if we required it to be one way or the other.)</p>",
+        "id": 188272350,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1581749570
+    },
+    {
+        "content": "<p>Also, I guess you need to release the base template so I can make more changes to it.</p>",
+        "id": 188272357,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1581749589
+    },
+    {
+        "content": "<p>I don't <a href=\"http://build.fhir.org/datatypes-definitions.html#ContactPoint.value\" target=\"_blank\" title=\"http://build.fhir.org/datatypes-definitions.html#ContactPoint.value\">see any hint</a> on how you should format <code>value</code> when <code>system</code> is email. Agree that being specific one way or the other would be best. Given that it was never a requirement, it might be hard to be specific now, so perhaps assuming that it may or may not be there at present is all you can do in general, but ... I would assume that making the IG guidelines more strict actually is an option.</p>\n<p>Since you could not do a url without scheme, I don't see why you could not be specific for email (and phone|pager|fax|sms which are all tel:). Not sure what to do with \"other\" in the IG footer.</p>\n<p>Note that this whole thing is only relevant for the first telecom as that is linked into the footer. All others are \"nice-to-know\"</p>\n<p>In short: I would propose an invariant for the first IG.contact.telecom.value that requires it being a valid URL.</p>",
+        "id": 188274206,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1581753257
+    },
+    {
+        "content": "<p>email should just be the email address, and should not have mailto: prefixed. But since we apparently failed to be specific about this (though the provided example is fairly suggestive), I guess you'll have to handle both</p>",
+        "id": 188346328,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1581901250
+    },
+    {
+        "content": "<blockquote>\n<p>I guess you need to release the base template</p>\n</blockquote>\n<p>And update all the dependencies?</p>",
+        "id": 188346347,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1581901276
+    },
+    {
+        "content": "<p>Yes</p>",
+        "id": 188350043,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1581909405
+    },
+    {
+        "content": "<p>so before I can do the release you need to make another entry in the package-list.json file, filling in everything but the date (make that XXXX-XX-XX), and changing current = false for the last released version</p>",
+        "id": 188350300,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1581909949
+    },
+    {
+        "content": "<p>let me know when you've committed it</p>",
+        "id": 188350301,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1581909961
+    },
+    {
+        "content": "<p>Done</p>",
+        "id": 188351107,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1581911753
+    },
+    {
+        "content": "<p>hmm. check change I made in the package-list.json for how it should be</p>",
+        "id": 188352536,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1581914817
+    },
+    {
+        "content": "<p>if you increase the minor version, does that bump the minor version of all the dependent packages?</p>",
+        "id": 188352545,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1581914864
+    },
+    {
+        "content": "<p>I think it does</p>",
+        "id": 188352654,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1581915080
+    },
+    {
+        "content": "<p>y</p>",
+        "id": 188356554,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1581922611
+    },
+    {
+        "content": "<p>ok released</p>",
+        "id": 188370260,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1581938378
+    },
+    {
+        "content": "<p>I'm using fhir.base.template and am getting a lot of <br>\n<code>The link 'bmilius@nmdp.org' for \"NMDP/Be The Match\" cannot be resolved</code><br>\nBasically, found in the footer of every page.<br>\nI think it's picking it up from my package.json file containing</p>\n<div class=\"codehilite\"><pre><span></span>{\n  &quot;name&quot;: &quot;hla-reporting&quot;,\n  &quot;version&quot;: &quot;0.1.0&quot;,\n  &quot;canonical&quot;: &quot;http://fhir.nmdp.org/ig/hla-reporting&quot;,\n  &quot;url&quot;: &quot;http://fhir.nmdp.org/ig/hla-reporting&quot;,\n  &quot;title&quot;: &quot;HLA Reporting Implementation Guide&quot;,\n  &quot;description&quot;: &quot;How to report HLA genotyping using FHIR&quot;,\n  &quot;dependencies&quot;: {\n    &quot;hl7.fhir.r4.core&quot;: &quot;4.0.1&quot;,\n    &quot;hl7.fhir.uv.genomics-reporting&quot;: &quot;1.0.0&quot;\n  },\n  &quot;keywords&quot;: [\n    &quot;HLA&quot;,\n    &quot;Genotype&quot;,\n    &quot;Lab results&quot;,\n    &quot;genomics reporting&quot;\n  ],\n  &quot;language&quot;: &quot;en&quot;,\n  &quot;author&quot;: &quot;NMDP/Be The Match&quot;,\n  &quot;maintainers&quot;: [\n    {\n      &quot;name&quot;: &quot;Bob Milius&quot;,\n      &quot;email&quot;: &quot;bmilius@nmdp.org&quot;\n    }\n  ],\n  &quot;license&quot;: &quot;CC0-1.0&quot;\n}\n</pre></div>\n\n\n<p>Is this another template issue?</p>",
+        "id": 192730211,
+        "sender_full_name": " Bob Milius",
+        "timestamp": 1585863476
+    },
+    {
+        "content": "<p>Not from there I don't think.  The footer doesn't grab from the package.json, it grabs from the ImplementationGuide.  What's in your IG file?</p>",
+        "id": 192733442,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1585865313
+    },
+    {
+        "content": "<p>my ImplementationGuide-hla-reporting.json?</p>",
+        "id": 192733882,
+        "sender_full_name": " Bob Milius",
+        "timestamp": 1585865572
+    },
+    {
+        "content": "<p>y</p>",
+        "id": 192734099,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1585865701
+    },
+    {
+        "content": "<p><a href=\"/user_uploads/10155/fXq8bsa9-aHLTDW_do1MqBf-/ImplementationGuide-hla-reporting.json\" title=\"ImplementationGuide-hla-reporting.json\">ImplementationGuide-hla-reporting.json</a> <br>\n(created by sushi)</p>",
+        "id": 192734253,
+        "sender_full_name": " Bob Milius",
+        "timestamp": 1585865787
+    }
+]

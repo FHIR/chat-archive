@@ -1,0 +1,61 @@
+---
+layout: page
+title: "FHIR Chat  · Serializing resources · ibm"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/index.html">ibm</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/Serializing.20resources.html">Serializing resources</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="184160247"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/Serializing%20resources/near/184160247" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eliot Salant <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/Serializing.20resources.html#184160247">(Dec 24 2019 at 09:37)</a>:</h4>
+<p>In order to store POSTed FHIR objects,  I wrote Interceptor code which grabs the incoming Resource and pulls selected fields/values out to create a JSON string.  The FHIRJsonGenerator class does this in a much more elegant manner by traversing the Resource, except that the generate() methods return void and write their output to an output stream or to a file.  It would be really useful to get a method, public String generate(Visitable visitable), that would allow capturing the serialized Resource as a JSON string.</p>
+
+
+
+<a name="184173300"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/Serializing%20resources/near/184173300" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lee Surprenant <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/Serializing.20resources.html#184173300">(Dec 24 2019 at 14:47)</a>:</h4>
+<p>Hey Eliot. The FHIRJsonGenerator should have an option for generating to a Writer (not just an output stream). <br>
+ This is the method we've used to write objects to a string in the past.  You should be able to use a StringWriter and then just get the JSON String from that.  Let us know how it goes!</p>
+
+
+
+<a name="184219512"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/Serializing%20resources/near/184219512" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eliot Salant <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/Serializing.20resources.html#184219512">(Dec 25 2019 at 14:22)</a>:</h4>
+<p>Great - thanks!</p>
+
+
+
+<a name="184256949"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/Serializing%20resources/near/184256949" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gidon Gershinsky <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/Serializing.20resources.html#184256949">(Dec 26 2019 at 11:22)</a>:</h4>
+<blockquote>
+<p>In order to store POSTed FHIR objects,  I wrote Interceptor code which grabs the incoming Resource and pulls selected fields/values out to create a JSON string.  The FHIRJsonGenerator class does this in a much more elegant manner by traversing the Resource, except that the generate() methods return void and write their output to an output stream or to a file.  It would be really useful to get a method, public String generate(Visitable visitable), that would allow capturing the serialized Resource as a JSON string.</p>
+</blockquote>
+<p>This is about using Parquet storage backend, instead of a database (for certain resource types). Before creating a Parquet file, we're collecting a number of FHIR messages in an NDJSON file in a local cache, eg SSD. After a certain size or time, we convert the NDJSON to an encrypted Parquet file in a storage. So, we need each POSTed FHIR object  (for some resource types) in a single-line JSON string form.  We'll use FHIRJsonGenerator with StringWriter for that. <span class="user-mention" data-user-id="191676">@Lee Surprenant</span> If there is a way to get the original JSON payload, that arrived with POST, it can save the (re-)generation of the same object. Moreover, it can save object deserialization (if a resource type is looked up before deep deserialization - eg via simple string search). But that could be done at a later stage, we can start with the FHIRJsonGenerator.</p>
+
+
+
+<a name="184875827"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/Serializing%20resources/near/184875827" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lee Surprenant <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/Serializing.20resources.html#184875827">(Jan 06 2020 at 02:39)</a>:</h4>
+<p>Ok, thats about what I thought.  But if you're not going to do any validation of the message and you're just using the FHIR server as some kind of staging area for batching the POSTed JSON, you might be better off just using some kind of messaging / queue-like system (because there is nothing FHIR-specific needed for the described behavior).  For example, the client could write the resources directly to a Kafka topic and then you can pull a batch of resources off the topic before writing them all to a parquet file.</p>
+
+
+
+<a name="184875877"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/Serializing%20resources/near/184875877" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lee Surprenant <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/Serializing.20resources.html#184875877">(Jan 06 2020 at 02:40)</a>:</h4>
+<p>Also, please note that the FHIR server actually adds some metadata to the POSTed JSON on the way in:  a server-assigned id, a versionId ("1" since its a POST), and a lastUpdated time.  So you'll probably want to consider whether any of those are important for your use case.</p>
+
+
+
+<a name="184889202"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/Serializing%20resources/near/184889202" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gidon Gershinsky <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/Serializing.20resources.html#184889202">(Jan 06 2020 at 08:59)</a>:</h4>
+<p>Thanks for this perspective. Since we want to preserve the standard FHIR model, we'll certainly need the server-assigned id, version and timestamp. We won't use Kafka though, as this would break the FHIR model, and we hope to demonstrate that FHIR is a good fit for heavy analytics on healthcare data. Also, not all messages are stored in Parquet, most of the resource types will go into a regular backend. Actually, the decision on what to send to Parquet can be more sophisticated than a simple <em>if</em> on the resource type - another reason to use the server-side deserialization of messages. So that's where we 'll start, and will consider different optimizations later on.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

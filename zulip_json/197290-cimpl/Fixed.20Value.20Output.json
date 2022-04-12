@@ -1,0 +1,122 @@
+[
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> </p>\n<p>I took a look at the output for fixed values, specifically fixing Observation.Code. </p>\n<p>Entry: BreastAbnormality<br>\nParent: Observation<br>\nParent: Observation<br>\n    Code = BREASTABNORMALITYCODESCS#BreastAbnormalityObservationCode</p>\n<p>It appears that to fix the value, the cli creates a slice on Observation.Code and then fixes the value in that slice. If I understand fhir, this means that there is a slice of Observation.Code that has a fixed value, but there can be other slices as well with different values.</p>\n<p>I hand modified the above example, and put in what my (limited) understanding of the fixed value is. It passed validation.  This one limits Code to a single value and fixes that value.</p>\n<p>Should this be what the cli outputs?</p>\n<p>The reason this came up is that I am writing tooling that will output c# classes for a profile, constraining the properties to be only what is allowed in the constrained profile. Reading the cli output, unless I misunderstand, would cause me to output two properties for Code, the slice that has a fixed value, and another slice that can contain any value (the original slice).</p>\n<p>I attached the two files </p>\n<p>cli output -&gt; <a href=\"/user_uploads/10155/wIaqW4u6nu-ArAB5YJubQMmr/Fixed-cli.json\" target=\"_blank\" title=\"Fixed-cli.json\">Fixed-cli.json</a> </p>\n<p>hand modified -&gt; <a href=\"/user_uploads/10155/0ASQxPs5acoYXRorohpM5s06/Fixed-modified.json\" target=\"_blank\" title=\"Fixed-modified.json\">Fixed-modified.json</a> output)</p>\n<p>Please let me know your thoughts.</p>\n<p>Best,<br>\nKurt A.</p>",
+        "id": 172861977,
+        "sender_full_name": "Kurt Allen",
+        "timestamp": 1565365601
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span>  and <span class=\"user-mention\" data-user-id=\"191447\">@Mark Kramer</span> <br>\nI am seeing some issues that don't look quite perfect in the way slicing is done.</p>\n<p>a) I am seeing a 'slicing' statement on the slice (I think you only need one on the base definition).<br>\n   I think this element can be removed (or at least the slicing section can be).<br>\n   From the fhir documentation, it appears that adding the slicing item will de facto define a new slice, which we don't want to do.<br>\n      {<br>\n        \"id\": \"Observation.component:breastrad-AbnormalityDensity.code.coding\",<br>\n        \"path\": \"Observation.component.code.coding\",<br>\n        \"slicing\": {<br>\n          \"id\": \"6\",<br>\n          \"discriminator\": [<br>\n            {<br>\n              \"type\": \"value\",<br>\n              \"path\": \"code\"<br>\n            }<br>\n          ],<br>\n    ...<br>\n      },</p>\n<p>b) The fixed statements of the component slices have the same problem as what I mentioned in my previous post. i.e. the fixed value is set on a slice of the slice, not on the slice itself.</p>",
+        "id": 173252229,
+        "sender_full_name": "Kurt Allen",
+        "timestamp": 1565825727
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span>  and <span class=\"user-mention\" data-user-id=\"191447\">@Mark Kramer</span> I am not sure if this is a bug or just messy, but when a CodeableConcept is set to a fixed value, the cli generates a separate fixed StructuredDefinition.ElementDefinition for each sub part of the CodeableConcept (system, code, text, etc). When I populate a structured definition c# item manually and write it out with a fixed value, I get something much cleaner - one single element definition for all the parts.</p>\n<p>\"fixedCodeableConcept\": {<br>\n  \"coding\": [<br>\n    {<br>\n      \"system\": \"codeSystem\",<br>\n      \"code\": \"codeCode\",<br>\n      \"display\": \"codeDisplay\"<br>\n     }<br>\n   ],<br>\n   \"text\": \"codeText\"<br>\n },</p>",
+        "id": 173287336,
+        "sender_full_name": "Kurt Allen",
+        "timestamp": 1565873628
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span>  and <span class=\"user-mention\" data-user-id=\"191447\">@Mark Kramer</span> <br>\nWhen slicing Observation.Component, cli setd the discriminator path to code.coding.code. This should probably be just 'code'.</p>",
+        "id": 173290303,
+        "sender_full_name": "Kurt Allen",
+        "timestamp": 1565876062
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"192611\">@Kurt Allen</span> -- sorry for the late responses; both <span class=\"user-mention\" data-user-id=\"191447\">@Mark Kramer</span> and I were on vacation. </p>\n<blockquote>\n<p>It appears that to fix the value, the cli creates a slice on Observation.Code and then fixes the value in that slice. If I understand fhir, this means that there is a slice of Observation.Code that has a fixed value, but there can be other slices as well with different values.</p>\n</blockquote>\n<p><code>Observation.code</code> is <code>1..1</code>, so we don't slice that -- we slice <code>Observation.code.coding</code>.  You are correct in your interpretation -- we are basically saying that the CodeableConcept must have one coding with the fixed value, but <em>other</em> codings are allowed as well.  This allows the data to contain other synonyms, proprietary codes, or perhaps the \"user-selected\" code, etc -- while still requiring the one standards-based code.</p>\n<p>Your modified version is also a valid approach, but would not allow the data to contain any additional codes; so in cases where a code was translated to the standards-based code, the \"original\" code would have to be dropped from the data entirely in order to be compliant with the profile.</p>",
+        "id": 173548721,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1566225426
+    },
+    {
+        "content": "<blockquote>\n<p>I am seeing a 'slicing' statement on the slice (I think you only need one on the base definition)...<br>\n...<br>\n\"id\": \"Observation.component:breastrad-AbnormalityDensity.code.coding\",<br>\n...</p>\n</blockquote>\n<p>There are indeed two slices here and I believe that both are necessary if you want to follow the current approach of fixing codes on CodeableConcepts as I described above.  The first slice (on <code>Observation.component</code>) identifies the slice for the <code>breastrad-AbnormalityDensity</code> component.  The entire structure of an <code>Observaton.component</code> backbone element is part of this top-level slice.</p>\n<p>Within that <code>Observation.component</code> slice, we want to slice the <code>Observation.component.code.coding</code> in order to indicate that _one_ of the codings must be the fixed code, while still allowing other codings (for synonyms, original code, etc).  If you're fine with <em>not allowing</em> any additional codes over the required standardized code, then that slicing <em>could</em> be removed.  But for CIMPL, we felt it was important to allow the data to still contain those alternate/original codes as well.</p>",
+        "id": 173549165,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1566225810
+    },
+    {
+        "content": "<p>I should note, however, that based on recent discussions, we plan to change the CLI to use <code>pattern[x]</code> for fixing codings on CodeableConcept instead.  This approach is semantically the same (require a specific coding but also allow other codings to co-exist), but doesn't need a <em>slice</em> to represent it.</p>",
+        "id": 173549344,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1566225948
+    },
+    {
+        "content": "<blockquote>\n<p>when a CodeableConcept is set to a fixed value, the cli generates a separate fixed StructuredDefinition.ElementDefinition for each sub part of the CodeableConcept (system, code, text, etc).</p>\n</blockquote>\n<p>I believe that we're required to redefine all of the sub-elements in the snapshot when we create a slice.  If you look at other profiles (generated with other tools), I believe you'll find the same.</p>",
+        "id": 173549574,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1566226095
+    },
+    {
+        "content": "<blockquote>\n<p>When slicing Observation.Component, cli setd the discriminator path to code.coding.code. This should probably be just 'code'.</p>\n</blockquote>\n<p>IIRC, the FHIR spec requires the discriminator path to terminate at the element that contains the <code>fixed[x]</code> or <code>pattern[x]</code> declaration -- which is why we need to do <code>code.coding.code</code> rather than just <code>code</code>.  Technically, we should probaly be using a dual discriminator that looks at <code>code.coding.code</code> <em>and</em> <code>code.coding.system</code>, but there were some technical limitations that made this difficult.</p>\n<p>When we move to using <code>pattern[x]</code> instead of <code>fixed[x]</code>, then the pattern will be at the <code>code</code> level, and the discriminator can point to <code>code</code> instead of <code>code.coding.code</code> -- but we're not there yet.</p>",
+        "id": 173549797,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1566226284
+    },
+    {
+        "content": "<p>Do you think 'pattern'  slice will be implemented before the end of the year? I have concerns about releasing the next round of the ballot (which is not for comment only...) with the current setup. <br>\nI am writing a profile c# class generator  from the output profiles generated, and the current output is really hard to parse properly...</p>",
+        "id": 173550487,
+        "sender_full_name": "Kurt Allen",
+        "timestamp": 1566226763
+    },
+    {
+        "content": "<p>Priority is <span class=\"user-mention\" data-user-id=\"191447\">@Mark Kramer</span>'s call.  Mark, what say you?  By end of the year?</p>",
+        "id": 173553821,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1566229195
+    },
+    {
+        "content": "<p>It is a priority. Lloyd may even start enforcing this in the validation</p>",
+        "id": 173554285,
+        "sender_full_name": "Mark Kramer",
+        "timestamp": 1566229471
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 173556077,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1566230781
+    },
+    {
+        "content": "<blockquote>\n<p>Lloyd may even start enforcing this in the validation</p>\n</blockquote>\n<p>That's interesting considering the FHIR Vital Signs profiles and the US Core profiles (even the R4 ones) use the slicing approach (<em>not</em> the pattern approach).  If we profile a vital signs profile or US Core profile, we can't change those definitions.  Would we fail validation?</p>\n<p>For a little history: one of the reasons we avoided pattern was because the DSTU2 spec strongly recommends <em>against</em> using a pattern within a slice.  This meant we shouldn't use a pattern to differentiate slices of Observation.component -- leaving us with slicing + fixed[x] as the only viable option.  From the DSTU2 spec:</p>\n<blockquote>\n<p>Note: At present, only a fixed value or a required value set should be used for slicing; using ElementDefinition.pattern[x]) is not recommended as a basis for slicing while issues related to this are investigated during the DSTU period. </p>\n</blockquote>\n<p>All that said, now that Grahame has updated how he renders patterns in the IG publisher, I'm fine with making the switch and agree that it should take priority.</p>",
+        "id": 173556741,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1566231389
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> </p>\n<p>Welcome back!</p>\n<p>Some thoughts: sorry if this is irritating anal :-)</p>\n<p>1) so when I have the following CIMPL code, \n*   Entry: BreastAbnormality<br>\n    Parent: Observation<br>\n        Code = BREASTABNORMALITYCODESCS#BreastAbnormalityObservationCode\n*\nam I saying the Code is exactly and only <br>\n*BREASTABNORMALITYCODESCS#BreastAbnormalityObservationCode<br>\n*or am I saying that Code contains<br>\n<em>BREASTABNORMALITYCODESCS#BreastAbnormalityObservationCode</em><br>\nand may or may not contain other codes.</p>\n<p>I wonder if the 'fixed' statement needs to be a bit more nuanced allowing either to be specified. I can see cases for both.</p>\n<p>2)  from <a href=\"https://www.hl7.org/fhir/profiling.html\" target=\"_blank\" title=\"https://www.hl7.org/fhir/profiling.html\">https://www.hl7.org/fhir/profiling.html</a>\n*   Each slice must use the element definition for the element(s) in the discriminator(s) to ensure that the slices are clearly     differentiated by assigning an appropriate value domain, depending on the discriminator type. If the type is value, or  pattern, then the element definition must use either:</p>\n<div class=\"codehilite\"><pre><span></span>ElementDefinition.fixed[x], or\nElementDefinition.pattern[x], or\n</pre></div>\n\n\n<p>*\nTo me that suggests that if the discriminator is<br>\n   \"discriminator\": [<br>\n    {<br>\n      \"type\": \"value\",<br>\n      \"path\": \"code\"<br>\n    }</p>\n<p>then code must be fixed; Is this the same as fixing code.code and code.system separately?</p>\n<p>3) I think you are using the \"id\" ':sliceName' format to define if an element is in a slice. The Fhir spec says that this format is expected, but some articles from Firely have said that you can not count on it for parsing; i.e. is is a really good idea but not required.</p>\n<p>If that is the case, then do we need to add sliceName entries to all child entries?<br>\ni.e.</p>\n<ul>\n<li>{<br>\n        \"id\": \"Observation.component:breastrad-AbnormalityType\",<br>\n        \"path\": \"Observation.component\",<br>\n        \"sliceName\": \"breastrad-AbnormalityType\",<br>\n    ...<br>\n      },<br>\n      {<br>\n        \"id\": \"Observation.component:breastrad-AbnormalityType.code\",<br>\n        \"path\": \"Observation.component.code\"<br>\nadded&gt;  \"sliceName\": \"breastrad-AbnormalityType\",   <br>\n      },\n*</li>\n</ul>\n<p>Also, is the following a reslice</p>\n<ul>\n<li>\n<p>{<br>\n        \"id\": \"Observation.component:breastrad-AbnormalityType.code.coding:Fixed_AbnormalityType\",<br>\n        \"path\": \"Observation.component.code.coding\",<br>\n        \"sliceName\": \"Fixed_AbnormalityType\",<br>\n      },\n*\nand if so should sliceName be modified:</p>\n</li>\n<li>\n<p>{<br>\n        \"id\": \"Observation.component:breastrad-AbnormalityType.code.coding:Fixed_AbnormalityType\",<br>\n        \"path\": \"Observation.component.code.coding\",<br>\n        \"sliceName\": \"breastrad-AbnormalityType/Fixed_AbnormalityType\",<br>\n      },\n*</p>\n</li>\n</ul>",
+        "id": 173557747,
+        "sender_full_name": "Kurt Allen",
+        "timestamp": 1566232261
+    },
+    {
+        "content": "<blockquote>\n<p>1) so when I have the following CIMPL code,<br>\nEntry: BreastAbnormality<br>\nParent: Observation<br>\nCode = BREASTABNORMALITYCODESCS#BreastAbnormalityObservationCode<br>\nam I saying the Code is exactly and only <em>BREASTABNORMALITYCODESCS#BreastAbnormalityObservationCode</em><br>\nor am I saying that Code contains <em>BREASTABNORMALITYCODESCS#BreastAbnormalityObservationCode</em><br>\nand may or may not contain other codes.</p>\n</blockquote>\n<p>It's kind of nuanced, but you're saying that the <code>Code</code>element value <em>is</em> the BreastAbnormalityObservationCode <em>concept</em>.  At this point, we're in the conceptual space, not the physical representation.  When we map to FHIR, we need to indicate the physical representation of that idea, and it will depend on what you're binding to:</p>\n<ul>\n<li>If the target FHIR type is a primitive <code>code</code> (which is essentially just a string), then there is no other choice but to say that it must be <em>exactly</em> <code>BreastAbnormalityObservationCode</code> (without a code system)</li>\n<li>If the target FHIR type is a <code>Coding</code>(which has structure for <code>system</code> but is still essentially <em>singular</em>), then there is no other choice but to say it must have only the exact code <code>BreastAbnormalityObservationCode</code> and exact system <code>BREASTABNORMALITYCODESCS</code></li>\n<li>If the target FHIR type is a <code>CodeableConcept</code>, however, then then its <code>coding</code> is a multiple (<code>0..*</code>).  While we <em>could</em> choose to constrain it to <code>1..1</code> and say it must have a single coding that has exact code <code>BreastAbnormalityObservationCode</code> and exact system <code>BREASTABNORMALITYCODESCS</code>, we think there is little value in this rigidity.  The FHIR team chose to use a <code>CodeableConcept</code> instead of a <code>Coding</code> because they felt that it was useful to allow secondary codes, so we choose to keep it that way.  At the end of the day it should still be a single <em>concept</em>; it just might have multiple codes representing that concept-- and as long as <em>one</em> is what we want, then we're good.</li>\n</ul>\n<p>Perhaps we could allow authors to specify which flavor they want, but I'm not sure exactly where/how that should be done since it is really only a question when you get down to FHIR (not at the conceptual model level).  What is the use case where you wouldn't want to allow extraneous codings within a single CodeableConcept?</p>\n<p>I should also mention, once you get down to <code>Coding</code> and <code>CodeableConcept</code> you're not <em>fixing</em> the Coding or CodeableConcept as a whole -- because you shouldn't fix the <code>display</code> or <code>text</code> (it's not considered good practice to do so); rather you're fixing just parts of the <code>Coding</code> and <code>CodeableConcept</code> as appropriate.</p>",
+        "id": 173561051,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1566234836
+    },
+    {
+        "content": "<blockquote>\n<p>2) ...<br>\nTo me that suggests that if the discriminator is<br>\n\"discriminator\": [<br>\n{<br>\n\"type\": \"value\",<br>\n\"path\": \"code\"<br>\n}<br>\nthen code must be fixed; Is this the same as fixing code.code and code.system separately?</p>\n</blockquote>\n<p>If the discriminator has path <code>\"code\"</code> then the <code>code</code> element must have a <code>fixed[x]</code> or <code>pattern[x]</code>.  Let's say that the path <code>\"code\"</code> has type <code>CodeableConcept</code>.  In this case, it must have a <code>fixedCodeableConcept</code> declaration or <code>patternCodeableConcept</code> declaration.  In 99.99% of cases you would <em>never</em> want <code>fixedCodeableConcept</code> because it is too rigid -- it is saying that <em>everything</em> must be exactly as declared (each <code>coding</code> and its <code>code</code>, <code>system</code>, <code>version</code>, and <code>display</code>, as well as the <code>text</code>).  Any variation in something even as trivial as <code>text</code> or <code>display</code> would fail validation.  For this reason, only <code>patternCodeableConcept</code> would be recommended for a discriminator with path <code>\"code\"</code>.</p>\n<p>If, however, you are fixing values at the <code>code.coding.code</code> and <code>code.coding.system</code> paths, however, then those are the paths you must use in the discriminator.  Even though they are using fixed[x], they are not too rigid because they are <em>only</em> fixing code and system (not display, text, etc).</p>",
+        "id": 173561748,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1566235394
+    },
+    {
+        "content": "<blockquote>\n<p>3) 3) I think you are using the \"id\" ':sliceName' format to define if an element is in a slice. The Fhir spec says that this format is expected, but some articles from Firely have said that you can not count on it for parsing; i.e. is is a really good idea but not required.<br>\nFHIR R4 actually does <em>require</em> this format using <code>SHALL</code>: <a href=\"http://hl7.org/fhir/elementdefinition.html#id\" target=\"_blank\" title=\"http://hl7.org/fhir/elementdefinition.html#id\">http://hl7.org/fhir/elementdefinition.html#id</a></p>\n</blockquote>\n<p>That said, versions prior to R4 did not have this language (and, in fact, DSTU2 prohibits some of those characters from being in the id!).  So the Firely guidance is wise for versions prior to R4.  But... It should still be possible to parse the definitions even without it; once a slice is started (with <code>sliceName</code>), you know you're out of the slice when you (a) encounter an element path that is the same as the root slice path, or (b) encounter an element path that does not start with the root slice path.</p>\n<p>I don't believe you are allowed to repeat the <code>sliceName</code> on each component of the slice.</p>",
+        "id": 173563240,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1566236492
+    },
+    {
+        "content": "<blockquote>\n<p>Also, is the following a reslice</p>\n<p>{<br>\n\"id\": \"Observation.component:breastrad-AbnormalityType.code.coding:Fixed_AbnormalityType\",<br>\n\"path\": \"Observation.component.code.coding\",<br>\n\"sliceName\": \"Fixed_AbnormalityType\",<br>\n}</p>\n</blockquote>\n<p>No, I don't think so.  Based on my understanding, it is a nested slice, but not a re-slice.  I believe a re-slice is when a profile is based on another profile, and the child profile wants to divide a parent profile's slices into more specific slices.  In this case, the re-slicing happens at the same path as the original slice (versus a subpath, which would be a nested slice).  The profiling doc uses an example where a parent profile might define an \"example\" slice that can contain examples, but the child profile wants to define a more specific \"example1\" slice from the original \"example\" slice.</p>",
+        "id": 173566049,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1566238657
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> <br>\nThanks for your info - your comments have helped me to understand slicing. :-)</p>",
+        "id": 173797309,
+        "sender_full_name": "Kurt Allen",
+        "timestamp": 1566396611
+    }
+]

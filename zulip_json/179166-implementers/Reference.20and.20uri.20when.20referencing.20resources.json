@@ -1,0 +1,830 @@
+[
+    {
+        "content": "<p>Today, FHIR-I agreed to re-open <a href=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=12902\" target=\"_blank\" title=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=12902\">GF#12902</a> which had agreed to replace all appearances of <code>uri</code> as a reference mechanism with a choice of <code>uri|Reference([appropriate resource type(s)])</code> based on late feedback from implementers who objected to the change.  Issues to figure out include:<br>\n- Can a Reference include a canonical URL or only a server-specific URL?  (Current policy says \"yes\", but some implementers were surprised about that)<br>\n- Can a Reference include a canonical URL with a \"|[bus-version]\" appended?  Current policy doesn't enable this, but some want it<br>\n- If we just use uri and not Reference when pointing to other resources, how do we resolve the following issues:<br>\n-- Control over what types of resources can be referenced (including the ability of profiles being able to constrain what can be referenced).  This includes the ability to make clear which \"real\" resources can be referenced (e.g. StructureDefinition, Questionnaire, PlanDefinition), but also the ability to allow/prohibit pointing to PDFs, word documents and any other non-FHIR artifacts that are also legal as a URI<br>\n-- Support for traceability when a \"contained\" resource points to its parent or is pointed to by its parent via <code>uri</code> rather than <code>Reference</code>such that the invariant requiring that contained resources point to or be pointed to by their container can still be tested</p>\n<p>The decision here will impact many resources - essentially all resources that point to infrastructure or other defininitional/knowledge resources (including Questionnaire, PlanDefinition, ValueSet, etc.)  We'll be taking this up on the FHIR-I call next Monday.  Feel free to join us or share your thoughts here.</p>",
+        "id": 153935375,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1517869609
+    },
+    {
+        "content": "<p>My thoughts:<br>\nThe outcome of this should allow us to do the following:<br>\n- Ensure that the base resources make clear whether a URI can resolve to a non-FHIR artifact, a FHIR artifact or both.  If it can resolve to a FHIR artifact, it should be clear which artifact type(s) can be resolved to<br>\n- It should be possible for profilers to constrain a reference such that it they can control which resource(s) the reference is allowed to point to and/or whether referencing a non-resource is permitted or required.  (Being able to constrain the mime-type of the target resource would be useful too.)<br>\n- When referencing resources, profiles should be able to use the standard mechanism to indicate whether the reference can be contained, bundled and/or referenced and the validator needs to be able to enforce those references<br>\n- References to definitional/infrastructure/knowledge resources need to be able to point to and from contained resources and the validator must support such references when confirming that the contained resource is properly referenced. <br>\n- It needs to be clear when and where canonical references and canonical version references can be used (and ideally have profiling control of that too - e.g. \"this must point to a version-specific questionnaire canonical URL\"<br>\nI expect these behaviors fall with in the 80% for most systems dealing with definitional/infrastructure/knowledge resources, but I'm open to arguments that they're not.  (In any event, I'd expect validators for the reference implementations and profile authoring tools we endorse to support them.)</p>",
+        "id": 153935389,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1517873592
+    },
+    {
+        "content": "<p>what about Reference.identifier? how does it factor into this?  I fear asking about Reference.display...</p>",
+        "id": 153935573,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1517944169
+    },
+    {
+        "content": "<p>It does suggest that if you want to point to a definitional artifact by business identifier rather than uri, that there'd be a need for Reference rather than uri as the data type.  And yes, the absense of Reference.display when you just have a uri is a bit problematic too.  It's hard to generate narrative if you don't have a display value to indicate what Questionnaire a response is for or what protocol an order is following or what value set an element is constrained to.</p>",
+        "id": 153935574,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1517944651
+    },
+    {
+        "content": "<blockquote>\n<ul>\n<li>Can a Reference include a canonical URL or only a server-specific URL?  (Current policy says \"yes\", but some implementers were surprised about that)</li>\n</ul>\n</blockquote>\n<p>I don't know whether \"yes\" means the first or the second option - but in my mind the references (with a small 'r') between conformance resources are done using \"canonical urls\", which aren't necessarily resolvable.  One of these is StructureDefinition.url, which definition reads:</p>\n<p>\"An absolute URI that is used to identify this structure definition when it is referenced in a specification, model, design or an instance. This SHALL be a URL, SHOULD be globally unique, and SHOULD be an address at which this structure definition is (or will be) published\"</p>\n<p>On the referencing side, we have for example ElementDefinition.type.profile, which definition says:<br>\n\"Identifies a profile structure or implementation Guide that SHALL hold for the datatype this element refers to. Can be a local reference - to a contained StructureDefinition, or a reference to another StructureDefinition or Implementation Guide by a canonical URL. \"</p>\n<p>These definitions represents the mind shift that has been going on in the core team: in DSTU1 these (canonical) urls were actual addresses, and we said back then that they MUST resolve.  This, however, is unmaintainable.  These StructureDefinitions (and other conformance resources) may move from repository to repository, the original organization may go out of business or merge with another organization, be renamed etc.  In every case, the canonical url may become unresolvable at a later moment. It therefore becomes more important to have a canonical url that represents a logical, more pertinent identifier than an actual physical location. The current definitions -as far as I interpret them- stress the fact that they are /identifiers/ in the first place, and references second.</p>\n<p>This is adequately expressed in our models currently, since these references are now uri's.  Changing them to References expresses an intent that does not align with this mindset, as far as I can see.</p>\n<p>If you read <a href=\"http://hl7.org/fhir/references.html#canonical\" target=\"_blank\" title=\"http://hl7.org/fhir/references.html#canonical\">http://hl7.org/fhir/references.html#canonical</a>, this section /again/ stresses that resources may travel from location to location and that (to quote the section) \"The canonical URL serves as a stable logical identifier\".</p>\n<blockquote>\n<ul>\n<li>Can a Reference include a canonical URL with a \"|[bus-version]\" appended?  Current policy doesn't enable this, but some want it</li>\n</ul>\n</blockquote>\n<p>I think <a href=\"http://hl7.org/fhir/references.html#canonical\" target=\"_blank\" title=\"http://hl7.org/fhir/references.html#canonical\">http://hl7.org/fhir/references.html#canonical</a> says this is true for our current \"uri\" coded canonical references. If (which I am not in facor of) we would change these to References, References would also need to accept the |[version] notation.</p>\n<blockquote>\n<ul>\n<li>If we just use uri and not Reference when pointing to other resources, how do we resolve the following issues:<br>\n-- Control over what types of resources can be referenced (including the ability of profiles being able to constrain what can be referenced).  This includes the ability to make clear which \"real\" resources can be referenced (e.g. StructureDefinition, Questionnaire, PlanDefinition), but also the ability to allow/prohibit pointing to PDFs, word documents and any other non-FHIR artifacts that are also legal as a URI</li>\n</ul>\n</blockquote>\n<p>This sounds like a minor usecase to me personally, and I wonder whether this warrants the big change this GF tracker item is proposing.</p>\n<blockquote>\n<p>-- Support for traceability when a \"contained\" resource points to its parent or is pointed to by its parent via <code>uri</code> rather than <code>Reference</code>such that the invariant requiring that contained resources point to or be pointed to by their container can still be tested</p>\n</blockquote>\n<p>This is a good point, although I think we can alter the invariants to make this work \"canonically\" too. Not sure.</p>",
+        "id": 153937823,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1518712225
+    },
+    {
+        "content": "<p>i think switching from uri to <code>uri|Reference([appropriate resource type(s)])</code>would be a great idea, we currently having a problem because of uri in Attachment and not be able to replace the temporary uri during a transaction: <a href=\"https://chat.fhir.org/#narrow/stream/implementers/subject/Reference.20file.20from.20Attachment/near/127232\" target=\"_blank\" title=\"https://chat.fhir.org/#narrow/stream/implementers/subject/Reference.20file.20from.20Attachment/near/127232\">https://chat.fhir.org/#narrow/stream/implementers/subject/Reference.20file.20from.20Attachment/near/127232</a></p>",
+        "id": 153937825,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1518712412
+    },
+    {
+        "content": "<p>Yes, good that you mention that point! But couldn't that be fixed by just doing that in Attachment?  That does not seem to be a canonical uri?</p>",
+        "id": 153937826,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1518712484
+    },
+    {
+        "content": "<p>For our usecase, adding reference to Attachment would fix the the issue, correct. I just mentioned it as it is a related issue. The proposed switch would <strong>also</strong> solve our problem. We also would be happy with adding reference to Attachment.<br>\nAs we want to prevent redundant work, should we add a tracker item for our issue and link it to the reopened item?</p>",
+        "id": 153937829,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1518712738
+    },
+    {
+        "content": "<p>True. Using _include to return the binary with the search results wouldn't work either!</p>",
+        "id": 153937839,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1518715852
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span> Don't worry too much about the specific proposed change that was agreed to in <a href=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=12902\" target=\"_blank\" title=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=12902\">GF#12902</a>.  Instead focus on the use-cases.  There's a need to be able to control what type of artifacts are pointed to, do _include, _revinclude, identify whether the content is to be bundled/contained/referenced, identify profiles that will apply to references (and validate that those profiles hold), etc.  All of the requirements that we have for referencing regular resources <em>still apply</em> when we reference infrastructure resources.  What's different is that we want to be able to make references by canonical (and sometimes business-version-specific canonical) URLs.</p>",
+        "id": 153937858,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1518718008
+    },
+    {
+        "content": "<p>One of the powers of FHIR is that StructureDefinition and ValueSet, etc. are resources that behave like any other resource.  We need to ensure that they <em>do</em> behave like any other resource.</p>",
+        "id": 153937859,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1518718058
+    },
+    {
+        "content": "<p>on the subject of attachment: it's a different subject, but changing attachment to a reference won't help with _include. And the transaction thing - servers should be fixing attachment.uri in a transaction</p>",
+        "id": 153937925,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1518727860
+    },
+    {
+        "content": "<p>as for canonical URLs: Reference is currently allowed to contain a canonical URL. <span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span> seems to think that it shouldn't but i don't know what grounds there are for that. Logically, at least, local registries are caches for canonical URLs. We don't make rules about caches, especially, no rule that you can't resolve any Reference(X) through a cache</p>",
+        "id": 153937928,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1518727942
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> Do you agree that the behavior of references to knowledge resources/infrastructure resources should be able to do the same things as we do for other resources - _include, contain, profiling inclusion/validation of references, etc.?  (Obviously with the recognition that the use of canonical references and version-specific references adds extra capabilities/complexities that don't exist for other clinical/administrative resources.)</p>",
+        "id": 153937936,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1518729687
+    },
+    {
+        "content": "<p>not sure. for instance, I would not expect _include to be very useful in a typical canonical reference context</p>",
+        "id": 153937940,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1518730644
+    },
+    {
+        "content": "<p>Give me the Questionnaire along with the QuestionnaireResponse; Give me the ValueSets along with the StructureDefinition; Give me the ActivityDefinitions along with the PlanDefinition.</p>",
+        "id": 153937942,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1518730695
+    },
+    {
+        "content": "<p>quite often they would not be on the same server</p>",
+        "id": 153937944,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1518730806
+    },
+    {
+        "content": "<p>Maybe</p>",
+        "id": 153937946,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1518730838
+    },
+    {
+        "content": "<p>The canonical definitions, perhaps not.  Local cached copies, quite often would be though.</p>",
+        "id": 153937948,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1518730861
+    },
+    {
+        "content": "<p>\"The name of the search parameter which must be of type reference\" .... but I suspect _include would work on canonical URLs on my server anyway</p>",
+        "id": 153937949,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1518730896
+    },
+    {
+        "content": "<blockquote>\n<p>as for canonical URLs: Reference is currently allowed to contain a canonical URL. <span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span> seems to think that it shouldn't but i don't know what grounds there are for that. Logically, at least, local registries are caches for canonical URLs. We don't make rules about caches, especially, no rule that you can't resolve any Reference(X) through a cache</p>\n</blockquote>\n<p>I was aware it could (we do this locally in batches), but these are turned into http references after processing. I do think it's surprising to our users that References would just contain identifying canonical urls, and not be physical references, that is true.</p>",
+        "id": 153938184,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1518784704
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191351\">@Chris Grenz</span> <span class=\"user-mention\" data-user-id=\"191401\">@Eric Haas</span> <span class=\"user-mention\" data-user-id=\"191407\">@Rick Geimer</span> <span class=\"user-mention\" data-user-id=\"191505\">@Sean McIlvenna</span> <span class=\"user-mention\" data-user-id=\"191334\">@Marten Smits</span> <span class=\"user-mention\" data-user-id=\"191375\">@Alexander Henket</span> <span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span> <span class=\"user-mention\" data-user-id=\"192856\">@Thomas Tveit Rosenlund</span> <span class=\"user-mention\" data-user-id=\"191427\">@Jens Villadsen</span> <span class=\"user-mention\" data-user-id=\"191450\">@Simone Heckmann</span> <span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span> <span class=\"user-mention\" data-user-id=\"191832\">@Jose Costa Teixeira</span> <span class=\"user-mention\" data-user-id=\"191682\">@Richard Townley-O'Neill</span> <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> <span class=\"user-mention\" data-user-id=\"191336\">@Michel Rutten</span>.  </p>\n<p>You are invited to take a look at this normative change to StructureDefinition!</p>",
+        "id": 153938185,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1518784854
+    },
+    {
+        "content": "<p>(And ValueSet and CodeSystem and PlanDefinition and most other knowledge and infrastructure resources - anything that points to something potentially by a canonical URL.)</p>",
+        "id": 153938229,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1518795468
+    },
+    {
+        "content": "<p>would it make sense for canonical URLs to go into Reference.identifier instead, with some kind of system meaning \"this is a canonical URL\"?</p>",
+        "id": 153938230,
+        "sender_full_name": "Ben Spencer",
+        "timestamp": 1518795496
+    },
+    {
+        "content": "<p>We could.  Or we could have a boolean for \"isCannonical\" or a variety of other solutions.  The key is having the ability to do with canonical references what we can do with regular references and the ability to differentiate between references to resources and references to other things.</p>",
+        "id": 153938234,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1518795924
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> what are we supposed to look at?</p>",
+        "id": 153938260,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1518806766
+    },
+    {
+        "content": "<p>I'm not sure. there's <a href=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=12902\" target=\"_blank\" title=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=12902\">GF#12902</a>, and then there's my request for comment at <a href=\"https://onfhir.hl7.org/2017/12/21/fhir-r4-ballot-community-consultation/\" target=\"_blank\" title=\"https://onfhir.hl7.org/2017/12/21/fhir-r4-ballot-community-consultation/\">https://onfhir.hl7.org/2017/12/21/fhir-r4-ballot-community-consultation/</a> and then there's Ewout's comments in this thread</p>",
+        "id": 153938271,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1518811264
+    },
+    {
+        "content": "<blockquote>\n<p>would it make sense for canonical URLs to go into Reference.identifier instead, with some kind of system meaning \"this is a canonical URL\"?</p>\n</blockquote>\n<p>We could, but that's only one part of the equation, but what to do about the references to these urls/identifiers? Should that be uri/Reference or [uri|reference]?</p>",
+        "id": 153938597,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1519053763
+    },
+    {
+        "content": "<p>Im not sure what the proposed change is at this point. I do agree with all the various problem definitions...   Identifier vs URI vs URL ... so close, yet so far apart...</p>",
+        "id": 153938602,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1519054862
+    },
+    {
+        "content": "<p>Reopening for consultation one last time:</p>",
+        "id": 153938708,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519080111
+    },
+    {
+        "content": "<p><a href=\"https://onfhir.hl7.org/2018/02/19/community-consultation-urls-vs-references/\" target=\"_blank\" title=\"https://onfhir.hl7.org/2018/02/19/community-consultation-urls-vs-references/\">https://onfhir.hl7.org/2018/02/19/community-consultation-urls-vs-references/</a></p>",
+        "id": 153938709,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519080125
+    },
+    {
+        "content": "<p>Are these right?</p>\n<p>What canonical does can be done in a roundabout way using Reference.identifier.value with Reference.identifier.system=\"urn:ietf:rfc:3986\"</p>\n<p>What url does can be done in a round about way with Reference.reference. But Reference.reference lets you also specify aggregation, targetProfile, and _include, while url does not.</p>",
+        "id": 153938818,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1519106144
+    },
+    {
+        "content": "<p>canonical: yes, but the rules around it are not there<br>\nurl: no, because Reference must point to a resource (or something that would be a resource). url doesn't have to</p>",
+        "id": 153938826,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519106553
+    },
+    {
+        "content": "<p>Ta</p>",
+        "id": 153938828,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1519107162
+    },
+    {
+        "content": "<p>Sorry, late to the party, but what _is_ a canonical URL?</p>",
+        "id": 153938948,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1519137017
+    },
+    {
+        "content": "<p>see detail in the article <a href=\"https://onfhir.hl7.org/2018/02/19/community-consultation-urls-vs-references/\" target=\"_blank\" title=\"https://onfhir.hl7.org/2018/02/19/community-consultation-urls-vs-references/\">https://onfhir.hl7.org/2018/02/19/community-consultation-urls-vs-references/</a></p>",
+        "id": 153938950,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1519137205
+    },
+    {
+        "content": "<p>I like the proposed change. Canonical url's are very fundamental to FHIR, so it makes perfect sense to introduce a new datatype \"canonical\" to provide a clear and unambiguous definition of this special concept (vs. regular \"uri\"). Of course this breaking change will have some impact on existing logic, however it seems manageable and I think the benefits are worth it.</p>",
+        "id": 153938952,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1519137540
+    },
+    {
+        "content": "<p>Ah got it, thanks <span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span>  (I missed <a href=\"http://build.fhir.org/references.html#canonical\" target=\"_blank\" title=\"http://build.fhir.org/references.html#canonical\">http://build.fhir.org/references.html#canonical</a>)</p>",
+        "id": 153938956,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1519137806
+    },
+    {
+        "content": "<p>Glad we're addressing this - it's one of the few areas we just went rogue in our implementation to avoid the ambiguity.  Can someone clarify what's happening with the Reference type with this change?  For example, ElementDefinition.binding.valueSet[x] currently allows <code>valueSetReference</code>. Would this be eliminated in favor of <code>valueSetUri</code> and <code>valueSetCanonical</code>?</p>",
+        "id": 153938977,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1519142956
+    },
+    {
+        "content": "<p>I thought the critical distinction before was Reference was a declaration of intent to resolve to a FHIR resource whereas uri was a free-for-all.</p>",
+        "id": 153938978,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1519143039
+    },
+    {
+        "content": "<p>Also, how does this impact the parsability rules here: <a href=\"http://build.fhir.org/references.html#literal\" target=\"_blank\" title=\"http://build.fhir.org/references.html#literal\">http://build.fhir.org/references.html#literal</a>  ??</p>",
+        "id": 153938979,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1519143137
+    },
+    {
+        "content": "<p>Do canonical's have to be in a FHIR normal form?</p>",
+        "id": 153938980,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1519143275
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191351\">@Chris Grenz</span> We have a full enumeration of all the changes for the infrastructure resources in the updated change proposal.  But yest, valueSetReference gets toasted in favor of valueSetCanonical.  And we'll still have valueSetUri.</p>",
+        "id": 153939007,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519148007
+    },
+    {
+        "content": "<p>Canonicals don't have to be in FHIR normal form.  E.g. \"<a href=\"http://loinc.org\" target=\"_blank\" title=\"http://loinc.org\">http://loinc.org</a>\" is the canonical for the LOINC CodeSystem.  And you could have \"http://loinc.org|201801\" (or whatever LOINC's version numbering system is - too lazy to look it up :))</p>",
+        "id": 153939008,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519148096
+    },
+    {
+        "content": "<p>Also, <span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span> has made a comment: <a href=\"https://onfhir.hl7.org/2018/02/19/community-consultation-urls-vs-references/#comments\" target=\"_blank\" title=\"https://onfhir.hl7.org/2018/02/19/community-consultation-urls-vs-references/#comments\">https://onfhir.hl7.org/2018/02/19/community-consultation-urls-vs-references/#comments</a></p>",
+        "id": 153939073,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519156931
+    },
+    {
+        "content": "<p>FHIR-I must consider the comment...</p>",
+        "id": 153939075,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519156945
+    },
+    {
+        "content": "<p>A question: if an element with a type of \"canonical\" can point to multiple resources (e.g. Questionnaire, PlanDefinition or ActivityDefinition), is there a need to be able to communicate the \"type\" of resource being referenced, or should we just expect the recipient to search against all possible types.  If there is such a need, do we make this a complex structure or add an extension?  If a complex structure, do we make the type required?</p>",
+        "id": 153939088,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519157540
+    },
+    {
+        "content": "<p>(Note that canonical URLs can't be reliably parsed to extract the resource type.)</p>",
+        "id": 153939089,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519157560
+    },
+    {
+        "content": "<p>where does this arise?</p>",
+        "id": 153939090,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519157601
+    },
+    {
+        "content": "<p>Procedure.instantiates would be one place.  EventDefinition.type.profile would be another (StructureDefinition vs. ImplementationGuide)</p>",
+        "id": 153939093,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519157739
+    },
+    {
+        "content": "<p>I don't know about instantiates. EventDefinition.type.profile I can't imagine why you'd need to know which type without needing to resolve the content anyway</p>",
+        "id": 153939095,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519157871
+    },
+    {
+        "content": "<p>Yes, you'll need to resolve.  But to resolve, right now, you'll need to do a search of your caches for both StructureDefinition and ImplementationGuide</p>",
+        "id": 153939097,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519157975
+    },
+    {
+        "content": "<p>shouldn't- canonicals can never conflict between types. Just do all at once</p>",
+        "id": 153939100,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519158044
+    },
+    {
+        "content": "<p>That presumes you have a common cache across all types.  If you're doing it as a search where URL=[canonical], then you're going to have to search multiple endpoints.</p>",
+        "id": 153939101,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519158092
+    },
+    {
+        "content": "<p>I'm fine with us saying \"that's ok\".  I just wanted to make sure we discussed and agreed.</p>",
+        "id": 153939102,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519158115
+    },
+    {
+        "content": "<p>you can do </p>\n<div class=\"codehilite\"><pre><span></span>GET [base]?url=[canonical]&amp;_type=StructureDefinition,ImplementationGuide\n</pre></div>",
+        "id": 153939103,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519158221
+    },
+    {
+        "content": "<p>If the server supports that, sure.</p>",
+        "id": 153939104,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519158506
+    },
+    {
+        "content": "<p>The set of possible resources is presumably much narrower than we have for Reference where there's a not-small number of places where we allow Reference(*).  I expect that <code>canonical</code> will likely be constrained to 3-4 resource types max.  And the vast majority are limited to only 1.  So it's legitimate for us to say that cross-resource searching is expected and acceptable.</p>",
+        "id": 153939105,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519158660
+    },
+    {
+        "content": "<p>so we should document that and otherwise say that if you think that it matters, there's always extensions</p>",
+        "id": 153939106,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519158771
+    },
+    {
+        "content": "<p>with regard to Michael's comments: After some thought, I could actually deal with the renaming personally; I'd just make an alias in the reference implementations and not worry about it otherwise.</p>",
+        "id": 153939108,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519158854
+    },
+    {
+        "content": "<p>but it's not scratching an itch that i have</p>",
+        "id": 153939109,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519158865
+    },
+    {
+        "content": "<p>So ValueSet.url has a type of uri - and that's actually what we want.  It doesn't <em>have</em> to resolve.  Where I believe that the new \"url\" type is expected to resolve.  At the same time, we still want to leave ValueSet.url named as it is because we want to encourage the use of urls</p>",
+        "id": 153939116,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519159850
+    },
+    {
+        "content": "<p>The fact that canonical urls don't have to reference FHIR resources, or live under [base]/[resourcetype] means, in my mind, that canonical urls can't be the target of a Reference. I see canonical urls as closer to a type of identifier (which might end up being resolvable), than as a type of reference.</p>",
+        "id": 153939123,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1519160365
+    },
+    {
+        "content": "<p>A couple of questions. Firstly would the proposed new data types ('canonical' and 'url') be classified as Primitive Types or Complex Types? Secondly, in the list of proposed changes to element data types, I don't see any where the type is to be changed to 'url'  am I  missing something or are there other use cases for creating a 'url' data type?</p>",
+        "id": 153939155,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1519166533
+    },
+    {
+        "content": "<p>primitives. Attachment.url will be changed to url. Bryn says there's some elements in the CDS resources that will be changed too</p>",
+        "id": 153939156,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519166767
+    },
+    {
+        "content": "<p>Why are some elements changing to canonical | uri? Are you expecting some of the referenced instances (they all look to be ValueSets) to not have canonical uris?</p>\n<p>And again why are canonical uri not just identifiers?</p>",
+        "id": 153939160,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1519167695
+    },
+    {
+        "content": "<p>a few things, the references are not only to ValueSet resources. Like the binding value sets</p>",
+        "id": 153939161,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519168006
+    },
+    {
+        "content": "<p>and same answer again ;-)</p>",
+        "id": 153939162,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519168016
+    },
+    {
+        "content": "<p>Adding 'url' as a (sub) type of the existing 'uri' data type makes sense to me. However, I have doubts as to whether 'canonical' sits at that level of abstraction - it's really a specific (sub) type of 'url' rather than an immediate sub-type of  'uri' - and I'm not sure if exposing it as a data type will result in better outcomes than declaring that a given 'url' data type shall contain a canonical representation.</p>",
+        "id": 153939168,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1519168652
+    },
+    {
+        "content": "<p>canonicals do not have to be urls. they can be uris</p>",
+        "id": 153939170,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519168801
+    },
+    {
+        "content": "<p>And when they use the [canonical]|[version] syntax, they almost certainly won't resolve.</p>",
+        "id": 153939183,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519169181
+    },
+    {
+        "content": "<p>Well both the Community Consultation page and the section on versioning in the specification ultimately point to the term 'Canonical Url' - but, either way, I don't see how creating a primitive data type of 'canonical' will ensure that a unique reference is placed in any given element .</p>",
+        "id": 153939199,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1519170025
+    },
+    {
+        "content": "<p>as opposed to some flag on the element definition? what would be different?</p>",
+        "id": 153939200,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519170259
+    },
+    {
+        "content": "<p>A flag on an element definition isn't a (very) late breaking change for implementations.</p>",
+        "id": 153939205,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1519171797
+    },
+    {
+        "content": "<blockquote>\n<p>a few things, the references are not only to ValueSet resources. Like the binding value sets</p>\n</blockquote>\n<p>Why aren't these ValueSet resources? Will the documentation be clear not to use uri if there is a ValueSet resource?</p>",
+        "id": 153939219,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1519172934
+    },
+    {
+        "content": "<p>It's more about the behaviors for \"Canonical\" being very different from the behaviors for \"uri\" and \"url\".  With canonical, you can do _include, you can specify targetProfile and can set aggregationMode like you can for Reference.  With url you can't (though there's a separate discussion exploring allowing _include in a different way for url).</p>",
+        "id": 153939220,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519172934
+    },
+    {
+        "content": "<p>It's not a valueset resource if it's a web page - like we point to for the Mime type code system.</p>",
+        "id": 153939221,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519172964
+    },
+    {
+        "content": "<p>We certainly prefer real ValueSet instances.  But even in the core spec there are times when we can't because the content just isn't published in a way that allows computational representation in a maintainable/sustainable way.</p>",
+        "id": 153939223,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519173040
+    },
+    {
+        "content": "<p>saves us from boiling the ocean</p>",
+        "id": 153939225,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519173102
+    },
+    {
+        "content": "<p>OK, I shouldn't have focused on ValueSet. What I should have asked is, where do we need canonical | uri? The web page example given by Lloyd  works for canonical. I don't see a problem with the binding value sets having a canonical url. So, where is uri needed?</p>",
+        "id": 153939227,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1519173295
+    },
+    {
+        "content": "<p>\"The web page example given by Lloyd works for canonical\" - uh, no it doesn't. it's not actually a value set</p>",
+        "id": 153939228,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519173328
+    },
+    {
+        "content": "<p>but all the places where we proposed canonical | uri are all value set references</p>",
+        "id": 153939230,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519173381
+    },
+    {
+        "content": "<p>Why isn't it a value set? What's an example of someplace that needs uri?</p>",
+        "id": 153939231,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1519173437
+    },
+    {
+        "content": "<p>because it's a web page that describes a code system and a grammar for building valid codes. We won't have a value set for it</p>",
+        "id": 153939232,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519173497
+    },
+    {
+        "content": "<p><code>canonical</code> must resolve to a real resource.  <code>url</code> resolves to something that isn't a resource (PDF, web page, JPEG, MS-Word document... :))</p>",
+        "id": 153939234,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519173624
+    },
+    {
+        "content": "<p>canonical is like Reference, except with Reference you can do a direct GET.  With canonical you need to parse the string to split the URL and version and then do a search against candidate resource types in your local cache and if you don't find it, then do a query against the base URL with the version (if any)</p>",
+        "id": 153939235,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519173703
+    },
+    {
+        "content": "<p>Oh. That wasn't clear earlier.</p>\n<p>So what canonical maps to is different than what, eg., ValueSet.url maps to?</p>",
+        "id": 153939236,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1519173708
+    },
+    {
+        "content": "<p>canonical maps to ValueSet.url plus possibly ValueSet.version</p>",
+        "id": 153939237,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519173735
+    },
+    {
+        "content": "<p>OK, but ValueSet.url doesn't need to map to a ValueSet resource (although it's polite if it does).</p>",
+        "id": 153939238,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1519173771
+    },
+    {
+        "content": "<p>So you search your local/cached set of value sets for a match.  If no luck, you try local registries and if still no luck you hit the ValueSet.url which should ideally resolve.</p>",
+        "id": 153939239,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519173777
+    },
+    {
+        "content": "<blockquote>\n<p><code>canonical</code> must resolve to a real resource.  <code>url</code> resolves to something that isn't a resource (PDF, web page, JPEG, MS-Word document... :))</p>\n<p>canonical is like Reference, except with Reference you can do a direct GET.  With canonical you need to parse the string to split the URL and version and then do a search against candidate resource types in your local cache and if you don't find it, then do a query against the base URL with the version (if any)</p>\n<p>So you search your local/cached set of value sets for a match.  If no luck, you try local registries and if still no luck you hit the ValueSet.url which should ideally resolve.</p>\n</blockquote>\n<p>The first statement there doesn't match the following two. The first says that <code>canonical</code> must resolve; the later two says it may.</p>",
+        "id": 153939240,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1519174064
+    },
+    {
+        "content": "<p>if it doesn't resolve to a resource, it's an error</p>",
+        "id": 153939241,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519174179
+    },
+    {
+        "content": "<p>where as with URL, if it doesn't... it might be a problem</p>",
+        "id": 153939242,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519174189
+    },
+    {
+        "content": "<p>or it might not be a resource.</p>",
+        "id": 153939243,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519174227
+    },
+    {
+        "content": "<p>So, I have a ValueSet.url. And whether I reference that in OperationDefinition.binding.valueSetUri or in OperationDefinition.binding.valueSetCanonical depends on whether the thing at that url is a ValueSet resource?</p>",
+        "id": 153939244,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1519174465
+    },
+    {
+        "content": "<p>if you have a ValueSet.url, then you would use valueSetCanonical</p>",
+        "id": 153939245,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519174714
+    },
+    {
+        "content": "<p>DICOM is defining ValueSets for all their context groups, like CID 29 Aquisition Modalities. The ValueSet.url is set to the webpage of the DICOM spec where that context group is defined. Linked from that page is the ValueSet, along with the context group in other formats, e.g., IHE SVS. Can the ValueSet be referenced by canonical or by a uri element?</p>\n<p>(see <a href=\"http://dicom.nema.org/medical/dicom/current/output/chtml/part16/sect_CID_29.html\" target=\"_blank\" title=\"http://dicom.nema.org/medical/dicom/current/output/chtml/part16/sect_CID_29.html\">http://dicom.nema.org/medical/dicom/current/output/chtml/part16/sect_CID_29.html</a>)</p>",
+        "id": 153939246,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1519174724
+    },
+    {
+        "content": "<blockquote>\n<p>canonical maps to ValueSet.url plus possibly ValueSet.version</p>\n</blockquote>\n<p>I believe that it was agreed in NOLA, that ValueSet.url should contain the 'single source of truth' for the ValueSet (current version unless a specific, and alternative, version is also passed in the request). It does not necessarily point to the instance of the Value Set on the server that 's the subject of the request (i.e. my server might contain some of the HL7 FHIR value sets, but the SSOT is an HL7/FHIR server).</p>",
+        "id": 153939248,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1519174944
+    },
+    {
+        "content": "<p>in your case, Elliot, you would use canonical, since there's a valueset that exists with that url as it's ValueSet.url</p>",
+        "id": 153939249,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519175012
+    },
+    {
+        "content": "<p>But it doesn't resolve -- which you said is an error.</p>",
+        "id": 153939250,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1519175049
+    },
+    {
+        "content": "<p>BTW: is ValueSet.url still going to be of data type uri ?</p>",
+        "id": 153939253,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1519175313
+    },
+    {
+        "content": "<p>yes</p>",
+        "id": 153939254,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519175746
+    },
+    {
+        "content": "<p>I'm not sure what you mean 'doesn't resolve' - it resolves by a different path</p>",
+        "id": 153939255,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519175771
+    },
+    {
+        "content": "<p>So to use a canonical value, there must be an \"official\" resource defined, but it doesn't have to exist at the url listed in the canonical value?</p>",
+        "id": 153939256,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1519175991
+    },
+    {
+        "content": "<p>yes</p>",
+        "id": 153939257,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519176186
+    },
+    {
+        "content": "<p>need to be explicit in the spec what 'resolve' means...</p>",
+        "id": 153939466,
+        "sender_full_name": "David Hay",
+        "timestamp": 1519243747
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191364\">@Peter Jordan</span> Peter is correct about what I thought we decided on Valueset.url - this was the SOT \"universal identifier\" for the resource, and it may not \"FHIR resolve = pass back the resource\". Is this a change from that understanding? <span class=\"user-mention\" data-user-id=\"191380\">@Elliot Silver</span> example from DICOM does not \"FHIR resolve\" by my definition at all. The fact that some other url will FHIR resolve is immaterial to the the fact that the url in valueset.url provides useful information to the human reader. I must be very lost here...</p>",
+        "id": 153939507,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1519250665
+    },
+    {
+        "content": "<p>I don't think we have changed anything. I'm not sure where the confusion comes from</p>",
+        "id": 153939598,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519280096
+    },
+    {
+        "content": "<blockquote>\n<p>with regard to Michael's comments: After some thought, I could actually deal with the renaming personally; I'd just make an alias in the reference implementations and not worry about it otherwise.</p>\n</blockquote>\n<p>What the scale of the change - this is about changing names of elements to \"uri\" (instead or \"url\")?  Don't think we have many of those?</p>",
+        "id": 153939629,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1519292978
+    },
+    {
+        "content": "<p>I'd change them to canonical not uri. I don't really like the change. But I could deal with it personally</p>",
+        "id": 153939630,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519293118
+    },
+    {
+        "content": "<p>Hi Robert, no, we don't change behaviour or this \"universal identifier\" - in fact Valueset.url and StructureDefinition.url etc are not touched by this change at all. So, you are not lost, nor do you have to change your understanding.</p>\n<p>What we <em>have</em> done is made more explicit which elements in other resources are _referring_ to this Valueset.url and StructureDefinition.url.  Right now, in R3, you had to just know (and it was not always documented). We're now \"flagging\" each of the places where we refer to such a universal identifier (which we call canonical uri), so developers know they have to resolve it indirectly, not by going to a physical location (e.g. including the hostname etc.).</p>",
+        "id": 153939631,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1519293386
+    },
+    {
+        "content": "<p>So the proposal would be to change \"CodeSystem.url : type=uri\" to \"CodeSystem.canonical : type=uri\"?</p>",
+        "id": 153939724,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519316391
+    },
+    {
+        "content": "<p>I could live with it too.  It adds precision at the cost of sylables and makes the spec a bit more high-brow.  Aesthetically, my leaning is to stick with url.  We should however make sure that the short description and full definition use the word \"canonical\".</p>",
+        "id": 153939726,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519316495
+    },
+    {
+        "content": "<p>My leaning is also to stick with url and include \"canonical\" in the description/definition, but I wouldn't be opposed to changing to 'canonical'</p>",
+        "id": 153939790,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1519324711
+    },
+    {
+        "content": "<p>did we say to change Coding.system to a canonical?</p>",
+        "id": 153940530,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519623480
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> should the type of DataRequirement.profile change?</p>",
+        "id": 153940531,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519623507
+    },
+    {
+        "content": "<p>To canonical, I think yes.</p>",
+        "id": 153940532,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1519623671
+    },
+    {
+        "content": "<p>k thx</p>",
+        "id": 153940533,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519623689
+    },
+    {
+        "content": "<p>I used uri because StructureDefinition did for baseDefinition</p>",
+        "id": 153940534,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1519623690
+    },
+    {
+        "content": "<p>k.</p>",
+        "id": 153940535,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519623722
+    },
+    {
+        "content": "<p>It could maybe be a reference to a StructureDefinition though?</p>",
+        "id": 153940536,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1519623726
+    },
+    {
+        "content": "<p>And valueSet[x] should have canonical added?</p>",
+        "id": 153940537,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1519623741
+    },
+    {
+        "content": "<p>same question for Extension.url, Quantity.system, Identifier.system</p>",
+        "id": 153940538,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519623742
+    },
+    {
+        "content": "<p>Bryn- should RelatedArtifact.url change to url? or stay as uri?</p>",
+        "id": 153940539,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519623772
+    },
+    {
+        "content": "<p>Should be url, yes, it's intended to be a resolveable web address.</p>",
+        "id": 153940540,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1519623827
+    },
+    {
+        "content": "<p>k thanks</p>",
+        "id": 153940541,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519624413
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span> I am changing EndPoint.address from uri to url</p>",
+        "id": 153940542,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519625758
+    },
+    {
+        "content": "<p>And that's ok for mailto:brian...</p>",
+        "id": 153940543,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1519625780
+    },
+    {
+        "content": "<p>yes</p>",
+        "id": 153940544,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519625795
+    },
+    {
+        "content": "<p>Are direct addresses also ok with that? (as in the US Direct project)</p>",
+        "id": 153940545,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1519625800
+    },
+    {
+        "content": "<p>yes</p>",
+        "id": 153940546,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519625847
+    },
+    {
+        "content": "<p>I am not changing extensions of type uri to either url or canonical, since that would change their representation</p>",
+        "id": 153940547,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519626498
+    },
+    {
+        "content": "<p>If Coding.system becomes a canonical, then we don't need the Coding.version extension any more.</p>",
+        "id": 153940553,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519628688
+    },
+    {
+        "content": "<p>Extension.url including a version gives me the heebie-jeebies...</p>",
+        "id": 153940554,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519628707
+    },
+    {
+        "content": "<p>Identifer.system doesn't have a resource to point at</p>",
+        "id": 153940555,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1519628763
+    },
+    {
+        "content": "<p>ah yes, we don't want Coding.system to be a canonical uri</p>",
+        "id": 153940558,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519633700
+    },
+    {
+        "content": "<blockquote>\n<p>did we say to change Coding.system to a canonical?</p>\n</blockquote>\n<p>We said no, but don't remember why.  Does this indeed have something to do with versioning as Lloyd just said?</p>",
+        "id": 153940608,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1519656551
+    },
+    {
+        "content": "<p>yes</p>",
+        "id": 153940652,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519668941
+    }
+]

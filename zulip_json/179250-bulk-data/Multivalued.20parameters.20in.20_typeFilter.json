@@ -1,0 +1,80 @@
+[
+    {
+        "content": "<p>I have a question about how I should go about implementing _typeFilter in Bulk Export. The docs show an example with a single _typeFilter, which the filters separated by a comma. Here it is </p>\n<div class=\"codehilite\"><pre><span></span><code>$export?\n  _type=\n    MedicationRequest,\n    Condition&amp;\n  _typeFilter=\n    MedicationRequest%3Fstatus%3Dactive,\n    MedicationRequest%3Fstatus%3Dcompleted%26date%3Dgt2018-07-01T00%3A00%3A00Z\n</code></pre></div>\n<p>But what if I need to filter with logically OR'ed parameters within a single filter? For example, this: </p>\n<div class=\"codehilite\"><pre><span></span><code>$export?\n  _type=\n    MedicationRequest,\n    Condition&amp;\n  _typeFilter=\n    MedicationRequest%3Fmedication%3DMedication/123,Medication/456,\n    MedicationRequest%3Fstatus%3Dcompleted%26date%3Dgt2018-07-01T00%3A00%3A00Z\n</code></pre></div>\n<p>Since _typeFilter uses commas to differ between multiple parameters, is this a supported use case at all? The commas in the value list will cause issues in processing won't they, since commas are used as filter delimiters? To me it feels as though _typeFilter should have 0..* instances in the request. Should I assume that the presence of a comma is not enough to actually split the filters, and i should look for the presence of a comma, followed by a resource type? Or am I missing something glaringly obvious here?</p>",
+        "id": 228964775,
+        "sender_full_name": "G G",
+        "timestamp": 1614955571
+    },
+    {
+        "content": "<p>I think the expectation is that commas within a type filter clause should be escaped.</p>\n<p>Still, this is something we should address in the Bulk Data 1.5 ballot/reconciliation process, though, since now we support submission using post where it would be more natural to repeat the perimeter or something like it I don't think this came up at all during our discussions this year, which is part of why type filter has still been labeled experimental, and we would not necessarily need to maintain backwards compatibility.</p>",
+        "id": 228966021,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1614956051
+    },
+    {
+        "content": "<p>Ah I see. Whatever processing HAPI is doing to the get requests is causing all commas from input (escaped or not) to get resolved to unescaped commas come $export time, so I've resolved this using a regex  that can correctly identify individual typeFilters. FWIW I would support moving to supporting only POST requests for export, as well as supporting multiple _typeFilter parameters.</p>",
+        "id": 228999593,
+        "sender_full_name": "G G",
+        "timestamp": 1614968249
+    },
+    {
+        "content": "<p>We didn't want to break any (nonexperimental) usage of bulk data 1.0, but <span class=\"user-mention\" data-user-id=\"191414\">@Dan Gottlieb</span> I assume you'd be on board with changing type filter to be used only with POST.</p>",
+        "id": 229020000,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1614976387
+    },
+    {
+        "content": "<p>Yup, agree that it's worth considering! <span class=\"user-mention\" data-user-id=\"195874\">@G G</span> <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>  presumably you're thinking that repeated <code>_typeFilter</code> parameters would be ORs (analogous to how the commas are currently used and how the Patient parameter handles repeated values in Post requests) rather than ANDs (analogous to how multiple search params work in a REST query)?</p>",
+        "id": 229205697,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1615140108
+    },
+    {
+        "content": "<p>Also, any reason not to allow repeated <code>_typeFilter</code> params in GET requests too (IIRC we went POST only for the Patient parameter to avoid potential confusion on how to represent the referenced patients)?</p>",
+        "id": 229205703,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1615140120
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> , <span class=\"user-mention\" data-user-id=\"191676\">@Lee Surprenant</span>  - I believe you both have _typeFilter implementations in your servers. What are your thoughts on allowing repeating of the parameter to indicate logical ORs?</p>",
+        "id": 229205775,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1615140153
+    },
+    {
+        "content": "<p>Yeah they would be ORs. Only reason I see for limiting use in to POST only would be avoiding inconsistency --  for _type in GET, we still want to use comma separation. perhaps what we should do though is to say that _types can be separated using commas as well as using multiple repeated parameters, and that they are always combined with \"or\".</p>",
+        "id": 229206922,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1615141147
+    },
+    {
+        "content": "<p>That could work and I like the consistency, though it's another requirement that servers would have to support in v1.5 (or 2.0 or whatever :)</p>",
+        "id": 229207574,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1615141741
+    },
+    {
+        "content": "<p>Our server accepts multiple _typeFilter parameters but only one condition per resource type, you get an error if you try to specify the same resource type more than once</p>",
+        "id": 229226709,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1615159752
+    },
+    {
+        "content": "<p>That's interesting. I am on board with supporting multiples, but it seems like the doc example shows that multiple filters on the same resource type should have their results unioned: <a href=\"https://hl7.org/fhir/uv/bulkdata/export/index.html#example-request-with-_typefilter\">https://hl7.org/fhir/uv/bulkdata/export/index.html#example-request-with-_typefilter</a> . Is this a strict requirement of the spec? Currently HAPI just grabs the first _typeFilter relevant to the resource type.</p>",
+        "id": 229371441,
+        "sender_full_name": "G G",
+        "timestamp": 1615236708
+    },
+    {
+        "content": "<blockquote>\n<p>multiple filters on the same resource type should have their results unioned</p>\n</blockquote>\n<p>Right; I think <span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> is saying his implementation is a bit narrower (which is fine/expected; this is experimental territory after all).</p>",
+        "id": 229372275,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1615237071
+    },
+    {
+        "content": "<p>I drafted some language covering repeating parameters in kickoff requests to include in the next version of the IG (v1.1, formerly v1.5) at <a href=\"https://github.com/HL7/bulk-data/pull/102/files#diff-4ec03c0948a3420a72f90f30bb8773e72b3cb2dcc88c8b56cfdd0b3faef84b5e\">https://github.com/HL7/bulk-data/pull/102/files#diff-4ec03c0948a3420a72f90f30bb8773e72b3cb2dcc88c8b56cfdd0b3faef84b5e</a> - open to edits / suggestions here or on the PR!</p>",
+        "id": 230363106,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1615821743
+    }
+]

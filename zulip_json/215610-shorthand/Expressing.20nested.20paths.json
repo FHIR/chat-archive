@@ -1,0 +1,98 @@
+[
+    {
+        "content": "<p>An issue came up in the context of populating Questionnaire and Questionnaire responses. These resources involve deeply nested paths and arrays. The current FSH syntax is (admittedly) awkward in cases like this, and gives rise to expressions like this: <code>* item[3].item[0].item[2].text = \"Oral hygiene - functional ability during assessment period\"</code>.  In the current grammar, the entire path has to be included in each rule. It's very index-heavy. So, we're exploring better ways to express this, perhaps escaping into YAML, perhaps something like YAML but with FSH-like values, or creating extensions to FSH grammar. <br>\nThe FSH-SUSHI team would appreciate feedback. Here's the discussion so far: <a href=\"https://github.com/FHIR/sushi/issues/291\" target=\"_blank\" title=\"https://github.com/FHIR/sushi/issues/291\">https://github.com/FHIR/sushi/issues/291</a>.</p>",
+        "id": 191481396,
+        "sender_full_name": "Mark Kramer",
+        "timestamp": 1584974123
+    },
+    {
+        "content": "<p>Here's one possible approach. It depends on having leading white space having meaning:<br>\nOld way:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: BetsySmithMDSResponse\nInstanceOf: PACIOquestionaireResponse\n* subject.reference  = &quot;Betsy Smith&quot;\n* status = #completed\n* item.text =  &quot;Section GG: Functional Abilities and Goals&quot;\n* item.linkId = &quot;Section-37&quot;\n* item.item.text =  &quot;Self-Care. Code the {patient&#39;s/resident&#39;s} usual performance at {admission} for each activity using the 6-point scale. If activity was not attempted at {admission}, code the reason. Code the {patient&#39;s/resident&#39;s} {discharge} goal(s) using the 6 point scale. Use of codes 07, 09, 10, or 88 is permissible to code {discharge} goal(s).&quot;\n* item.item.linkId = &quot;Section-37/GG0130&quot;\n* item[0].item[0].item[0].text = &quot;Oral hygiene - functional ability during 3D assessment period [CMS Assessment]&quot;\n* item[0].item[0].item[0].linkId = &quot;Section-37/GG0130B1&quot;\n* item[0].item[0].item[0].answer.valueReference = Reference(BetsySmithMDSOralHygiene)\n* item[0].item[0].item[1].text = &quot;Eating - functional ability during 3D assessment period [CMS Assessment]&quot;\n* item[0].item[0].item[1].linkId = &quot;Section-37/GG0130A1&quot;\n* item[0].item[0].item[1].answer.valueReference = Reference(BetsySmithMDSEating)\n</pre></div>\n\n\n<p>Proposal:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: BetsySmithMDSResponse\nInstanceOf: PACIOquestionaireResponse\n* subject.reference  = &quot;Betsy Smith&quot;\n* status = #completed\n* item:\n    text =  &quot;Section GG: Functional Abilities and Goals&quot;\n    linkId = &quot;Section-37&quot;\n    item:\n        text =  &quot;Self-Care. Code the {patient&#39;s/resident&#39;s} usual performance at {admission} for each activity using the 6-point scale. If activity was not attempted at {admission}, code the reason. Code the {patient&#39;s/resident&#39;s} {discharge} goal(s) using the 6 point scale. Use of codes 07, 09, 10, or 88 is permissible to code {discharge} goal(s).&quot;\n        linkId = &quot;Section-37/GG0130&quot;\n        item:\n            text = &quot;Oral hygiene - functional ability during 3D assessment period [CMS Assessment]&quot;\n            linkId = &quot;Section-37/GG0130B1&quot;\n            answer.valueReference = Reference(BetsySmithMDSOralHygiene)\n        item:\n            text = &quot;Eating - functional ability during 3D assessment period [CMS Assessment]&quot;\n            linkId = &quot;Section-37/GG0130A1&quot;\n            answer.valueReference = Reference(BetsySmithMDSEating)\n</pre></div>",
+        "id": 191624858,
+        "sender_full_name": "Mark Kramer",
+        "timestamp": 1585062981
+    },
+    {
+        "content": "<p>I'd have to look at this some more, but off-hand I feel like parsing would be easier if we at least maintained the <code>*</code> on each line.  It's a good hint to the parser that we're on a new rule.  Otherwise we're probably giving up some of the other features of FSH that allow authors to format things as they wish (taking advantage of insignificant whitespace).</p>",
+        "id": 191631280,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1585065346
+    },
+    {
+        "content": "<p>In general, I think, either have white space always being significant (Python), or never have it being significant.</p>",
+        "id": 191635531,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1585066917
+    },
+    {
+        "content": "<p>To make white space insignificant, there has to be a mechanism for grouping. If curly brackets are used, it would be something like this:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: BetsySmithMDSResponse\nInstanceOf: PACIOquestionaireResponse\n* subject.reference  = &quot;Betsy Smith&quot;\n* status = #completed\n* item {\n    * text =  &quot;Section GG: Functional Abilities and Goals&quot;\n    * linkId = &quot;Section-37&quot;\n    * item {\n        * text =  &quot;Self-Care. Code the {patient&#39;s/resident&#39;s} usual performance at {admission} for each activity using the 6-point scale. If activity was not attempted at {admission}, code the reason. Code the {patient&#39;s/resident&#39;s} {discharge} goal(s) using the 6 point scale. Use of codes 07, 09, 10, or 88 is permissible to code {discharge} goal(s).&quot;\n        * linkId = &quot;Section-37/GG0130&quot;\n        * item {\n            * text = &quot;Oral hygiene - functional ability during 3D assessment period [CMS Assessment]&quot;\n            * linkId = &quot;Section-37/GG0130B1&quot;\n            * answer.valueReference = Reference(BetsySmithMDSOralHygiene)\n        }\n        * item {\n            * text = &quot;Eating - functional ability during 3D assessment period [CMS Assessment]&quot;\n            * linkId = &quot;Section-37/GG0130A1&quot;\n            * answer.valueReference = Reference(BetsySmithMDSEating)\n        }\n    }\n}\n</pre></div>\n\n\n<p>This is indented for readability, but the indentation is not meaningful.<br>\nPS - I added the <code>*</code> back in for <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span></p>",
+        "id": 191644103,
+        "sender_full_name": "Mark Kramer",
+        "timestamp": 1585070382
+    },
+    {
+        "content": "<ol>\n<li>could we benefit from aliases here?</li>\n</ol>",
+        "id": 191644739,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1585070606
+    },
+    {
+        "content": "<ol start=\"2\">\n<li>personally I prefer an indented syntax</li>\n</ol>",
+        "id": 191644796,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1585070630
+    },
+    {
+        "content": "<p>Ha.  I was about to say \"Personally, I prefer the syntax with some kind of delimeters (e.g., <code>{</code> <code>}</code> or some other symbol(s)) if you're going to nest.\"  So, I guess it's pretty subjective.</p>",
+        "id": 191645946,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1585071063
+    },
+    {
+        "content": "<p>yes, i 'm Pascal / Python flavour, with a twist of YAML, so obviously it's a preference</p>",
+        "id": 191646114,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1585071127
+    },
+    {
+        "content": "<p>I'm not sure exactly what you are proposing w/ aiases <span class=\"user-mention\" data-user-id=\"191832\">@Jose Costa Teixeira</span>, but on the GitHub issue I floated an example of how this would be done using \"inline\" references: <a href=\"https://github.com/FHIR/sushi/issues/291#issuecomment-602604604\" target=\"_blank\" title=\"https://github.com/FHIR/sushi/issues/291#issuecomment-602604604\">https://github.com/FHIR/sushi/issues/291#issuecomment-602604604</a></p>",
+        "id": 191646166,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1585071153
+    },
+    {
+        "content": "<p>what about aliases? if we are going to repeat * item[0].item[0].item[0] many times, we may call it something</p>",
+        "id": 191646209,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1585071173
+    },
+    {
+        "content": "<p>à la yaml ;)</p>",
+        "id": 191646250,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1585071188
+    },
+    {
+        "content": "<p>as you do that.. you head away from one of the nice parts of shorthand, that being more git friendly. And you head into the complexity of json/xm that you are saving us from. If we head that direction, then it seems we should just stick with StructureDefinition</p>",
+        "id": 191648136,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1585071988
+    },
+    {
+        "content": "<p>that gives me an idea.<br>\nCould we embed a fhirpath inside shorthand? for these edge cases (without changing the syntax)</p>",
+        "id": 191648282,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1585072060
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span> -- when we first looked at using YAML (back in December), we came to a similar conclusion at the time: it didn't seem to be different enough from the status quo to justify the investment.  I guess now we're trying to see what we've learned since then and if there is a more intelligent approach that could keep the strengths of FSH while mitigating some of the weaknesses (mainly being verbosity and repetition in this case).</p>",
+        "id": 191651202,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1585073361
+    },
+    {
+        "content": "<p>But I think it's wise for you to remind us to keep the original goals of FSH in mind.  So thank you!</p>",
+        "id": 191651258,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1585073398
+    }
+]

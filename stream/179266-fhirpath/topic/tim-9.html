@@ -1,0 +1,118 @@
+---
+layout: page
+title: "FHIR Chat  · tim-9 · fhirpath"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/index.html">fhirpath</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/tim-9.html">tim-9</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="188987436"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/tim-9/near/188987436" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Calderero <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/tim-9.html#188987436">(Feb 25 2020 at 02:58)</a>:</h4>
+<p>Hi All,</p>
+<p>We're trying to validate the CarePlan below across all the public test servers. <code>[baseurl]/CarePlan/$validate?profile=http://hl7.org/fhir/StructureDefinition/CarePlan</code></p>
+<p>HAPI FHIR, Aegis WildFHIR, <a href="http://test.fhir.org" target="_blank" title="http://test.fhir.org">test.fhir.org</a> all report that this resource is OK.</p>
+<p>However, vonk says that</p>
+<div class="codehilite"><pre><span></span>    {
+      &quot;severity&quot;: &quot;error&quot;,
+      &quot;code&quot;: &quot;invariant&quot;,
+      &quot;details&quot;: {
+        &quot;coding&quot;: [
+          {
+            &quot;system&quot;: &quot;http://hl7.org/fhir/dotnet-api-operation-outcome&quot;,
+            &quot;code&quot;: &quot;1012&quot;
+          }
+        ],
+        &quot;text&quot;: &quot;Instance failed constraint tim-9 \&quot;If there&#39;s an offset, there must be a when (and not C, CM, CD, CV)\&quot;&quot;
+      },
+      &quot;diagnostics&quot;: &quot;offset.empty() or (when.exists() and ((when in (&#39;C&#39; | &#39;CM&#39; | &#39;CD&#39; | &#39;CV&#39;)).not()))&quot;,
+      &quot;location&quot;: [
+        &quot;CarePlan.activity[1].detail[0].scheduledTiming[0].repeat[0]&quot;
+      ]
+    }
+</pre></div>
+
+
+<p>I believe this is triggered by the <code>when in ...</code> part of the FHIRPath expression. I looked at the spec here: <a href="http://hl7.org/fhirpath/N1/index.html#in-membership" target="_blank" title="http://hl7.org/fhirpath/N1/index.html#in-membership">http://hl7.org/fhirpath/N1/index.html#in-membership</a> and it says that "If the left operand has multiple items, an exception is thrown." I can verify this is the case since if I change <code>when</code> to only contain a single value, vonk reports the validation didn't find any errors.</p>
+<p>Since <code>when</code> indeed contains multiple items in this case, I believe Vonk is right and the others wrong. Can anyone comment and confirm on what is the correct behavior?</p>
+<p>Note: The description for the <code>in</code> operator seems to have been unchanged since version <a href="http://hl7.org/fhirpath/2018May/index.html#collections-2" target="_blank" title="http://hl7.org/fhirpath/2018May/index.html#collections-2">http://hl7.org/fhirpath/2018May/index.html#collections-2</a></p>
+<p>This would mean FHIR STU3 and R4 are affected.</p>
+<p>I would guess the implementations of <code>contains</code> operator are affected as well.</p>
+<div class="codehilite"><pre><span></span>{
+    &quot;resourceType&quot;: &quot;CarePlan&quot;,
+    &quot;id&quot;: &quot;example&quot;,
+    &quot;text&quot;: {
+        &quot;status&quot;: &quot;additional&quot;,
+        &quot;div&quot;: &quot;&lt;div xmlns=\&quot;http://www.w3.org/1999/xhtml\&quot;&gt;test careplan&lt;/div&gt;&quot;
+    },
+    &quot;status&quot;: &quot;active&quot;,
+    &quot;intent&quot;: &quot;plan&quot;,
+    &quot;subject&quot;: {
+        &quot;reference&quot;: &quot;Patient/123&quot;
+    },
+    &quot;activity&quot;: [
+        {
+            &quot;reference&quot;: {
+                &quot;display&quot;: &quot;Prenatal vitamin MedicationRequest&quot;
+            }
+        },
+        {
+            &quot;detail&quot;: {
+                &quot;kind&quot;: &quot;Appointment&quot;,
+                &quot;code&quot;: {
+                    &quot;coding&quot;: [
+                        {
+                            &quot;system&quot;: &quot;http://example.org/mySystem&quot;,
+                            &quot;code&quot;: &quot;1an&quot;
+                        }
+                    ],
+                    &quot;text&quot;: &quot;First Antenatal encounter&quot;
+                },
+                &quot;status&quot;: &quot;scheduled&quot;,
+                &quot;doNotPerform&quot;: false,
+                &quot;scheduledTiming&quot;: {
+                    &quot;repeat&quot;: {
+                        &quot;boundsPeriod&quot;: {
+                            &quot;start&quot;: &quot;2013-02-14&quot;,
+                            &quot;end&quot;: &quot;2013-02-28&quot;
+                        },
+                        &quot;offset&quot;: 1,
+                        &quot;when&quot;: [
+                            &quot;ACM&quot;,
+                            &quot;AC&quot;
+                        ]
+                    }
+                },
+                &quot;description&quot;: &quot;The first antenatal encounter. This is where a detailed physical examination is performed.             and the pregnanacy discussed with the mother-to-be.&quot;
+            }
+        }
+    ]
+}
+</pre></div>
+
+
+
+<a name="188988191"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/tim-9/near/188988191" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/tim-9.html#188988191">(Feb 25 2020 at 03:19)</a>:</h4>
+<p>you're right. I don't think that the definition of opIn and opContains are correct, in that a set can still be in another set (<span class="user-mention" data-user-id="191359">@Bryn Rhodes</span>) and that's how I implemented it. The invariant is definitely wrong given the FHIRPath definition. Added here: <a href="https://confluence.hl7.org/display/FHIR/Known+Issues+with+the+published+FHIR+Specifications" target="_blank" title="https://confluence.hl7.org/display/FHIR/Known+Issues+with+the+published+FHIR+Specifications">https://confluence.hl7.org/display/FHIR/Known+Issues+with+the+published+FHIR+Specifications</a></p>
+
+
+
+<a name="188989268"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/tim-9/near/188989268" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/tim-9.html#188989268">(Feb 25 2020 at 03:49)</a>:</h4>
+<p>Hmmm... don't you still need to be able to ask if a list is in a list of lists? If we add an overload of <code>in</code> to take a list for both operands, we wouldn't be able to distinguish that case, right? We defined <code>in(T, List&lt;T&gt;)</code> and <code>contains(List&lt;T&gt;, T)</code>. I think to properly support this use case, we'd need list-level operations: <code>includedIn(List&lt;T&gt;, List&lt;T&gt;)</code> and <code>includes(List&lt;T&gt;, List&lt;T&gt;)</code>.</p>
+
+
+
+<a name="188989324"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/tim-9/near/188989324" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/tim-9.html#188989324">(Feb 25 2020 at 03:50)</a>:</h4>
+<p>I guess</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

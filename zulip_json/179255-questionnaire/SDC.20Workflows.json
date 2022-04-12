@@ -1,0 +1,266 @@
+[
+    {
+        "content": "<p>I've been going through the SDC &amp; workflow documentation, which has been really helpful, but it's missing some examples. To ensure I understand the flow as it's supposed to go, I've tried to create a couple of these examples. To start with, I have 3 questionnaires, each is named and structured the same way, as follows:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n    &quot;resourceType&quot;: &quot;Questionnaire&quot;,\n    &quot;url&quot;: &quot;http://hapi.fhir.org/baseR4/Questionnaire/quest1&quot;,\n    &quot;title&quot;: &quot;quest1&quot;,\n    &quot;name&quot;: &quot;quest1&quot;,\n    &quot;item&quot;: []\n}\n</code></pre></div>\n<p>They are for children under 6 years old. The first is given to kids &lt; 2 yo, the first 2 are given to kids &lt; 4, and all of them if you're &gt; 4. They are referenced using a PlanDefinition Resource:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;resourceType&quot;: &quot;PlanDefinition&quot;,\n  &quot;id&quot;: &quot;screening-2-4-yo&quot;,\n  &quot;title&quot;: &quot;Pediatric Screening for 2-4 year olds&quot;,\n  &quot;status&quot;: &quot;active&quot;,\n  &quot;action&quot;: [\n    {\n      &quot;title&quot;: &quot;quest1&quot;,\n      &quot;participant&quot;: [\n        {\n          &quot;type&quot;: &quot;related-person&quot;,\n          &quot;role&quot;: {\n            &quot;coding&quot;: [\n              {\n                &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/v3-RoleCode&quot;,\n                &quot;code&quot;: &quot;PRN&quot;,\n                &quot;display&quot;: &quot;parent&quot;\n              }\n            ]\n          }\n        },\n        {\n          &quot;type&quot;: &quot;patient&quot;\n        }\n      ],\n      &quot;definitionUri&quot;: &quot;http://hapi.fhir.org/baseR4/Questionnaire/quest1&quot;\n    },\n    {\n      &quot;title&quot;: &quot;quest2&quot;,\n      &quot;participant&quot;: [\n        {\n          &quot;type&quot;: &quot;related-person&quot;,\n          &quot;role&quot;: {\n            &quot;coding&quot;: [\n              {\n                &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/v3-RoleCode&quot;,\n                &quot;code&quot;: &quot;PRN&quot;,\n                &quot;display&quot;: &quot;parent&quot;\n              }\n            ]\n          }\n        },\n        {\n          &quot;type&quot;: &quot;patient&quot;\n        }\n      ],\n      &quot;definitionUri&quot;: &quot;http://hapi.fhir.org/baseR4/Questionnaire/quest2&quot;\n    }\n  ]\n}\n</code></pre></div>",
+        "id": 249481102,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1628981677
+    },
+    {
+        "content": "<p>So far looks ok? All of this is going to be triggered by a ServiceRequest. Because the order is going to come from an outside institution, we're going to record the order using a ServiceRequest (I probably could have just used a Task, but if we expand it in the future, or use it for official orders (with billing) we wanted to use a ServiceRequest. I think it would look like this:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n    &quot;resourceType&quot;: &quot;ServiceRequest&quot;,\n    &quot;instantiatesCanonical&quot;: [\n      &quot;http://hapi.fhir.org/baseR4/PlanDefinition/screening-2-4-yo&quot;\n    ],\n    &quot;status&quot;: &quot;active&quot;,\n    &quot;intent&quot;: &quot;order&quot;,\n    &quot;priority&quot;: &quot;routine&quot;,\n    &quot;subject&quot;: {\n      &quot;reference&quot;: &quot;Patient/surveyPatient&quot;,\n      &quot;display&quot;: &quot;PatientName&quot;\n    },\n    &quot;authoredOn&quot;: &quot;2021-08-11T16:37:56.328247-04:00&quot;,\n    &quot;requester&quot;: {\n      &quot;reference&quot;: &quot;Provider/orderingProvider&quot;,\n      &quot;display&quot;: &quot;Organization Name&quot;\n    },\n    &quot;performer&quot;: [\n      {\n        &quot;reference&quot;: &quot;Patient/surveyPatient&quot;,\n        &quot;display&quot;: &quot;PatientName&quot;\n      }\n    ]\n  }\n</code></pre></div>",
+        "id": 249481329,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1628982048
+    },
+    {
+        "content": "<p>So I think my first specific question is how to pick the PlanDefinition for a specific age group, assuming we have the following:</p>\n<ol>\n<li>\"<a href=\"http://hapi.fhir.org/baseR4/PlanDefinition/screening-1-2-yo\">http://hapi.fhir.org/baseR4/PlanDefinition/screening-1-2-yo</a>\"</li>\n<li>\"<a href=\"http://hapi.fhir.org/baseR4/PlanDefinition/screening-2-3-yo\">http://hapi.fhir.org/baseR4/PlanDefinition/screening-2-3-yo</a>\"</li>\n<li>\"<a href=\"http://hapi.fhir.org/baseR4/PlanDefinition/screening-4-5-yo\">http://hapi.fhir.org/baseR4/PlanDefinition/screening-4-5-yo</a>\"</li>\n</ol>\n<p>Does that happen at this step, should it go in the PlanDefinition, or in a Task, which is about to be created?</p>",
+        "id": 249481556,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1628982474
+    },
+    {
+        "content": "<p>And from these a Task will be created. Now with this, is it better to create an Overarching task, with a smaller task for each individual questionnaire, or to put all questionnaires in a single task? Currently I'm keeping track of them as a single Task, like this:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;resourceType&quot;: &quot;Task&quot;,\n  &quot;status&quot;: &quot;requested&quot;,\n  &quot;intent&quot;: &quot;order&quot;,\n  &quot;requester&quot;: {\n    &quot;reference&quot;: &quot;Practitioner/Alguien&quot;\n  },\n  &quot;input&quot;: [\n    {\n      &quot;type&quot;: {\n        &quot;coding&quot;: [\n          {\n            &quot;system&quot;: &quot;http://hl7.org/fhir/uv/sdc/CodeSystem/temp&quot;,\n            &quot;code&quot;: &quot;questionnaire&quot;\n          }\n        ]\n      },\n      &quot;valueCanonical&quot;: &quot;http://hapi.fhir.org/baseR4/Questionnaire/quest1&quot;\n    },\n    {\n      &quot;type&quot;: {\n        &quot;coding&quot;: [\n          {\n            &quot;system&quot;: &quot;http://hl7.org/fhir/uv/sdc/CodeSystem/temp&quot;,\n            &quot;code&quot;: &quot;questionnaire&quot;\n          }\n        ]\n      },\n      &quot;valueCanonical&quot;: &quot;http://hapi.fhir.org/baseR4/Questionnaire/quest2&quot;\n    }\n  ]\n}\n</code></pre></div>",
+        "id": 249481791,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1628982900
+    },
+    {
+        "content": "<p>I started the other way by creating a Task resource<br>\nI started off by creating a Task conforming to the <a href=\"http://build.fhir.org/ig/HL7/sdc/StructureDefinition-sdc-task.html\">http://build.fhir.org/ig/HL7/sdc/StructureDefinition-sdc-task.html</a></p>",
+        "id": 249481853,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1628983019
+    },
+    {
+        "content": "<p>Here is my Task resource<br>\n{<br>\n    \"resourceType\": \"Task\",<br>\n    \"id\": \"questionnairetask\",<br>\n    \"meta\": {<br>\n        \"profile\": [<br>\n            \"<a href=\"http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-task\">http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-task</a>\"<br>\n        ]<br>\n    },<br>\n    \"status\": \"requested\",<br>\n    \"intent\": \"order\",<br>\n    \"code\": {<br>\n        \"coding\": [{<br>\n            \"system\": \"<a href=\"http://hl7.org/fhir/uv/sdc/CodeSystem/temp\">http://hl7.org/fhir/uv/sdc/CodeSystem/temp</a>\",<br>\n            \"code\": \"complete-questionnaire\"<br>\n        }],<br>\n        \"text\": \"My Tasks\"<br>\n    },<br>\n    \"for\": {<br>\n        \"reference\": \"Patient/2506029\"<br>\n    },<br>\n    \"authoredOn\": \"2016-03-10T22:39:32-04:00\",<br>\n    \"lastModified\": \"2016-03-10T22:39:32-04:00\",<br>\n    \"requester\": {<br>\n        \"reference\": \"Practitioner/2506125\"<br>\n    },<br>\n    \"owner\": {<br>\n        \"reference\": \"Patient/2506029\"<br>\n    },<br>\n    \"reasonCode\": {<br>\n        \"text\": \"The Task is performed to render questionnaire and post the questionnaire response\"<br>\n    },<br>\n    \"input\": [{<br>\n            \"type\": {<br>\n                \"coding\": [{<br>\n                    \"system\": \"<a href=\"http://hl7.org/fhir/uv/sdc/CodeSystem/temp\">http://hl7.org/fhir/uv/sdc/CodeSystem/temp</a>\",<br>\n                    \"code\": \"questionnaire\"<br>\n                }]<br>\n            },<br>\n            \"valueUrl\": \"<a href=\"http://hapi.fhir.org/baseR4/Questionnaire/2506046/\">http://hapi.fhir.org/baseR4/Questionnaire/2506046/</a>\"<br>\n        },<br>\n        {<br>\n            \"type\": {<br>\n                \"coding\": [{<br>\n                    \"system\": \"<a href=\"http://hl7.org/fhir/uv/sdc/CodeSystem/temp\">http://hl7.org/fhir/uv/sdc/CodeSystem/temp</a>\",<br>\n                    \"code\": \"response-endpoint\"<br>\n                }]<br>\n            },<br>\n            \"valueUrl\": \"<a href=\"http://hapi.fhir.org/baseR4/\">http://hapi.fhir.org/baseR4/</a>\"<br>\n        }<br>\n    ]<br>\n}</p>",
+        "id": 249481918,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1628983131
+    },
+    {
+        "content": "<p>I was thinking of querying the Task resource for a particular patient from my client<br>\n<a href=\"http://hapi.fhir.org/baseR4/Task?status=requested&amp;intent=order&amp;requester:Practitioner.identifier=12345678901\">http://hapi.fhir.org/baseR4/Task?status=requested&amp;intent=order&amp;requester:Practitioner.identifier=12345678901</a></p>",
+        "id": 249481978,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1628983252
+    },
+    {
+        "content": "<p>Actually that does remind me of another question. Who is the owner? I know officially it's: \"Individual organization or Device currently responsible for task execution.\" But does that mean the patient who is completing it? If it's a child would it be the parent? If we're providing this task as a service, would WE be the owner? Would it be whoever ordered it?</p>",
+        "id": 249482000,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1628983313
+    },
+    {
+        "content": "<p>I would think the owner is the Organization</p>",
+        "id": 249482039,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1628983353
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"194383\">Ozair Bajwa</span> <a href=\"#narrow/stream/179255-questionnaire/topic/SDC.20Workflows/near/249481978\">said</a>:</p>\n<blockquote>\n<p>I was thinking of querying the Task resource for a particular patient from my client<br>\n<a href=\"http://hapi.fhir.org/baseR4/Task?status=requested&amp;intent=order&amp;requester:Practitioner.identifier=12345678901\">http://hapi.fhir.org/baseR4/Task?status=requested&amp;intent=order&amp;requester:Practitioner.identifier=12345678901</a></p>\n</blockquote>\n<p>So this search should find all tasks where that Practitioner is the one who requested it, but what if the Practitioner ordered a questionnaire to be completed and a lipid panel to be done? How do you think it's best to differentiate between the two?</p>",
+        "id": 249482106,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1628983498
+    },
+    {
+        "content": "<p>Also, how does your task know which Questionnaire to include? How is that information passed to it?</p>",
+        "id": 249482114,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1628983529
+    },
+    {
+        "content": "<p>Basically I was thinking there will be multiple Tasks for each questionnaire and patient. which is owned by an Organization etc. and each user/patient will poll for the Task resources assigned to it by different flags, once the task is retrieved the status of the Task can be updated to \"Accepted\" and the QuestionnaireResponse will be be generated and the Task will be updated (Task.output) to link to the QuestionnaireResponse</p>",
+        "id": 249482178,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1628983666
+    },
+    {
+        "content": "<p>Will the flags be inside the Task?</p>",
+        "id": 249482220,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1628983696
+    },
+    {
+        "content": "<p>I am sure how to define the PlanDefinition, Actions (threshold, timing etc.) and tie them to my Tasks. May be you have done that part already</p>",
+        "id": 249482227,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1628983739
+    },
+    {
+        "content": "<p>The flags will be put of the query and we can use all searchable parameters as part of the Task resource</p>",
+        "id": 249482241,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1628983795
+    },
+    {
+        "content": "<p>Sorry I meant part of the query</p>",
+        "id": 249482301,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1628983865
+    },
+    {
+        "content": "<p>Could you post an example of that?</p>",
+        "id": 249482309,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1628983892
+    },
+    {
+        "content": "<p>Here is what I tried<br>\n<a href=\"http://hapi.fhir.org/baseR4/Task?status=accepted&amp;intent=order&amp;requester:Practitioner.identifier=12345678901\">http://hapi.fhir.org/baseR4/Task?status=accepted&amp;intent=order&amp;requester:Practitioner.identifier=12345678901</a></p>",
+        "id": 249482485,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1628984227
+    },
+    {
+        "content": "<p>Looking for all Tasks with status (accepted), intent (order) and requested by a Practitioner</p>",
+        "id": 249482502,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1628984275
+    },
+    {
+        "content": "<p>But then you still have to look through all of the tasks to see if they're appropriate for your service</p>",
+        "id": 249482565,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1628984350
+    },
+    {
+        "content": "<p>Yeah I would think so. Task is a sort of a shared resource, can be update by multiple systems. One would have to poll the Task Queue to determine the tasks that it can execute. Once the Task has been posted it can be cancelled, suspended by the owner so there would have to be a polling mechanism</p>",
+        "id": 249482749,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1628984703
+    },
+    {
+        "content": "<p>Again this is my understanding</p>",
+        "id": 249482760,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1628984749
+    },
+    {
+        "content": "<p>I would definitely recommend a separate Task for each Questionnaire - as the status for each of them could be different.  You <em>could</em>, if there was value, have a parent Task that grouped all of the others.  The owner of the Task should be the individual who's supposed to do it.  That might just be a contained RelatedPerson that says \"some parent of Patient xyz\", though searching for those won't be easy.  Assigning it to a specific individual is easier to search, but then you're picking one person when you might not care which parent/guardian completes the form.  The third option is to assign it to a Group which includes all guardians for the child, presuming you expect people to be able to search for the group.</p>",
+        "id": 249517248,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629040102
+    },
+    {
+        "content": "<p>We had also discussed using RequestGroup instead of an overall Task, would that make more sense?</p>",
+        "id": 249519340,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1629043226
+    },
+    {
+        "content": "<p>RequestGroup is for when there's a complex action that has a single status and where the parts are inseparable.  I don't think that would make sense here as the status for each of the Questionnaires could be different.  It's more for orders where if you cancel one part, you must also cancel the other part.</p>",
+        "id": 249521782,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629046841
+    },
+    {
+        "content": "<p>Here are two ER diagrams that we have been working with. Again, trying to put here to post examples that may be helpful. <a href=\"/user_uploads/10155/U9V0X2AAmWuSCBk_SceF1Ioa/NJInCK-Portal-Specification-ED-Order-v1.png\">NJInCK-Portal-Specification-ED-Order-v1.png</a> <a href=\"/user_uploads/10155/nN2TcvJQOd4bZ05vbIcblxD3/NJInCK-Portal-Specification-ED-Order-v2.png\">NJInCK-Portal-Specification-ED-Order-v2.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/U9V0X2AAmWuSCBk_SceF1Ioa/NJInCK-Portal-Specification-ED-Order-v1.png\" title=\"NJInCK-Portal-Specification-ED-Order-v1.png\"><img src=\"/user_uploads/10155/U9V0X2AAmWuSCBk_SceF1Ioa/NJInCK-Portal-Specification-ED-Order-v1.png\"></a></div><div class=\"message_inline_image\"><a href=\"/user_uploads/10155/nN2TcvJQOd4bZ05vbIcblxD3/NJInCK-Portal-Specification-ED-Order-v2.png\" title=\"NJInCK-Portal-Specification-ED-Order-v2.png\"><img src=\"/user_uploads/10155/nN2TcvJQOd4bZ05vbIcblxD3/NJInCK-Portal-Specification-ED-Order-v2.png\"></a></div>",
+        "id": 249542249,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1629080761
+    },
+    {
+        "content": "<p>I am looking at the PlanDefinition. It is still a little vague to me. The Guide does not have many relevant examples. I was thinking of going with the approach of Different Tasks for each Questionnaire. So 5 tasks for 5 questionnaires. How will that map to the PlanDefiniition, looking at your Diagram it says 1 to many relationship to the Questionnaires</p>",
+        "id": 249544233,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1629083997
+    },
+    {
+        "content": "<p>On the PlanDefinition page <a href=\"http://hl7.org/fhir/R4/plandefinition.html\">http://hl7.org/fhir/R4/plandefinition.html</a><br>\nUnder Applying a PlanDefinition Section it says <br>\nQuestionnaire: Set the resource element of the action to the Questionnaire, indicating that the activity to be performed is filling out the given questionnaire</p>",
+        "id": 249544343,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1629084192
+    },
+    {
+        "content": "<p>Under the action there are trigger and condition attributes. Can we use those to trigger/start the process</p>",
+        "id": 249544558,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1629084580
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"235060\">@Grey Faulkenberry</span> A few comments:</p>\n<ul>\n<li>Person is never allowed to be owner of Task.  (In fact, Person isn't allowed to be referenced anywhere - Person is used to link resources, it can't ever be an actor.  Human/animal actors are always one of Patient, RelatedPerson or Practitioner.)</li>\n<li>The link from Task to Questionnaire is going to be 1..1.  If you want multiple Questionnaires to be completed, you'll need multiple Tasks.  (Because completion of each response will be tracked independently.  One could be completed while another is refused.)</li>\n<li>RequestGroup means that the individual ServiceRequests can't have an independent status.  I.e. they can't be cancelled, put on hold or marked as complete except as a group - that seems unusual?</li>\n<li>The use of ServiceRequest is optional.  You can ask people to fill out forms without there being a formal authorization (i.e. a ServiceRequest).  It's fine to support it, but be sure you need it before making it mandatory</li>\n<li>You might want to point to ActivityDefinitions rather than PlanDefinition so that you can refer to the specific aspects of the PlanDefinition that refer to the step for that particular form.  However, that's also not critical because the Task will indicate the Questionnaire.</li>\n</ul>",
+        "id": 249588419,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629120631
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> , does this look closer to how the resources should be linked? <a href=\"/user_uploads/10155/XRtkH5M8lOeGf92hzRdbJBMR/Fhir-Workflow-1.png\">Fhir-Workflow-1.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/XRtkH5M8lOeGf92hzRdbJBMR/Fhir-Workflow-1.png\" title=\"Fhir-Workflow-1.png\"><img src=\"/user_uploads/10155/XRtkH5M8lOeGf92hzRdbJBMR/Fhir-Workflow-1.png\"></a></div>",
+        "id": 249609169,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1629130135
+    },
+    {
+        "content": "<p>I don't understand what 'Order' is.  While you <em>can</em> have a Task that just says \"instantiate plan XYZ\", that's a level of sophistication that many fillers won't have.  It's really a question of how much work do you expect the requesting system to do, vs. how much do you expect the filling system to do.  For simple clients, just giving them the simple Tasks of \"Fill out form 1\", \"Fill out form 2\", etc. is going to work better than \"Please instantiate protocol 123\" and having them figure out that means generating sub-tasks to fill out each form.  However, if your clients are sophisticated enough to manage the process, then yes, the layout you've described is viable.</p>",
+        "id": 249610221,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629130636
+    },
+    {
+        "content": "<p>Sorry, the order is the request from outside the system that is going to trigger the workflow</p>",
+        "id": 249610573,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1629130813
+    },
+    {
+        "content": "<p>We're actually going to be the ones implementing this whole workflow, so we can make them more sophisticated where needed. I'm just trying to decide how to stay within the FHIR specs as much as possible, and ensure we're following the SDC workflow correctly.</p>",
+        "id": 249610795,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1629130941
+    },
+    {
+        "content": "<p>(I'm hoping that by having as much of the workflow as possible within the FHIR resources, it can make us more flexible when working with other systems)</p>",
+        "id": 249611106,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1629131101
+    },
+    {
+        "content": "<p>Request from outside can/should still be represented as a ServiceRequest.</p>\n<p>SDC doesn't really get into linkage to PlanDefinition/ActivityDefinition at all.  It's primarily focused on the detailed Task that says \"please fill out form X\"  The higher level protocol stuff isn't really Questionnaire-specific.</p>",
+        "id": 249612228,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629131633
+    },
+    {
+        "content": "<p>Is there somewhere else that would be better for me to look regarding this workflow? (or at least a different heading for this stream?)</p>",
+        "id": 249612866,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1629131923
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span></p>",
+        "id": 249612991,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629131996
+    },
+    {
+        "content": "<p>The FHIR Clinical Guidelines IG provides several different profiles of PlanDefinition to support different process modeling, a pathway for longitudinal processes, a strategy for processes related to a particular focus (such as an encounter or a procedure), and a recommendation for rules such as decision support logic. There's a discussion of workflow in CPG here: <a href=\"https://hl7.org/fhir/uv/cpg/documentation-approach-12-06-cpg-common-pathway.html\">https://hl7.org/fhir/uv/cpg/documentation-approach-12-06-cpg-common-pathway.html</a></p>",
+        "id": 249631250,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1629140105
+    },
+    {
+        "content": "<p>My workflow is similar to <span class=\"user-mention\" data-user-id=\"235060\">@Grey Faulkenberry</span> except the trigger for the Tasks. <br>\nI have multiple questionnaires each tied to a Task. I am thinking of a PlanDefiintion with multiple actions for each questionnaire. However the client/Form Filler will be a rendered a specific questionnaire based on a certain predefined criteria/threshold. Client will be interfacing with a Personal Health Device or access other resources at its disposal to gather the Vitals, Pulse etc. Now if one of the measurements generates a trigger (i.e. pulse is more than 100) then a specific questionnaire will be rendered and filled. The rest of the workflow should be similar. Where will the trigger conditions of the workflow defined? I see trigger and condition elements under action, is that where this is defined? I could not find any relevant examples.</p>",
+        "id": 249658594,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1629154279
+    },
+    {
+        "content": "<p>if I am able to handle all trigger data from within the app (e.g. access to all measurements). Would it be acceptable to isolate that logic from within the workflow to the app itself?</p>",
+        "id": 249660828,
+        "sender_full_name": "Ozair Bajwa",
+        "timestamp": 1629155903
+    },
+    {
+        "content": "<p>You don't have to represent the logic in a PlanDefinition.  The only reason for doing that is if the logic needs to be shared to multiple other systems.  You probably want a separate Task for each Questionnaire, as you'd want to monitor the completion of each independently.</p>",
+        "id": 249668652,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629163576
+    },
+    {
+        "content": "<p>I'm creating a UI for Task at the moment and discovered that there is a lastModified property in it as well as the lastUpdated in the meta, what's the difference?<br>\nAnd when would you not update the lastModified - or is that for when you're distibuting the task between servers (and the lastModified is the lastUpdated from the source system?)</p>",
+        "id": 267285061,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1641632081
+    },
+    {
+        "content": "<p>I guess lastUpdated is server-specific, while lastUpdated would be across servers.  Though I don't know that Tasks will typically live on multiple servers...</p>",
+        "id": 267377514,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1641762059
+    }
+]

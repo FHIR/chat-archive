@@ -1,0 +1,458 @@
+[
+    {
+        "content": "<p>We're seeing the need to do a kind of search for distinct field values.  For example:</p>\n<p>1) The distinct observation codes (whose display text matches some string)<br>\n2) The distinct observation categories<br>\n3) The distinct observation effectiveDateTime values</p>\n<p>The functionality would be similar to the \"distinct\" keyword in SQL, and ideally the solution would be general purpose and apply to any resource and (nearly?) any field.</p>\n<p>It would also be nice if the solution could fit into the current search infrastructure, so that the distinct values returned could be further constrained b(e.g. observation codes for a particular patient, or effectiveDateTime values in 2019) using other search parameters.</p>",
+        "id": 174249101,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1566925685
+    },
+    {
+        "content": "<p>What would a search for distinct observation codes return? Only the first observation that has a matching code?</p>",
+        "id": 174250984,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1566927010
+    },
+    {
+        "content": "<p>like lastN where n = 1? <a href=\"http://hl7.org/fhir/r4/observation.html#lastn\" target=\"_blank\" title=\"http://hl7.org/fhir/r4/observation.html#lastn\">http://hl7.org/fhir/r4/observation.html#lastn</a></p>",
+        "id": 174251359,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1566927266
+    },
+    {
+        "content": "<p>You'd end up with numerous Observations, but only one with a given code.  Most recent vs. not wouldn't much matter.</p>",
+        "id": 174256157,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1566930618
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> I am not sure what the return format should be.  I think that in order to fit in with the existing search framework, it would makes sense to return a bundle of matching Observations, selected as you stated.  It gets a little messy due to the fact each Observation can have multiple codes.  Depending on how that was handled, I might have to post-process to get the list of unique codes.</p>\n<p><span class=\"user-mention\" data-user-id=\"191356\">@Jenni Syed</span> lastN requires that a patient be specified, plus either a code or a category.  My use case for getting distinct observation codes is across patients and categories.  I am hoping, though, that a solution can be found for the more general case of getting the distinct values for any searchable field in a resource and using search-like capabilities of matching on substrings, and maybe other search parameters.</p>",
+        "id": 174264223,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1566935281
+    },
+    {
+        "content": "<p>What is the use case for that? IE: needing the most recent heart rate across the entire system?</p>",
+        "id": 174264397,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1566935386
+    },
+    {
+        "content": "<p>We have an \"<a href=\"https://lhcforms.nlm.nih.gov/fhir/obs-viewer.html\" target=\"_blank\" title=\"https://lhcforms.nlm.nih.gov/fhir/obs-viewer.html\">Observation viewer</a>\" tool (still a work in progress); the idea is mainly to provide an overview or sample of what is in the Observation \"table\", for selected codes (and eventually some other parameters).  The use case for the distinct code search would be for the lookup that selects the codes of the Observations that will be retrieved.  Currently, this lookup is hitting the full LOINC code list, but we want it to be searching the list of codes actually used.</p>",
+        "id": 174267392,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1566937187
+    },
+    {
+        "content": "<p>Sounds like an operation more than a search</p>",
+        "id": 174309095,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1566938661
+    },
+    {
+        "content": "<p>The drawback of not putting it in search is that you lose access to (or have to reinvent) all the other search parameters.</p>",
+        "id": 174311314,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1566940296
+    },
+    {
+        "content": "<p>that's not necessarily true. Not if you specify the operation type as a search</p>",
+        "id": 174314032,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1566943554
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> I was just looking at OperationDefinition to see where one might do that, but OperationDefinition.type is a boolean that means something else.  Where would one specify that the operation is of type \"search\"?</p>",
+        "id": 174316478,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1566946018
+    },
+    {
+        "content": "<p>OperationDefinition.kind</p>",
+        "id": 174317084,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1566946618
+    },
+    {
+        "content": "<p>Thanks.  For kind=\"query\", I see that <a href=\"https://www.hl7.org/fhir/operationdefinition.html#equeries\" target=\"_blank\" title=\"https://www.hl7.org/fhir/operationdefinition.html#equeries\">it says</a>, \"Named queries always return a bundle containing a set of resources, so all the out parameters must be resources\", but that is okay with me.  I would extract the fields that were requested as distinct and ignore the rest of the resource.</p>",
+        "id": 174368471,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1567003068
+    },
+    {
+        "content": "<p>Do 'search' operations automatically support regular search parameters?  E.g. if I have a 'query' operation on Observation, can I automatically include the patient, code and similar parameters.</p>",
+        "id": 174386598,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1567015087
+    },
+    {
+        "content": "<p>that's the implication, yes</p>",
+        "id": 174393950,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1567020548
+    },
+    {
+        "content": "<p>Here is a draft of an OperationDefinition (the first I've ever tried to write) for the \"$distinct\" operation I'm proposing.  It would be great to hear from people implementing FHIR servers about the feasibility of adding this.  We gave some thought to how it might be handled in ElasticSearch, and it seemed possible to us.</p>\n<div class=\"codehilite\"><pre><span></span><span class=\"p\">{</span>\n  <span class=\"nt\">&quot;resourceType&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;OperationDefinition&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;name&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;distinct&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;code&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;distinct&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;description&quot;</span><span class=\"p\">:</span>  <span class=\"s2\">&quot;Conducts a search in which the returned resources are constrained to be unique based on the content of the fields specified in &#39;distinctField&#39;.&quot;</span>\n  <span class=\"s2\">&quot;system&quot;</span><span class=\"p\">:</span> <span class=\"kc\">false</span>\n  <span class=\"s2\">&quot;type&quot;</span><span class=\"p\">:</span> <span class=\"kc\">true</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;instance&quot;</span><span class=\"p\">:</span> <span class=\"kc\">false</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;kind&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;query&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;status&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;draft&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;parameter&quot;</span><span class=\"p\">:</span> <span class=\"p\">[{</span>\n    <span class=\"nt\">&quot;name&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;distinctField&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;documentation&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;One or more search parameter names whose values will be used to constrain the results of the search.  The combination of the values of the specified fields will be unique in each of the returned resources.&quot;</span>\n    <span class=\"s2\">&quot;use&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;in&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;type&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;string&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;min&quot;</span><span class=\"p\">:</span> <span class=\"mi\">1</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;max&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;*&quot;</span>\n  <span class=\"p\">},</span>\n  <span class=\"p\">{</span>\n    <span class=\"nt\">&quot;name&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;return&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;documentation&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;The set of resources that are distinct relative to the fields defined by &#39;distinctField&#39;.&quot;</span>\n    <span class=\"s2\">&quot;use&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;out&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;type&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;Bundle&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;min&quot;</span><span class=\"p\">:</span> <span class=\"mi\">1</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;max&quot;</span><span class=\"p\">:</span> <span class=\"mi\">1</span>\n  <span class=\"p\">}]</span>\n<span class=\"p\">}</span>\n</pre></div>",
+        "id": 174487848,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1567109323
+    },
+    {
+        "content": "<p>I don't understand this. if I have more than one match, which one to return? distinct applies to primitives</p>",
+        "id": 174492789,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1567112833
+    },
+    {
+        "content": "<p>This sounds like a problem I would solve using sql-on-fhir.</p>",
+        "id": 174494021,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1567113830
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> The intent is that if there more more than one match per combination of field values, you just pick one of the resources.  The goal is to get the distinct field values (or dinstinct combinations if more than one distinctField is provided).  The rest of the resource is not really of interest in most cases.</p>",
+        "id": 174496659,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1567116266
+    },
+    {
+        "content": "<p>For simplicity, I am extending the concept of distinctness to non-primitive types.  There is a question of whether [1 ,2 ,3] is distinct from [1, 3, 2], but I think it would be simplest to treat them as distinct.</p>",
+        "id": 174497575,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1567117206
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span> Is the intent of sql-on-fhir that a FHIR server would provide an API for submitting SQL queries?  I am writing SMART on FHIR client, so the thing I have access to is a FHIR server.</p>",
+        "id": 174497724,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1567117367
+    },
+    {
+        "content": "<p>Details vary. Some servers might provide an API for submitting SQL queries, others might copy the data out to a separate SQL database.</p>\n<p>I bring this up because getting widespread adoption of a special-purpose operation might be a much longer process than using more general functionality.</p>",
+        "id": 174497971,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1567117667
+    },
+    {
+        "content": "<p>I was actually going for a general-purpose operation.  But, you are right that full SQL is even more flexible and general.  I  suppose the SQL submission could itself be a FHIR operation.</p>\n<p>I think there is a trade off at some point between making things more general purpose and making it more complicated to implement.  Has there been activity toward implementing sql-on-fhir in FHIR servers?</p>",
+        "id": 174498336,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1567118035
+    },
+    {
+        "content": "<p>Not through a FHIR API. The analytics on FHIR track is really active but in my experience it's clients talking directly to SQL databases. Lots of people in this channel can correct me if I'm wrong though ;-)</p>",
+        "id": 174501609,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1567121060
+    },
+    {
+        "content": "<p>I do think you've moved in analytics, not really search anymore</p>",
+        "id": 174501706,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1567121163
+    },
+    {
+        "content": "<p>Here is a non-search version of an OperationDefinition for the \"distinct\" operation, which is now constrained to work on Coding or CodeableConcept fields (search fields of type token), but will hopefully seem less weird.  Examples of usage:</p>\n<ul>\n<li>Observation/$distinctCodings?codingField=category  (distinct category codings)</li>\n<li>Observation/$distinctCodings?codingField=code&amp;patient=zero (distinct code codings for patient id “zero”)</li>\n<li>MedicationStatement/$distinctCodings?codingField=code&amp;patient=zero (distinct medications taken by patient id “zero”)</li>\n</ul>\n<div class=\"codehilite\"><pre><span></span>{\n  &quot;resourceType&quot;: &quot;OperationDefinition&quot;,\n  &quot;name&quot;: &quot;distinctCodings&quot;,\n  &quot;code&quot;: &quot;distinctCodings&quot;,\n  &quot;descripton&quot;:  &quot;Returns the distinct codings for a search parameter of type token in the specified resource type&quot;,\n  &quot;system&quot;: false,\n  &quot;type&quot;: true,\n  &quot;instance&quot;: false,\n  &quot;kind&quot;: &quot;operation&quot;,\n  &quot;status&quot;: &quot;draft&quot;,\n  &quot;parameter&quot;: [{\n    &quot;name&quot;: &quot;codingField&quot;,\n    &quot;documentation&quot;: &quot;The name of a search parameter of type token (searching Coding or CodeableConcept)&quot;,\n    &quot;use&quot;: &quot;in&quot;,\n    &quot;type&quot;: &quot;string&quot;,\n    &quot;min&quot;: 1,\n    &quot;max&quot;: &quot;*&quot;\n  },{\n    &quot;name&quot;: &quot;patient&quot;,\n    &quot;documentation&quot;: &quot;An optional Patient ID, for use with resources which have an associated patient.  If present the returned Codings will be drawn only from the resource instances associated with the patient.&quot;,\n    &quot;use&quot;: &quot;in&quot;,\n    &quot;type&quot;: &quot;string&quot;,\n    &quot;min&quot;: 0,\n    &quot;max&quot;: 1\n  },\n  {\n    &quot;name&quot;: &quot;return&quot;,\n    &quot;documentation&quot;: &quot;The set of Codings for field &#39;codingField&#39; that are distinct across instances of the resource, or if &#39;patient&#39; was specified, within the patient&#39;s resource instances&quot;,\n    &quot;use&quot;: &quot;out&quot;,\n    &quot;type&quot;: &quot;Coding&quot;,\n    &quot;min&quot;: 0,\n    &quot;max&quot;: &quot;*&quot;\n  }]\n}\n</pre></div>",
+        "id": 175439437,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1568213376
+    },
+    {
+        "content": "<p>I just realized I missed a parameter value needed for autocompletion on the codes's display strings.  So, the examples would be:</p>\n<p>Observation/$distinctCodings?codingField=category&amp;codetext=bact (distinct category codings with a display word starting with \"bact\")<br>\nObservation/$distinctCodings?codingField=code&amp;patient=zero (distinct code codings for patient id “zero”)<br>\nMedicationStatement/$distinctCodings?codingField=code&amp;patient=zero (distinct medications taken by </p>\n<div class=\"codehilite\"><pre><span></span><span class=\"p\">{</span>\n  <span class=\"nt\">&quot;resourceType&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;OperationDefinition&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;name&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;distinctCodings&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;code&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;distinctCodings&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;descripton&quot;</span><span class=\"p\">:</span>  <span class=\"s2\">&quot;Returns the distinct codings for a search parameter of type token in the specified resource type where the text of a code matches the codetext parameter.&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;system&quot;</span><span class=\"p\">:</span> <span class=\"kc\">false</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;type&quot;</span><span class=\"p\">:</span> <span class=\"kc\">true</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;instance&quot;</span><span class=\"p\">:</span> <span class=\"kc\">false</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;kind&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;operation&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;status&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;draft&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;parameter&quot;</span><span class=\"p\">:</span> <span class=\"p\">[{</span>\n    <span class=\"nt\">&quot;name&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;codingField&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;documentation&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;The name of a search parameter of type token (searching Coding or CodeableConcept)&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;use&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;in&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;type&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;string&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;min&quot;</span><span class=\"p\">:</span> <span class=\"mi\">1</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;max&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;*&quot;</span>\n  <span class=\"p\">},{</span>\n    <span class=\"nt\">&quot;name&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;patient&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;documentation&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;An optional Patient ID, for use with resources which have an associated patient.  If present the returned Codings will be drawn only from the resource instances associated with the patient.&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;use&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;in&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;type&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;string&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;min&quot;</span><span class=\"p\">:</span> <span class=\"mi\">0</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;max&quot;</span><span class=\"p\">:</span> <span class=\"mi\">1</span>\n  <span class=\"p\">},</span>\n  <span class=\"p\">{</span>\n    <span class=\"nt\">&quot;name&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;codetext&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;documentation&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;This field works just like code:text in regular search.  It limits the returned results to Codings whose display text contains a word that starts with the parameter value.&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;use&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;in&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;type&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;string&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;min&quot;</span><span class=\"p\">:</span> <span class=\"mi\">0</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;max&quot;</span><span class=\"p\">:</span> <span class=\"mi\">1</span>\n  <span class=\"p\">},</span>\n  <span class=\"p\">{</span>\n    <span class=\"nt\">&quot;name&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;return&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;documentation&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;The set of Codings for field &#39;codingField&#39; that are distinct across instances of the resource, or if &#39;patient&#39; was specified, within the patient&#39;s resource instances&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;use&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;out&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;type&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;Coding&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;min&quot;</span><span class=\"p\">:</span> <span class=\"mi\">0</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;max&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;*&quot;</span>\n  <span class=\"p\">}]</span>\n<span class=\"p\">}</span>\n</pre></div>",
+        "id": 175569485,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1568321043
+    },
+    {
+        "content": "<p>It would be really helpful to get feedback (especially from server implementers) as to whether this would be reasonable to implement.</p>",
+        "id": 175569593,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1568321131
+    },
+    {
+        "content": "<p>It would be way down the list for us - no use cases, plenty of features that are already standard that we'd like to implement first</p>",
+        "id": 175570882,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1568321990
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> \"no use cases\"?  I would not be proposing this if I didn't have one.</p>",
+        "id": 175572640,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1568323277
+    },
+    {
+        "content": "<p>Sorry - I mean no use cases from our customers</p>",
+        "id": 175572965,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1568323539
+    },
+    {
+        "content": "<p>Ah-- that makes more sense.</p>",
+        "id": 175576224,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1568326467
+    },
+    {
+        "content": "<p>Another useful thing would be to get the list of unique tags on resource, e.g.:</p>\n<p>Observation/$distinctCodings?codingField=_tag</p>",
+        "id": 175761853,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1568574638
+    },
+    {
+        "content": "<p>You can actually do this today specifically for tags, profiles, and security labels via the $meta operation:</p>\n<p><a href=\"http://hapi.fhir.org/baseDstu3/Patient/$meta\" target=\"_blank\" title=\"http://hapi.fhir.org/baseDstu3/Patient/$meta\">http://hapi.fhir.org/baseDstu3/Patient/$meta</a></p>",
+        "id": 175766962,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1568582954
+    },
+    {
+        "content": "<p>You can do it with SQL on FHIR :)</p>",
+        "id": 175791585,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1568621238
+    },
+    {
+        "content": "<p>In aidbox it would be <code>select distinct(resource-&gt;'code') from observation</code></p>",
+        "id": 175791679,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1568621302
+    },
+    {
+        "content": "<p>if this devolves to just the codes themselves... we're actually talking about a value set now. And then the value set machinery has everything we need.</p>",
+        "id": 175796648,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568626042
+    },
+    {
+        "content": "<p>I'm not sure value sets machinery will help. As far as I understood he is going to implement a kind of synoptic time based patient's vitals dashboard (just like ICU vitals' monitor) and he needs the distinct list of vitals  available for a specific patient. So if you don't go through SQL on FHIR, probably the best option is to define a custom operation. With a \"search\" the result should be a real resource(s) , with specific id while in this use case the result(s) of a distinct would be an aggregate temp resource  which should not have references to any specific \"real\" resource.</p>",
+        "id": 175817593,
+        "sender_full_name": "vania manzelli",
+        "timestamp": 1568644430
+    },
+    {
+        "content": "<p>Paul and I actually had a chat about this on Saturday at the connectathon and one of the things we came up with was the notion of some sort of implicit value set that is dynamically maintained as \"all of the codes that are used by Observation.code for a given patient\", where an expansion parameter might be the patient ID. That felt like an abuse of valuesets, but also seems elegant in a way..</p>\n<p>We also talked about whether this is a special case of the <code>$lastn</code> operation, which I still think it might be</p>",
+        "id": 175819758,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1568645739
+    },
+    {
+        "content": "<p>we already have this in place</p>",
+        "id": 175827023,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568650265
+    },
+    {
+        "content": "<p>We have lastn.  But we don't really want the full resources back, just the codes.</p>",
+        "id": 175848796,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1568665387
+    },
+    {
+        "content": "<p>I don’t see how it’s a lastn that is unless we make it a Swiss army night and add a codes only parameter and distinct. (Set of codes) parameter</p>",
+        "id": 175859860,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1568673919
+    },
+    {
+        "content": "<p>Knife not night</p>",
+        "id": 175859871,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1568673934
+    },
+    {
+        "content": "<blockquote>\n<p>we already have this in place</p>\n</blockquote>\n<p>The dynamic implicit valueset? or the special case of lastn?</p>",
+        "id": 175861595,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1568675508
+    },
+    {
+        "content": "<p>get url/ValueSet/$expand?context=Observation.code&amp;contextMode=outgoing</p>",
+        "id": 175862005,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568676002
+    },
+    {
+        "content": "<p>that query is what Paul is looking for</p>",
+        "id": 175862062,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568676031
+    },
+    {
+        "content": "<p>i believe Paul's after a patient specific collection of codes though... (Paul, correct me if I'm wrong here of course)</p>",
+        "id": 175862777,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1568676884
+    },
+    {
+        "content": "<p>yes, the ones used in Observation.code.</p>",
+        "id": 175862831,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568676962
+    },
+    {
+        "content": "<p>that's what that query is - the codes the system is capable of returning resources for</p>",
+        "id": 175862886,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568676980
+    },
+    {
+        "content": "<blockquote>\n<p>that's what that query is - the codes the system is capable of returning resources for</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>  I'm not sure whether you mean \"the codes the system might theoretically return if there were Observations so coded\" or \"the codes used by Observations that actually exist in the system\".   It seems to be the former, but what I need is the latter.</p>\n<p><a href=\"http://test.fhir.org/r4/ValueSet/$expand?context=Observation.code&amp;contextMode=outgoing&amp;count=5&amp;filter=we\" target=\"_blank\" title=\"http://test.fhir.org/r4/ValueSet/$expand?context=Observation.code&amp;contextMode=outgoing&amp;count=5&amp;filter=we\">http://test.fhir.org/r4/ValueSet/$expand?context=Observation.code&amp;contextMode=outgoing&amp;count=5&amp;filter=we</a></p>\n<p>returns LOINC code 71210-9, but:</p>\n<p><a href=\"http://test.fhir.org/r4/Observation?code=71210-9\" target=\"_blank\" title=\"http://test.fhir.org/r4/Observation?code=71210-9\">http://test.fhir.org/r4/Observation?code=71210-9</a></p>\n<p>has no results.</p>",
+        "id": 176032530,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1568831647
+    },
+    {
+        "content": "<p>well, that's a good point. we could add a new contextMode of \"existing\". I could support that</p>",
+        "id": 176041645,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568837549
+    },
+    {
+        "content": "<p>Would this work with context=Observation.category and context=Observation.meta.tag?</p>",
+        "id": 176042589,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1568838180
+    },
+    {
+        "content": "<p>in principle yes. I can make it work</p>",
+        "id": 176042631,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568838206
+    },
+    {
+        "content": "<p>Those are the three cases I have currently.  Would the \"existing\" contextMode be limited to work for exactly those three cases, or if not what would be the permitted values of \"context\"?</p>",
+        "id": 176043041,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1568838415
+    },
+    {
+        "content": "<p>context can be any element id - which is a big set that includes the 3 you've named.</p>",
+        "id": 176043101,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568838471
+    },
+    {
+        "content": "<p>up to systems which ones that they support</p>",
+        "id": 176043121,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568838482
+    },
+    {
+        "content": "<blockquote>\n<p>up to systems which ones that they support</p>\n</blockquote>\n<p>Well, I think that was the case with the operation I proposing, so no loss there, I guess.</p>",
+        "id": 176043380,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1568838631
+    },
+    {
+        "content": "<p>So, that sounds like a solution to me.  <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> ?</p>",
+        "id": 176045224,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1568839873
+    },
+    {
+        "content": "<p>I think I misunderstood your need- I thought it was about finding these lists <em>for a specific patient</em>. So yeah, this certainly does sound like it's the API you're after. :)</p>\n<p>This could be implemented in a horribly inefficient way very easily in HAPI FHIR by doing a group-by count search on the index tables. I don't know that I love the idea of doing that though.</p>\n<p>I'll chat with Ian about whether this could be layered into ElasticSearch in a more performant way. I assume it could be.</p>",
+        "id": 176113394,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1568908404
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> Should I submit a tracker item yet?  Which group would be the \"reviewing working group\"?</p>",
+        "id": 176147340,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1568931536
+    },
+    {
+        "content": "<p>Reasonable to submit a tracker.  Owner would be FHIR-I</p>",
+        "id": 176149334,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1568933429
+    },
+    {
+        "content": "<p>actually, it would be vocab; they own that operation</p>",
+        "id": 176149818,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568933980
+    },
+    {
+        "content": "<p>It looks like \"contextMode\" might have been changed to \"contextDirection\".  At least, what I find at <a href=\"https://www.hl7.org/fhir/valueset-operation-expand.html\" target=\"_blank\" title=\"https://www.hl7.org/fhir/valueset-operation-expand.html\">https://www.hl7.org/fhir/valueset-operation-expand.html</a> is contextDirection, which is what has \"incoming\" and \"going\".</p>",
+        "id": 176204370,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1568994433
+    },
+    {
+        "content": "<p>oh right. my mistake.</p>",
+        "id": 176204679,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568994652
+    },
+    {
+        "content": "<p>we'll have to talk about that</p>",
+        "id": 176204686,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1568994656
+    },
+    {
+        "content": "<p><a href=\"https://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=24834\" target=\"_blank\" title=\"https://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=24834\">GF#24834</a></p>",
+        "id": 176227926,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1569011404
+    },
+    {
+        "content": "<p>After some rounds of discussion in the Vocabulary work group on this idea of getting a distinct list of Codings stored in fields like Observation.code or category, <span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> suggested an alternative idea using implicit ValueSets.  The idea is that if you wanted to get a list of distinct Codings stored on a FHIR server in (say) Observation.category, you would pass in to the $expand operation's url parameter an implicit ValueSet URI like:</p>\n<div class=\"codehilite\"><pre><span></span><code>[base]/Observation/category?fhir_vs\n</code></pre></div>\n<p>The format of that is similar to what described for the <a href=\"http://build.fhir.org/snomedct.html#implicit\">SNOMED implicit ValueSets</a>.<br>\nA example of a full query, with a filter parameter for looking for matches in display text (and with ? encoded), would be:</p>\n<div class=\"codehilite\"><pre><span></span><code>[base]/ValueSet/$expand?url=[base]/Observation/category%3Ffhir_vs&amp;filter=height\n</code></pre></div>\n<p>Support for such implicit ValueSets would be optional.</p>",
+        "id": 271494419,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1644527268
+    },
+    {
+        "content": "<p>hmm we have something slightly similar to that already</p>",
+        "id": 271515131,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1644539381
+    },
+    {
+        "content": "<p>which is context</p>",
+        "id": 271515204,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1644539414
+    },
+    {
+        "content": "<p>see <a href=\"http://hl7.org/fhir/valueset-operation-expand.html\">http://hl7.org/fhir/valueset-operation-expand.html</a></p>",
+        "id": 271515212,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1644539422
+    },
+    {
+        "content": "<p>Yes.  Maybe using a syntax similar to the one suggested for the $expand 'context' parameter would be a good idea.  That might then be something like:</p>\n<div class=\"codehilite\"><pre><span></span><code>[base]/http://hl7.org/fhir/StructureDefinition/Observation#Observation.category?fhir_vs\n</code></pre></div>\n<p>That is definitely more verbose.  And it would be the way to do it if you needed to specify a particular profile rather than the base resource.  You need to do that for 'context', but I'm not sure that would be needed for this implicit value set?  If not, then probably it could just be:</p>\n<div class=\"codehilite\"><pre><span></span><code>[base]/Observation.category?fhir_vs\n</code></pre></div>\n<p>I originally thought that using the '.' in the url might need to be avoided, but I'm not sure why - doing it as <code>Observation.category</code> now seems probably better to me.</p>",
+        "id": 271571955,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1644584390
+    },
+    {
+        "content": "<p>Does changing the syntax to an $expand operation change the complexity of the problem? </p>\n<p>At the end of the day, you want the server to execute the equivalent of a SQL  DISTINCT or GROUP BY query to give you a list of unique values that exist for an attribute in the server. <br>\nIn pseudo-fhir-sql, you essentially want the server to execute something like: <br>\n<em>SELECT code FROM Observation GROUP BY code</em><br>\nor<br>\n<em>SELECT code FROM Observation where subject = 'Patient/123' GROUP BY code</em><br>\nor<br>\n<em>SELECT code FROM Observation where code like '945%' and subject = 'Patient/123' GROUP BY code</em></p>\n<p>The complexity comes in (in my mind) because FHIR search parameters can be multi-part (token), composite, can refer to multiple FHIR-path elements, etc. So implementing it generically using the existing search parameters would be tricky, depending on the underlying indexing model.</p>\n<p>Does the $expand idea change any of this complexity?</p>\n<p><em>Edit to add: Most FHIR servers don't index the data in a way that would be amenable to the queries above. They were just to illustrate the functional intent. It would be much more complex against most indexing schemes.</em></p>",
+        "id": 271638762,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1644614549
+    },
+    {
+        "content": "<p>I thought that the context parameter was just to let that provide the details of which valueset (from the binding) and not from the data that exists/used in the property</p>",
+        "id": 271735160,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1644741388
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span> That is correct.  <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>  proposed (<a href=\"#narrow/stream/179166-implementers/topic/.22distinct.22.20search/near/176041645\">earlier</a> in this thread, back in 2019) adding a new mode of \"existing\" to contextDirection, and that was proposed to the Vocabulary work group, which seems to prefer <a href=\"#narrow/stream/179166-implementers/topic/.22distinct.22.20search/near/271494419\">this new idea</a> of using implicit ValueSets instead.</p>\n<p><span class=\"user-mention\" data-user-id=\"193261\">@Craig McClendon</span> I don't think the complexity of the server side query should affected by the syntax of the $expand parameters.</p>",
+        "id": 271847564,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1644854601
+    },
+    {
+        "content": "<p>Using an $expand variant could simplify implementation if it limited the use of the operation to only Coding attributes I suppose. If the intent is that it could apply to other attributes (<a href=\"http://HumanName.family\">HumanName.family</a> or CodeableConcept.text, e.g.) I think a 'distinct' keyword/operation is more intuitive.</p>",
+        "id": 271853512,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1644857058
+    },
+    {
+        "content": "<p>The implicit ValueSets would just be for Codings (in CodeableConcept or otherwise).</p>",
+        "id": 271854337,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1644857404
+    }
+]

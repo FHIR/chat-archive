@@ -1,0 +1,143 @@
+---
+layout: page
+title: "FHIR Chat  · tutorial step 14 · mapping-framework"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/index.html">mapping-framework</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html">tutorial step 14</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="185246945"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185246945" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Harrison Tarr <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185246945">(Jan 09 2020 at 19:33)</a>:</h4>
+<p>hi all, i've been playing with the FHIR mapping language (big thanks to <span class="user-mention" data-user-id="191478">@Oliver Egger</span> and <span class="user-mention" data-user-id="191321">@David Hay</span> for their help) and ive quickly found myself in a tricky situation.<br>
+i have two input lists that i'd like to map into one input list<br>
+essentially:</p>
+<div class="codehilite"><pre><span></span>{a, b, c} + {1, 2, 3} -&gt; {a1, b2, c3}
+</pre></div>
+
+
+<p>from the description of tutorial step 14 (<a href="https://www.hl7.org/fhir/mapping-tutorial.html" target="_blank" title="https://www.hl7.org/fhir/mapping-tutorial.html">https://www.hl7.org/fhir/mapping-tutorial.html</a>), i think that should be covered there, but it's marked as to do. does anyone have an example of what the map rules should look like to iterate through two lists simultaneously and accomplish this?</p>
+
+
+
+<a name="185309505"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185309505" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Oliver Egger <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185309505">(Jan 10 2020 at 13:29)</a>:</h4>
+<p><span class="user-mention" data-user-id="246988">@Harrison Tarr</span> challenging task!<br>
+I came up the following for the first element element of the list:</p>
+<div class="codehilite"><pre><span></span>map &quot;http://hl7.org/fhir/StructureMap/unioncollection&quot; = &quot;unioncollection&quot;
+
+uses &quot;http://hl7.org/fhir/StructureDefinition/tutorial-left&quot; alias TLeft as source
+uses &quot;http://hl7.org/fhir/StructureDefinition/tutorial-right&quot; alias TRight as target
+
+group combine(source source : TLeft, target target : TRight) {
+    source.a first as a -&gt; target.c = (%source.a[0]+%source.b[0]) &quot;concatenated&quot;;
+//  source.a as a -&gt; target.c as c, c = (%source.a.item($index) + %source.b.item($index)) &quot;concatenate&quot;;
+}
+</pre></div>
+
+
+<p>to run above i need to update the <a href="https://github.com/hapifhir/org.hl7.fhir.core/pull/104" target="_blank" title="https://github.com/hapifhir/org.hl7.fhir.core/pull/104">pull request</a> but no idea how you either a) propagate the index of the list into the target or b) do a recursion of the tail of the two collections. if instead of the target a variable could be assigned in the target which could be reused, then it would be feasable. any other approaches <span class="user-mention" data-user-id="191316">@Grahame Grieve</span> <span class="user-mention" data-user-id="191363">@Vadim Peretokin</span> <span class="user-mention" data-user-id="193430">@Alexander Zautke</span> ?</p>
+
+
+
+<a name="185452273"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185452273" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Zautke <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185452273">(Jan 12 2020 at 22:10)</a>:</h4>
+<p>The rule that for merging the two values should be evaluated by the engine once for every element. Therefore you should not need to have any kind of indices.</p>
+
+
+
+<a name="185452280"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185452280" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Zautke <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185452280">(Jan 12 2020 at 22:10)</a>:</h4>
+<div class="codehilite"><pre><span></span>map &quot;http://hl7.org/fhir/StructureMap/unioncollection&quot; = &quot;unioncollection&quot;
+
+uses &quot;http://hl7.org/fhir/StructureDefinition/tutorial-left&quot; alias TLeft as source
+uses &quot;http://hl7.org/fhir/StructureDefinition/tutorial-right&quot; alias TRight as target
+
+group combine(source test : TLeft, target combined : TRight) {
+    test.a as a, test.b as b -&gt; combined.c = evaluate(test, &#39;%a + %b&#39;) collate;
+}
+</pre></div>
+
+
+
+<a name="185452374"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185452374" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Zautke <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185452374">(Jan 12 2020 at 22:13)</a>:</h4>
+<p>%a and %b should capture the current value for each iteration and collate should re-use the target.</p>
+
+
+
+<a name="185470115"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185470115" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Oliver Egger <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185470115">(Jan 13 2020 at 07:21)</a>:</h4>
+<p>according to the <a href="https://www.hl7.org/fhir/mapping-language.html" target="_blank" title="https://www.hl7.org/fhir/mapping-language.html">spec</a> this would give a1, a2, a3,  b1,  b2,  b3, c1, c2, c3 and not a1, b2, c3 ?</p>
+<blockquote>
+<p>If there are multiple source statements, the rule applies for the permutation of the source elements from each source statement. E.g. if there are 2 source statements, each with 2 matching elements, the rule applies 4 times, one for each combination. </p>
+</blockquote>
+
+
+
+<a name="185504694"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185504694" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Zautke <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185504694">(Jan 13 2020 at 15:42)</a>:</h4>
+<p>Mhm, right...</p>
+
+
+
+<a name="185504880"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185504880" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Zautke <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185504880">(Jan 13 2020 at 15:43)</a>:</h4>
+<p>What would be if you nest the second element selection?</p>
+
+
+
+<a name="185504944"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185504944" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Zautke <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185504944">(Jan 13 2020 at 15:44)</a>:</h4>
+<p>Nevermind, same result...</p>
+
+
+
+<a name="185515815"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185515815" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Zautke <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185515815">(Jan 13 2020 at 17:35)</a>:</h4>
+<p>Our the .NET implementation doesn’t currently support the external variables in the FHIRPath statement. That’s why I can’t test the statement. I‘m a bit out of ideas</p>
+
+
+
+<a name="185546188"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185546188" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185546188">(Jan 13 2020 at 22:44)</a>:</h4>
+<p>Are you sure on that?<br>
+You just need to add them to the symbol table being used by the fhirpath engine (only supports string types at this stage though)<br>
+For my usage, I provide a new Symbol table with the vars, that wraps the core symbol table and pass that to the execution engine.</p>
+
+
+
+<a name="185547007"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185547007" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Zautke <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185547007">(Jan 13 2020 at 22:54)</a>:</h4>
+<p>Yes, the mapping engine uses internally already a parser based on Superpower for everything except FHIRPath. Therefore we have separate contexts between the selection of the source and the evaluation function (parsed and executed by the Sprache parser / API FHIRPath compiler). There is no shared symbol table between these two worlds. We have a solution to make it work for where statements but not for the evaluation function.</p>
+
+
+
+<a name="185557565"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185557565" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185557565">(Jan 14 2020 at 01:43)</a>:</h4>
+<p>Ok</p>
+
+
+
+<a name="185683295"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185683295" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Zautke <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185683295">(Jan 15 2020 at 09:56)</a>:</h4>
+<p><code>group combine(source source : TLeft, target target : TRight) {
+    let tailA = (%source.a.tail())
+    let tailB = (%source.b.tail())
+    source.a first as a -&gt; target.c = (%source.a[0]+%source.b[0]) "concatenated" then combine(tailA, tailB);
+}</code></p>
+
+
+
+<a name="185683316"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/tutorial%20step%2014/near/185683316" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Zautke <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/tutorial.20step.2014.html#185683316">(Jan 15 2020 at 09:56)</a>:</h4>
+<p><span class="user-mention" data-user-id="191478">@Oliver Egger</span>  and I came up with a solution using let statements (See <a href="http://jira.hl7.org/browse/FHIR-21642" target="_blank" title="http://jira.hl7.org/browse/FHIR-21642">J#21642</a>)</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

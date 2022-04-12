@@ -1,0 +1,104 @@
+[
+    {
+        "content": "<p>In Backend Services Authentication a client could request a <code>system/Patient.*</code> scope, but it is not explicitly described what the expected behavior of the servers should be in this case. The possible outcomes are:</p>\n<ol>\n<li>The request is rejected because it implies write access and a client should only have read access</li>\n<li>The scope is converted under the hood to <code>system/Patient.read</code></li>\n<li>The scope is rejected/ignored and not granted (but you don't get an error)</li>\n<li>Other?</li>\n</ol>\n<p>The reason for asking is that there is a potentially incorrect test in Inferno that asks for <code>system/Patient.*</code> and expects that to NOT result in an error.</p>\n<p>Also note that many clients would request <code>system/*.read</code> or even <code>system/*.*</code>, expecting to be granted whatever specific scopes are available to them (for example <code>system/*.read</code> =&gt; <code>system/Patient.read, system/Observation.read</code>. </p>\n<p>There are even some Bulk Data servers that requre clients to request <code>sustem/*.*</code>. That is not correct in my opinion, but that is the current state of things.</p>",
+        "id": 253448999,
+        "sender_full_name": "Vladimir Ignatov",
+        "timestamp": 1631724817
+    },
+    {
+        "content": "<p>To be clear, in Keycloak a client app can only request the scopes they are allowed to request.  If they ask for a scope that they are not allowed to, the server will reject the request (number 1 above).  It makes sense to me that some implementations would want to grant a tighter set of scopes instead (number 2 above), but I think that a server should be allowed to reject a request with overly broad scopes (like write access when only read access is allowed).  Inferno <code>Auth-14: Token endpoint supports wildcard action scopes</code> does not allow that.</p>",
+        "id": 253451108,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1631725539
+    },
+    {
+        "content": "<p>(1), (2), and (3) are all valid behaviors according to our current spec.</p>",
+        "id": 253458314,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1631728208
+    },
+    {
+        "content": "<p>OK, then the test should not expect <code>system/Patient.*</code> to be handled without an error.</p>\n<blockquote>\n<p>valid behaviors according to our current spec </p>\n</blockquote>\n<p>Where is that described?</p>",
+        "id": 253458826,
+        "sender_full_name": "Vladimir Ignatov",
+        "timestamp": 1631728403
+    },
+    {
+        "content": "<blockquote>\n<p>As with any requested scope, the scopes ultimately granted by the authorization server may differ from the scopes requested by the client! When dealing with wildcard clinical scope requests, this is often true.</p>\n</blockquote>\n<p><a href=\"http://build.fhir.org/ig/HL7/smart-app-launch/scopes-and-launch-context.html\">http://build.fhir.org/ig/HL7/smart-app-launch/scopes-and-launch-context.html</a></p>",
+        "id": 253459392,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1631728582
+    },
+    {
+        "content": "<p>That's probably the most explicit statement.</p>",
+        "id": 253459414,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1631728591
+    },
+    {
+        "content": "<p>We don't have specific guidance on rejection.</p>",
+        "id": 253459458,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1631728606
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"193731\">@Vladimir Ignatov</span> </p>\n<blockquote>\n<p>test in Inferno that asks for system/Patient.* and expects that to NOT result in an error.</p>\n</blockquote>\n<p>Can you clarify if this is in Inferno Program or Inferno Community?</p>",
+        "id": 253585793,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1631800618
+    },
+    {
+        "content": "<p>I think it was in community but <span class=\"user-mention\" data-user-id=\"191676\">@Lee Surprenant</span> should confirm that. What is the difference though - aren't they using the same test suite?</p>\n<p>I intended to make some commits/PRs for the few issues we discovered during the connectathon but I don't have the time to do it yet. <br>\nWhat is the right way to do this now? Are you using tests from <a href=\"https://github.com/smart-on-fhir/bdt\">https://github.com/smart-on-fhir/bdt</a> or do you have your own fork?</p>",
+        "id": 253587290,
+        "sender_full_name": "Vladimir Ignatov",
+        "timestamp": 1631801133
+    },
+    {
+        "content": "<p>Yes, community edition</p>",
+        "id": 253587489,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1631801199
+    },
+    {
+        "content": "<p>For this issue we have 2 choices. </p>\n<ol>\n<li>Remove the test</li>\n<li>Modify it to request <code>system/*.read</code> instead. That would match the test name and description. </li>\n</ol>\n<p>As far as I can recall, one of the CMS servers wasn't accepting  <code>system/*.read</code> and was insisting for <code>system/*.*</code> instead. Such a server would fail if we choose option 2, but that is incorrect implementation anyway. What do you think?</p>",
+        "id": 253589023,
+        "sender_full_name": "Vladimir Ignatov",
+        "timestamp": 1631801806
+    },
+    {
+        "content": "<p>Inferno Program use its own testing module while Inferno Community wraps around bdt. In Inferno Program, we test <code>system/*.read</code> and make this scope configurable so the tester could change the scope before testing.</p>",
+        "id": 253589751,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1631802091
+    },
+    {
+        "content": "<p>To be clear, there is a default \"scope\" option in bdt. It is for the scope that should be used in any auth requests during the test flow. However, in this particular test the scope is intentionally hard-coded to <code>system/Patient.*</code>.</p>\n<p>In other words, the scope option allows the tester to set the default scope to anything (like <code>system/*.*</code>) so that other Bulk Data tests are executed even if the authentication part is not using the standard <code>system/*.read</code>.</p>",
+        "id": 253590957,
+        "sender_full_name": "Vladimir Ignatov",
+        "timestamp": 1631802562
+    },
+    {
+        "content": "<p>Our implementation is still failing this inferno test. Is there anything we can do to help move this one forward? Maybe open an issue on the inferno-community and/or bdt repos?</p>",
+        "id": 267639251,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1641932330
+    },
+    {
+        "content": "<p>Yup, if wildcard scope support isn't required in the spec, seems like there shouldn't be core tests around it. Can you open an issue at <a href=\"https://github.com/smart-on-fhir/bdt\">https://github.com/smart-on-fhir/bdt</a> ?</p>",
+        "id": 267658703,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1641941829
+    },
+    {
+        "content": "<p>Relatedly, are there tests around scope that would be helpful in dbt? For example, is it worth having implementations indicate the scopes they think they support for this client_id in the config and then testing those?</p>",
+        "id": 267658731,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1641941852
+    },
+    {
+        "content": "<p>vlad seems to have gotten to this one too (awesome!):  <a href=\"https://github.com/smart-on-fhir/bdt/issues/6\">https://github.com/smart-on-fhir/bdt/issues/6</a></p>",
+        "id": 267666284,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1641946662
+    }
+]

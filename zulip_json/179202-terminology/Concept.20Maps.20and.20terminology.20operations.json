@@ -1,0 +1,98 @@
+[
+    {
+        "content": "<p>In the past few days, I've been discussing the use of concept maps in combination with terminology operations with <span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span></p>",
+        "id": 153901862,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1502406865
+    },
+    {
+        "content": "<p>Here's some requirements:<br>\n- expand a value set, and use a conceptmap to translate it before returning it <br>\n- validate a code, and specify for the server to translate it before validation<br>\n- expand a value set, using subsumption logic from a mapped code system</p>",
+        "id": 153901874,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1502406948
+    },
+    {
+        "content": "<p>other requirements...?</p>",
+        "id": 153901875,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1502406958
+    },
+    {
+        "content": "<p>I don't know much about it, but could fhirpath be useful for this kind of thing?</p>",
+        "id": 153901876,
+        "sender_full_name": "Jim Steel",
+        "timestamp": 1502407172
+    },
+    {
+        "content": "<p>As a simple building block, being able to $translate a list of codes in a single request (without the overhead of a batch transaction) would help</p>",
+        "id": 153901877,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1502407194
+    },
+    {
+        "content": "<p>To provide a specific use-case context for the requirements list, consider a server that has a bunch of Conditions stored which are coded using one or more code systems (call them A &amp; B) for which there also exist maps A -&gt; SNOMED and B -&gt; SNOMED (and the composite map A/B -&gt; SNOMED).  What you want to do is retrieve all Conditions with code:below=http://snomed.info/sct|123456 after applying the composite map.</p>",
+        "id": 153901890,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1502407687
+    },
+    {
+        "content": "<p>In those use cases, maybe implement the mapping via an Expansion Profile?  Returning value sets is definitely more efficient than batching individual translation requests.</p>",
+        "id": 153901916,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1502411056
+    },
+    {
+        "content": "<p>well, the easiest changes here are:<br>\n- add  a reference to a concept map in ExpansionProfile and as an expansion parameter. Server performs the translation, and blows up if there's no appropriate translation<br>\n- add a parameter valueset to $translate, and server returns outcome value set, or blows up if there's input codes that don't have an appropriate translation</p>\n<p>... for whatever \"appropriate translation\" means</p>",
+        "id": 153901920,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1502411506
+    },
+    {
+        "content": "<p>I think both of those would be useful additions, and should be fairly straightforward<br>\nyour third requirement for \"expand a value set, using subsumption logic from a mapped code system\" probably could be done by leveraging the first one? - I think you should be able to expand an intensional value set based on the subsumption logic and then translate it to the other one</p>",
+        "id": 153901996,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1502418816
+    },
+    {
+        "content": "<p>Wouldn't favour making breaking changes to $translate to return a ValueSet rather than a Parameters resource. If you want to pass a ValueSet (\"bunch of codes\") and receive another ValueSet of translation results then maybe add another operation to ConceptMap such as $convert.</p>",
+        "id": 153901997,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1502419237
+    },
+    {
+        "content": "<p>somehow I feel as though we're going to end up with TranslateProfile (equivalent to ExpansionProfile) and some pipelining mechanism...</p>",
+        "id": 153902002,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1502425169
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191364\">@Peter Jordan</span> When mapping from one code system to another, I think this has to be a concept (code) by concept activity, do you agree?  I think this must be true in all cases - this has been my experience unless one evokes very complicated logic. Given that, I think an operation that delivers the result of mapping should take as input an expansion, not a value set definition.</p>",
+        "id": 153903584,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1503586609
+    },
+    {
+        "content": "<p>I think that what Grahame suggested and Peter commented on assumed the presence of ConceptMap(s) with all of the mappings for the individual concepts.  We don't have a ValueSetExpansion resource (and we don't necessarily need one), so a ValueSet parameter makes sense, but to be able to process the translations the value set would need to be expanded, so probably we would need to be considering the parameters  (ExpansionProfile?) for that.  That's my take, anyway.</p>",
+        "id": 153903591,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1503587978
+    },
+    {
+        "content": "<p>I agree with <span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> that we'd need to pass an Expansion Profile reference as an additional, and optional parameter to the $translate operation. <span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> has a purist's perspective that translation is a concept(code) by concept activity, however we have to be aware that in practice there are description-based maps out there, such as the UK Read to SNOMED CT maps, which is why source and target concept descriptions were added to the ConceptMap resource.</p>",
+        "id": 153903621,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1503607824
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191364\">@Peter Jordan</span> By <br>\n description-based maps out there, such as the UK Read to SNOMED CT maps,<br>\nYou mean for a specific concept from a specific code system, you want to map from one specific description, to another specific description, associated with a concept in a different code system. RIght? If so, then that is just a special case of the basic approach I mentioned - you still need a specified concept on both sides of the map.</p>",
+        "id": 153903627,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1503610111
+    },
+    {
+        "content": "<p>Right...and agreed, definitely still need specified source and target concepts. The description-based mapping from Read Codes to SCT was done by NHS Digital, but from an implementation perspective it's all about concepts. In the case of Read, we've added the 2 digit description id to the 5 digit Read Code to form a source code with a single description, but the target code is a 'pure' SCT Concept Identifier because all those descriptions are effectively properties of that code (and we use the preferred term as the target description). That also allows us to persist the map in an RF2 formatted Reference Set.</p>",
+        "id": 153903631,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1503612307
+    }
+]

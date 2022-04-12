@@ -1,0 +1,362 @@
+[
+    {
+        "content": "<p>Hey guys - I have a few things we have identified as we need here at Epic, in working through some implementations. </p>\n<p>#1 - A <strong>Card Identifier</strong>. This needs to do three things for us. </p>\n<p>A. The Card ID tells us at some \"abstract\"/vague level what the card is about. So one card could be about \"diabetes\" and another card could be about the \"chest-x-ray\" the provider orders. </p>\n<p>B. The Card ID can serve for deduplication of alerts. So for example, a health system could decide that I'm subscribing to both services X and Y. However, if service X and service Y both return alerts about \"diabetes\" I think they are duplicative and result in alert fatigue for the provider. Besides I know service X is a better source than service Y for \"diabetes\" related information. So if both returns \"diabetes\" cards, then I want to suppress the card from service Y and only show the card from service X. </p>\n<p>C. The health system has already made a CDS Hooks request and is showing the cards to the provider. The provider thinks, because they did something to the patient after the CDS request, one of the cards shown is no longer up to date. They want to just selectively refresh that card. (or they simply, for no reason want to refresh that one card to get up to date info). <em>This needs a separate field in the request as well - I'm writing up a separate comment on selective refresh below.</em></p>\n<p>It could be argued even that there are two concepts being intermixed here - a <strong>Card ID</strong> and a <strong>Card Category</strong>. Open to feedback; let me know how to proceed with this.</p>",
+        "id": 174839857,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567554427
+    },
+    {
+        "content": "<p>#2 - A <strong>request field for specifying what cards</strong> to refresh. </p>\n<p>As stated above, sometimes, after the initial request for CDS, the EHR may want to selectively refresh some but not all the cards being shown. <br>\nThis refresh can happen in two ways.<br>\nA - refresh (a) specific card(s), by specifying (a) Card ID(s) in the request, as stated in the previous issue. <br>\nB - refresh all cards of (a) specific <strong>indicator</strong> type(s) (indicator field in the card is defined as either <em>info</em>, <em>warning</em>, or <em>critical</em>.)<br>\nC - possibly there are other refresh types I'm not considering? </p>\n<p>How can we incorporate this in the CDS Hooks request? Ideally, I don't want to do a full refresh and drop specific cards (and even dropping specific cards needs a Card ID field.) since then I'm dropping CDS information sent back by the service into the void.</p>",
+        "id": 174840051,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567554683
+    },
+    {
+        "content": "<p>#3 - Flexibility on <strong>selectionBehavior</strong> of Suggestions in the card. </p>\n<p>Right now, the Suggestion + Action structure doesn't really work for our use. We are planning to <strong>add a constraint that each suggestion only contain one action for our initial implementation</strong> of Suggestions because of this. So a CDS Service can return N different suggestions. And we want the provider to be able to select a subset of them. This means, the value set for <strong>selectionBehavior</strong> (currently only 'at-most-one') also does not work for us. Can we add a new value to the valueset: <strong>Any</strong>, which implies the provider can accept none/some/all of the suggestions returned?</p>",
+        "id": 174840219,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567554892
+    },
+    {
+        "content": "<p>#4 - finally, given the above <strong>Any</strong> option for the selectionBehavior, we would like to specify a <strong>default selection status</strong> for each suggestion. </p>\n<p>Basically, when there are multiple suggestions, some suggestions are \"preferred\"/\"recommended\" suggestions, and others are \"alternate\"/\"less-preferred\" suggestions. So we want to mark the preferred suggestions, so that when the card is returned, the preferred suggestions are selected by default, and the provider can accept the preferred suggestions by a single click. They only need to tweak selections etc, if they want to disregard the preferred suggestion and go with an alternate suggestion returned by the CDS Service.</p>",
+        "id": 174840341,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567555048
+    },
+    {
+        "content": "<p>Writing these up so that I can have your feedback on what is the best way to accomplish the objectives. Please provide feedback here, but I will also be present at the connectathon if anyone would like to talk more.</p>",
+        "id": 174840405,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567555130
+    },
+    {
+        "content": "<p>My opinions (for what they're worth)<br>\n#1 - I'm ok with a card id, but I can't imagine a situation where there could be meaningful de-duplication except from a single server.  Servers might well provide all sorts of different information about diabetes - protocol recommendations, rules for diagnosing,  tests that should be performed,  etc.  You could use the id to suppress a particular card for that patient (possibly for a period of time) or independent of the patient forever if the information is particularly useless/annoying.  But the notion that we could come up with an ontology that would be specific enough to allow de-duplication across servers seems far-fetched to me given the potentially infinite set of recommendations CDS systems might come up with.  And if we did get one that was sufficiently all-encompassing, the likelihood of everyone coding recommendations consistently would also be poor.  I'd very much like to see this in action (particularly across non-coordinating CDS systems) using extensions before we consider semantic identifiers.<br>\n#2 - My understanding was that the service gets hit every time a field changes, so all the cards should effectively get refreshed pretty much all the time and nothing should be out of date.  If an action results in changes to the resource in question, that should certainly trigger a refiring of the hook services, no?  (I wouldn't expect most clinicians to be paying enough attention to the cards they're getting back to notice if they've changed and expecting a couple of additional clicks to force refresh of each card seems like a lot of imposed cost on the users for something that definitely shouldn't be the user's problem.)<br>\n#3 - There are good reasons to have multiple actions in a single suggestion.  If you want to replace a record with a new record, that's a delete + an add (2 actions).  In CRD, one of the suggestions is to fill out a Questionnaire (create questionnaire + create task).  If you have multiple actions for a single suggestion it's because they <em>must</em> be executed together to make sense.  Fine with adding clarification to that effect, but not so fine with prohibiting multiple actions per suggestion.<br>\n#4 - In practice, there can be logic to the suggestions where some are mutually exclusive, some could be done together, etc.  The notion of 'preference' could be challenging in a lot of those situations.  Also, 'preference' implies that the service knows what's better than the practitioner - which a) might not be true; and b) might be true, but not appreciated by the practitioner.  My take on the 'default' for CDS Hooks was always \"ignore the cards and continue with what you were doing\" - particularly when the cards may well change as you continue filling out the screen.</p>",
+        "id": 174841785,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1567557017
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> - as I mentioned, these are all issues that came up from real world implementation efforts going on right now. Epic does not, ideally, want to go ahead and make extensions to support this, since we think these are valuable to others as well and so merit being standardized. </p>\n<p>#1 - We actually have some meaningful deduplication examples which were designed with input from CDS Service and are being developed right now for real world use with multiple sources of decision support. Granted, this would require communication between services, a mix of EHR configuration for mappings, and CDS Hooks card ID support - so I'm also not expecting a complete ontology, and in your terminology this would not be a non-coordinating CDS system, but coordinating CDS systems are rather common in the real world. </p>\n<p>#2 - EHRs usually have workflows where only a subset of decision support may be refreshed. These are usually actively triggered by a clinician's interaction, so that there is no risk of the clinician not noticing. Essentially this is a clinician driven refresh of a single specified card / single indicator type group that the clinician clicked on. This is existing EHR behavior that clinicians are used to, that we need to make sure works with CDS Hooks as well.</p>\n<p>#3 - We cannot currently support multiple actions inside a suggestion. So Epic's initial implementation will constrain that there be only one action within a suggestion, but there can be multiple suggestions in a card. Eventually we plan to take this limitation away so both ways become supported. <br>\n#3.1 To be clear, I am <strong>not proposing prohibiting multiple actions</strong>. We also want to support that eventually, and we really think it is a very valuable thing. I am only asking that both options / both ways of doing things be allowed. selectionBehavior can retain existing value of 'at-most-one', plus asking to add a new value of 'any' (or some other equivalent word) representing multiple selections being allowed.<br>\n#3.2 Also note that, what I am asking for is how EHR decision support works in many examples out in real world today (not driven by CDS Hooks, but built natively in EHR) - so what CDS Hooks has formulated doesn't fit existing decision support implementations / what clinicians are used to. What I'm asking for is one way to bridge the gap - open to other ways to solve the problem as well. <br>\n#3.3 <strong>For example</strong>, if I place an MRI, and the CDS comes back and says use a CT preferably or an X-Ray, but not an MRI. Then there are two ways to represent this in suggestions:<br>\n#3.3.1 with a selectionBehavior of 'at-most-one', there will be a suggestion of CT+remove MRI, and another suggestion of X-Ray+remove MRI. <br>\n#3.3.2 with the new proposed selectionBehavior of 'any', there will be three suggestions: CT, X-Ray, and remove MRI. The CT and the remove MRI will be selected by default, but the X-ray being the less preferred suggestion, will not be selected by default. So if the clinician just accepts the Card without tweaking suggestions, they place a CT and remove the MRI.</p>\n<p>#4 The <strong>concept of a preference is already baked into existing decision support mechanisms</strong> (EHR-native) that are out there in real world use. So we are not introducing anything new to a practitioner, but rather introducing something that <strong>gels comfortably into what they are already used to</strong>. <br>\n#4.1 Even in 3.3.1 above where I have the example with the current CDS Hooks way of doing things, it is still extremely useful for the CDS service to be able to mark that the CT+remove action is preferable to the X-Ray+remove action in the 'at-most-one' case (as I understand there are real world use-cases which can actually make such distinctions based on radiation exposure, implants that the patient has etc.). EHRs will very likely default to making the first suggestion be the preferred suggestion if an explicit marking of the preferred suggestion is not supported. But I would say, explicit marking makes for a better standard than allowing arbitrary behavior like the first suggestion becoming the preferred suggestion.</p>",
+        "id": 174846152,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567563801
+    },
+    {
+        "content": "<blockquote>\n<p>t could be argued even that there are two concepts being intermixed here - a Card ID and a Card Category</p>\n</blockquote>\n<p>I definitely think that. id needs to be some kind of generated UUID thing. category needs to some managed code from some useful ontology that doesn't currently exist (and feels like a nightmare)</p>",
+        "id": 174846867,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1567565067
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> Category is attempting to capture the set of types of alerts that a CDS Service can generate. Therefore, I would say it is preferable to make it a string and leave it to the CDS service, or make it a code where there are code systems defined by each CDS Service. I can't imagine a universal ontology - each CDS service is going to differ in how they categorize alerts.</p>",
+        "id": 174847139,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567565526
+    },
+    {
+        "content": "<p>Also, I don't think CDS Hooks should bring it under its scope to start defining clinical content such as code-systems/ontologies etc.</p>",
+        "id": 174847147,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567565579
+    },
+    {
+        "content": "<p>I certainly wasn't proposing that we do it. but if you're going to try and do meaningful de-duplication based on the category code (however represented) then someone has to impose some consistent meaning on it; you can't just leave it to the CDS service - all their incentive is to game the system by choosing a code no one else uses</p>",
+        "id": 174847272,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1567565810
+    },
+    {
+        "content": "<p>What about making it a code? Then different vendors can define different code systems, and they can work together with the EHR for the translations. This is already how things are done in many other situations. </p>\n<p>Also, I would say the statement \"all their incentive is to game the system by choosing a code no one else uses\" comes across as rather harsh. At least all services that I have worked with, and afaik all that are used in the real world, are pretty good at cooperating and collaborating to make really cool things happen.</p>",
+        "id": 174847425,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567566044
+    },
+    {
+        "content": "<p>yes ok it was a bit harsh. But I had just read this: <a href=\"https://twitter.com/jasonfried/status/1168986962704982016\" target=\"_blank\" title=\"https://twitter.com/jasonfried/status/1168986962704982016\">https://twitter.com/jasonfried/status/1168986962704982016</a>, so that colored my opinion a little. But nevertheless, it needs some curation centrally. So yes, it needs to be a code of some kind. And with multiple supporting code systems.... yes....</p>\n<div class=\"inline-preview-twitter\"><div class=\"twitter-tweet\"><a href=\"https://twitter.com/jasonfried/status/1168986962704982016\" target=\"_blank\"><img class=\"twitter-avatar\" src=\"https://pbs.twimg.com/profile_images/3413742921/0e9ef95e76c4a965b9b177fa2267d6c1_normal.png\"></a><p>When Google puts 4 paid ads ahead of the first organic result for your own brand name, you’re forced to pay up if you want to be found. It’s a shakedown. It’s ransom. But at least we can have fun with it. Search for Basecamp and you may see this attached ad. <a href=\"https://t.co/c0oYaBuahL\" target=\"_blank\" title=\"https://t.co/c0oYaBuahL\">https://twitter.com/jasonfried/status/1168986962704982016/photo/1</a></p><span>- Jason Fried (@jasonfried)</span><div class=\"twitter-image\"><a href=\"https://t.co/c0oYaBuahL\" target=\"_blank\" title=\"https://t.co/c0oYaBuahL\"><img src=\"https://pbs.twimg.com/media/EDkTcjZXoAADGTM.png:medium\"></a></div></div></div>",
+        "id": 174847545,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1567566243
+    },
+    {
+        "content": "<p>Ok - I agree code will meet the need and avoid many of the unfortunate situations that could potentially arise out of a plain string.</p>",
+        "id": 174847644,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567566427
+    },
+    {
+        "content": "<p>Maybe the difference is that these CDS Services needing to be configured in the EHR, if they are malicious actors, the Health System will just end their contract - so there is good incentive on the part of the CDS Services to play good actors.</p>",
+        "id": 174847694,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567566493
+    },
+    {
+        "content": "<p>so I think that's a thing that's true for your use of CDS hooks, but not true in other uses outside pay-to-play EHRs. EHRs are obviously an important use case, but not the only one</p>",
+        "id": 174847717,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1567566553
+    },
+    {
+        "content": "<p>Agreed - but I'm only asking category in the standard. How that is used to deduplicate isn't baked into the standard. So the category can be optional, and in a non EHR case it can be ignored. Is that fair?</p>",
+        "id": 174847845,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567566741
+    },
+    {
+        "content": "<p>Also, for CardID being a UUID, can we say then that if nothing has changed so that the same card is being returned by the service, the UUID will/can remain the same?</p>",
+        "id": 174847934,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567566948
+    },
+    {
+        "content": "<p>well, i'd just make it an id and say that if the CDS service returns an id, it must be something it recognises when it's returned in the request, and then say what it functionally means in the request</p>",
+        "id": 174848004,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1567567065
+    },
+    {
+        "content": "<p>Ok - I think I can make that work.</p>",
+        "id": 174848053,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567567097
+    },
+    {
+        "content": "<p>and I think yes about the category, though I'm not sure whether it should be system+code (like a FHIR  coding) or a URI (which is kind of system#code)</p>",
+        "id": 174848055,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1567567109
+    },
+    {
+        "content": "<p>Open to either - my preference would be to keep it like it is done in FHIR.</p>",
+        "id": 174848076,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567567174
+    },
+    {
+        "content": "<p>so would mine, but Coding isn't directly available</p>",
+        "id": 174848137,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1567567260
+    },
+    {
+        "content": "<p>Well, everything in CDS Hooks is custom JSON anyway? Except for the JWT and the contained resources.</p>",
+        "id": 174848193,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567567336
+    },
+    {
+        "content": "<p>yes so just have to define an object with system/code properties - looks the same, and refer to FHIR Coding for the entire edifice it sits in front of</p>",
+        "id": 174848205,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1567567373
+    },
+    {
+        "content": "<p>I can agree with that.</p>",
+        "id": 174848217,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567567420
+    },
+    {
+        "content": "<p>then of course I ask the logical corollary... is only one enough? .. <span aria-label=\"unamused\" class=\"emoji emoji-1f612\" role=\"img\" title=\"unamused\">:unamused:</span></p>",
+        "id": 174848306,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1567567562
+    },
+    {
+        "content": "<p>That depends on how complex we want to make this.</p>",
+        "id": 174848372,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567567674
+    },
+    {
+        "content": "<p>I am open to multiple. I don't necessarily need multiple. But maybe someone else does?</p>",
+        "id": 174848505,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567567884
+    },
+    {
+        "content": "<p>typically, we define a singleton and wait for someone to protest</p>",
+        "id": 174848511,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1567567918
+    },
+    {
+        "content": "<p>Okay - I'm fine with that strategy.</p>",
+        "id": 174848556,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567567956
+    },
+    {
+        "content": "<p>I'm not totally clear on why Epic can't support multiple actions within a suggestion - is it issues with the transactional nature of both must succeed?  You should provide feedback to the CRD specification because right now, two very key suggestion types depend on multiple actions.  (And I don't expect the need for them will be limited to CRD.)</p>\n<p>The concern about \"preference\" is that if you're calling 5 different decision support services and each of them are providing cards, what does the notion of \"preference\" mean?  Sure, if all the cards are coming back from one place, you could indicate preference if that's sensible in the context of what's being returned (i.e. the actions are intended to be mutually exclusive).  My my expectation is that most of the time there will be numerous services involved.  And at that point, the notion of \"preferred\" is going to become pretty meaningless.</p>",
+        "id": 174849812,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1567570323
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> Every EHR ideally wants to integrate CDS Hooks into existing decision support mechanisms. So major differences from how existing decision support mechanisms work will require a much larger development effort. Like I said, we also want to eventually support multiple actions within a suggestion and see it as desirable; however, that is not how things work today. Also we really feel most multiple action situations can be equivalently accomplished by single actions as I showed with the example, maybe that won't be as nifty as with a grouped action, but it meets the need. This is really not in my power to change, I'm trying as best as I can. </p>\n<p>Preference exists only within a card. So I don't think I follow your concern with preference.</p>",
+        "id": 174878037,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567601619
+    },
+    {
+        "content": "<p>Catching up here --</p>\n<p>1) regarding a card ID, having a <em>semantically meaningless</em> unique id is fine/feasible; trying to use this ID for context-sensitive de-duplication is like requiring the ID semantics to \"read your mind\" (i.e., it's expecting the id to reflect exactly whatever hard-to-pin-down de-duplication semantics you want to enforce). Seems infeasible to me.</p>\n<p>2) With respect to multiple suggestions per card (<code>selectionBehavior</code>), I'd be in favor of adding <code>all</code> and <code>any</code> (in addition to <code>at-most-one</code>), and making this a required field; right now, it seems like \"all\" semantics only happens if you omit the field.</p>",
+        "id": 174915708,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1567626108
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> <br>\n1. In the conversation with <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> above, we are saying there will be Category which will be a Code-System+Coding and can work for deduplication (but only with co-operating services and additional configuration in EHR to map different codesets), and there will be a separate UUID which must be recognizable to the CDS Service if returned in a subsequent request.<br>\n2. <code>selectionBehavior</code> is already required field. From the specification (Card Attributes, text against the suggestions property)</p>\n<blockquote>\n<p>If suggestions are present, selectionBehavior MUST also be provided.</p>\n</blockquote>\n<p>So sending suggestions without a <code>selectionBehavior</code> is currently precluded.</p>",
+        "id": 174916694,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567626817
+    },
+    {
+        "content": "<p>Wait, I see</p>\n<p><a href=\"/user_uploads/10155/-VTdqBh8ixOjIWlmS2d3WZ7a/pasted_image.png\" target=\"_blank\" title=\"pasted_image.png\">this content</a>  at <a href=\"https://cds-hooks.org/specification/1.0/#http-response\" target=\"_blank\" title=\"https://cds-hooks.org/specification/1.0/#http-response\">https://cds-hooks.org/specification/1.0/#http-response</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/-VTdqBh8ixOjIWlmS2d3WZ7a/pasted_image.png\" target=\"_blank\" title=\"this content\"><img src=\"/user_uploads/10155/-VTdqBh8ixOjIWlmS2d3WZ7a/pasted_image.png\"></a></div>",
+        "id": 174916923,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1567626986
+    },
+    {
+        "content": "<p>Ah. \"If suggestions are present, selectionBehavior MUST also be provided\" is what I was missing!</p>",
+        "id": 174916933,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1567627002
+    },
+    {
+        "content": "<p>Thanks.</p>",
+        "id": 174916945,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1567627016
+    },
+    {
+        "content": "<p>So to restate: I'd be in favor of adding <code>all</code> and <code>any</code> (in addition to <code>at-most-one</code>).</p>",
+        "id": 174916984,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1567627049
+    },
+    {
+        "content": "<p>(Incidentally, I'd prefer the word <code>CONDITONAL</code> to <code>OPTIONAL</code> for <code>selectionBehavior</code>. Will add a PR.)</p>",
+        "id": 174917076,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1567627098
+    },
+    {
+        "content": "<p><a href=\"https://github.com/cds-hooks/docs/pull/492\" target=\"_blank\" title=\"https://github.com/cds-hooks/docs/pull/492\">https://github.com/cds-hooks/docs/pull/492</a></p>",
+        "id": 174917189,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1567627201
+    },
+    {
+        "content": "<p>Agree with both the values for <code>selectionBehavior</code> and the <code>CONDITIONAL</code> phrasing.</p>",
+        "id": 174925737,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1567633210
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"193265\">@Matt Varghese</span> these are topics that would be worth discussing further this weekend.  Outside of integrating and testing CDS Hooks workflows at the Connectathon, let's try to talk through some of your use-cases, whether in a break out session or otherwise.  Sound good?</p>",
+        "id": 175627033,
+        "sender_full_name": "Dennis Patterson",
+        "timestamp": 1568383717
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191358\">@Dennis Patterson</span> Yes, that sounds good.</p>",
+        "id": 175630582,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1568385767
+    },
+    {
+        "content": "<p>I'm not sure if this has been brought up, but in the <code>fhirAuthorization</code> object, the key names are in snake case format (i.e. access_token). Why are the key names not camel cased like all of the other fields in the specification (i.e. accessToken)? Is there sound reason for this difference or is this something that could be changed for 1.1? It just seems inconsistent in my limited lens of view.</p>",
+        "id": 175706724,
+        "sender_full_name": "Jacob Crump",
+        "timestamp": 1568475630
+    },
+    {
+        "content": "<p>Hey Jacob, I think it's because those are names defined by OAuth.</p>",
+        "id": 175707083,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1568476210
+    },
+    {
+        "content": "<p>Gotcha that makes sense. I just found the rfc documentation for anyone else interested: <a href=\"https://tools.ietf.org/html/rfc6749\" target=\"_blank\" title=\"https://tools.ietf.org/html/rfc6749\">https://tools.ietf.org/html/rfc6749</a>. Thanks Isaac.</p>",
+        "id": 175707164,
+        "sender_full_name": "Jacob Crump",
+        "timestamp": 1568476397
+    },
+    {
+        "content": "<p>Hey folks, I've created a few pull requests, based on this thread:</p>\n<ul>\n<li><code>ruleCode</code> (<a href=\"https://github.com/cds-hooks/docs/pull/505\" target=\"_blank\" title=\"https://github.com/cds-hooks/docs/pull/505\">https://github.com/cds-hooks/docs/pull/505</a>) based on the discussion about the Card Category above, as well as some discussions at the Connectathon. </li>\n<li><code>uuid</code> (<a href=\"https://github.com/cds-hooks/docs/pull/496\" target=\"_blank\" title=\"https://github.com/cds-hooks/docs/pull/496\">https://github.com/cds-hooks/docs/pull/496</a>) to add a Card ID to the card.</li>\n<li>(<a href=\"https://github.com/cds-hooks/docs/pull/498\" target=\"_blank\" title=\"https://github.com/cds-hooks/docs/pull/498\">https://github.com/cds-hooks/docs/pull/498</a>) adds <code>selectionBehavior</code> value <code>any</code>.</li>\n<li><code>preference</code> indication (<a href=\"https://github.com/cds-hooks/docs/pull/497\" target=\"_blank\" title=\"https://github.com/cds-hooks/docs/pull/497\">https://github.com/cds-hooks/docs/pull/497</a>) on suggestion.</li>\n</ul>",
+        "id": 177725642,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1570635147
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"193265\">@Matt Varghese</span> Has there been any further discussion, decisions, consensus regarding the card.uuid? Is the UUID typically associated with the card or \"instance of the card\" i.e. as you had mentioned, if nothing has changed so that the same card is being returned by the service, does the UUID remain the same, or is it different?</p>",
+        "id": 223438430,
+        "sender_full_name": "Frank Pandolfe",
+        "timestamp": 1611178208
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"224788\">@Frank Pandolfe</span> , my above requests have made their way into CDS Hooks, and have been in the spec for some time now. <br>\n<a href=\"https://cds-hooks.org/specification/current/#card-attributes\">https://cds-hooks.org/specification/current/#card-attributes</a></p>\n<p>card.uuid represents a unique instance of the card. </p>\n<p>We also have card.source.topic which is a coding object, and captures the type of card, or rule or logic that led to the generation of the card.</p>",
+        "id": 223448258,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1611183004
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"193265\">@Matt Varghese</span> </p>\n<p>Do you consider every time the card is issued (returned to the calling application) a unique instance of the card? </p>\n<p>I have been thinking about the cards as more static objects. Generating a new UUID for the same card every time it is issued seems to present difficulties when trying to use the feedback for analysis. For example, if a service determines to return Card_A , for an A1c between 7 and 9 and Card_B for an A1c greater than 9. Both cards may have some unique suggestions but may also have a shared one (suggestion_1). Additionally, both of these cards will have the same topic (diabetes). </p>\n<p>Since we are generating a new UUID every time the card is issued, do you have any recommendations regarding re-associating the UUIDs to the same card?  How else would one try to determine how often suggestion_1 was taken for Card_A vs for Card_B?</p>",
+        "id": 223451781,
+        "sender_full_name": "Frank Pandolfe",
+        "timestamp": 1611185338
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"224788\">@Frank Pandolfe</span> , I personally don't have an opinion or preference here :( . </p>\n<p>In my CDS Hooks client implementation, I assume that the CDS Service will make the determination if and when card UUIDs can stay the same, suggestion UUIDs can stay the same, what is the boundary between things that fall in two different topics etc. At least in my implementation, I am able to handle the same UUID returned across multiple invocations, but I cannot speak for the broader community, and will defer to others to chime in. </p>\n<p>What I can say is, if I get the same value for topic, I treat that as the same conceptual card / template card. So for example, if a physician says \"snooze this topic for the next four hours\", I can skip presenting cards with that topic but different (or same UUIDs) for the next four hours even if the CDS Hooks response returned those.</p>",
+        "id": 223458070,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1611190739
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> . Based on some of your thoughts from the original thread, wondered if you have comments or thoughts you'd be willing to share. Thanks.</p>",
+        "id": 223522051,
+        "sender_full_name": "Frank Pandolfe",
+        "timestamp": 1611242277
+    },
+    {
+        "content": "<p>The key thing for Da Vinci CRD is that there's a clear ability to audit on both sides - so an EHR can capture \"we received card X from payer Y\" and be able to verbally share an identifier for that card so they payer can find it in their own log.  As such, for us, it's fine if the identifier changes every time.  It's also ok if the identifier remains if identical information is sent multiple times in close proximity (e.g. during order create)</p>",
+        "id": 223554960,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1611255615
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179159-cds-hooks/topic/CDS.20Hooks.20feature.20request/near/223554960\">said</a>:</p>\n<blockquote>\n<p>The key thing for Da Vinci CRD is that there's a clear ability to audit on both sides - so an EHR can capture \"we received card X from payer Y\" and be able to verbally share an identifier for that card so they payer can find it in their own log.  As such, for us, it's fine if the identifier changes every time.  It's also ok if the identifier remains if identical information is sent multiple times in close proximity (e.g. during order create)</p>\n</blockquote>\n<p>It seems like the combination of the UUID and a timestamp could help resolve the exact identify. Additionally, in your case the CDS Hooks service provider would have to log every time a card was sent, not just feedback received. i.e. server sent Card_A at 12:01 and the card is ignored on the client... no feedback is generated. The client could log the receipt of the card, but unless the server is also logging every card it sends, you're not going to find it in the feedback log. This could also possibly help with figuring out an \"ignore rate\" and potentially \"dwell time\"</p>",
+        "id": 223571485,
+        "sender_full_name": "Frank Pandolfe",
+        "timestamp": 1611263764
+    },
+    {
+        "content": "<p>The notion of feedback didn't exist at the time we adopted CDS Hooks.  We don't have an expectations to require use for that at the moment.</p>",
+        "id": 223573225,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1611264655
+    },
+    {
+        "content": "<p>I don't know why it would be hard either way? Even if you have a card UUID that is unique to each instance / each response, wouldn't the service still be able to do analysis like that on the data?</p>",
+        "id": 223577312,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1611266684
+    },
+    {
+        "content": "<p>In fact, I would wonder if \"dwell time\" isn't harder if the UUID is reused?</p>",
+        "id": 223577413,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1611266742
+    },
+    {
+        "content": "<p>sorry... my stream of consciousness was probably hard to follow. I agree now that a UUID for every card instance is a good idea. I think the trick is the service provider logging the cards template name, the UUID and timestamp (along with any optional details that may differ from the card template) when the card is generated and sent to a client. If and when feedback is received from the client, that UUID row can be updated with the additional details from the feedback response. This will allow for ignore rate and dwell time. If the client chooses to keep its own details based on the UUID it can.  Potentially it can be merged/compared with the log kept on the service provider, depending on the use case... i suppose possibly for auditing reasons.</p>",
+        "id": 223582905,
+        "sender_full_name": "Frank Pandolfe",
+        "timestamp": 1611269775
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"224788\">@Frank Pandolfe</span> , I agree with that.</p>",
+        "id": 223584736,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1611271016
+    }
+]

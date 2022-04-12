@@ -1,0 +1,140 @@
+[
+    {
+        "content": "<p>When I try to validate the attached <a href=\"/user_uploads/10155/FicmhJRIIZEGEeI4qnj-7-5Q/provenance.json\">provenance.json</a>, with HAPI 5.3.3, the validator reports an error:</p>\n<p>Validation severity ERROR - Location Provenance.agent[1].type.coding[0] - Message Unknown Code System '<a href=\"http://hl7.org/fhir/us/core/CodeSystem/us-core-provenance-participant-type\">http://hl7.org/fhir/us/core/CodeSystem/us-core-provenance-participant-type</a>'</p>\n<p>According to the us-core spec (<a href=\"https://www.hl7.org/fhir/us/core/StructureDefinition-us-core-provenance.html\">https://www.hl7.org/fhir/us/core/StructureDefinition-us-core-provenance.html</a>) it is an allowed coding.</p>\n<p>Here is my code:</p>\n<div class=\"codehilite\"><pre><span></span><code>FhirContext ctx = FhirContext.forR4();\nIParser parser = ctx.newJsonParser();\nFhirValidator validator = ctx.newValidator();\n\nIValidatorModule module = new FhirInstanceValidator(ctx);\nvalidator.registerValidatorModule(module);\n\nString json = ...(see attachment)...;\n\nProvenance p = parser.parseResource(Provenance.class, json);\nValidationResult vr = validator.validateWithResult(p);\n\nvr.getMessages()\n    .forEach(singleValidationMessage -&gt; System.out\n        .println(String.format(&quot; Validation severity %s - Location %s - Message %s&quot;,\n            singleValidationMessage.getSeverity(), singleValidationMessage.getLocationString(),\n            singleValidationMessage.getMessage())));\n</code></pre></div>\n\n<p>Is this a bug?</p>",
+        "id": 238369606,
+        "sender_full_name": "Peter Teunissen",
+        "timestamp": 1620761737
+    },
+    {
+        "content": "<p>have you loaded US Core into the validator context?</p>",
+        "id": 238465355,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1620822768
+    },
+    {
+        "content": "<p>I guess I didn't.... I'm trying to understand the documentation how to do that, but I am not having much luck.<br>\nWhatever I try it seems to pass, even when I butcher the input json, so I think it is not validating at all anymore.</p>\n<div class=\"codehilite\"><pre><span></span><code>FhirContext ctx = FhirContext.forR4();\nIParser parser = ctx.newJsonParser();\nFhirValidator validator = ctx.newValidator();\n\nString json = ...(see attachment)...;\n\nProvenance p = parser.parseResource(Provenance.class, json);\n\nValidationResult vr = validator.validateWithResult(p, new ValidationOptions()\n    .addProfile(&quot;https://www.hl7.org/fhir/us/core/StructureDefinition-us-core-provenance.xml&quot;));\n\nvr.getMessages()\n    .forEach(singleValidationMessage -&gt; System.out\n        .println(String.format(&quot; Validation severity %s - Location %s - Message %s&quot;,\n            singleValidationMessage.getSeverity(), singleValidationMessage.getLocationString(),\n            singleValidationMessage.getMessage())));\n</code></pre></div>\n\n<p>Is this the right way to do this? What should be the exact url of the profile?</p>",
+        "id": 238479453,
+        "sender_full_name": "Peter Teunissen",
+        "timestamp": 1620828479
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <br>\nI have been trying some more and when I register the us-core valueset and codeset myself (after downloading the definitions), I can get rid of the ERROR part. But the way I need to code this seems cumbersome. Is there no easier way to load US Core?</p>\n<div class=\"codehilite\"><pre><span></span><code>    FhirContext ctx = FhirContext.forR4();\n    IParser parser = ctx.newJsonParser();\n    IParser xmlParser = ctx.newXmlParser();\n\n    URL url = new URL(&quot;file:///C:\\\\git_work\\\\hapi-test\\\\src\\\\test\\\\resources\\\\provenance.json&quot;);\n    Path resPath = Paths.get(url.toURI());\n    String json = new String(Files.readAllBytes(resPath), &quot;UTF-8&quot;);\n\n    Provenance p = parser.parseResource(Provenance.class, json);\n\n    ValidationSupportChain supportChain = new ValidationSupportChain();\n\n    supportChain.addValidationSupport(new DefaultProfileValidationSupport(ctx));\n    supportChain.addValidationSupport(new CommonCodeSystemsTerminologyService(ctx));\n    supportChain.addValidationSupport(new InMemoryTerminologyServerValidationSupport(ctx));\n\n    PrePopulatedValidationSupport prePopulatedSupport = new PrePopulatedValidationSupport(ctx);\n\n    URL surl = new URL(&quot;file:///C:\\\\temp\\\\StructureDefinition-us-core-provenance.xml&quot;);\n    Path sPath = Paths.get(surl.toURI());\n    String sxml = new String(Files.readAllBytes(sPath), &quot;UTF-8&quot;);\n\n    StructureDefinition sdef = xmlParser.parseResource(StructureDefinition.class, sxml);\n\n    prePopulatedSupport.addStructureDefinition(sdef);\n\n    URL vurl = new URL(&quot;file:///C:\\\\temp\\\\ValueSet-us-core-provenance-participant-type.xml&quot;);\n    Path vPath = Paths.get(vurl.toURI());\n    String vxml = new String(Files.readAllBytes(vPath), &quot;UTF-8&quot;);\n\n    ValueSet vs = xmlParser.parseResource(ValueSet.class, vxml);\n\n    prePopulatedSupport.addValueSet(vs);\n\n    URL csurl = new URL(&quot;file:///C:\\\\temp\\\\CodeSystem-us-core-provenance-participant-type.xml&quot;);\n    Path csPath = Paths.get(csurl.toURI());\n    String csxml = new String(Files.readAllBytes(csPath), &quot;UTF-8&quot;);\n\n    CodeSystem cs = xmlParser.parseResource(CodeSystem.class, csxml);\n    prePopulatedSupport.addCodeSystem(cs);\n\n    supportChain.addValidationSupport(prePopulatedSupport);\n\n    CachingValidationSupport cache = new CachingValidationSupport(supportChain);\n\n    FhirInstanceValidator validatorModule = new FhirInstanceValidator(cache);\n    FhirValidator validator = ctx.newValidator().registerValidatorModule(validatorModule);\n\n    ValidationResult vr = validator.validateWithResult(p);\n\n    vr.getMessages()\n        .forEach(singleValidationMessage -&gt; System.out\n            .println(String.format(&quot; Validation severity %s - Location %s - Message %s&quot;,\n                singleValidationMessage.getSeverity(), singleValidationMessage.getLocationString(),\n                singleValidationMessage.getMessage())));\n</code></pre></div>",
+        "id": 238534113,
+        "sender_full_name": "Peter Teunissen",
+        "timestamp": 1620849260
+    },
+    {
+        "content": "<p>well, I would've expected you to do this by package id and just load all of us core</p>",
+        "id": 238563793,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1620865443
+    },
+    {
+        "content": "<p>How would I do that?</p>",
+        "id": 238574227,
+        "sender_full_name": "Peter Teunissen",
+        "timestamp": 1620874805
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>  How would I load all us-core?</p>",
+        "id": 238760144,
+        "sender_full_name": "Peter Teunissen",
+        "timestamp": 1620996175
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"248736\">@Mark Iantorno</span> ?</p>",
+        "id": 238828148,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1621025625
+    },
+    {
+        "content": "<p>Hi, I will look at this over the weekend. I was at the community garden and did not see this.</p>",
+        "id": 238842341,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1621034577
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"411247\">@Peter Teunissen</span>, sorry for the delay in responding.</p>",
+        "id": 239084304,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1621256612
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 239084355,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1621256637
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 239084547,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1621256705
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 239084549,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1621256706
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 239084616,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1621256733
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 239084646,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1621256748
+    },
+    {
+        "content": "<p>I misread your initial message give me a second to figure it out for you</p>",
+        "id": 239084800,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1621256800
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 239084863,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1621256839
+    },
+    {
+        "content": "<p>Alright, I would start by looking at these tests here: <a href=\"https://github.com/hapifhir/hapi-fhir/blob/75c74a22dbd1f0dde3631b540d1898eef2a2666f/hapi-fhir-jpaserver-base/src/test/java/ca/uhn/fhir/jpa/packages/NpmR4Test.java\">https://github.com/hapifhir/hapi-fhir/blob/75c74a22dbd1f0dde3631b540d1898eef2a2666f/hapi-fhir-jpaserver-base/src/test/java/ca/uhn/fhir/jpa/packages/NpmR4Test.java</a></p>",
+        "id": 239090721,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1621258928
+    },
+    {
+        "content": "<p>Which loads us-core into the package cache using the PackageInstallationSpec class</p>",
+        "id": 239090863,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1621258978
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 239090957,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1621259024
+    },
+    {
+        "content": "<p>That is probably the best place to start. I haven't actually run a test with it, but it seems like they have an implemented test there that uses US-Core</p>",
+        "id": 239091250,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1621259137
+    },
+    {
+        "content": "<p>Let me know if that helps</p>",
+        "id": 239091293,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1621259160
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"248736\">@Mark Iantorno</span>  I will have a look at it.</p>",
+        "id": 239128340,
+        "sender_full_name": "Peter Teunissen",
+        "timestamp": 1621272291
+    }
+]

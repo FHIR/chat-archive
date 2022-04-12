@@ -1,0 +1,86 @@
+[
+    {
+        "content": "<p><a href=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=5884\" target=\"_blank\" title=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=5884\">GF#5884</a> asks for more <a href=\"https://en.wikipedia.org/wiki/HATEOAS\" target=\"_blank\" title=\"https://en.wikipedia.org/wiki/HATEOAS\">HATEOAS-style</a> capabilities, so that a client knows \"here's what you're allowed to do with this resources.\" Another thing we could consider here would be to introduce an explicit permissions API like <a href=\"https://kubernetes.io/docs/admin/authorization/\" target=\"_blank\" title=\"https://kubernetes.io/docs/admin/authorization/\">what Kubernetes does</a> with commands like</p>\n<div class=\"codehilite\"><pre><span></span>kubectl auth can-i list pods\n</pre></div>\n\n\n<p>In the context of FHIR this might look something like:</p>\n<div class=\"codehilite\"><pre><span></span>GET /Patient/123/$can-i?interaction=update\nGET /Patient/123/$can-i?operation=$everything\nGET /Patient/$can-i?interaction=search\nGET /$can-i?interaction=history\n</pre></div>\n\n\n<p>This is more client-driven (i.e. the client can choose to ask questions) rather than server-driven (i.e. the server pushes a list of allowed transitions to a client).</p>\n<p>Pros: no wasted work to compute a long list of permissions that may be irrelevant the vast majority of the time. Cons: clunky; sometimes the answer will depend not just on an interaction name but also the specific arguments (or request body) that would go along with it (but this applies to HATEOAS too).</p>\n<p>Thoughts <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>, <span class=\"user-mention\" data-user-id=\"192320\">@Ed Costello</span> , and others?</p>",
+        "id": 153936964,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1518467104
+    },
+    {
+        "content": "<p>I like this a lot more except that I wonder (a) should it cover transactional integrity (e.g. given version X as  a header $can-i? (b) does it matter that I can't serve up permissions in the same transaction? not sure about these</p>",
+        "id": 153936965,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1518467276
+    },
+    {
+        "content": "<p>Although it's definitely an improvement, I do wonder how many server implementers would implement it if we would add it to the spec.</p>",
+        "id": 153937818,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1518710009
+    },
+    {
+        "content": "<p>I would because we added it. But I wouldn't have much interesting to say about this in my server other than 'yes'</p>",
+        "id": 153937912,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1518726532
+    },
+    {
+        "content": "<p>but some people have asked for it</p>",
+        "id": 153937913,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1518726540
+    },
+    {
+        "content": "<p>I like this, it looks much like one of my proposals. And that was ignorant of this. In that I recognized that we have some common query parameters that could be composed into scopes.  <a href=\"https://healthcaresecprivacy.blogspot.com/2017/05/fhir-oauth-scope-proposal-using-fhir.html\" target=\"_blank\" title=\"https://healthcaresecprivacy.blogspot.com/2017/05/fhir-oauth-scope-proposal-using-fhir.html\">https://healthcaresecprivacy.blogspot.com/2017/05/fhir-oauth-scope-proposal-using-fhir.html</a></p>",
+        "id": 153938581,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1519051174
+    },
+    {
+        "content": "<p>I think there are a lot of details in the authorization that you can not easily convey in the response:</p>\n<ul>\n<li>GET Observation/456/$can-i?interaction=update =&gt; Yes, but only if you do not change the Observation.subject, otherwise it may fall out of your compartment.</li>\n<li>GET Patient/123/$can-i?operation=$everything =&gt; Yes, but you will not really get everything because your authorization scopes only allow you to see Observation and AllergyIntolerance.</li>\n<li>GET Patient/$can-i?interaction=search =&gt; Yes, but not if you do a chained search on general-practitioner, because you don't have authorization to read Practitioner.</li>\n</ul>\n<p>For individual requests it is more efficient to simply try the statement. 200 or 401 is the answer you wanted to know. And on a 200 you don't need to re-query for the result. But that does not fulfill the need of the original question: en-/disable buttons on a form based on available interactions.</p>",
+        "id": 153938835,
+        "sender_full_name": "Christiaan Knaap",
+        "timestamp": 1519109519
+    },
+    {
+        "content": "<p>You should never expect an authorization denial to be conveyed to you. It might, but it might be silent. There are two very different policies, one that says that the client is trustable enough to tell it that it is NOT authorized, the other that says that if the client is not authorized then they are not authorized to know that they are not authorized. So you will simply have the results you are not authorized to receive filtered out silently. Often just returning a successful empty Bundle.   See <a href=\"http://build.fhir.org/security.html#AccessDenied\" target=\"_blank\" title=\"http://build.fhir.org/security.html#AccessDenied\">http://build.fhir.org/security.html#AccessDenied</a></p>",
+        "id": 153938947,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1519136747
+    },
+    {
+        "content": "<p>it has to be conveyed on POST/PUT/DELETE</p>",
+        "id": 153939066,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519156499
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> as in you'll know if it works when you try it?  Should we add a \"try\" flag somewhere that would allow a client to check the action without actually executing the action?  Useful for things like \"before I make my user fill out this form I'll check to see if I can submit the form\"?</p>",
+        "id": 153939405,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1519233910
+    },
+    {
+        "content": "<p>Of course, all of <span class=\"user-mention\" data-user-id=\"191757\">@Christiaan Knaap</span> 's points about the specifics of the data would still apply.</p>",
+        "id": 153939406,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1519233929
+    },
+    {
+        "content": "<p>you can validate a resource as a put/post  - that's pretty much the same thing</p>",
+        "id": 153939446,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1519241809
+    },
+    {
+        "content": "<p>Certainly the original problem that led to that suggestion is the UI presentation one. For any FHIR APIs exposing mutation operations to and end user context there are going to be operations the people are not authorized to perform. If there is a goal of people building direct end user facing applications that write back and are inter-operable across different back ends then we're going to need to have some standard way of exposing this information, at least at a course level.</p>\n<p>Alternatively, if the primary target of FHIR is going to be towards exposing data for query, and mutation is only expected in a more system to system data exchange context then there is a lot less need for something like this. The limits will be far less dynamic and per-record so it's far more reasonable to use a \"just try it\" kind of approach. Or the kubernetes style that kicked off this discussion.</p>\n<p>Since I originally raised that request,  I've certainly came to the conclusion that FHIR API mutations are really only going to be inter-operable at the system to system level. User facing applications really do need specific APIs to back them, whether these are using the FHIR resources with application specific surrounds to deal with these kind of authorization considerations, or pure application APIs I don't expect a user facing application to be portable across them, and to be honest I struggle to see a case where it would be valuable to have such portability.</p>\n<p>Where as interoperability in querying the data actually is a valuable goal and can be achieved without trying to bake this authorization information into the spec.</p>\n<p>I'm curious about what contexts people are thinking about when discussing FHIR interoperability now.</p>",
+        "id": 153940033,
+        "sender_full_name": "Ed Costello",
+        "timestamp": 1519354966
+    },
+    {
+        "content": "<p>The FHIR specification is an Interoperability specification.  It should be usable with many security and privacy models.  Including security models that are really good, and really bad... This is not a statement of goodness, just an emphasis that the FHIR specification needs to be independent of the security model.   This is also not to say that there won't be security models that will be published by HL7 (or other organizations like IHE or Katara); in fact that is happening. In those publications they express clearly how the security model interacts with the FHIR model.</p>",
+        "id": 153940099,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1519393541
+    }
+]

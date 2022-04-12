@@ -1,0 +1,158 @@
+[
+    {
+        "content": "<p>Hi all,</p>\n<p>I'm working on an app that allows a user to enter insurance information for patients. We're using the Coverage resource to represent each of the insurance plans that a Patient should be associated with.</p>\n<p>Two of the pieces of data we need to collect about an insurance plan are \"group name\" and \"group number\".</p>\n<p>This seems like a natural fit for <a href=\"http://Coverage.class.name\">Coverage.class.name</a> and Coverage.class.value, so that was what we went with initially.</p>\n<p>However, it turns out that in reality there are insurance plans that can be effectively billed with any combination of the following:<br>\n1) Missing both group name &amp; group number<br>\n2) Having just group name, and missing group number<br>\n3) Having just group number, and missing group name<br>\n4) Having both group name and number</p>\n<p>With the cardinalities defined in Coverage, scenarios 1, 3, and 4 are fine. Scenario 2 is not, because inside a Coverage.class, .value (the \"number\" in this context) is required (1..1).</p>\n<p>Is this intentional? Should Coverage.class.value be relaxed to be 0..1? Is there another way to model this situation?</p>\n<p>Thanks!</p>",
+        "id": 202388382,
+        "sender_full_name": "Tadas Antanavicius",
+        "timestamp": 1593482936
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191430\">@Paul Knapp</span></p>",
+        "id": 202390242,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1593485667
+    },
+    {
+        "content": "<p>At the moment, the workaround I am leaning towards is continuing to store \"group number\" in <code>Coverage.class.value</code>, and coming up with a custom <code>Coverage.identifier</code> to store the group name when it exists</p>",
+        "id": 202492856,
+        "sender_full_name": "Tadas Antanavicius",
+        "timestamp": 1593550168
+    },
+    {
+        "content": "<p>We landed on a slightly more elegant solution: for scenario 2, we'll just use the <code>http://terminology.hl7.org/CodeSystem/data-absent-reason</code> extension with a <code>valueCode</code> of <code>asked-unknown</code> to satisfy the constraint</p>",
+        "id": 202603865,
+        "sender_full_name": "Tadas Antanavicius",
+        "timestamp": 1593627189
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"242509\">@Tadas Antanavicius</span> Normally if there is a class element you would know the value, e.g. group=ABC123, if you wish to not require that then given that the element is required (1..1) in the base resource you would need to include a Data Absent reason extension in .class.value. In a future version of FHIR we could relax the cardinality to 0..1 and I would encourage you to come to a Financial Management conference call  to discuss that as a proposal.</p>",
+        "id": 203026497,
+        "sender_full_name": "Paul Knapp",
+        "timestamp": 1594061360
+    },
+    {
+        "content": "<p>I know DAR is a mitigation when a profile constrains the cardinality of a field and there's no data.  In this case, when it's a spec required field, is DAR still sufficient?  I'm curious if client libraries would choke.</p>",
+        "id": 204127962,
+        "sender_full_name": "Dennis Patterson",
+        "timestamp": 1594926199
+    },
+    {
+        "content": "<p>It would be conformant, but many systems would choke.  For interoperability, it's best to avoid surprising communication partners - and a DAR in a required element would be a surprise to most unless it was specifically called out in the relevant profile.</p>",
+        "id": 204134460,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1594929231
+    },
+    {
+        "content": "<p>That's what I figured.  <span class=\"user-mention\" data-user-id=\"242509\">@Tadas Antanavicius</span>  are you returning some kind of placeholder default value for Coverage.class.value along with the DAR?</p>",
+        "id": 204135565,
+        "sender_full_name": "Dennis Patterson",
+        "timestamp": 1594929801
+    },
+    {
+        "content": "<p>If you have a valid placeholder value, there wouldn't really be a need for a DAR (and it would be somewhat confusing to have one...)</p>",
+        "id": 204151507,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1594938642
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191358\">@Dennis Patterson</span> we're not using a placeholder value (indeed, as Lloyd points out, I would not have run into this problem if I'd had a placeholder value). And yes, I agree the solution is undesirable from an interoperability perspective.</p>",
+        "id": 204151851,
+        "sender_full_name": "Tadas Antanavicius",
+        "timestamp": 1594938945
+    },
+    {
+        "content": "<p>To elaborate, I was meaning something like </p>\n<div class=\"codehilite\"><pre><span></span><code>&quot;value&quot;: &quot;--&quot;,\n &quot;_value&quot;: {\n   &quot;extension&quot; : [ {\n      &quot;url&quot; : &quot;http://hl7.org/fhir/StructureDefinition/data-absent-reason&quot;,\n      &quot;valueCode&quot; : &quot;unknown&quot;\n   }]\n }\n</code></pre></div>\n\n\n<p>The DAR is necessary in the situation being discussed.  The only reason I'm mentioning something like a placeholder value is to prevent client libraries from blowing up.  However, while a human reader might make sense of this, software may be all the more confused (to <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> 's point) about what was intended.</p>",
+        "id": 204210869,
+        "sender_full_name": "Dennis Patterson",
+        "timestamp": 1594995397
+    },
+    {
+        "content": "<p><code>\"value\": \"--\"</code><br>\nwould blow up if that's not in the required value set</p>",
+        "id": 204225092,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595001874
+    },
+    {
+        "content": "<p>Most valuesets support an unknown concept</p>",
+        "id": 204225273,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1595001945
+    },
+    {
+        "content": "<p>My question is what is the value of DAR? Aren't we setting up consuming applications for a hard time here? Why not have guidance in the spec on how to handle this? Couldn't we set some value in this example where the resource is valid to return without this 1 field?</p>",
+        "id": 204225475,
+        "sender_full_name": "Drew Torres",
+        "timestamp": 1595002031
+    },
+    {
+        "content": "<p>If they support the notion of \"unknown\", you don't generally need DAR</p>",
+        "id": 204226211,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595002397
+    },
+    {
+        "content": "<p>If it's valid to have an instance without the field, then it shouldn't be 1..x.  If you always need a value, then you <em>should</em> also mark the 'value' property as required - which means that sending an extension instead isn't good enough.</p>",
+        "id": 204226352,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595002458
+    },
+    {
+        "content": "<p>We don't use 1..x for \"we strongly encourage you to send\" - that's what mustSupport is for.</p>",
+        "id": 204226390,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595002474
+    },
+    {
+        "content": "<p>we're talking about class.value, not class.type.  It's a string not a code</p>",
+        "id": 204226444,
+        "sender_full_name": "Dennis Patterson",
+        "timestamp": 1595002502
+    },
+    {
+        "content": "<p>If you don't have a value, just omit the class entirely.  Why would you send a class without a value?</p>",
+        "id": 204226713,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595002626
+    },
+    {
+        "content": "<p>the system has a group name without a group value</p>",
+        "id": 204226900,
+        "sender_full_name": "Dennis Patterson",
+        "timestamp": 1595002698
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191430\">@Paul Knapp</span></p>",
+        "id": 204227010,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595002761
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191358\">Dennis Patterson</span> <a href=\"#narrow/stream/179166-implementers/topic/Should.20Coverage.2Eclass.2Evalue.20be.200.2E.2E1.3F/near/204226900\">said</a>:</p>\n<blockquote>\n<p>the system has a group name without a group value</p>\n</blockquote>\n<p>Isn't then the value the same as the name?</p>",
+        "id": 204229404,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1595004019
+    },
+    {
+        "content": "<p>Does FHIR resources provide any option to have row level security feature? where I want to ensure the particular patient record is provided access to given client? can I use SMART on FHIR to implement role based access to FHIR application?</p>",
+        "id": 204406578,
+        "sender_full_name": "PKumar",
+        "timestamp": 1595240994
+    },
+    {
+        "content": "<p>There is much background on security and privacy in the core spec <a href=\"http://build.fhir.org/secpriv-module.html\">http://build.fhir.org/secpriv-module.html</a><br>\nAnd security and privacy questions might get more focus on <a class=\"stream\" data-stream-id=\"179247\" href=\"/#narrow/stream/179247-Security-and-Privacy\">#Security and Privacy</a> stream</p>",
+        "id": 204423827,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1595252818
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191358\">@Dennis Patterson</span> We can relax the cardinality in R5. Can you give an example of the Group which has a name not a value, as I'm with Vassil that if the name is 'Bronze' or 'Firefighters' then that is the value but if 'Boilermakers of America Local #126' then not the value.</p>",
+        "id": 207421514,
+        "sender_full_name": "Paul Knapp",
+        "timestamp": 1597850325
+    },
+    {
+        "content": "<p>We model group value numerically (we actually call it group number), and had a case where there was a group name but not a group number at a client domain.  I've seen some other examples in domains that match up more with your former examples, but at runtime if there's a group name but no group number, I can't distinguish whether it's 'Bronze' or 'Boilermakers of America Local #126'.  I just know I have a textual name for the group.</p>",
+        "id": 208259058,
+        "sender_full_name": "Dennis Patterson",
+        "timestamp": 1598553879
+    }
+]

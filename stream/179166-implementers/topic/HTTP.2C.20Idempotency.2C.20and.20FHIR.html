@@ -1,0 +1,334 @@
+---
+layout: page
+title: "FHIR Chat  · HTTP, Idempotency, and FHIR · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html">HTTP, Idempotency, and FHIR</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153891376"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891376" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891376">(May 26 2017 at 17:43)</a>:</h4>
+<p><strong>"Idempotent"</strong>: An idempotent operation is one that can be retried/replayed without affecting the outcome; the result will be the same if the operation is applied one time or a hundred times.</p>
+<p>By my reading, there are 4 "writey" operations in the FHIR spec:</p>
+<ul>
+<li>1. <code>PUT [base]/[type]/[id]</code></li>
+<li>2. <code>PUT [base]/[type]?[search parameters]</code></li>
+<li>3. <code>POST [base]/[type]</code></li>
+<li>4. <code>POST [base]/[type]</code> with <code>If-None-Exist: [search parameters]</code></li>
+</ul>
+<p>In HTTP, <code>PUT</code> operations are generally expected to be idempotent. I'm not a huge "thou must perfectly follow the letter and spirit of the spec" kind of person, but that particular assumption is baked into a lot of things. For instance, the Apache HTTP client library is (by default) configured to allow retry of <code>GET</code>s and <code>PUT</code>s, but not allow retry of <code>POST</code>s. No huge deal there: I can override the defaults. But things get a little bit more tricky with things that users don't directly control, such as HTTP proxies -- some of those will be configured to automatically retry things or not based on the HTTP operation.</p>
+<p>Unfortunately, of those 4 FHIR "writey" operations, only the last one (<code>POST [base]/[type]</code> with <code>If-None-Exist: [search parameters]</code>) is truly idempotent. The two <code>PUT</code> operations, per the spec, will create duplicate versions if they're retried.</p>
+<p>Why do I care? Because I'm pushing millions of FHIR write operations, a non-zero number of them fail for transport reasons, and I need to automatically retry them when that happens. So why don't I just use option #4? Because unfortunately, that option doesn't allow me to specify the resources' logical IDs as I'm creating them, which I'd really really like to do (makes maintaining the system MUCH simpler down the road).</p>
+
+
+
+<a name="153891377"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891377" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891377">(May 26 2017 at 17:46)</a>:</h4>
+<p>Anyone geeky/nerdy enough to have thoughts on this? I've checked and <a class="stream" data-stream-id="8" href="/#narrow/stream/hapi">#hapi</a> doesn't honor the <code>If-None-Exist</code> header on <code>PUT</code>s -- and it shouldn't, per the spec.</p>
+
+
+
+<a name="153891378"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891378" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891378">(May 26 2017 at 17:47)</a>:</h4>
+<p>What I'd really love is to be able to add an <code>If-None-Exist: true</code> or somesuch header to option 1 submissions, and have it be honored as a different type of conditional create operation.</p>
+
+
+
+<a name="153891379"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891379" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891379">(May 26 2017 at 17:49)</a>:</h4>
+<p>Well, that's the quick and dirty solution, anyways. If you guys really wanted to ensure that <code>PUT</code>s were idempotent (per the HTTP spec), the FHIR spec would state that retrying the exact same <code>PUT</code> request with the exact same content would <strong>not</strong> result in duplicate versions.</p>
+
+
+
+<a name="153891380"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891380" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joel Schneider <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891380">(May 26 2017 at 17:56)</a>:</h4>
+<p>Wouldn't this (version aware updates) meet your requirement for a PUT operation that doesn't result in duplicate versions?<br>
+<a href="http://build.fhir.org/http.html#versionaware" target="_blank" title="http://build.fhir.org/http.html#versionaware">http://build.fhir.org/http.html#versionaware</a></p>
+
+
+
+<a name="153891381"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891381" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joel Schneider <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891381">(May 26 2017 at 17:57)</a>:</h4>
+<p>Assuming the server supports it, that is.</p>
+
+
+
+<a name="153891382"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891382" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891382">(May 26 2017 at 18:13)</a>:</h4>
+<p>Unfortunately not, because <code>If-Match: null</code> isn't supported. I'd need something like that to say "create this resource that shouldn't exist yet, but don't add a second version of it if I have to retry this request."</p>
+
+
+
+<a name="153891383"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891383" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891383">(May 26 2017 at 18:17)</a>:</h4>
+<p>Put another way: yeah, that could work for updates, but it wouldn't work for creates.</p>
+
+
+
+<a name="153891384"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891384" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891384">(May 26 2017 at 18:22)</a>:</h4>
+<p>I'm not following this exactly - why does it matter if it creates a new version?</p>
+
+
+
+<a name="153891385"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891385" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891385">(May 26 2017 at 18:24)</a>:</h4>
+<p>Wastes space with versions that are exact dupes.</p>
+
+
+
+<a name="153891387"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891387" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joel Schneider <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891387">(May 26 2017 at 18:25)</a>:</h4>
+<p>It seems to me you may be looking for a custom operation.</p>
+<p>For resource creation, the standard RESTful API uses a different HTTP verb (POST),  which may support the If-None-Exist header.</p>
+
+
+
+<a name="153891388"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891388" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891388">(May 26 2017 at 18:25)</a>:</h4>
+<p>Is more or less of a problem depending on how many resources one includes in each <code>Bundle</code>.</p>
+
+
+
+<a name="153891389"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891389" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891389">(May 26 2017 at 18:26)</a>:</h4>
+<p>Joel: Yup. But that <code>POST</code> operation doesn't allow clients to specify the logical ID.</p>
+
+
+
+<a name="153891390"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891390" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joel Schneider <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891390">(May 26 2017 at 18:30)</a>:</h4>
+<p>Why would the client need the ability to specify the logical id for a newly created resource?  Isn't that id supposed to be local to (and assigned by) the server?</p>
+
+
+
+<a name="153891391"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891391" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891391">(May 26 2017 at 18:31)</a>:</h4>
+<p>Quoting the spec:</p>
+<hr>
+<p>Note that servers MAY choose to allow clients to PUT a resource to a location that does not yet exist on the server - effectively, allowing the client to define the id of the resource. Whether a server allows this is a deployment choice based on the nature of its relationships with the clients. While many servers will not allow clients to define their ids, there are several reasons why it may be necessary in some configurations:</p>
+<ul>
+<li>client is reproducing an existing data model on the server, and needs to keep original ids in order to retain ongoing integrity</li>
+<li>client is a server doing push based pub/sub (this is a special case of the first reason)</li>
+<li>multiple clients doing push in the context of agreed data model shared across multiple servers where ids are shared across servers</li>
+</ul>
+<p>Alternatively, clients may be sharing an agreed identification model (e.g. key server, scoped identifiers, or UUIDs) where clashes do not arise.</p>
+<p>Servers can choose whether or not to support client defined ids, and indicate such to the clients using CapabilityStatement.rest.resource.updateCreate.</p>
+
+
+
+<a name="153891392"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891392" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891392">(May 26 2017 at 18:33)</a>:</h4>
+<p>there's a number of reasons why we would not state that " retrying the exact same PUT request with the exact same content would not result in duplicate versions"</p>
+
+
+
+<a name="153891393"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891393" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891393">(May 26 2017 at 18:34)</a>:</h4>
+<p>we might say that a server was allow to not create duplicate versions - that is, to ignore a change that isn't a change. that does seem possible</p>
+
+
+
+<a name="153891394"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891394" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891394">(May 26 2017 at 18:34)</a>:</h4>
+<p>But I'm wondering about the record-keeping requirements / provenance aspects of that. </p>
+
+
+
+<a name="153891395"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891395" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891395">(May 26 2017 at 18:35)</a>:</h4>
+<p>and i"m also wondering what % of time this occurs - it seems sufficiently rare to me that the loss of resources is not overly strong</p>
+
+
+
+<a name="153891396"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891396" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891396">(May 26 2017 at 18:35)</a>:</h4>
+<p>What about a smaller change, like a mechanism to specify <code>If-Match: null</code> or something equivalent?</p>
+
+
+
+<a name="153891397"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891397" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891397">(May 26 2017 at 18:37)</a>:</h4>
+<p>It's a bit frustrating that all the _pieces_ I need are there: client-specified logical IDs, a mechanism to make creates idempotent, a mechanism to make updates idempotent, etc. But I can't combine them in the specific configuration that I need.</p>
+
+
+
+<a name="153891399"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891399" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joel Schneider <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891399">(May 26 2017 at 18:44)</a>:</h4>
+<p>Propagating logical IDs seems like a special case to me, involving systems which are not loosely coupled.</p>
+<p>Does the data travel in only one direction between these systems?  Is the downstream system a read-only copy of the upstream one?</p>
+
+
+
+<a name="153891400"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891400" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891400">(May 26 2017 at 18:55)</a>:</h4>
+<p>Yes and yes.</p>
+
+
+
+<a name="153891598"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891598" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891598">(May 30 2017 at 00:23)</a>:</h4>
+<p>This is an odd debate to me:</p>
+<ul>
+<li>Graham is arguing that duplicate versions/idempotency shouldn't matter, but there's already <code>If-Match</code>supports for updates, so the spec has conceded that issue.</li>
+<li>Joel is arguing that client-specified logical IDs shouldn't be needed, but there's already support for that with <code>PUT [base]/[type]/[id]</code> submissions, so the spec has conceded that issue.</li>
+</ul>
+<p>Are these features that folks disagree with and are hoping to pull from the spec eventually? Or is there some other reason to oppose adding a way to avoid duplicate versions for resource creates (instead of just updates, as things exist now)?</p>
+
+
+
+<a name="153891599"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891599" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891599">(May 30 2017 at 00:26)</a>:</h4>
+<p>I'm not arguing anything - just exploring the issues. But adding if-match because we need to support version aware updates is not the same as conceding that idempotency at this level matters</p>
+
+
+
+<a name="153891600"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891600" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891600">(May 30 2017 at 00:27)</a>:</h4>
+<p>(nor is it saying it doesn't)</p>
+
+
+
+<a name="153891601"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891601" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891601">(May 30 2017 at 00:38)</a>:</h4>
+<p>For the Blue Button FHIR server, idempotent creates get us two things:</p>
+<ul>
+<li>Allows us to retry the creates when they fail. We're seeing more socket/timeout errors in AWS than I've seen other places. Still not "a lot", butit's nice not having to worry about polluting the version history when it happens.</li>
+<li>Allows us to avoid building a lot of additional progress-tracking logic into our ETL service. It already checkpoints our initial load every .1% or so, so we can now stop in the middle of those .1% chunks (which can still take hours) and safely restart later without worrying about polluting the version history or wasting disk space.</li>
+</ul>
+<p>These are more concrete benefits than we were getting from predictable logical IDs, so I've just finished updating our code to handle creates by <code>POST</code>ing with <code>If-None-Exists</code>. It's be nice to not have to make that tradeoff, but oh well for now.</p>
+
+
+
+<a name="153891603"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891603" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joel Schneider <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891603">(May 30 2017 at 01:58)</a>:</h4>
+<p>I'm not arguing anything either.  Just observing that using the FHIR API to replicate logical IDs across multiple servers looks like a new use case.</p>
+
+
+
+<a name="153891604"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891604" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891604">(May 30 2017 at 01:59)</a>:</h4>
+<p>that's not new - we've had this from the beginning for many reasons</p>
+
+
+
+<a name="153891605"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891605" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joel Schneider <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891605">(May 30 2017 at 02:18)</a>:</h4>
+<p>In that case, I must be missing something.  Is there a way to specify the logical ID when creating a new resource via the REST API?</p>
+
+
+
+<a name="153891606"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891606" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891606">(May 30 2017 at 02:18)</a>:</h4>
+<p>yes. Just PUT it to the place you want it at </p>
+
+
+
+<a name="153891622"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891622" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joel Schneider <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891622">(May 30 2017 at 07:01)</a>:</h4>
+<p>Thanks, that's helpful.  Now I see the update (PUT) interaction "creates an initial version if no resource already exists for the given id."</p>
+
+
+
+<a name="153891981"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153891981" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153891981">(Jun 01 2017 at 21:12)</a>:</h4>
+<p>HTTP's <code>If-None-Match: *</code>would seem to match this use-case exactly (<a href="https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.26" target="_blank" title="https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.26">https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.26</a>)</p>
+
+
+
+<a name="153892047"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153892047" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153892047">(Jun 02 2017 at 07:25)</a>:</h4>
+<p>What about ´If-None-Match´with the client-generated logical ID as etag in the POST? Would that be considered a violation of the standard?</p>
+
+
+
+<a name="153892092"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153892092" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153892092">(Jun 02 2017 at 11:32)</a>:</h4>
+<p><code>PUT</code> with <code>If-None-Match: *</code> gives you an idempotent create operation .  Idempotent update is also do-able, but you need to know the E-Tag of the resource that you're updating.  I'm not clear if <span class="user-mention" data-user-id="192789">@Karl M. Davis</span> 's use case requires update or just create</p>
+
+
+
+<a name="153892096"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153892096" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153892096">(Jun 02 2017 at 11:44)</a>:</h4>
+<p><span class="user-mention" data-user-id="191343">@Michael Lawley</span> but don't you then leave it up to server to decide if it has seen the resource before - meaning it will be (entirely) proprietary? If the identifiers issued by the client can be embedded in the etag (using weak validation), it would be up to the client to decide what it sees as duplicate resources at the moment of creation?</p>
+
+
+
+<a name="153892097"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153892097" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153892097">(Jun 02 2017 at 11:49)</a>:</h4>
+<p>Our use case requires both create and update, but we can use different options for each, if need be.</p>
+
+
+
+<a name="153892140"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153892140" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joel Schneider <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153892140">(Jun 02 2017 at 16:38)</a>:</h4>
+<p>I agree, <code>PUT</code> with <code>If-None-Match: *</code> looks reasonable for idempotent creates.</p>
+<p>The version aware update mechanism (if supported) could perform idempotent updates.<br>
+<a href="http://build.fhir.org/http.html#versionaware" target="_blank" title="http://build.fhir.org/http.html#versionaware">http://build.fhir.org/http.html#versionaware</a></p>
+
+
+
+<a name="153892595"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153892595" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joel Schneider <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153892595">(Jun 07 2017 at 01:32)</a>:</h4>
+<p>Has FHIR guidance regarding usage of <code>PUT</code> with <code>If-None-Match: *</code> yet been considered, or decided?  (e.g. to support <em>updateCreate</em> combined with <em>conditionalCreate</em>)</p>
+<p>Notably, as pointed out here by <span class="user-mention" data-user-id="191343">@Michael Lawley</span>, the <code>If-None-Match</code> section of RFC 2616 indicates <code>If-None-Match: *</code> is "intended to be useful in preventing races between <code>PUT</code> operations."  (a.k.a. the "lost update" problem)<br>
+<a href="https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.26" target="_blank" title="https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.26">https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.26</a></p>
+<p>Per <span class="user-mention" data-user-id="192789">@Karl M. Davis</span>, a header such as <code>If-None-Match: *</code> (or maybe <code>If-None-Exist: true</code>) would enable precise data replication between version-aware servers, where the downstream server is an exact, read-only copy of the upstream one.</p>
+<p>The FHIR spec presently describes usage of <code>If-None-Match</code> in conjunction with <code>GET</code>, but is apparently silent on its usage (if any) with <code>PUT</code>.  The spec additionally describes usage of a HL7-defined extension header, <code>If-None-Exist</code>, in conjunction with <code>POST</code>.<br>
+<a href="http://build.fhir.org/http.html" target="_blank" title="http://build.fhir.org/http.html">http://build.fhir.org/http.html</a></p>
+<p>With this in mind, would it be reasonable to add guidance for using <code>PUT</code> with <code>If-None-Match: *</code> to the FHIR spec?</p>
+
+
+
+<a name="153892597"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153892597" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153892597">(Jun 07 2017 at 01:35)</a>:</h4>
+<p>we document use of the if-match header. I don't understand what extra is needed?</p>
+
+
+
+<a name="153892605"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/153892605" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joel Schneider <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#153892605">(Jun 07 2017 at 02:17)</a>:</h4>
+<p>Using <code>If-Match</code>, is there a way to require that the target resource does not exist?  E.g., in a <code>PUT</code> request which attempts to create a new resource with an assigned id.</p>
+
+
+
+<a name="205073794"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/205073794" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#205073794">(Jul 27 2020 at 00:34)</a>:</h4>
+<p>This is an old thread, but I'm now coming around to implement <code>PUT</code> and <code>If-Match</code> but this doesn't help with the case of using <code>PUT</code> to do a <code>create</code> -- I am planning to use <code>If-None-Match: *</code> rather than the FHIR-invented <code>If-None-Exist</code>.<br>
+It would be really nice if the spec were updated to deal with this case and provide canonical advice.</p>
+
+
+
+<a name="209818200"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/209818200" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Aaron Nash <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#209818200">(Sep 11 2020 at 18:32)</a>:</h4>
+<p>Is there any consensus here? I'm running into a similar issue. There is no standard way to create a resource with a client specified ID AND ensure an existing resource is not updated, if one already exists. If-None-Match (<a href="https://tools.ietf.org/html/rfc7232#section-3.2">https://tools.ietf.org/html/rfc7232#section-3.2</a>) seems like the right solution.</p>
+
+
+
+<a name="209820514"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/209820514" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#209820514">(Sep 11 2020 at 18:53)</a>:</h4>
+<p>I think we should add "If-None-Match: *" to PUT for this case.</p>
+<p>I think there is also some additional clarification that would be useful on If-Match. Can I If-Match on a deleted version (tombstone)? If the resource does not exist and never existed, and I PUT with "If-Match: xyz", is that still a 412 Precondition Failed? Should we call out "If-Match: *" as allowed by RFC 7232 to match any existing version?</p>
+
+
+
+<a name="209824585"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/209824585" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Aaron Nash <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#209824585">(Sep 11 2020 at 19:26)</a>:</h4>
+<p>I created <a href="https://jira.hl7.org/browse/FHIR-28495">https://jira.hl7.org/browse/FHIR-28495</a> for supporting "If-None-Match" for update operations.</p>
+<p><span class="user-mention" data-user-id="197072">@Paul Church</span> those seem like good clarifications to make. I haven't yet developed a opinion on the specific questions you've raised. Do you have any thoughts on the correct behaviors for those instances? I do believe it would be best if FHIR matched the behaviors described in RFC 7232 for the sections that FHIR supports.</p>
+
+
+
+<a name="209827252"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HTTP%2C%20Idempotency%2C%20and%20FHIR/near/209827252" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HTTP.2C.20Idempotency.2C.20and.20FHIR.html#209827252">(Sep 11 2020 at 19:51)</a>:</h4>
+<p>I think it should be possible to If-Match on tombstones, the non-version should not If-Match any version, and If-Match: * would be useful.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

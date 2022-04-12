@@ -1,0 +1,38 @@
+[
+    {
+        "content": "<p>The CQL grammar allows for an expression <code>'String' in MyValueSet</code>. I'm trying to figure out how that should work in practice.</p>\n<p><a href=\"https://cql.hl7.org/02-authorsguide.html#terminology-operators\">Section 5.8.3. Terminology Operations</a> says that valueset membership is based strictly on the definition of equivalence. Equivalence for codes means that both system and code must match. If either side has just a code value and the other side has both code and system, the equivalence operation will return null.</p>\n<p>1) The Java engine treats 'String' in the above expression as a Code object with a code value and null system. It passes that code object to the <code>TerminologyProvider.in(...)</code>method and the <code>R4RestFhirTerminologyProvider.in(...)</code> implementation of the TerminologyProvider will then build a request to the FHIR server ValueSet/$validate-code operation that includes a <code>code</code> parameter and optionally a <code>system</code> parameter if the system is specified in the code object. For the <code>'String' in MyValueSet</code> expression the system is always null, so the parameter isn't passed to the FHIR server.</p>\n<p>The <a href=\"https://www.hl7.org/fhir/valueset-operation-validate-code.html\">FHIR spec for $validate-code</a> says that if a code parameter is specified, then either a <code>context</code> or <code>system</code> parameter <em>MUST</em> also be provided in the validate-code request, so there seems to be a disconnect here. It shouldn't be legal to send only the <code>code</code> parameter. I confirmed at least on the IBM FHIR server I use for CQL evaluation that the ValueSet/$validate-code operation does require the system parameter when code is specified. The $validate-code throws an error if system isn't specified.</p>\n<p>As one last note, the <a href=\"https://www.hl7.org/fhir/valueset.html\">ValueSet specification</a> requires that system be present for any included codes. Strictly from a FHIR R4 perspective, you shouldn't be able to lookup a code that doesn't contain a system in a valueset. The valueset won't contain codes without system.</p>\n<p>2) The <a href=\"https://github.com/cqframework/cql-execution/blob/b0f53070cdace518adc307ed5ec7afe0086883c3/src/datatypes/clinical.js#L67\">Javascript engine</a> takes some pretty reasonable liberties when trying to handle this case. It will allow string containership as long as all the codes in the valueset share a common system value. If not, an \"In (valueset) is ambiguous\" error is thrown.</p>\n<p>3) I tried to review samply/blaze to see how it was handled there, but as best as I can tell from <a href=\"https://github.com/samply/blaze/blob/a5eb4922ea9ef3cd1cec87b92a7ed3b545a56577/docs/conformance/cql.md\">the conformance statement</a> the InValueSet operation is still TBD right now.</p>\n<p>So, what is the expected behavior here? The design clearly allows for non-FHIR terminology support, so the FHIR rules need not apply, but that is the main use case and the Java implementation doesn't really support FHIR correctly as-is. The Javascript logic seems reasonable, but wouldn't be supported by the FHIR validate-code operation.</p>",
+        "id": 261322567,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1636758161
+    },
+    {
+        "content": "<p>The string overload of in is a special case that we allowed for simplicity, but that overload has specific evaluation semantics: <a href=\"https://cql.hl7.org/09-b-cqlreference.html#in-valueset\">https://cql.hl7.org/09-b-cqlreference.html#in-valueset</a></p>",
+        "id": 261376724,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1636832857
+    },
+    {
+        "content": "<p>Based on those semantics, I don't think the Java implementation is doing the right thing here, because you're right, it couldn't be evaluated as a FHIR ValueSet membership test. It would actually have to be evaluated as:<br>\n<code>'String' in (MyValueSet X return X.code)</code> and even then, there would have to be a check to make sure that <code>(MyValueSet X return X.code) = (MyValueSet X return all X.code)</code>.</p>",
+        "id": 261376895,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1636833106
+    },
+    {
+        "content": "<p>In the case that the ValueSet is also the default ValueSet for a given CodeSystem, an implementation could provide that system.</p>",
+        "id": 261376944,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1636833146
+    },
+    {
+        "content": "<p><a href=\"https://github.com/DBCG/cql_engine/issues/514\">https://github.com/DBCG/cql_engine/issues/514</a></p>",
+        "id": 261377035,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1636833298
+    },
+    {
+        "content": "<p>Thanks, Bryn. I was missing the extra detail in the cqlreference section.</p>",
+        "id": 261512957,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1636990290
+    }
+]

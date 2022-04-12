@@ -1,0 +1,92 @@
+[
+    {
+        "content": "<p>There are three profiles:   Network (a profile of Organization), OrganizatonAffiliation, and Location.</p>\n<p>Network  <br>\n^<br>\n| 0..*<br>\n|<br>\nOrganizationAffiliation (role = pharmacy)<br>\n| 0..*<br>\n|<br>\nv<br>\nLocation (type=pharmacy, address.postCode=20854)<br>\nid = N                                                                                                  </p>\n<p>I'm trying to construct a search for all pharmacy locations that are part of network N  in zipcode 20854 using reverse chaining.</p>\n<p>The challenge:   The query uses two reverse chaining (_has) relationships:<br>\n   1) OrganizationAffiliation:location:network = N.    The Organization affiliation that refers to Location using its location search parameter refers to Network N.<br>\n   2) OrganizationAffiliation:location:role = pharmacy.  The OrganizationAffiliation that refers to location has its role = pharmacy.</p>\n<p>My read of the terse documentation on reverse chaining is that the two _has relationships are independent.<br>\nSo, it is possible that there could be two OrganizationAffiliation instances, one with role=pharmacy and network=M (not N), and one with role=provider and network=N, and the location would be included.   </p>\n<p>Two questions:<br>\n   1) <strong>is that understanding correct?</strong><br>\n   2) <strong>Is there any way to place two requirements on a single OrganizationAffiliation instance in one query using reverse chaining?</strong></p>",
+        "id": 217937857,
+        "sender_full_name": "Saul Kravitz",
+        "timestamp": 1606337567
+    },
+    {
+        "content": "<p>I doubt many (any?) servers will implement reverse chaining, maybe you are better off doing multiple searches</p>",
+        "id": 217940111,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1606338789
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span>  it is required by Plan-Net, and supported by the servers that have attended the connectathons (HAPI, IBM, etc).  Your point is well taken, but I'd like to have a correct recommendation for implementers built into our RI, and currently I'm not sure that is the case.</p>",
+        "id": 217943555,
+        "sender_full_name": "Saul Kravitz",
+        "timestamp": 1606341046
+    },
+    {
+        "content": "<p>That understanding is correct, you can't do this in one query. At best you can do <code>OrganizationAffiliation?network=N&amp;role=pharmacy</code> to get the intermediate list of IDs, and then <code>Location?_has:OrganizationAffiliation:location:_id=[intermediate list of IDs]</code></p>",
+        "id": 217944055,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1606341455
+    },
+    {
+        "content": "<p>I stand corrected!</p>",
+        "id": 217945655,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1606342493
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>  -- the inability to do this type of join will result in a much less efficient implementation of this query.   By inefficient, I mean the client code will be much more complicated, AND significantly more data will be requested from the server.   </p>\n<p>Is this a bug or a feature of the FHIR API?</p>",
+        "id": 218306509,
+        "sender_full_name": "Saul Kravitz",
+        "timestamp": 1606752216
+    },
+    {
+        "content": "<p>It's a feature.  The more complexity we add to RESTful search, the less likely implementers are to support it.  I believe _filter could work for your use-case, but it's not widely implemented</p>",
+        "id": 218327129,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1606761628
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  -- so you are suggesting that the _filter include all of the constraints on the OrganizationAffiliation, thus ensuring they are all satisfied on a single instance?   thx</p>",
+        "id": 218340355,
+        "sender_full_name": "Saul Kravitz",
+        "timestamp": 1606767707
+    },
+    {
+        "content": "<p>Filter gives you the power of brackets.  You can also have sub-filters on particular nodes.  I'm not an expert with the syntax though.  (And I'm not sure if <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>'s reference implementation of _filter has full _reverseInclude support.)</p>",
+        "id": 218341052,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1606768023
+    },
+    {
+        "content": "<p>_filter generally hasn't been implemented on the grounds that it's needless complexity and load on the server. The counter argument that it's lack is more of a load on the server hasn't really sunk in yet. </p>\n<p>At least HAPI now supports it. But in your context, will your users support it?</p>",
+        "id": 218512246,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1606880484
+    },
+    {
+        "content": "<p>Agreed that _filter is a hail-mary pass.<br>\nI'm not even sure that it CAN work for this query.   For example, is this well-formed?</p>\n<p>https://davinci-plan-net-ri.logicahealth.org/fhir/Location?_has:OrganizationAffiliation:location:_filter=(network re Organization/plannet-network-HPID010000 and role=pharmacy)</p>\n<p>HAPI is not happy with this.   \"Unknown parameter name: OrganizationAffiliation:_filter\"\"</p>",
+        "id": 218632484,
+        "sender_full_name": "Saul Kravitz",
+        "timestamp": 1606949908
+    },
+    {
+        "content": "<p>I don't think that's the way _filter works, it is <code>../Location?_filter=( complex expression )</code></p>",
+        "id": 218632794,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1606950119
+    },
+    {
+        "content": "<p>I think you'd have to do this: OrganizationAffiliation?_filter=(role=pharmacy and location[type=pharmacy and address.postalCode=20854])&amp;_include=OrganizationAffiliation.organization</p>",
+        "id": 218637762,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1606953455
+    },
+    {
+        "content": "<p>First of all, thanks for continuing the discussion.<br>\nTwo issues:<br>\n  1) the location[fielda eq valueb and fieldb eq valueb] makes HAPI sad.   But that type of syntax to apply the location constraints to a single location would be necessary to avoid the same problem stated above.<br>\n2) you've flipped the search to be on OrgAffiliation, and including locations, but this would be casting a much wider net than applying the filter on Locations that satisfy the geographic constraint AND the OrganizationAffiliation (network, type, specialty) constraint.   Many of the returned locations wouldn't meet the geographic constraint.</p>\n<p>I think it is more efficient to perform the original query:<br>\n<code>https://davinci-plan-net-ri.logicahealth.org/fhir/Location?_has:OrganizationAffiliation:location:network=Organization/plannet-network-HPID010000&amp;_has:OrganizationAffiliation:location:role=pharmacy&amp;_revinclude=OrganizationAffiliation:location&amp;address-postalcode:contains=06040,06074,06043,06118,06041</code></p>\n<p>And then do some client side filtering of the locations to eliminate those locations for whom an appropriate OrganizationAffilation that satisfies the network and type constraint can't be found.</p>",
+        "id": 218883280,
+        "sender_full_name": "Saul Kravitz",
+        "timestamp": 1607111716
+    },
+    {
+        "content": "<p>_(rev)include doesn't allow for any conditions .. (address-postal:contains..). Only _has supports such a feature.</p>",
+        "id": 218934794,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1607174132
+    }
+]

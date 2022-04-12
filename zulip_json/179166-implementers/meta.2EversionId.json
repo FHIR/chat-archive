@@ -1,0 +1,140 @@
+[
+    {
+        "content": "<p>Is it appropriate to put the schema version in <code>meta.versionId</code>, or is that only for versioned history of a specific history?  Where is the expected place to store in a resource that it's schema version <code>1.6.0</code>, for example?  </p>",
+        "id": 153878877,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1490124033
+    },
+    {
+        "content": "<p>The meta is intended to track the history of a specific resource. EG: I created MedicationStatement/abc, then updated it, then updated it again. the meta.versionId on MedicationStatement/abc must be different for each of those instances</p>",
+        "id": 153878887,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1490124641
+    },
+    {
+        "content": "<p>ie: meta.versionId = \"0\", next meta.versionId=\"1\", final meta.versionId=\"2\" (though they can be any type of version, alphanumeric etc, and don't need to be an incrementation like this)</p>",
+        "id": 153878889,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1490124724
+    },
+    {
+        "content": "<p>As FHIR is right now, if the conformance on a server states version 1.6.0, the resources exposed would be assumed to be of that version. I don't think we have anything defined in core to indicate what a specific resource's FHIR version is</p>",
+        "id": 153878890,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1490124775
+    },
+    {
+        "content": "<p>+1 <span class=\"user-mention\" data-user-id=\"191356\">@Jenni Syed</span>. FHIR doesn't have a standard approach to label instance data in this way (it's certainly something that's been discussed).</p>",
+        "id": 153878900,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1490127552
+    },
+    {
+        "content": "<p>Hmmm.  Thank you for the clarification, Jenni.  Seems like we're going to need to have an internal extension then.  We're reaching the point where we have two or three or more different apps pointing at a single database using FHIR as our database schema.  So, we're considering intra-app interoperability, with the database as a wire persistence cache.  Need to start managing schema migrations.   I'll probably go with <code>meta.fhirVersion</code> then.  (Unless there are any other recommendations.)</p>",
+        "id": 153878901,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1490127749
+    },
+    {
+        "content": "<p>You might wish to have a look at resource tags: <a href=\"http://build.fhir.org/resource.html#profile-tags\" target=\"_blank\" title=\"http://build.fhir.org/resource.html#profile-tags\">http://build.fhir.org/resource.html#profile-tags</a></p>",
+        "id": 153878912,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1490128494
+    },
+    {
+        "content": "<p>different apps are supposed to suppot different versions?</p>",
+        "id": 153878916,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1490129307
+    },
+    {
+        "content": "<p>like on the fly?</p>",
+        "id": 153878917,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1490129314
+    },
+    {
+        "content": "<p>We have a really fast turn-around time of getting an app up-and-running in about 6 to 12 weeks.   So we have a number of deployments which have been writing down <code>v1.0.2</code> Patients, Practitioners, Questionnaires, and other resources for the past year.  But now we have the Interface Engine, Practitioner Directory, and Clinical Decision Support apps going online; but they're on <code>v1.6.0</code>.  </p>\n<p>Put another way, we're trying to point a <code>fhir-1.0.2</code> app and a <code>fhir-1.6.0</code> app at the same database.  Trying to figure out the details of how to do that, and not completely bork things.</p>",
+        "id": 153878937,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1490131730
+    },
+    {
+        "content": "<p>well, if it was me.... you're going to need a translation layer somewhere. the changes between r2 and r3 are deeper than just 'changing the format a little'</p>",
+        "id": 153878948,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1490132528
+    },
+    {
+        "content": "<p>queries are different... so right now, you'd need to either (a) do different endpoints or (b) use some kind of header or url parameter </p>",
+        "id": 153878949,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1490132560
+    },
+    {
+        "content": "<p>oooh, now that's an interesting idea.  Use the <code>meta.fhirVersion</code> to build up a virtualized url, and have the database driver use the same translation layer that the REST endpoints do for r2 and r3 endpoints.  Isomorphic code reuse.  Excellent.  That's exactly what I was looking for.  Thank you!</p>",
+        "id": 153878969,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1490137442
+    },
+    {
+        "content": "<p>Do you mean the CapabilityStatement.fhirVersion associated with the receiving endpoint?</p>",
+        "id": 153879047,
+        "sender_full_name": "Paul Knapp",
+        "timestamp": 1490180136
+    },
+    {
+        "content": "<p>No, I'm (now) talking about an extension to <code>Meta</code> or <code>DomainResource</code> that provides a lightweight capability field on a per-record level.  It's for database schema migrations and scenarios involving apps with different CapabilityStatements accessing the same JSON database.</p>",
+        "id": 153879178,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1490199971
+    },
+    {
+        "content": "<p>Why use an extension when you could use a tag?</p>",
+        "id": 153879184,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1490200435
+    },
+    {
+        "content": "<p>Well....  extensions are easy, it would keep things semantically consistent, and performance. Doing a quick check that <code>CapabilityStatements.fhirVersion</code> is equal to <code>Meta.fhirVersion</code> will be a lot more performant than looping through tags...  particularly if the collection has millions or billions of records that have been created by from apps with different CapabilityStatements.  Also, I'm not sure if I can put an index on the tags, since they're within an array.  Might be able to; but I'll need to research it.</p>",
+        "id": 153879186,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1490200803
+    },
+    {
+        "content": "<p>To achieve consistence and efficiency then I suggest you propose that meta.fhirVersion be an element. I see other  uses including systems which process multiple versions.</p>",
+        "id": 153879487,
+        "sender_full_name": "Paul Knapp",
+        "timestamp": 1490267766
+    },
+    {
+        "content": "<p>We absolutely *don't* want instances declaring what version they are in general practice.  While this is necessary in some environments during the STU2 phase, it's counter to our objective of having a versionless specification in the normative phase.</p>",
+        "id": 153879518,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1490281617
+    },
+    {
+        "content": "<p>Given that even after normative new resources will flow through the STU process, wouldn't it be a good idea to have a defined place/tag/extension to hold the version rather than encouraging people to make up their own?</p>",
+        "id": 153879749,
+        "sender_full_name": "Paul Knapp",
+        "timestamp": 1490368143
+    },
+    {
+        "content": "<p>If new resources flow in that you don't support, you'd treat them in the same manner as you'd handle resources you receive now that you don't support - no need to have a version to do that.</p>",
+        "id": 153879753,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1490369357
+    },
+    {
+        "content": "<p>I don't think the issue is resources which people don't support but rather resources that people do support which are undergoing change.</p>",
+        "id": 153879773,
+        "sender_full_name": "Paul Knapp",
+        "timestamp": 1490512072
+    },
+    {
+        "content": "<p>But once things are normative, the only changes permitted are backwards-compatible ones.</p>",
+        "id": 153879776,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1490543717
+    }
+]

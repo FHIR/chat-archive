@@ -1,0 +1,542 @@
+[
+    {
+        "content": "<p>I'm trying to implement a set of codes using codeSystem &amp; valueSet, where he codes are in a hierarchy. I noticed that in the definition of codeSystem, you appear to be able to nest concepts, so I set up a codeSystem with some nested concepts, along the lines of <br>\n&lt;concept&gt;<br>\n&lt;code value=\"MA00\"/&gt;<br>\n&lt;display value=\"Mainstream Housing\"/&gt;<br>\n&lt;concept&gt;&lt;code value=\"MA01\"/&gt;&lt;display value=\"Owner occupier\"/&gt;&lt;/concept&gt;<br>\n&lt;concept&gt;&lt;code value=\"MA02\"/&gt;&lt;display value=\"Settled mainstream housing with family/friends\"/&gt;&lt;/concept&gt;<br>\n&lt;/concept&gt;<br>\n&lt;concept&gt;<br>\n&lt;code value=\"HM00\"/&gt;<br>\n&lt;display value=\"Homeless\"/&gt;<br>\n&lt;concept&gt;&lt;code value=\"HM01\"/&gt;&lt;display value=\"Rough sleeper\"/&gt;&lt;/concept&gt;<br>\n&lt;concept&gt;&lt;code value=\"HM02\"/&gt;&lt;display value=\"Squatting\"/&gt;&lt;/concept&gt;<br>\n&lt;/concept&gt;<br>\nI then set up a valueSet to query (include) the codeSystem. However, when I expand the valueSet, the codes appear in a flat list, rather then in a nested list as I expected - they appeared like this<br>\n\"contains\": [<br>\n{<br>\n\"system\": \"<a href=\"http://fhir.nhs.net/CodeSystem/AccommodationStatusCode\" target=\"_blank\" title=\"http://fhir.nhs.net/CodeSystem/AccommodationStatusCode\">http://fhir.nhs.net/CodeSystem/AccommodationStatusCode</a>\",<br>\n\"code\": \"MA00\",<br>\n\"display\": \"Mainstream Housing\"<br>\n},<br>\n{<br>\n\"system\": \"<a href=\"http://fhir.nhs.net/CodeSystem/AccommodationStatusCode\" target=\"_blank\" title=\"http://fhir.nhs.net/CodeSystem/AccommodationStatusCode\">http://fhir.nhs.net/CodeSystem/AccommodationStatusCode</a>\",<br>\n\"code\": \"MA01\",<br>\n\"display\": \"Owner occupier\"<br>\n},<br>\n{<br>\n\"system\": \"<a href=\"http://fhir.nhs.net/CodeSystem/AccommodationStatusCode\" target=\"_blank\" title=\"http://fhir.nhs.net/CodeSystem/AccommodationStatusCode\">http://fhir.nhs.net/CodeSystem/AccommodationStatusCode</a>\",<br>\n\"code\": \"MA02\",<br>\n\"display\": \"Settled mainstream housing with family/friends\"<br>\n},<br>\netc...<br>\nAnyone any idea what I'm doing wrong? I need to store and retrieve a list of codes that have a structure (hierarchy) within the codeSystem. <br>\nI've tested this on our (NHS) internal STU3 HAPI server, and on the public <a href=\"http://fhirtest.uhn.ca/\" target=\"_blank\" title=\"http://fhirtest.uhn.ca/\">http://fhirtest.uhn.ca/</a> STU3 HAPI server, and get the same results (as above)</p>\n<p>[*NOTE* this was originally posted on the Implementer's stream, but re-posted here for a view from the hapi folk]</p>",
+        "id": 153836032,
+        "sender_full_name": "Dave Barnet",
+        "timestamp": 1467361038
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192158\">@Dave Barnet</span> You're not doing anything wrong - the $expand operation is free to return the expansion as a flat list or with nesting as it sees fit.  Our terminology server always returns a flat list because the order is significant (ranked by the score from the filter matching) and this is incompatible with also returning hierarchy.<br>\nHowever, since the structure is in the CodeSystem, you can use $lookup to access it.</p>",
+        "id": 153836125,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1467415665
+    },
+    {
+        "content": "<p>As far as I can see, $lookup acts on a single concept defined in a codeSystem.<br>\nI'll try and restate the requirement, this time avoiding the word \"hierarchy\". I enter concepts into a codeSystem that are nested (codeSystem allows you to do this), I then create a valueSet which includes the codeSystem. How do I retrieve the concepts and still have the nesting maintained? <br>\nIf I do a GET (something like [base]/ValueSet/150/$expand - where 150 is the value set that includes the nested codeSystem) I get back a flat list of concepts.</p>",
+        "id": 153836292,
+        "sender_full_name": "Dave Barnet",
+        "timestamp": 1467631096
+    },
+    {
+        "content": "<p>have you looked at the terribly named $closure resource <span class=\"user-mention\" data-user-id=\"192158\">@Dave Barnet</span> ?</p>",
+        "id": 153836293,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1467633937
+    },
+    {
+        "content": "<p>from what i gather (sorry I'm bit of a FHIR noob) it will do a full hierarchy walk and return all the descendant-ancestor links</p>",
+        "id": 153836294,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1467634214
+    },
+    {
+        "content": "<p>ie if A is a subset of B, and B is a subset of C then it would give [A-B, A-C, B-C]</p>",
+        "id": 153836295,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1467634297
+    },
+    {
+        "content": "<p>my comment on the other thread was just saying that it would be possible possible to prune back to the core links by culling A-C because there are more hi-res links available that transitively imply the A-C link (A-B and B-C)</p>",
+        "id": 153836296,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1467634559
+    },
+    {
+        "content": "<p>so this involves a two step process as far as I can tell, the $lookup to get the list then $closure to get the \"ancestor table\"</p>",
+        "id": 153836297,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1467634682
+    },
+    {
+        "content": "<p>Thanks Erich, I'll see if I can give this a go. It does seem a long-winded way round for getting out information (creating client side tables, and $lookup acts on one concept at a time etc.). What we are trying to achieve is a vocabulary server using codeSystem and valueSet, containing &amp; maintaining our own code systems. It's really conceptually very simple, so I was trying to avoid complexity.</p>",
+        "id": 153836302,
+        "sender_full_name": "Dave Barnet",
+        "timestamp": 1467639969
+    },
+    {
+        "content": "<p>it's still not clear to me what you are trying to achieve. </p>",
+        "id": 153836313,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467669652
+    },
+    {
+        "content": "<p>I'm intererested in this too <span class=\"user-mention\" data-user-id=\"192158\">@Dave Barnet</span> and agree there should be a simpler solution. Perhaps someone needs to request a \"$hierarchy\" service?</p>",
+        "id": 153836361,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1467705104
+    },
+    {
+        "content": "<p>Its extremely possible that I'm leading you up the garden path tho - I am a complete FHIR noob so I wouldn't believe me :-)</p>",
+        "id": 153836362,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1467705145
+    },
+    {
+        "content": "<p>I'll try and expand a little on what we are trying to achieve. We are looking for a way to manage some code values for our Data Dictionary. FHIR offers many of the facilities that we would require (such as querying via an API, auditing, distinguishing between code system &amp; value sets etc.). However, there are some challenges to overcome with the code sets we want to manage, which we are working through. Although 90% of the code sets conform to a code/value pair, which are straight forward to incorporate into a codeSystem, there are some code sets that have code/value/notes and some code sets that have structure within them, such as nesting of codes. I've put an example codeSystem of the nesting issue on the Canadian public FHIR server (<a href=\"http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052\" target=\"_blank\" title=\"http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052\">http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052</a>), and an example of a valueSet that includes this codeSystem (<a href=\"http://fhirtest.uhn.ca/baseDstu3/ValueSet/111111\" target=\"_blank\" title=\"http://fhirtest.uhn.ca/baseDstu3/ValueSet/111111\">http://fhirtest.uhn.ca/baseDstu3/ValueSet/111111</a>). The codeSystem has nested codes. When you expand the valueSet (do a GET on <a href=\"http://fhirtest.uhn.ca/baseDstu3/ValueSet/111111/$expand\" target=\"_blank\" title=\"http://fhirtest.uhn.ca/baseDstu3/ValueSet/111111/$expand\">http://fhirtest.uhn.ca/baseDstu3/ValueSet/111111/$expand</a>) all the nesting in the codeSystem is lost, and the codes appear in a flat list.<br>\nIt was my hope that if you put nested codes into a codeSystem, you'd get out nested codes when you retrieved them.<br>\nHope that makes things clearer</p>",
+        "id": 153836370,
+        "sender_full_name": "Dave Barnet",
+        "timestamp": 1467709895
+    },
+    {
+        "content": "<p>well, I don't think you've thought this all the way through. This looks like a classification. When you get the expansion, I think that you don't want the root codes MA00 and HM00 to be selectable </p>",
+        "id": 153836372,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467710442
+    },
+    {
+        "content": "<p>hmm. is that the case? </p>",
+        "id": 153836373,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467710581
+    },
+    {
+        "content": "<p>looking at <a href=\"http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052\" target=\"_blank\" title=\"http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052\">http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052</a> - what is the gap between that and your requirements? </p>",
+        "id": 153836378,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1467712184
+    },
+    {
+        "content": "<p>(I can see it wouldn't cope well with large DAG hierarchies due to duplication, but for small trees it seems to have the core information)</p>",
+        "id": 153836379,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1467712260
+    },
+    {
+        "content": "<p>The Data collections in the UK are sometimes at a detailed level, or at a higher level to help those systems that don't collect detailed data. Another example of nesting is for relationships. The Data Dictionary states \"Note that ORGANISATIONS may choose to collect the RELATIONSHIP TO PERSON FOR CHILDREN AND YOUNG PEOPLE codes at the high level (shown in bold) or at the more detailed level below each high-level code.\" The list includes<br>\n*BPX*   Biological Parent <br>\nBPM Biological mother<br>\nBPF         Biological father<br>\n*SPX*   Step-Parent <br>\nSPM Stepmother<br>\nSPF Stepfather<br>\n*GPX*   Grandparent <br>\nGPM Grandmother<br>\nGPF Grandfather<br>\netc..<br>\nThe nesting is certainly required for presentation purposes, and so needs to be maintained in the codeSystem, and served out to the presenting system as a nested list. </p>",
+        "id": 153836389,
+        "sender_full_name": "Dave Barnet",
+        "timestamp": 1467720610
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192158\">@Dave Barnet</span> that makes sense to me for one, but I'm still wondering why <a href=\"http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052\" target=\"_blank\" title=\"http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052\">http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052</a> isn't meeting your requirements?</p>",
+        "id": 153836390,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1467720759
+    },
+    {
+        "content": "<p>So the problem here isn't the spec, it's the open source terminology services. </p>",
+        "id": 153836394,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467721870
+    },
+    {
+        "content": "<p>have you looked at the definition for ExpansionProfile.excludeNested? </p>",
+        "id": 153836395,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467721897
+    },
+    {
+        "content": "<p>James, I could enhance the standard value set expander to maintain the heirarchy from the code system if the include statement is simple enough, and if the right flag is set. But that doesn't solve all cases, right? how do you handle merging outside the standard expander? </p>",
+        "id": 153836396,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467721960
+    },
+    {
+        "content": "<p>My colleague Naminder Soorma is having a look at the expansionProfile - I'll let you know how we get on.</p>",
+        "id": 153836397,
+        "sender_full_name": "Dave Barnet",
+        "timestamp": 1467722105
+    },
+    {
+        "content": "<p>I am confused how ExpansionProfile works, here is some of the code, can you tell me how ValueSet links to the ExpansionProfile?</p>\n<p>&lt;ExpansionProfile xmlns=\"<a href=\"http://hl7.org/fhir\" target=\"_blank\" title=\"http://hl7.org/fhir\">http://hl7.org/fhir</a>\"&gt; <br>\n &lt;url value=\"http://fhir.nhs.net/ExpansionProfile/TestExpansion\"/&gt;<br>\n &lt;identifier&gt;ExpansionProfileNHS&lt;/identifier&gt;<br>\n &lt;version value=\"1.0\"/&gt;<br>\n &lt;name value=\"ExpansionProfileNHS\"/&gt;<br>\n &lt;status value=\"active\"/&gt;<br>\n &lt;experimental value=\"false\"/&gt;<br>\n  &lt;codeSystem&gt;<br>\n    &lt;include&gt;<br>\n     &lt;codeSystem&gt;<br>\n     &lt;system value=\"http://fhir.nhs.net/CodeSystem/TestCodeSystem\"/&gt;<br>\n     &lt;/codeSystem&gt;<br>\n    &lt;/include&gt;<br>\n   &lt;/codeSystem&gt;<br>\n  &lt;excludeNested value=\"false\"/&gt;<br>\n&lt;/ExpansionProfile&gt;</p>",
+        "id": 153836402,
+        "sender_full_name": "Naminder Soorma",
+        "timestamp": 1467722466
+    },
+    {
+        "content": "<p>ExpansionProfile is a parameter on the $expand operation</p>",
+        "id": 153836403,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467722598
+    },
+    {
+        "content": "<p>Hi, do you mean it is an IN Parameter? <a href=\"http://hl7.org/fhir/2016May/valueset-operations.html#expand\" target=\"_blank\" title=\"http://hl7.org/fhir/2016May/valueset-operations.html#expand\">http://hl7.org/fhir/2016May/valueset-operations.html#expand</a></p>\n<p>I couldn't find any reference to it on this page? Could you give me an example please.</p>",
+        "id": 153836409,
+        "sender_full_name": "Naminder Soorma",
+        "timestamp": 1467723090
+    },
+    {
+        "content": "<p>profile parameter. Guess I better update the documentation for that parameter since we now defined the ExpansionProfile</p>",
+        "id": 153836417,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467723268
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> Yeah, adding that capability to the ValueSetExpander probably wouldn't help here anyway. I only actually use that to do expansions on \"built in\" codesystems (i.e. the ones distributed with the spec itself). Anything user supplied or not-present is expanded using a Lucene query. Nonetheless, this would probably be useful at some point... </p>\n<p>I'd love to get our term service enhanced so that you can specify a profile and get the hierarchical expansion, but that's a TBD.. If I get to it first, I'll do the ValueSetExpanderSimple too.</p>",
+        "id": 153836427,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1467726549
+    },
+    {
+        "content": "<p>ok</p>",
+        "id": 153836428,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467726574
+    },
+    {
+        "content": "<p>I'll probably do it while doing publishing QA in the lead into the ballot publication</p>",
+        "id": 153836429,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467726595
+    },
+    {
+        "content": "<p>On another note, I love the <code>HM04</code> code from that code system.  I've sure had periods where <code>Sofa surfing (sleeps on different friends floor each night)</code> applied.. don't know that I thought of myself as homeless though. </p>\n<p>I feel like if that was a SCT code it would be \"Sleeps on Couch, Sofa, or Chesterfield or similar for a period not exceeding two months where the subject does not permanently reside in the same dwelling (Finding)\"</p>",
+        "id": 153836430,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1467726698
+    },
+    {
+        "content": "<p>James - :) very posh if you got to sleep on a Chesterfield.... <span class=\"user-mention\" data-user-email=\"grahame@healthintersections.com.au\">@Grahame Grieve</span> - So are you talking about the Valueset profile, I tried some code like this:</p>\n<p>&lt;expansion&gt;<br>\n    &lt;extension url=\"<a href=\"http://hl7.org/fhir/StructureDefinition/valueset-expansionSource\" target=\"_blank\" title=\"http://hl7.org/fhir/StructureDefinition/valueset-expansionSource\">http://hl7.org/fhir/StructureDefinition/valueset-expansionSource</a>\"&gt;<br>\n      &lt;valueUri value=\"http://hl7.org/fhir/ValueSet/example-extensional\"/&gt;<br>\n    &lt;/extension&gt;<br>\n    &lt;identifier value=\"http://fhir.nhs.net/ExpansionProfile/TestExpansion\"/&gt;<br>\n    &lt;timestamp value=\"2016-07-07T10:00:00Z\"/&gt;<br>\n  &lt;parameter&gt;  &lt;!-- 0..* Parameter that controlled the expansion process --&gt;<br>\n   &lt;name value=\"excludeNested\"/&gt;&lt;!-- 1..1 Name as assigned by the server --&gt;<br>\n   &lt;valueBoolean value=\"false\"/&gt;<br>\n     &lt;/parameter&gt;<br>\n    &lt;contains&gt;<br>\n      &lt;abstract value=\"true\"/&gt;<br>\n      &lt;display value=\"Cholesterol codes\"/&gt;<br>\n      &lt;contains&gt;<br>\n        &lt;system value=\"http://fhir.nhs.net/CodeSystem/TestCodeSystem\"/&gt;<br>\n        &lt;version value=\"1\"/&gt;<br>\n        &lt;code value=\"A01Main\"/&gt;<br>\n        &lt;display value=\"Main Code Header\"/&gt;<br>\n      &lt;/contains&gt;<br>\n    &lt;/contains&gt;<br>\n  &lt;/expansion&gt;</p>",
+        "id": 153836431,
+        "sender_full_name": "Naminder Soorma",
+        "timestamp": 1467727040
+    },
+    {
+        "content": "<p>where did you try that? </p>",
+        "id": 153836432,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467727077
+    },
+    {
+        "content": "<p>&lt;ValueSet xmlns=\"<a href=\"http://hl7.org/fhir\" target=\"_blank\" title=\"http://hl7.org/fhir\">http://hl7.org/fhir</a>\"&gt;<br>\n   &lt;identifier&gt;<br>\n      &lt;system value=\"http://fhir.nhs.net/valueset/TestValueSet\"/&gt;<br>\n      &lt;value value=\"ValueSetNHS\"/&gt;<br>\n   &lt;/identifier&gt;<br>\n   &lt;version value=\"1\"/&gt;<br>\n   &lt;name value=\"ValueSetNHS\"/&gt;<br>\n   &lt;status value=\"active\"/&gt;<br>\n   &lt;experimental value=\"false\"/&gt;<br>\n   &lt;publisher value=\"NHS Data Dictionary\"/&gt;<br>\n   &lt;date value=\"2016-07-05\"/&gt;<br>\n   &lt;description value=\"Test ValueSet\"/&gt;<br>\n   &lt;compose&gt;<br>\n      &lt;include&gt;<br>\n         &lt;system value=\"http://fhir.nhs.net/CodeSystem/TestCodeSystem\"/&gt;<br>\n         &lt;version value=\"1\"/&gt;<br>\n      &lt;/include&gt;<br>\n   &lt;/compose&gt;<br>\n   &lt;expansion&gt;<br>\n    &lt;extension url=\"<a href=\"http://hl7.org/fhir/StructureDefinition/valueset-expansionSource\" target=\"_blank\" title=\"http://hl7.org/fhir/StructureDefinition/valueset-expansionSource\">http://hl7.org/fhir/StructureDefinition/valueset-expansionSource</a>\"&gt;<br>\n      &lt;valueUri value=\"http://hl7.org/fhir/ValueSet/example-extensional\"/&gt;<br>\n    &lt;/extension&gt;<br>\n    &lt;identifier value=\"http://fhir.nhs.net/ExpansionProfile/TestExpansion\"/&gt;<br>\n    &lt;timestamp value=\"2016-07-07T10:00:00Z\"/&gt;<br>\n  &lt;parameter&gt;  &lt;!-- 0..* Parameter that controlled the expansion process --&gt;<br>\n   &lt;name value=\"excludeNested\"/&gt;&lt;!-- 1..1 Name as assigned by the server --&gt;<br>\n   &lt;valueBoolean value=\"false\"/&gt;<br>\n     &lt;/parameter&gt;<br>\n    &lt;contains&gt;<br>\n      &lt;abstract value=\"true\"/&gt;<br>\n      &lt;display value=\"Cholesterol codes\"/&gt;<br>\n      &lt;contains&gt;<br>\n        &lt;system value=\"http://fhir.nhs.net/CodeSystem/TestCodeSystem\"/&gt;<br>\n        &lt;version value=\"1\"/&gt;<br>\n        &lt;code value=\"A01Main\"/&gt;<br>\n        &lt;display value=\"Main Code Header\"/&gt;<br>\n      &lt;/contains&gt;<br>\n    &lt;/contains&gt;<br>\n  &lt;/expansion&gt;<br>\n&lt;/ValueSet&gt;</p>",
+        "id": 153836433,
+        "sender_full_name": "Naminder Soorma",
+        "timestamp": 1467727127
+    },
+    {
+        "content": "<p>I don't know why putting it there will make any difference. What are you trying to do? </p>",
+        "id": 153836434,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467727170
+    },
+    {
+        "content": "<p>it should be something like GET [base]/ValueSet/[id]/$expand?profile=[uri]</p>",
+        "id": 153836435,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467727198
+    },
+    {
+        "content": "<p>I was reading up the following: ValueSet.expansion.parameter <br>\nDefinition <br>\nA parameter that controlled the expansion process. These parameters may be used by users of expanded value sets to check whether the expansion is suitable for a particular purpose, or to pick the correct expansion.</p>\n<p>Control 0..* <br>\nComments <br>\nThe server decides which parameters to include here, but at a minimum, the list SHOULD include the date, filter, and profile parameters passed to the $expand operation (if any).</p>\n<p>so based on your code profile=[uri] = the name of the expansion profile?</p>",
+        "id": 153836436,
+        "sender_full_name": "Naminder Soorma",
+        "timestamp": 1467727329
+    },
+    {
+        "content": "<p>basically that returns the following:<br>\n&lt;ValueSet xmlns=\"<a href=\"http://hl7.org/fhir\" target=\"_blank\" title=\"http://hl7.org/fhir\">http://hl7.org/fhir</a>\"&gt;<br>\n    &lt;expansion&gt;<br>\n        &lt;identifier value=\"urn:uuid:7064442e-0780-438d-999e-090d3dc9a7c1\"/&gt;<br>\n        &lt;timestamp value=\"2016-07-05T15:02:21+01:00\"/&gt;<br>\n        &lt;parameter&gt;<br>\n            &lt;name value=\"version\"/&gt;<br>\n            &lt;valueUri value=\"http://fhir.nhs.net/CodeSystem/TestCodeSystem?version=1\"/&gt;<br>\n        &lt;/parameter&gt;<br>\n        &lt;contains&gt;<br>\n            &lt;system value=\"http://fhir.nhs.net/CodeSystem/TestCodeSystem\"/&gt;<br>\n            &lt;code value=\"A01Main\"/&gt;<br>\n            &lt;display value=\"Main Code Header\"/&gt;<br>\n        &lt;/contains&gt;<br>\n        &lt;contains&gt;<br>\n            &lt;system value=\"http://fhir.nhs.net/CodeSystem/TestCodeSystem\"/&gt;<br>\n            &lt;code value=\"A01Sub\"/&gt;<br>\n            &lt;display value=\"Sub Code 01\"/&gt;<br>\n        &lt;/contains&gt;<br>\n        &lt;contains&gt;<br>\n            &lt;system value=\"http://fhir.nhs.net/CodeSystem/TestCodeSystem\"/&gt;<br>\n            &lt;code value=\"A02Sub\"/&gt;<br>\n            &lt;display value=\"Sub Code 02\"/&gt;<br>\n        &lt;/contains&gt;<br>\n    &lt;/expansion&gt;<br>\n&lt;/ValueSet&gt;</p>\n<p>I want it to return THIS:</p>\n<p>&lt;ValueSet xmlns=\"<a href=\"http://hl7.org/fhir\" target=\"_blank\" title=\"http://hl7.org/fhir\">http://hl7.org/fhir</a>\"&gt;<br>\n    &lt;expansion&gt;<br>\n        &lt;identifier value=\"urn:uuid:7064442e-0780-438d-999e-090d3dc9a7c1\"/&gt;<br>\n        &lt;timestamp value=\"2016-07-05T15:02:21+01:00\"/&gt;<br>\n        &lt;parameter&gt;<br>\n            &lt;name value=\"version\"/&gt;<br>\n            &lt;valueUri value=\"http://fhir.nhs.net/CodeSystem/TestCodeSystem?version=1\"/&gt;<br>\n        &lt;/parameter&gt;<br>\n      &lt;contains&gt;<br>\n            &lt;system value=\"http://fhir.nhs.net/CodeSystem/TestCodeSystem\"/&gt;<br>\n            &lt;code value=\"A01Main\"/&gt;<br>\n            &lt;display value=\"Main Code Header\"/&gt;<br>\n          &lt;contains&gt;<br>\n            &lt;system value=\"http://fhir.nhs.net/CodeSystem/TestCodeSystem\"/&gt;<br>\n            &lt;code value=\"A01Sub\"/&gt;<br>\n            &lt;display value=\"Sub Code 01\"/&gt;<br>\n          &lt;/contains&gt;<br>\n          &lt;contains&gt;<br>\n            &lt;system value=\"http://fhir.nhs.net/CodeSystem/TestCodeSystem\"/&gt;<br>\n            &lt;code value=\"A02Sub\"/&gt;<br>\n            &lt;display value=\"Sub Code 02\"/&gt;<br>\n          &lt;/contains&gt;<br>\n      &lt;/contains&gt;<br>\n    &lt;/expansion&gt;<br>\n&lt;/ValueSet&gt;</p>",
+        "id": 153836437,
+        "sender_full_name": "Naminder Soorma",
+        "timestamp": 1467727426
+    },
+    {
+        "content": "<p>[uri] is the url in the expansion profile. </p>",
+        "id": 153836438,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467727847
+    },
+    {
+        "content": "<p>ok, well I have tried that then on the HAPI STU3 server and it returned the result in my previous post.</p>",
+        "id": 153836441,
+        "sender_full_name": "Naminder Soorma",
+        "timestamp": 1467728688
+    },
+    {
+        "content": "<p>Oh yeah, we don't support the profile parameter yet unfortunately. So you may well be doing it right, but HAPI doesn't yet support it. :)</p>",
+        "id": 153836442,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1467728730
+    },
+    {
+        "content": "<p>Folks, When I look at <a href=\"http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052\" target=\"_blank\" title=\"http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052\">http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052</a> I see nesting that is undefined and simply represented as indentations. That is not how a code system should do this - use additional space as the relationship that links a child to a parent. What I see is a visual metaphore for something that should be computable. In real code systems a hierarchy is a specialized type of relationship where the code system has defined content that uses a named relationship to link concepts AND then says that relationship is hierarchical (transitive is ussually what is meant.) So I don't see that information in the link <span class=\"user-mention\" data-user-id=\"192158\">@Dave Barnet</span> has provided so I suspect the computability of the hierarchy is missing. I am not an expert on what FHIR supports for all this but is the code system shown somehow legally defining a hierarchy in FHIR? </p>",
+        "id": 153836444,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1467729265
+    },
+    {
+        "content": "<p>I was going by this definition \"CodeSystem.concept.concept<br>\nDefinition  <br>\nDefines children of a concept to produce a hierarchy of concepts. The nature of the relationships is variable (is-a/contains/categorizes) and can only be determined by examining the definitions of the concepts\" from <a href=\"http://hl7.org/fhir/2016May/codesystem-definitions.html#CodeSystem.concept.concept\" target=\"_blank\" title=\"http://hl7.org/fhir/2016May/codesystem-definitions.html#CodeSystem.concept.concept\">http://hl7.org/fhir/2016May/codesystem-definitions.html#CodeSystem.concept.concept</a>, which implies a basic hierarchy denoted by nesting (I think??)</p>",
+        "id": 153836448,
+        "sender_full_name": "Dave Barnet",
+        "timestamp": 1467730676
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> Is <span class=\"user-mention\" data-user-id=\"192158\">@Dave Barnet</span>  correct? It seems this is essentially a shortcut that allows the code system definition to describe a relationship of \"childOf\" (perhaps implicitly parentOf too?) but I wonder if that shortcut makes other computations more difficult. I assume this is for inline code systems primarily - Dave, is that what you are using this for?</p>",
+        "id": 153836459,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1467733284
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> you were on the call when we discussed this, and you helped draft the text Dave quoted. But you don't seem to remember that in your comments above. The heirarchy is a convenient short cut for a computable relationship, but It was you who pushed back against making it computable </p>",
+        "id": 153836484,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467747005
+    },
+    {
+        "content": "<p>Perhaps now is a good time to renew my call to revisit the proposed ExpansionProfile Resource?  All those boolean parameters would be much better as optional explicit parameters to $expand</p>",
+        "id": 153836581,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1467789226
+    },
+    {
+        "content": "<p>Can I ask what the Expansion Profile is trying to achieve that the ValueSet resource does not achieve? I haven't been able to distinguish what it brings extra to the table, that couldn't already be incorporated into the ValueSet.</p>",
+        "id": 153836582,
+        "sender_full_name": "Naminder Soorma",
+        "timestamp": 1467793420
+    },
+    {
+        "content": "<p>the value set resource defines what codes are in the set.  The expansion profile resource defines information about how expansions are done on the system</p>",
+        "id": 153836585,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467809354
+    },
+    {
+        "content": "<p>Michael - I guess you should create a task so I can ask Vocab to talk about it. or you could send an email to the vocab list</p>",
+        "id": 153836586,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467809401
+    },
+    {
+        "content": "<p>It is a bit of a curious design I suppose. I'd assume that the intention is more that the server would expose a set of profiles it supports, essentially making ExpansionProfile a conformance resource, and clients would be expected to pick from those. </p>",
+        "id": 153836590,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1467812835
+    },
+    {
+        "content": "<p>well, there's some.. uncertainty.... about whether some of those flags are server profiles or client choices </p>",
+        "id": 153836592,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467813519
+    },
+    {
+        "content": "<p>Yeah, it would be interesting to hear what the intent is, and whether it is guided by any existing systems or implementer experience.</p>\n<p>If the idea is that these are client choices, the current design is overcomplicated.</p>",
+        "id": 153836593,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1467813582
+    },
+    {
+        "content": "<p>I can't see why it can't be achieved using the ValueSet.expansion.parameter element as the documentation suggests. </p>\n<p>ValueSet.expansion.parameter <br>\nDefinition <br>\nA parameter that controlled the expansion process. These parameters may be used by users of expanded value sets to check whether the expansion is suitable for a particular purpose, or to pick the correct expansion.</p>\n<p>Control 0..* <br>\nComments <br>\nThe server decides which parameters to include here, but at a minimum, the list SHOULD include the date, filter, and profile parameters passed to the $expand operation (if any).</p>",
+        "id": 153836595,
+        "sender_full_name": "Naminder Soorma",
+        "timestamp": 1467814919
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> Yep, I don't remember but you're taking liberties to say I would \"push\" to make it not computable - that is very unlikely. Setting revisionist history aside, I don't think it's a good idea. Here is the thing, if this dot notation is unequivocally computable and uniquivocally defines bi-directional relations (i.e: both child of and parent of) then I would assume FHIR terminology services can treat this as a special type of relation that can be reasoned over including transitive closure. IS that whaat you all are doing? <span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span> How do you handle this?</p>",
+        "id": 153836606,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1467821300
+    },
+    {
+        "content": "<p>For those of you unclear (and this is very understandable because it has been unclear to date) as to the difference between a value set definition and a value set exapnsion, I suggest you take a look at the just published Value Set Definition STU here <a href=\"http://www.hl7.org/implement/standards/product_brief.cfm?product_id=437\" target=\"_blank\" title=\"http://www.hl7.org/implement/standards/product_brief.cfm?product_id=437\">http://www.hl7.org/implement/standards/product_brief.cfm?product_id=437</a>. The value set resource was orginally created (I think) to support defining what concepts/codes should be in the expansion you want to use - this is called the expansion code set. An expansion is the resulting expansion code set PLUS any addition information about the concept (or information related to the concept) you need to use. Any number of value set definitions can result in the same expansion code set. The FHIR community is STRONGLY encourage to continue to align with this - as Graham has done (with some grumbling) to date - thank you Graham. You all are the leading edge in implementing this so where changes need to done to the approach we've outlined, let us know and we'll work together.</p>",
+        "id": 153836607,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1467821912
+    },
+    {
+        "content": "<p>I took the liberty to create task #10277 for this.  <span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span>, please go ahead and add or change what you want.  We could potentially bring this up for discussion on the Vocab call tomorrow, if there is available time (can check with Ted).</p>",
+        "id": 153836642,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1467830268
+    },
+    {
+        "content": "<p>thanks for adding the Zulip discussion link to the task, <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> - I was just thinking that I should go back and do that</p>",
+        "id": 153836645,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1467832794
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> We interpret nesting in the CodeSystem as transitive parent/child relationships. Hence this hierarchy will be used when computing the results for the $closure operation, and for populating the parent/child properties in a $lookup.</p>",
+        "id": 153836690,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1467840837
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> Thanks - I've added some detail in a comment</p>",
+        "id": 153836691,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1467840871
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191905\">@Naminder Soorma</span> ValueSet.expansion.parameter is about the server telling the client what it did during the expansion. ExpansionProfile is about letting the client tell the server what it wants - e.g., exclude inactive codes</p>",
+        "id": 153836696,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1467841091
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> I proposed an element to define what the heirarchy meant. As things stand snow, the heirarchy is clear and computable (and how we do things in many contexts) but the implication it carries is unstated. So \"if this dot notation is unequivocally computable and uniquivocally defines bi-directional relations (i.e: both child of and parent of) then I would assume FHIR terminology services can treat this as a special type of relation that can be reasoned over\" - yes. But \" including transitive closure\" not so much, because the definition of transitive closure is more specific. </p>",
+        "id": 153836701,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467841547
+    },
+    {
+        "content": "<p>that was why I proposed an element on code system so you could say that this was safe, but it failed to get through vocab, and I remember that you were the prime source of resistance to the idea </p>",
+        "id": 153836702,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467841590
+    },
+    {
+        "content": "<p>so now, we are forced to 'assume' that the heirarchy indicates subsumption. </p>",
+        "id": 153836703,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467841615
+    },
+    {
+        "content": "<p>which is Michael says he does, as do I and Apelon as well</p>",
+        "id": 153836705,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467841709
+    },
+    {
+        "content": "<p>As do I. :)</p>",
+        "id": 153836707,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1467841950
+    },
+    {
+        "content": "<p>and at the same time I warn people (as in my message to Erich) that the assumption may be faulty :)<br>\nJust as CodeSystem contains a flag to indicate whether it is \"compositional\", it would be much better to include a flag that indicates whether the hierarchy corresponds to subsumption or not (and to explicitly document that the containing concept is the subsumer).</p>",
+        "id": 153836722,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1467851096
+    },
+    {
+        "content": "<p>that's what I proposed, and vocab knocked it back. </p>",
+        "id": 153836724,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467852820
+    },
+    {
+        "content": "<p>We can revisit it again - it's probably needed.</p>",
+        "id": 153836735,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1467868264
+    },
+    {
+        "content": "<p>well, I doubt we have time to revisit it prior to ballot. So we can all ballot about it </p>",
+        "id": 153836740,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467886739
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> I remember we had a discussion but I don't remember this being the focal issue. If we had captured \"transivity\" of the assumed relation I am definitely been in favor of identifying that. Let's not dwell on the past... However we can identify that the unstated hierarchy relation is transitive we should do that. But I'd say that we are likely VERY safe in assuming that anything you all make using such a notation will be transitive so this practice simply needs to be documented (I.E.: The FHIR default (un-named) nested hierarchy is always transitive.) </p>",
+        "id": 153836785,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1467905786
+    },
+    {
+        "content": "<p>I agree, <span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> </p>",
+        "id": 153836790,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1467909417
+    },
+    {
+        "content": "<p>transitivity is not the whole question. We can certainly state the transitivity is implied and can be taken for granted. but we can't say that subsumption can be taken for granted</p>",
+        "id": 153836809,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467920756
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> Ok, I'm dense. How do you see them as different? Are you saying that subsumption is a more general \"grouped by\" operation and transitive is limited to \"Is-A\"? I'm assuming that is not what you mean because if subsumption = \"grouped by” then subsumption means having a hierarchy. So help me understand how you separate defining a heriearchy from subsumption in a hierarchy?</p>",
+        "id": 153836825,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1467925156
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> can we state that both transitivity and subsumption are the implied default - unless stated otherwise?<br>\nI'm not immediately thinking of cases where that wouldn't work - but if there are some, it would be good to bring them forward</p>",
+        "id": 153836826,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1467925261
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> it actually would be the other way around - for example, part-of would be transitive, but it is not subsumption</p>",
+        "id": 153836835,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1467925683
+    },
+    {
+        "content": "<p>yes, the other way around. heirarchy is implicitly transitive, but a given heirarchy is not always subsumptive</p>",
+        "id": 153836837,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467925762
+    },
+    {
+        "content": "<p>Great discussion too bad is 'buried'  in hapi-land ( no offense to James - I'm sure everyone is already subscribed)  can it be moved to conformance or implementers? </p>",
+        "id": 153836850,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1467930967
+    },
+    {
+        "content": "<p>yeah this ended up as general dsiscussion. Actually, it's really time we had a terminology track - terminology is ending up split between 4 tracks....</p>",
+        "id": 153836869,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1467935483
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> how would that be different from the existing ontology track? (genuine question)</p>",
+        "id": 153837032,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1468056878
+    },
+    {
+        "content": "<p>well, within the health community we differentiate between a terminology and an ontology, though the line is blurred. A terminology - and terminology use and services - is a list of codes with definitions. An ontology is a graph of concepts that tries to assign underlying meaning to the content (blurry, as I said)</p>",
+        "id": 153837036,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1468064338
+    },
+    {
+        "content": "<p>in FHIR&lt; terminology means code system, value set, + the service API, where as ontology usually means RDF representation + validation + reasoning against external ontologies and services </p>",
+        "id": 153837037,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1468064384
+    },
+    {
+        "content": "<p>thanks <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> - I'd be seeing more benefit from converging these streams rather then diverging tbh</p>",
+        "id": 153837041,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1468064590
+    },
+    {
+        "content": "<p>at the end of the day its all about giving ideas identifiers to support agregation and filtering, and on which knowledge and relationship can be hung...</p>",
+        "id": 153837042,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1468064659
+    },
+    {
+        "content": "<p>well, that's the grounds for the current arrangement, but that only works if everybody buys in. And multiple people have said to me that following terminology is a problem because it appears in multiple places. Remember: all models are wrong. but some are useful</p>",
+        "id": 153837043,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1468064695
+    },
+    {
+        "content": "<p>i guess there is always a distinction between the abstract and concrete...</p>",
+        "id": 153837045,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1468065095
+    },
+    {
+        "content": "<p>+1 for separation.   Is simpler that way.</p>",
+        "id": 153837050,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1468075825
+    },
+    {
+        "content": "<p>+1 for adding terminology stream<br>\nI think it needs it's own place - seems that pretty much everyone agrees that it's too fragmented currently<br>\nand practically, the discussions in ontology have been, as Grahame said, more about RDF and reasoning, so I would vote for keeping that as is, at least for now</p>",
+        "id": 153837111,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1468155014
+    },
+    {
+        "content": "<p>well I'm still looking for an answer to <a href=\"https://chat.fhir.org/#narrow/near/24886/stream/CQL/topic/subsumption.20in.20CQL\" target=\"_blank\" title=\"https://chat.fhir.org/#narrow/near/24886/stream/CQL/topic/subsumption.20in.20CQL\">the blah.blah.blah</a> problem so if splitting helps concentrate the collective brain on that it can only be a good thing... i guess</p>",
+        "id": 153837114,
+        "sender_full_name": "Erich Schulz",
+        "timestamp": 1468155837
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> One of us in confused. Subsumption is by definition transitive in my book. A-&gt;B, B-&gt;C, transitive says A-&gt;C</p>",
+        "id": 153837658,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1468335814
+    },
+    {
+        "content": "<p>I didn't say otherwise, <span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> - what I did say was that transitive does not necessarily imply subsumption.  I didn't say anything either way about subsumption being transitive, but I agree with you that it is.</p>",
+        "id": 153837713,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1468355784
+    }
+]

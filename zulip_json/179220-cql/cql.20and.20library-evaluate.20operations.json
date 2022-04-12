@@ -1,0 +1,116 @@
+[
+    {
+        "content": "<p>I'm trying to implement the <a href=\"http://build.fhir.org/ig/HL7/cqf-recommendations/OperationDefinition-cpg-cql.html\">$cql</a> and <a href=\"http://build.fhir.org/ig/HL7/cqf-recommendations/OperationDefinition-cpg-library-evaluate.html\">$library-evaluate</a> operations per the CPG recommendations. The $library-evaluate operation always returns a Parameters resource and, for an expression where the result that is a list, the <code>return</code> Parameters resource should include multiple parameters with the same name corresponding to the expression for which the list that is returned. That works fine for all datatypes include lists of resources and lists of primitives. For the $cql operation, there will be a single result. In the <code>return</code> doc, it says that a list of resources should be returned as a bundle and other types should be returned as a Parameters resource.  I'm struggling with that Parameters resource recommendation. The exact wording is as follows...</p>\n<blockquote>\n<p>If the result is a List of resources, the result will be a Bundle. If the result is a CQL system-defined or FHIR-defined type, the result is returned as a Parameters resource</p>\n</blockquote>\n<p>What would I do with a list of primitives as in the following expression?</p>\n<div class=\"codehilite\"><pre><span></span><code> [Encounter: &quot;Inpatient&quot;] E\n  return all E.lengthOfStay\n</code></pre></div>\n<p>I'm also curious why do the two operations behave differently for lists of resources? One creates duplicate parameter names and the other constructs a bundle.</p>",
+        "id": 242123162,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1623269568
+    },
+    {
+        "content": "<p>The difference in output is mainly due to the fact that <code>$cql</code> started life as an ad-hoc operation on the cqf-ruler to provide an execution service for CQL and thus was subject to fewer constraints than <code>$evaluate</code>. It was convenient to get a Bundle with a few resources when you were evaluating a single expression. On the other hand <code>$evaluate</code> evolved alongside the rest of the clinical reasoning and Parameters resource guidance. It'd be worth discussing whether or not to reconcile that difference.</p>",
+        "id": 242124653,
+        "sender_full_name": "JP",
+        "timestamp": 1623270256
+    },
+    {
+        "content": "<p>FHIR Parameters support primitives using the <code>value[x]</code>. For example:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;resourceType&quot;: &quot;Parameters&quot;,\n  &quot;parameter&quot;: [\n    {\n      &quot;name&quot;: &quot;DefinitionName&quot;,\n      &quot;part&quot;: [\n        {\n          &quot;name&quot;: &quot;value&quot;,\n          &quot;valueBoolean&quot;: true\n        }\n      ]\n    }\n  ]\n}\n</code></pre></div>\n<p>So you'd return a Parameters resource with multiple parameters each named \"DefinitionName\" with a value part that had \"valueDuration\" and whatever the duration is.</p>",
+        "id": 242125802,
+        "sender_full_name": "JP",
+        "timestamp": 1623270835
+    },
+    {
+        "content": "<p>Thanks, @JP. Is \"DefinitionName\" just assumed as a constant at that point? Same question for the inner parts. Are each of those just named \"value\"?</p>",
+        "id": 242126471,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1623271111
+    },
+    {
+        "content": "<p>\"DefinitionName\" = Whatever the original definition name was in the CQL library</p>\n<p>Sorry, the example I gave wasn't correct (was copy-pasting quicky...):</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;resourceType&quot;: &quot;Parameters&quot;,\n  &quot;parameter&quot;: [\n    {\n      &quot;name&quot;: &quot;DefinitionName&quot;,\n       &quot;valueBoolean&quot;: true\n    }\n  ]\n}\n</code></pre></div>",
+        "id": 242127075,
+        "sender_full_name": "JP",
+        "timestamp": 1623271401
+    },
+    {
+        "content": "<p>I'm was specifically asking for the ad-hoc $cql case where there isn't really a well-defined DefinitionName.</p>",
+        "id": 242127204,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1623271474
+    },
+    {
+        "content": "<p>Hmm... That seems like a gap in the spec. I've only implemented the Bundle side of that. I'd suggest \"result\" or similar. <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> ?</p>",
+        "id": 242127752,
+        "sender_full_name": "JP",
+        "timestamp": 1623271707
+    },
+    {
+        "content": "<p>Where do I find the HAPI implementation for these operations? It would help me to review the decisions that were made there.</p>",
+        "id": 242129170,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1623272367
+    },
+    {
+        "content": "<p>There’s no complete implementation of either for HAPI as far as I’m aware. The cqf-ruler (which is based on HAPI) has partial implementations based on an older, in-progress version of the cpg spec. Those implementations are here:</p>\n<p><a href=\"https://github.com/DBCG/cqf-ruler/blob/9f1a748cb1342bc4421404502eb53d6fa3383a85/r4/src/main/java/org/opencds/cqf/r4/providers/CqlExecutionProvider.java#L233\">https://github.com/DBCG/cqf-ruler/blob/9f1a748cb1342bc4421404502eb53d6fa3383a85/r4/src/main/java/org/opencds/cqf/r4/providers/CqlExecutionProvider.java#L233</a></p>\n<p><a href=\"https://github.com/DBCG/cqf-ruler/blob/master/r4/src/main/java/org/opencds/cqf/r4/providers/LibraryOperationsProvider.java#L181\">https://github.com/DBCG/cqf-ruler/blob/master/r4/src/main/java/org/opencds/cqf/r4/providers/LibraryOperationsProvider.java#L181</a></p>\n<p>Both of those are being reworked to bring them up-to-date with the spec, but that effort is still a couple weeks out.</p>",
+        "id": 242130431,
+        "sender_full_name": "JP",
+        "timestamp": 1623272920
+    },
+    {
+        "content": "<p>Yes, we should align the $cql and $evaluate operations there, I would think they should behave the same way. I would actually suggest \"return\" as the name of the expression though in the $cql case, aligning with the FHIR operation name: <a href=\"http://hl7.org/fhir/operations.html#response\">http://hl7.org/fhir/operations.html#response</a></p>",
+        "id": 242271381,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1623359320
+    },
+    {
+        "content": "<p>I will say that one motivation for returning a list of resources as a Bundle rather than a Parameters, is that it provides a way to support paging.</p>",
+        "id": 242271771,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1623359491
+    },
+    {
+        "content": "<p>Another consideration is that you can't represent primitive data types with a Bundle.</p>",
+        "id": 242606360,
+        "sender_full_name": "JP",
+        "timestamp": 1623681387
+    },
+    {
+        "content": "<p>I hit a couple things in my implementation of the Library/$evaluate response that I think could be made clearer / improved in the spec. The first was handling of null values and the second was empty lists. For both, I was simply leaving them out of the parameters response, but that was unsatisfying to the end user as it wasn't clear why they were missing. The cqf-ruler converts these to string representations \"null\" and \"[]\" and now I'm doing the same thing. This is necessary because the Parameter <a href=\"https://www.hl7.org/fhir/parameters.html#invs\">constraints</a> require at least one of part, resource, or value. I'm not sure there is a better answer, but it rubs me the wrong way to convert an empty list into a string. Regardless, a note in the spec on how to deal with the situations would be useful.</p>",
+        "id": 243381122,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1624281919
+    },
+    {
+        "content": "<p>Because there's no collection/list type for the parameters we ended up needing to define an extension as a marker for something that should be an empty list. It's not yet in the cpg spec but should be arriving soon. Here's an example (this is on the input, but in principle you could do it for output as well):</p>\n<p><a href=\"https://github.com/DBCG/cql-evaluator/blob/master/evaluator.expression/src/test/java/org/opencds/cqf/cql/evaluator/expression/ExpressionEvaluatorTest.java#L264\">https://github.com/DBCG/cql-evaluator/blob/master/evaluator.expression/src/test/java/org/opencds/cqf/cql/evaluator/expression/ExpressionEvaluatorTest.java#L264</a></p>",
+        "id": 243423579,
+        "sender_full_name": "JP",
+        "timestamp": 1624300172
+    },
+    {
+        "content": "<p>Tracker for the CPG issue: <a href=\"https://jira.hl7.org/browse/FHIR-32962\">https://jira.hl7.org/browse/FHIR-32962</a></p>",
+        "id": 243532615,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1624375308
+    },
+    {
+        "content": "<p>Equivalent tracker on the FHIR R5 spec: <a href=\"https://jira.hl7.org/browse/FHIR-32963\">https://jira.hl7.org/browse/FHIR-32963</a></p>",
+        "id": 243533164,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1624375422
+    },
+    {
+        "content": "<p>As far as the results, I think a dataAbsentReason extension would be more appropriate there.</p>",
+        "id": 243533192,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1624375438
+    },
+    {
+        "content": "<p>A tracker for that on CPG: <a href=\"https://jira.hl7.org/browse/FHIR-32964\">https://jira.hl7.org/browse/FHIR-32964</a></p>",
+        "id": 243533661,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1624375619
+    },
+    {
+        "content": "<p>And the equivalent tracker for R5: <a href=\"https://jira.hl7.org/browse/FHIR-32965\">https://jira.hl7.org/browse/FHIR-32965</a></p>",
+        "id": 243533876,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1624375713
+    }
+]

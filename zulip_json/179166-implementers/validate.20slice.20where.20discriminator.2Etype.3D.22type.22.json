@@ -1,0 +1,56 @@
+[
+    {
+        "content": "<p>I ran into an issue using the Java Validator with a profile on DocumentManifest that defines slicing on the content element where discriminator.type=\"type\". One slice, \"pReference\", is defined on content that defines two (2) Reference types each with different targetProfile on DocumentReference.</p>\n<div class=\"codehilite\"><pre><span></span><code>&lt;element id=&quot;DocumentManifest.content.p[x]:pReference&quot;&gt;\n  &lt;path value=&quot;DocumentManifest.content.p[x]&quot; /&gt;\n  &lt;sliceName value=&quot;pReference&quot; /&gt;\n  &lt;type&gt;\n    &lt;code value=&quot;Reference&quot; /&gt;\n    &lt;targetProfile value=&quot;http://nictiz.nl/fhir/StructureDefinition/IHE.MHD.Minimal.DocumentReference&quot; /&gt;\n  &lt;/type&gt;\n  &lt;type&gt;\n    &lt;code value=&quot;Reference&quot; /&gt;\n    &lt;targetProfile value=&quot;http://hl7.org/fhir/StructureDefinition/DocumentReference&quot; /&gt;\n  &lt;/type&gt;\n&lt;/element&gt;\n</code></pre></div>\n\n\n<p>The Java Validator returns the following warning against this part of the profile:</p>\n<div class=\"codehilite\"><pre><span></span><code>WARNING: Discriminator ($this) is based on type, but slice DocumentManifest.content.p[x] does not declare a type.\n</code></pre></div>\n\n\n<p>Examination of the Java Validator source shows that the slice matching logic for discriminator equal to \"type\" is restricting the number of types in the slice element to one and only one. When this fails, the above generic warning is thrown.</p>\n<p>In a discussion of this logic with <span class=\"user-mention\" data-user-id=\"192301\">@Ardon Toonstra</span> from Firely, Ardon replied that the .NET Validator supports this scenario where the sliced element can have multiple types.</p>\n<p>The FHIR specification Profiling page section on Slicing and the \"type\" discriminator does not seem to clearly define whether a single type or multiple types in the slice are allowed. Looking for guidance.</p>",
+        "id": 211321052,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1601069912
+    },
+    {
+        "content": "<p>Thanks Richard. Perhaps good to mention that this concerns FHIR STU3.</p>",
+        "id": 211459907,
+        "sender_full_name": "Ardon Toonstra",
+        "timestamp": 1601278483
+    },
+    {
+        "content": "<p>Ardon, yes, thank you. Though the current Java validator code contains this logic so, the impact is for all official versions of FHIR - DSTU2, STU3, R4 and R5(CI).</p>",
+        "id": 211485795,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1601296511
+    },
+    {
+        "content": "<p>do you have a test case? This looks like one of those things where we just took a short cut</p>",
+        "id": 211561000,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1601333820
+    },
+    {
+        "content": "<p>The example I describe is from the Nictiz MedMij profiles where they have incorporated the IHE MHD profiles. The specific profile is <a href=\"http://nictiz.nl/fhir/StructureDefinition/IHE.MHD.DocumentManifest\">http://nictiz.nl/fhir/StructureDefinition/IHE.MHD.DocumentManifest</a> and currently has this issue with multiple types in the slice element as described above.</p>\n<p>Here's the test DocumentManifest resource to validate against the Nicitz MedMij profiles: <a href=\"/user_uploads/10155/NoPmIiAkxN_0WM4JSk4meObf/pdfa-documentmanifest1.xml\">pdfa-documentmanifest1.xml</a></p>\n<p>I need to drop offline now for the day. I can work on this tomorrow if you need something else.</p>",
+        "id": 211562137,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1601334582
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191370\">@Richard Ettema</span> I've had a look at this. I'm not sure I follow. I validated the instance you provided against the profile you provided:</p>\n<div class=\"codehilite\"><pre><span></span><code>*FAILURE*: 1 errors, 0 warnings, 0 notes\n  Error @ DocumentManifest.type.coding[0] (line 68, col13) : Invalid System URI: http://loinc.org/\n</code></pre></div>\n\n\n<p>Then I replaced the content reference with an attachment:</p>\n<div class=\"codehilite\"><pre><span></span><code>*FAILURE*: 3 errors, 0 warnings, 0 notes\n  Error @ DocumentManifest.type.coding[0] (line 68, col13) : Invalid System URI: http://loinc.org/\n  Error @ DocumentManifest.content[0].p.ofType(Attachment) (line 85, col18) : This element does not match any known slice  defined in the profile http://nictiz.nl/fhir/StructureDefinition/IHE.MHD.DocumentManifest and slicing is CLOSED: DocumentManifest.content[0].p.ofType(Attachment): Does not match slice &#39;pReference&#39;\n  Error @ DocumentManifest.content[0] (line 84, col12) : Profile http://nictiz.nl/fhir/StructureDefinition/IHE.MHD.DocumentManifest, Element &#39;DocumentManifest.content[0].p[x][pReference]&#39;: minimum required = 1, but only found 0\n</code></pre></div>",
+        "id": 212642732,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1602125609
+    },
+    {
+        "content": "<p>that looks like the right errors to me. So what's the problem?</p>",
+        "id": 212642739,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1602125628
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>  The validation warning message is from using an earlier version of the validator. I since confirmed the same results you are seeing with the latest validator.</p>\n<p>However, that actually brings up a new question - why isn't the latest validator giving the expected warning message that the slice has multiple types?</p>\n<p>I'm looking at the InstanceValidator class sliceMatches() method where I would expect the following else if clause to evaluate to true and produce that expected message:</p>\n<div class=\"codehilite\"><pre><span></span><code>else if (criteriaElement.getType().size() &gt; 1)\n  throw new DefinitionException(context.formatMessage(I18nConstants.DISCRIMINATOR__IS_BASED_ON_TYPE_BUT_SLICE__IN__HAS_MULTIPLE_TYPES_, discriminator, ed.getId(), profile.getUrl(), criteriaElement.typeSummary()));\n</code></pre></div>",
+        "id": 213077080,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1602530638
+    },
+    {
+        "content": "<p>ah. because in my R5 internal form, the types are collapsed since there's only an actual single type</p>",
+        "id": 213234844,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1602635914
+    }
+]

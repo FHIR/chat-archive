@@ -1,0 +1,458 @@
+[
+    {
+        "content": "<p>I've got an IG that has &gt;100 structure definitions.  Each has a canonical URL which allows the profiles to reference each other.</p>\n<p>Current guidance says that if I make a substantive change to one of the profiles, I need to change its canonical URL.  And then I need to update all the structure definitions that use the old canonical URL to use the new one instead.  Which counts as a substantive change to those structure definitions and necessitates a change to their URLs too.  Which then cascades further.  And before I know it, changing one structure definitionhas resulted in edits to 50 files and all their URLs.  And that really sucks.</p>\n<p>We avoid that pain with FHIR-published IGs right now because we play the \"STU\" card which allows us to make substantive changes without changing the URLs for anything.  Which flies great in theory, but really sucks for production systems that want to be able to see a URL declared in meta.profile and use that to drive validation.  There's no way to do that without some external magic source of knowledge about what version of the IG the system's compliant with.</p>\n<p>What I'd like to propose is that in addition to being able to declare profiles in an instance (i.e. structure definitions), we're also able to point to a particular IG - and specifically a particular IG version.  The combination of IG version + profile id would then resolve to a specific profile version - and would avoid the need to change the URLs for a whole bunch of profiles within an IG every time a single file changes.</p>\n<p>Thoughts?</p>",
+        "id": 153864247,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482217485
+    },
+    {
+        "content": "<p>This would mean that the Canonical URL wouldn't be canonical anymore would it? Does that also mean that StructureDefinitions should always be part of an IG resource for validation, since just describing a profile possibly wouldn't  be future proof? Because it would be allowed to make breaking  changes to a SD and keep the same URL. That's really substancial..<br>\nThis change would have a lot of inpact on validators and registries (like Simplifier)</p>",
+        "id": 153864250,
+        "sender_full_name": "Marten Smits",
+        "timestamp": 1482228975
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> I see the problem. Just to be clear, your proposal only concerns profile conformance tags in resources? Not external profile references on profile element types?</p>",
+        "id": 153864254,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1482230061
+    },
+    {
+        "content": "<p>Maybe this calls for a proper versioning workflow?</p>\n<p>When you start working on a new version of an existing IG, the new IG starts in the \"draft\" phase during which profile authors are allowed to add/edit/remove existing profiles. When the new IG version is ready for publication, you assign new definitive canonical url's to all the new/updated profiles and update all the external profile references accordingly. This is a bit of work, but you only need to do this once before publication of a new IG version - and tooling can facilitate this process.</p>\n<p>Do you think such a workflow could address the problem?</p>",
+        "id": 153864255,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1482232340
+    },
+    {
+        "content": "<p>I don't really understand this. You're saying that the knowledge of which IG version has to be in-band, but you haven't provided any grounds for saying so. (in fact, you haven't even provided any reason why the profiles need to be in band, but that's not the focus of my question)</p>",
+        "id": 153864260,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482234613
+    },
+    {
+        "content": "<p>The reason is that you want to be able to validate and, as a server, you're going to be dealing with clients that are using the \"old\" IG version and some that are using the \"new\" IG version because there's a period of transition.    In order to validate, you need to know what you're validating against.</p>",
+        "id": 153864272,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482243417
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191334\">@Marten Smits</span> I agree this is substantial, but the way things operate right now is really painful once you stop ignoring what we're supposed to do.  <span class=\"user-mention\" data-user-id=\"191336\">@Michel Rutten</span> - it's not just work for the author.  If you need systems to declare the schemas on the inbound instances, it means changing a whole lot of code instead of just a small amount of code (changing all root-level profile ids rather than just the IG id and whatever change drove the original cascade).  Plus the file names are tied to the URL, which means a rename in version control and possible updates throughout all of your documentation.  It's a hard thing to automate</p>",
+        "id": 153864273,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482243671
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> I get this is currently painful for the specifier, but most of the things you describe are tooling issues, not FHIR spec issues are they? If I create an instance of  a patient that describes that it conforms to \"<a href=\"http://fhir.nl/fhir/nl-core-patient\" target=\"_blank\" title=\"http://fhir.nl/fhir/nl-core-patient\">http://fhir.nl/fhir/nl-core-patient</a>\" and the modeler doesn't change the URL, but makes breaking changes to the definition and only bumps the version of the IG, my resource will become invalid? That doesn't make sense to me..</p>",
+        "id": 153864289,
+        "sender_full_name": "Marten Smits",
+        "timestamp": 1482247317
+    },
+    {
+        "content": "<p>There's tooling for the models - and if you're able to use an integrated tool, that could help.  There's also tooling for the documentation and that's harder to automate.  And code for those who implement can't be automated at all.</p>\n<p>The notion would be that you would claim conformance to both nl-core-patient as well as nl-core-ig-1.0.  Because nl-core-patient could easily change numerous times and having to change it to nl-core-patient-1.1, 1.2, 2.0, etc. is a significant amount of work on all involved.</p>",
+        "id": 153864294,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482248877
+    },
+    {
+        "content": "<p>That means that a StructureDefinition always has to be part of an IG?</p>",
+        "id": 153864297,
+        "sender_full_name": "Marten Smits",
+        "timestamp": 1482249196
+    },
+    {
+        "content": "<p>And for implementers? You decide if you change your code after a new publication right? And base your code on that? Given the fact that there are breaking changes, you have a lot more work than bump a url. As for documentation tooling: I just discussed this briefly here and we could provide a couple of functions in simplifier that say for example: <br>\n1. \"Let all resources reference the latest versions\"<br>\n2. \"Let all resources in the project reference to the latest version of this resource\"<br>\n3. \"Let this resource reference to all the latest versions of other resources in this project\"</p>",
+        "id": 153864300,
+        "sender_full_name": "Marten Smits",
+        "timestamp": 1482249779
+    },
+    {
+        "content": "<p>I'm not sure we'll have many profiles that aren't tied to an IG of some sort - I can't actually think of a situation where it happens right now.  Documentation tooling isn't necessarily going to be integrated with Simplier.  We need a solution that isn't going to be dependent on using a particular tool or publication mechanism.  You're going to want each version of an implementation guide to tie to specific profile instances and be able to keep track of that - which is easy to do with source control.  It's the referencing that's a pain.</p>",
+        "id": 153864320,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482256949
+    },
+    {
+        "content": "<p>\"as a server, you're going to be dealing with clients that are using the \"old\" IG version and some that are using the \"new\" IG version because there's a period of transition\" - I thought you said you weren't mixing versions? but here, you are. The server needs to deal with two different structures both identified the same? </p>",
+        "id": 153864334,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482263049
+    },
+    {
+        "content": "<p>and why is it any different to a client to change one URL in all messages and not another? </p>",
+        "id": 153864335,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482263067
+    },
+    {
+        "content": "<p>By mixing I thought you meant within an instance.  Yes, definitely the same endpoint will need to process instances from a range of versions.  And the instances will have to identify what they comply with.  The question is whether that's by changing a whole bunch of URLs or adding a single new URL for the IG version.</p>",
+        "id": 153864352,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482265742
+    },
+    {
+        "content": "<p>clients still have to change something. So I'm not particularly swayed by the impact on implementers. </p>",
+        "id": 153864353,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482265790
+    },
+    {
+        "content": "<p>how does an endpoint process different content against the client's rules, not it's own rules?</p>",
+        "id": 153864354,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482265829
+    },
+    {
+        "content": "<p>In most clients (though perhaps not all), the change in IG URL could probably be made in one place even for multiple messages.  Even if you have to make the change in multiple places, it's a single change - a simple search &amp; replace.  If it's per profile, then it can't be a simple search and replace.</p>",
+        "id": 153864355,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482265836
+    },
+    {
+        "content": "<p>The server processes against the rules for the version of the IG the instance claims to conform to.</p>",
+        "id": 153864357,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482265866
+    },
+    {
+        "content": "<p>Essentially the server has multiple sets of rules - the client decides which set they're going to invoke.</p>",
+        "id": 153864358,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482265886
+    },
+    {
+        "content": "<p>(Because not all clients will migrate at the same time).</p>",
+        "id": 153864359,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482265895
+    },
+    {
+        "content": "<p>why isn't this different end-points? can you refer across different IG versions?</p>",
+        "id": 153864360,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482265938
+    },
+    {
+        "content": "<p>what you're trying to do is the equivalent of doing R2 and R3 on the same end-point. </p>",
+        "id": 153864361,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482265979
+    },
+    {
+        "content": "<p>It's the same FHIR release.  We could do multiple endpoints, but that can be a bit much if implementation guides change semi-regularly. (say every 4-6 months for some degree of change)</p>",
+        "id": 153864362,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482266050
+    },
+    {
+        "content": "<p>why a bit much? </p>",
+        "id": 153864364,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482266122
+    },
+    {
+        "content": "<p>what's the capability statement resource going to say for an end-point trying to do all IGs at once? </p>",
+        "id": 153864366,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482266165
+    },
+    {
+        "content": "<p>Maintaining endpoints is more effort than having a single endpoint and having your code look at the instance.</p>",
+        "id": 153864367,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482266167
+    },
+    {
+        "content": "<p>I think it's rather not. You can map it back to 'single implementation and have your code look at the instance context' ok</p>",
+        "id": 153864369,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482266211
+    },
+    {
+        "content": "<p>on the server. </p>",
+        "id": 153864370,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482266216
+    },
+    {
+        "content": "<p>Well, it'd list the profiles it supports.  If we do this notion of IG versioning, then presumably CapabilityStatement would need to declare that too.</p>",
+        "id": 153864371,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482266217
+    },
+    {
+        "content": "<p>really, seperate the end points, or litter everything with extensions</p>",
+        "id": 153864372,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482266248
+    },
+    {
+        "content": "<p>And if the endpoint isn't tightly bound to an IG?  E.g. I accept PIX/PDQ messages but I accept other stuff too?</p>",
+        "id": 153864374,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482266309
+    },
+    {
+        "content": "<p>Your assertion is that it's fine to reference the same profile for multiple versions of the profile if the receiving system has a different endpoint for each version.  But not all downstream systems can necessarily do that.</p>",
+        "id": 153864378,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482266402
+    },
+    {
+        "content": "<p>necessarily do what? </p>",
+        "id": 153864381,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482266548
+    },
+    {
+        "content": "<p>Have a separate endpoint for every version of every IG for which they might consume content.</p>",
+        "id": 153864382,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482266596
+    },
+    {
+        "content": "<p>no. but if you really have to support different igs, and go with the client statement, but interpret it differently, then it's a lot less painful than trying to mix them</p>",
+        "id": 153864384,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482266769
+    },
+    {
+        "content": "<p>The thing is that the instance should look the same whether you're planning to validate or not.</p>",
+        "id": 153864390,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482266934
+    },
+    {
+        "content": "<p>uh? </p>",
+        "id": 153864392,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482266976
+    },
+    {
+        "content": "<p>When I send an instance to a server with an intention that it *could* validate against a particular version of a particular profile, the instance should contain sufficient information to identify the version of the profile against which validation is intended to be possible.  Single endpoint vs. multiple endpoints doesn't (or at least shouldn't) change that.  (In part because as sender, I don't necessarily know what validation a given server might want to do and what validation it chooses to do could change from day to day.)  So I think the number of endpoints is a red herring.  The question is whether I should identify the specific version of the profile URL by continuously updating the profile URL (of that profile and, through cascade, a whole whack of others) or by sending the IG version that the profile is associated with.</p>",
+        "id": 153864399,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482267178
+    },
+    {
+        "content": "<p>I completely get this.  It was extraordinarily frustrating in CCDA to have to change templateId values for the very same reason.  What we did was have each template refer to more general conformance statement, that could be met by an IG Specific templateId.  In that way, a change to a template that required a new version didn't have the ripple effect if the referring template didn't make a version specific reference.<br>\nI would propose that FHIR support the same mechanism.  It's one that has taken us several years to evolve to the point that it is workable.</p>",
+        "id": 153864412,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1482269713
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191387\">@Keith Boone</span> Can you describe what that might look like in the FHIR context?  (I'm having trouble following your description.)</p>",
+        "id": 153864413,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482270263
+    },
+    {
+        "content": "<p>As FHIR has <a href=\"http://Resource.id\" target=\"_blank\" title=\"http://Resource.id\">Resource.id</a> and Resource.meta.versionId, and resources can be referenced by either, content in an IG can reference a profile by an identifier (the more general id), or a version identifier (the more specific id), and when referencing profile, can do so by id to say \"conformant with some version of this profile\", or more specific \"conformant to that specific version\".</p>",
+        "id": 153864422,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1482272378
+    },
+    {
+        "content": "<p>But how does that bind everything together?  What I really want to know is that when I point to profile 123 for version 2 of my IG, that it will lock down to a specific version all the referenced profiles for every resource in my message. </p>",
+        "id": 153864423,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482272921
+    },
+    {
+        "content": "<p>Also, these are canonical URIs, not the resource Ids and meta.versionIds, as these may change from server to server.<br>\n(Might be able to control the <a href=\"http://resource.id\" target=\"_blank\" title=\"http://resource.id\">resource.id</a>, but very unlikely to be able to force a server to use a specific meta.versionId)</p>",
+        "id": 153864452,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1482279598
+    },
+    {
+        "content": "<p>I don't at all agree that end-point is a red herring. Your argument appeared completely unrelated to me</p>",
+        "id": 153864456,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482283940
+    },
+    {
+        "content": "<p>it doesn't matter how much validation the server is doing; the client somply says what it is doing. Trying to jam everything in band will lead you to a long list of problems. </p>",
+        "id": 153864457,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482284026
+    },
+    {
+        "content": "<p>you didn't comment, for instance, about whether references could cross IG versions</p>",
+        "id": 153864458,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482284044
+    },
+    {
+        "content": "<p>anyway, the normal pattern is seperate end points, so that you when you upgrade you connect to a new place. I'm not sure what that's so controversial </p>",
+        "id": 153864459,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482284108
+    },
+    {
+        "content": "<p>If the wire syntax changes (i.e. new FHIR version), absolutely agree that you change endpoints.  That's a global change and affects everyone who's talking to the endpoint, what the Conformance/CapabilityStatement looks like, what the profiles look like, etc.  So, at least until everything a server does goes normative, when it moves to support a new FHIR version, the endpoint has to change.  But the same is not (and cannot) be true for profiles.  Lots of servers will receive data that declares profiles.  The server will care about some profiles and won't care about others.  It might accept an instance declaring a profile it doesn't care about only to later decide it does care about it.  You can't have a different endpoint for every version of every IG you might choose to support (let alone for all of those you don't currently care about).  For some servers that could result in an obscene number of endpoints.  And due to the \"might not care until later\" problem, there's still a need for the instance to be explicit about exactly what version of a profile validity is being declared against.  That has to be in-band.  That's why we have meta.profile in the first place.</p>",
+        "id": 153864461,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482284542
+    },
+    {
+        "content": "<p>References to things outside the instance could well cross IG boundaries - something sent today might well reference something sent last year under a different version.  References to things within a single instance (e.g. a message) I would expect to be valid against the same IG version.</p>",
+        "id": 153864462,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482284611
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> You may want to lock down everything to a specific version of a profile, and certainly an implementation is in some ways locking in choices that have been made by that implementation, but to ensure interoperability, one does not need to force an implementation to lock things down so hard that the other implementers have no freedom.  There is a difference between what an implementation requires in order to interoperate with others, and what might be ideal and supported by an implementation.  What A sends must be compatible with what B receives, or things go boom.</p>",
+        "id": 153864469,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1482289073
+    },
+    {
+        "content": "<p>Hi Keith,</p>",
+        "id": 153864470,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482289168
+    },
+    {
+        "content": "<p>What I mean is that if you have an interaction that's complying to a particular IG version, you want all content to be based on that version of the IG - even if newer versions of some of the profiles might be available.</p>",
+        "id": 153864471,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482289210
+    },
+    {
+        "content": "<p>returning to this. you originally said:<br>\n\"Current guidance says that if I make a substantive change to one of the profiles, I need to change its canonical URL\"</p>",
+        "id": 153864601,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482350932
+    },
+    {
+        "content": "<p>not so; current guidance says that you should change the canonical URL if you make a breaking change to the profile. i meant to explore this, but forgot. </p>",
+        "id": 153864602,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482350968
+    },
+    {
+        "content": "<p>generally, there a a number of ways to approach this:<br>\n- don't make breaking changes ;-)<br>\n- change the canonical URLs - tedious, so we could introduce tooling support. But you could do this but putting the IG version in the canonical URL (some reasons to do this anyway)<br>\n- version the profiles with the IG, and version all the references (only change the profile canonical url for changes in scope/intent)<br>\n- separate out your endpoints, so the knowledge of which IG pack to use is implicit<br>\n- add an extension that indicates the IG version, an have the framework use this to tell the validator which IG pack to load<br>\n- use a tag to convey the IG version ('workflow', not meaning)</p>",
+        "id": 153864603,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482351195
+    },
+    {
+        "content": "<p>I don't know how many of these you're explored</p>",
+        "id": 153864604,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482351211
+    },
+    {
+        "content": "<p>but given the complexity, I cannot see any proposal to change the spec getting up for STU3</p>",
+        "id": 153864605,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482351232
+    },
+    {
+        "content": "<p>I'm going to exclude a few of these options:<br>\na) Don't make breaking changes - tends not to fly in the real world<br>\nd) Separate out your endpoints - doesn't allow validation by systems not specifically designed around that IG</p>\n<p>b) Change the canonical URLs - that's what I'm trying to get away from because it's tedious and tends to cascade.  It also affects web pages and other things that reference the spec<br>\nc) Version the profiles with the IG - I'm not sure exactly what this means.  Does this mean I need to edit the references or not?  And how does the instance indicate what version it complies with?  I'd be fine with the notion of the profile reference in the instance somehow embedding the IG version too if we decide that's easier than a separate element<br>\ne) Add an extension - this is what I'm thinking about, though if we go this route, I think it needs to be core<br>\nf) Use a tag - not sure what you mean by workflow, not meaning.  Obviously if the IG version is needed to validate, it has some impact on meaning</p>",
+        "id": 153864614,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482352713
+    },
+    {
+        "content": "<p>I don't understand that last. Are you indicating underlying meaning in your profile references? You shouldn't be. </p>",
+        "id": 153864619,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482353195
+    },
+    {
+        "content": "<p>you can include a version reference in your canonical profile URLs in the .meta.profile:<br>\n<a href=\"http://example.org/fhir/StructureDefinition/my-profile|0.8\" target=\"_blank\" title=\"http://example.org/fhir/StructureDefinition/my-profile|0.8\">http://example.org/fhir/StructureDefinition/my-profile|0.8</a></p>",
+        "id": 153864621,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482353258
+    },
+    {
+        "content": "<p>if you use |ig-version, and version everything together, then the authors have to change the |ig version bit</p>",
+        "id": 153864622,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482353314
+    },
+    {
+        "content": "<p>The profiles don't change the meaning of anything.  But the IGversion does change the interpretation of the profile reference.</p>",
+        "id": 153864624,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482355430
+    },
+    {
+        "content": "<p>So your proposal is:<br>\n- allow breaking change in structure definitions without changing the canonical URL (though the business version would presumably need to change)<br>\n- when referencing a profile in meta.profile, use a convention to append the ig version to the end - which will allow resolution of the specific version of the profile.</p>",
+        "id": 153864626,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482355521
+    },
+    {
+        "content": "<p>If that's correct, I could be satisfied with that.</p>",
+        "id": 153864627,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482355534
+    },
+    {
+        "content": "<p>the business version has to change, yes, because that's what |version refers to. </p>",
+        "id": 153864628,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482355576
+    },
+    {
+        "content": "<p>But the business version wouldn't change on referencing profiles - but you'd still need to know the IG version.</p>",
+        "id": 153864630,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482355651
+    },
+    {
+        "content": "<p>What I want to happen is as follows - I edit one profile and increment its business version.  Then I edit the IG and increment its business version.  In the instance I might reference any of the 100+ profiles from the IG using the IG version and that resolves which business version of all in-scope profiles applies.</p>",
+        "id": 153864631,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482355713
+    },
+    {
+        "content": "<p>I *don't* want to have to increment the business version of the 50+ profiles that are impacted through the cascade of references from the one updated profile.</p>",
+        "id": 153864632,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482355745
+    },
+    {
+        "content": "<p>you do like making things super complex. I was recommending a simpler approach: increment all the versions on all the profiles and the Ig together, when you publish it.</p>",
+        "id": 153864633,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482355828
+    },
+    {
+        "content": "<p>I guess that's doable.  Would be ideal if we could pass a parameter to the igpublisher that would set the version element on all metadata artifacts.  It would mean the version would change even if the artifacts hadn't, but I guess that's not the end of the world.</p>",
+        "id": 153864678,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482363129
+    },
+    {
+        "content": "<p>doesn't sound right to be a publisher thing to me - it's going to change the source files?</p>",
+        "id": 153864679,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482363266
+    },
+    {
+        "content": "<p>It's going to change the generated files - all of the source files run through a transformation that does things like inject narratives, etc.  This would just be another thing it tweaks.</p>",
+        "id": 153864680,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482363364
+    },
+    {
+        "content": "<p>Presumably the source files wouldn't bother to declare version at all.  (If they did and someone tried to tell the publisher to force the version, I'd recommend treating that as an error.)</p>",
+        "id": 153864681,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482363401
+    },
+    {
+        "content": "<p>ok, make a task. it'll be something in the json file, not a parameter to the publisher</p>",
+        "id": 153864683,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482363973
+    },
+    {
+        "content": "<p><a href=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=12487\" target=\"_blank\" title=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=12487\">GF#12487</a></p>",
+        "id": 153864684,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1482365012
+    }
+]

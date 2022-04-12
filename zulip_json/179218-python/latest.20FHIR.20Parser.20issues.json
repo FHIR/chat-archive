@@ -1,0 +1,68 @@
+[
+    {
+        "content": "<p>I have merged the latest changes from FHIR parser and getting errors on generation of CI build:</p>\n<p>these changes let me get a set of Classes</p>\n<ul>\n<li>added \"!=\":'neq',  to mappings.py</li>\n<li>added '{cd}' \"'some data' to mappings.py</li>\n<li>short-circuited the unit tests using a <code> try except TypeError pass</code>  at  line 157</li>\n</ul>\n<p>but then trying to import Patient</p>\n<ul>\n<li>address Class tries to import AddressType and AddressUse class  which don't exist  see below:</li>\n</ul>",
+        "id": 184404652,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1577593994
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span>    def elementProperties(self):\n        js = super(Address, self).elementProperties()\n        js.extend([\n            (&quot;use&quot;, &quot;use&quot;, AddressUse.str, False, None, False),\n            (&quot;type&quot;, &quot;type&quot;, AddressType.str, False, None, False),\n            (&quot;text&quot;, &quot;text&quot;, str, False, None, False),\n            (&quot;line&quot;, &quot;line&quot;, str, True, None, False),\n            (&quot;city&quot;, &quot;city&quot;, str, False, None, False),\n            (&quot;district&quot;, &quot;district&quot;, str, False, None, False),\n            (&quot;state&quot;, &quot;state&quot;, str, False, None, False),\n            (&quot;postalCode&quot;, &quot;postalCode&quot;, str, False, None, False),\n            (&quot;country&quot;, &quot;country&quot;, str, False, None, False),\n            (&quot;period&quot;, &quot;period&quot;, period.Period, False, None, False),\n        ])\n        return js\n\n\nfrom . import AddressType\nfrom . import AddressUse\nfrom . import period\n</pre></div>",
+        "id": 184404660,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1577594030
+    },
+    {
+        "content": "<p>the codesystem_AddressType and codesystem_AddressUse do indeed exist and I believe there is some missing in the JInja2 templates or the parser settings.</p>",
+        "id": 184404805,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1577594321
+    },
+    {
+        "content": "<p>The latest changes to fhir-parser include breaking changes to codesystem → enum generation, the templates will probably have to be updated to support those changes.</p>",
+        "id": 184472890,
+        "sender_full_name": "Pascal Pfiffner",
+        "timestamp": 1577713004
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 184480215,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1577720659
+    },
+    {
+        "content": "<p>I don't understand how the enums will work...</p>\n<p>here is example using address.py where I hacked the Properties and imports to work:</p>\n<div class=\"codehilite\"><pre><span></span>        super(Address, self).__init__(jsondict=jsondict, strict=strict)\n\n    def elementProperties(self):\n        js = super(Address, self).elementProperties()\n        js.extend([\n            (&quot;use&quot;, &quot;use&quot;, addressuse.AddressUse, False, None, False),\n            (&quot;type&quot;, &quot;type&quot;, addresstype.AddressType, False, None, False),\n            (&quot;text&quot;, &quot;text&quot;, str, False, None, False),\n            (&quot;line&quot;, &quot;line&quot;, str, True, None, False),\n            (&quot;city&quot;, &quot;city&quot;, str, False, None, False),\n            (&quot;district&quot;, &quot;district&quot;, str, False, None, False),\n            (&quot;state&quot;, &quot;state&quot;, str, False, None, False),\n            (&quot;postalCode&quot;, &quot;postalCode&quot;, str, False, None, False),\n            (&quot;country&quot;, &quot;country&quot;, str, False, None, False),\n            (&quot;period&quot;, &quot;period&quot;, period.Period, False, None, False),\n        ])\n        return js\n\n\nfrom . import codesystem_AddressType as addresstype\nfrom . import codesystem_AddressUse as addressuse\nfrom . import period\n</pre></div>\n\n\n<p>so to implement this,  the class expects an object now and not a code as a string?</p>\n<div class=\"codehilite\"><pre><span></span>import R4models.address as A\nimport R4models.codesystem_AddressUse as AU\n\naddress = A.Address()\naddress.use = AU.AddressUse()\n\n\nprint(address.as_json())\n\n-------\n{&#39;use&#39;: &lt;R4models.codesystem_AddressUse.AddressUse object at 0x109870a20&gt;}\n[Finished in 0.32s]\n</pre></div>",
+        "id": 184689064,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1578003543
+    },
+    {
+        "content": "<p>also the FHIR parser template for code systems give invalid Class definitions... (looks like a carry over from Swift) So I am  wondering if introducing the enums classes into Python was intentional or accidental?</p>",
+        "id": 184775122,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1578092693
+    },
+    {
+        "content": "<p>Here is a CodeSystem Class which I needed to edit to make legal python by removing some curly brackets and replacing with colon</p>\n<div class=\"codehilite\"><pre><span></span>...\n\nclass AddressUse(object):\n    &quot;&quot;&quot; The use of an address.\n\n    URL: http://hl7.org/fhir/address-use\n    ValueSet: http://hl7.org/fhir/ValueSet/address-use\n    &quot;&quot;&quot;\n\n    home = &quot;home&quot;\n    &quot;&quot;&quot; A communication address at a home.\n    &quot;&quot;&quot;\n\n    work = &quot;work&quot;\n    &quot;&quot;&quot; An office address. First choice for business related contacts during business hours.\n    &quot;&quot;&quot;\n\n    temp = &quot;temp&quot;\n    &quot;&quot;&quot; A temporary address. The period can provide more detailed information.\n    &quot;&quot;&quot;\n\n    old = &quot;old&quot;\n    &quot;&quot;&quot; This address is no longer in use (or was never correct but retained for records).\n    &quot;&quot;&quot;\n\n    billing = &quot;billing&quot;\n    &quot;&quot;&quot; An address to be used to send bills, invoices, receipts etc.\n    &quot;&quot;&quot;\n</pre></div>",
+        "id": 184775249,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1578092837
+    },
+    {
+        "content": "<p>Which template did you use for that? fhir-parser doesn't provide templates, you have to write your own.</p>",
+        "id": 184902022,
+        "sender_full_name": "Pascal Pfiffner",
+        "timestamp": 1578313975
+    },
+    {
+        "content": "<p>I just the used sample templates “out of the box “ after doing a git pull.  Also note I did not directly edit the templates. I wanted to see what happened first if the enum classes where legal python.  So I edited the classes directly after they were generated.  After looking at this again. I think that there is something missing the as_json method. And that these classes would ideally inherit from Enum. Post 3.4</p>",
+        "id": 184922862,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1578328930
+    },
+    {
+        "content": "<p>The sample templates do not work out of the box, they are just samples. But you can work backwards from the fixes you made to add the learnings to the templates that live in client-py.</p>",
+        "id": 184926168,
+        "sender_full_name": "Pascal Pfiffner",
+        "timestamp": 1578331261
+    }
+]

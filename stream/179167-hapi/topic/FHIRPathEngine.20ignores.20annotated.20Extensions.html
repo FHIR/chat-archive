@@ -1,0 +1,88 @@
+---
+layout: page
+title: "FHIR Chat  · FHIRPathEngine ignores annotated Extensions · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/FHIRPathEngine.20ignores.20annotated.20Extensions.html">FHIRPathEngine ignores annotated Extensions</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="211141659"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/FHIRPathEngine%20ignores%20annotated%20Extensions/near/211141659" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Sergej Reiser <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/FHIRPathEngine.20ignores.20annotated.20Extensions.html#211141659">(Sep 24 2020 at 14:46)</a>:</h4>
+<p>The FHIRPathEngine is not seeing Extensions, that have been added by using the Field-Annotations @Child / @Extension. </p>
+<p>Lets say i have the following class for MyPatient (just like in the HAPI documentation):</p>
+<div class="codehilite" data-code-language="Java"><pre><span></span><code><span class="nd">@ResourceDef</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s">"Patient"</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="s">"http://example.com/StructureDefinition/mypatient"</span><span class="p">)</span>
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">MyPatient</span> <span class="kd">extends</span> <span class="n">Patient</span> <span class="p">{</span>
+    <span class="kd">private</span> <span class="kd">static</span> <span class="kd">final</span> <span class="kt">long</span> <span class="n">serialVersionUID</span> <span class="o">=</span> <span class="mi">1L</span><span class="p">;</span>
+
+    <span class="nd">@Child</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s">"petName"</span><span class="p">)</span>
+    <span class="nd">@Extension</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="s">"http://example.com/dontuse#petname"</span><span class="p">,</span> <span class="n">definedLocally</span><span class="o">=</span><span class="kc">false</span><span class="p">,</span> <span class="n">isModifier</span><span class="o">=</span><span class="kc">false</span><span class="p">)</span>
+    <span class="nd">@Description</span><span class="p">(</span><span class="n">shortDefinition</span><span class="o">=</span><span class="s">"The name of the patient's favourite pet"</span><span class="p">)</span>
+    <span class="kd">private</span> <span class="n">StringType</span> <span class="n">myPetName</span><span class="p">;</span>
+
+    <span class="nd">@Override</span>
+    <span class="kd">public</span> <span class="kt">boolean</span> <span class="nf">isEmpty</span><span class="p">()</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="kd">super</span><span class="p">.</span><span class="na">isEmpty</span><span class="p">()</span> <span class="o">&amp;&amp;</span> <span class="n">ElementUtil</span><span class="p">.</span><span class="na">isEmpty</span><span class="p">(</span><span class="n">myPetName</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="kd">public</span> <span class="n">StringType</span> <span class="nf">getPetName</span><span class="p">()</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">myPetName</span> <span class="o">==</span> <span class="kc">null</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">myPetName</span> <span class="o">=</span> <span class="k">new</span> <span class="n">StringType</span><span class="p">();</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">myPetName</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">setPetName</span><span class="p">(</span><span class="n">StringType</span> <span class="n">thePetName</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">myPetName</span> <span class="o">=</span> <span class="n">thePetName</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Now i would like to read the Extension with a FHIR-Path expression.</p>
+<div class="codehilite" data-code-language="Java"><pre><span></span><code><span class="nd">@Test</span>
+<span class="kt">void</span> <span class="nf">readByFhirPath</span><span class="p">()</span> <span class="kd">throws</span> <span class="n">Exception</span> <span class="p">{</span>
+    <span class="n">IFhirPath</span> <span class="n">fhirPath</span> <span class="o">=</span> <span class="n">FhirContext</span><span class="p">.</span><span class="na">forR4</span><span class="p">().</span><span class="na">newFhirPath</span><span class="p">();</span>
+
+    <span class="n">MyPatient</span> <span class="n">myPatient</span> <span class="o">=</span> <span class="k">new</span> <span class="n">MyPatient</span><span class="p">();</span>
+    <span class="n">myPatient</span><span class="p">.</span><span class="na">setPetName</span><span class="p">(</span><span class="k">new</span> <span class="n">StringType</span><span class="p">(</span><span class="s">"Adam"</span><span class="p">));</span>
+    <span class="c1">// notice: myPatient.getExtension() is empty</span>
+
+    <span class="n">List</span><span class="o">&lt;</span><span class="n">Extension</span><span class="o">&gt;</span> <span class="n">result</span> <span class="o">=</span> <span class="n">fhirPath</span><span class="p">.</span><span class="na">evaluate</span><span class="p">(</span><span class="n">myPatient</span><span class="p">,</span> <span class="s">"Patient.extension('http://example.com/dontuse#petname')"</span><span class="p">,</span> <span class="n">Extension</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+    <span class="k">assert</span> <span class="n">result</span><span class="p">.</span><span class="na">size</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">;</span> <span class="c1">// fails, because the list is empty</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>This fails! But when i add the Extension the "old-fsahion" way everything is fine!</p>
+<div class="codehilite" data-code-language="Java"><pre><span></span><code><span class="nd">@Test</span>
+<span class="kt">void</span> <span class="nf">readByFhirPath</span><span class="p">()</span> <span class="kd">throws</span> <span class="n">Exception</span> <span class="p">{</span>
+    <span class="n">IFhirPath</span> <span class="n">fhirPath</span> <span class="o">=</span> <span class="n">FhirContext</span><span class="p">.</span><span class="na">forR4</span><span class="p">().</span><span class="na">newFhirPath</span><span class="p">();</span>
+
+    <span class="n">MyPatient</span> <span class="n">myPatient</span> <span class="o">=</span> <span class="k">new</span> <span class="n">MyPatient</span><span class="p">();</span>
+<span class="c1">//    myPatient.setPetName(new StringType("Adam"));</span>
+    <span class="n">myPatient</span><span class="p">.</span><span class="na">addExtension</span><span class="p">(</span><span class="k">new</span> <span class="n">Extension</span><span class="p">(</span><span class="s">"http://example.com/dontuse#petname"</span><span class="p">,</span> <span class="k">new</span> <span class="n">StringType</span><span class="p">(</span><span class="s">"Adam"</span><span class="p">)));</span>
+
+    <span class="n">List</span><span class="o">&lt;</span><span class="n">Extension</span><span class="o">&gt;</span> <span class="n">result</span> <span class="o">=</span> <span class="n">fhirPath</span><span class="p">.</span><span class="na">evaluate</span><span class="p">(</span><span class="n">myPatient</span><span class="p">,</span> <span class="s">"Patient.extension('http://example.com/dontuse#petname')"</span><span class="p">,</span> <span class="n">Extension</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+    <span class="k">assert</span> <span class="n">result</span><span class="p">.</span><span class="na">size</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">;</span> <span class="c1">// succeeds</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Im not sure if this is an Issue with the FHIRPathEngine itself, or rather with the fact, that annotated Extensions are not accessable through <code>resource.getExtension()</code>. Is there some kind of a workaround to this?</p>
+
+
+
+<a name="214023557"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/FHIRPathEngine%20ignores%20annotated%20Extensions/near/214023557" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Sergej Reiser <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/FHIRPathEngine.20ignores.20annotated.20Extensions.html#214023557">(Oct 21 2020 at 08:51)</a>:</h4>
+<p><strong>PUSH</strong><br>
+Could someone please look into this? The circumstance, that FHIR-Path is not working for annotated Extensions has further implications for indexing of SearchParams.</p>
+<p>If i create a custom SearchParameter for <code>petName</code> it will not work, because HAPI also uses FHIR-Path for indexing. So this is what happens: <br>
+Before indexing or persisting, HAPI will parse the resource into it's corresponding class. If i added  the<code>MyPatient</code> class to the FhirContext by <code>fhirContext.setDefaultTypeForProfile("http://example.com/StructureDefinition/mypatient", MyPatient.class)</code>, HAPI will parse the resource into <code>MyPatient</code> and further pass this object for indexing.  Since <code>MyPatient</code> uses the <code>@Extension</code> annotation FHIR-Path will fail to evaluate the expression i use for my SearchParameter (<code>Patient.extension('http://example.com/dontuse#petname')</code>).  So <code>petName</code> will never be indexed as long as HAPI uses the <code>MyPatient</code>class for processing.</p>
+<p>The only workaround i found is to temporarily remove the <code>MyPatient </code> class from the FHIR-Context <code>fhirContext.setDefaultTypeForProfile("http://example.com/StructureDefinition/mypatient", null)</code>. Than HAPI will parse incoming resources into the default <code>Patient</code> class which has no <code>@Extension</code> annotations.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,185 @@
+---
+layout: page
+title: "FHIR Chat  · Retrieving FHIR contained resources · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html">Retrieving FHIR contained resources</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="172224125"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172224125" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172224125">(Aug 01 2019 at 14:12)</a>:</h4>
+<p>Hey CQL team. Is there a mechanism to retrieve information from contained resources from a query request. Something like <code>define "Aspirin MedRequests" [MedicationRequest: medication.code in "acetylsalicylic acid"]</code> if the MedicationRequest has a medication reference set?</p>
+
+
+
+<a name="172418278"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172418278" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> David Hay <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172418278">(Aug 03 2019 at 19:29)</a>:</h4>
+<p>does this help: <a href="http://hl7.org/fhir/search.html#contained" target="_blank" title="http://hl7.org/fhir/search.html#contained">http://hl7.org/fhir/search.html#contained</a></p>
+
+
+
+<a name="172506484"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172506484" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172506484">(Aug 05 2019 at 14:01)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="194612">@Michael Riley</span> -- if you strictly adhere to the defined FHIR models in CQL, then I think the only valid approach is via a subquery.  It's more complicated (and less efficient) than I prefer, but I think it's the only way that will work using a strict interpretation of the model.  Here is an example of your expression using that approach (and supporting both medication as a code and as a reference):</p>
+<div class="codehilite"><pre><span></span>define &quot;Aspirin Medications&quot;:
+  [Medication: &quot;acetylsalicylic acid&quot;]
+
+define &quot;Aspirin MedRequests&quot;:
+  [MedicationRequest] R
+  let
+    MedCode: FHIRHelpers.ToConcept(R.medication as FHIR.CodeableConcept),
+    MedRef: (R.medication as FHIR.Reference).reference
+  where
+    MedCode in &quot;acetylsalicylic acid&quot;
+    or exists ((&quot;Aspirin Medications&quot;) M where M.id = MedRef or EndsWith(MedRef, &#39;/&#39; + M.id))
+</pre></div>
+
+
+<p>Note: I haven't tested the above in a run-time environment, but it does compile w/ CQL-to-ELM.</p>
+
+
+
+<a name="172506749"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172506749" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172506749">(Aug 05 2019 at 14:04)</a>:</h4>
+<p>That said, I have seen cases where authors have treated the default membership operator for <code>MedicationRequest</code> as if it is a FHIR query on <code>MedicationRequest.medication</code> -- in which case you can just use `[MedicationRequest: "acetylsalicylic acid"].  But this is not the standardized model, so it would require special support from the execution engine (and you would need to make sure the CQL-to-ELM is not in strict mode).  If you want your CQL to be portable and to work across various execution environments, I wouldn't recommend that approach.</p>
+
+
+
+<a name="172506880"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172506880" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172506880">(Aug 05 2019 at 14:06)</a>:</h4>
+<p>Last, <span class="user-mention" data-user-id="191359">@Bryn Rhodes</span> is working on something called QUICK FHIR (or something like that).  It's an alternate, simpler to use, FHIR model for CQL.  I think it may abstract these sorts of issues from the author -- but you'd need to talk to Bryn to get the details.</p>
+
+
+
+<a name="172513392"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172513392" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172513392">(Aug 05 2019 at 15:33)</a>:</h4>
+<p>Wow this is exactly what I was looking for. Although it seems like  you need to pull the medication resource set from a previous query, before getting the medicationrequest resource. We might have MedRequests with a heterogenous set of CodeableConcepts vs Refences here. I assume that casting with the 'as' command fails silently in the cases where it's not relevant?</p>
+
+
+
+<a name="172514590"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172514590" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172514590">(Aug 05 2019 at 15:49)</a>:</h4>
+<p>You can put the medication resource set subquery in the same query, but I think it would be less efficient in some execution implementations:</p>
+<div class="codehilite"><pre><span></span>define &quot;Aspirin MedRequests&quot;:
+  [MedicationRequest] R
+  let
+    MedCode: FHIRHelpers.ToConcept(R.medication as FHIR.CodeableConcept),
+    MedRef: (R.medication as FHIR.Reference).reference
+  where
+    MedCode in &quot;acetylsalicylic acid&quot;
+    or exists ([Medication: &quot;acetylsalicylic acid&quot;] M where M.id = MedRef or EndsWith(MedRef, &#39;/&#39; + M.id))
+</pre></div>
+
+
+<p>The <code>as</code> expression will result in <code>null</code> if the actual type does not match the cast type.  See: <a href="https://cql.hl7.org/03-developersguide.html#casting" target="_blank" title="https://cql.hl7.org/03-developersguide.html#casting">https://cql.hl7.org/03-developersguide.html#casting</a></p>
+<p>In CQL, nulls tend to propagate, so often it ends up working the way you want in cases like this.</p>
+<p>For example, if a <code>MedicationRequest</code> instance has a <code>medicationReference</code>, then <code>MedCode</code> will be <code>null</code> -- and since <code>null in "acetylsalicylic acid"</code> results in <code>null</code>, that first part in the <code>where</code> clause will not be satisfied (which is right).</p>
+<p>Similarly, if a <code>MedicationRequest</code> instance has a <code>medicationCode</code>, then <code>MedRef</code> will be <code>null</code> -- and since <code>M.id = null</code> will always result in <code>null</code> and <code>EndsWith(null, '/' + M.id)</code> will also always result in <code>null</code>, that 2nd clause in the <code>where</code> will never be satisfied when <code>MedRef</code> is <code>null</code> (which is also right).</p>
+
+
+
+<a name="172516874"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172516874" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172516874">(Aug 05 2019 at 16:18)</a>:</h4>
+<p>This is awesome thank you so much! Makes perfect sense to me, it's just CQL that's way more clever than I'm normally writing :)</p>
+
+
+
+<a name="172517058"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172517058" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172517058">(Aug 05 2019 at 16:20)</a>:</h4>
+<p>It looks right to me, but like I said, I haven't fully tested it -- so let's hope it works! ;-)</p>
+
+
+
+<a name="172698318"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172698318" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172698318">(Aug 07 2019 at 17:38)</a>:</h4>
+<p>I was able to have this evaluate for medicationRequest, but what do I do in the case of a list of references? For example, what if I want to compare an Encounter's diagnosis reference to a set of conditions I've allready pulled?</p>
+<div class="codehilite"><pre><span></span>define &quot;ChlamydiaDiagnosis&quot;: [Condition: Code in &quot;Chlamydia_Codes&quot;]
+define &quot;ChlamydiaEncounters&quot;:
+[Encounter] Encounters
+where exists (&quot;ChlamydiaDiagnosis&quot; cond EndsWith(Encounters.diagnosis.condition.reference, &#39;/&#39; + cond.id))
+</pre></div>
+
+
+<p>This line returns an error of</p>
+<div class="codehilite"><pre><span></span> Error [16:1]: Expected a list with at most one element, but found a list with multiple elements.
+</pre></div>
+
+
+<p>Since Encounter.diagnosis.condition.reference is a list of references, instead of a singular reference, how do I splay out that list to be used in this context? I think I use the <code>ForEach</code> evaluator, but I can't find a good example of how to use it.</p>
+
+
+
+<a name="172699341"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172699341" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172699341">(Aug 07 2019 at 17:49)</a>:</h4>
+<p><span class="user-mention" data-user-id="191359">@Bryn Rhodes</span></p>
+
+
+
+<a name="172699873"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172699873" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172699873">(Aug 07 2019 at 17:55)</a>:</h4>
+<p><span class="user-mention" data-user-id="194612">@Michael Riley</span> and <span class="user-mention" data-user-id="191359">@Bryn Rhodes</span>  -- I'm already in the middle of working this out.  Stand by.</p>
+
+
+
+<a name="172701037"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172701037" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172701037">(Aug 07 2019 at 18:06)</a>:</h4>
+<p><span class="user-mention" data-user-id="194612">@Michael Riley</span> -- this can actually be accomplished using a single query and the <code>with</code> construct:</p>
+<div class="codehilite"><pre><span></span>define &quot;ChlamydiaEncounters&quot;:
+  [Encounter] Encounter
+    with [Condition: code in &quot;Chlamydia_Codes&quot;] ChlamydiaDiagnosis
+    such that exists (
+      (Encounter.diagnosis.condition.reference) ref
+        where EndsWith(ref, &#39;/&#39; + ChlamydiaDiagnosis.id)
+    )
+</pre></div>
+
+
+<p>This essentially says to query over each encounter and each chlamydia condition, looking for encounters such that it's dx reference ends with a chlamydia condition's id.</p>
+<p>For more on the <code>with</code> construct: <a href="https://cql.hl7.org/02-authorsguide.html#relationships" target="_blank" title="https://cql.hl7.org/02-authorsguide.html#relationships">https://cql.hl7.org/02-authorsguide.html#relationships</a></p>
+
+
+
+<a name="172701246"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172701246" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172701246">(Aug 07 2019 at 18:09)</a>:</h4>
+<p>The subquery actually needs to use the encounter refs as its source, since they are a list within a single encounter.  Since we use <code>with</code> on the chlamydia conditions, we don't need to worry about the "listness" of the conditions, as the iteration over that is built into the <code>with</code> construct.</p>
+
+
+
+<a name="172702176"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172702176" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172702176">(Aug 07 2019 at 18:21)</a>:</h4>
+<p><span class="user-mention" data-user-id="191469">@Chris Moesel</span> Thank you so much, this worked for me. I didn't really understand the with clause very well.<br>
+ I know the retrieve evaluator doesn't have a great mechanism for doing this, but if we could have the retrieve evaluator use either references, or construct a reference from a resource, that would be incredible.<br>
+Simply put, being able to do something like<br>
+<code>define "ChalmydiaEncounters":[Encounter: diagnosis references "ChlamydiaDiagnosis"]</code><br>
+to just pull resources that link against other resources would be really big for these non-patient-links. FHIR has some robust querying capability, I feel like CQL isn't leveraging it to the fullest.</p>
+
+
+
+<a name="172702860"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172702860" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172702860">(Aug 07 2019 at 18:30)</a>:</h4>
+<p>Hey <span class="user-mention" data-user-id="194612">@Michael Riley</span> -- agreed that something like that would be way cool.  One of the reasons that CQL doesn't leverage all of FHIR is that CQL is built to be data model agnostic.  It needs to support <em>any</em> data model, not just FHIR -- so building in FHIR-specific features wouldn't really support that aim.  That said, alternate data models could be designed that are based on FHIR but expose properties in a way that makes traversing references and leveraging queries easier.  I don't know if <span class="user-mention" data-user-id="191359">@Bryn Rhodes</span> has any of the in mind for QUICK FHIR, but I'm tagging him just in case.</p>
+
+
+
+<a name="172703832"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172703832" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172703832">(Aug 07 2019 at 18:42)</a>:</h4>
+<p>Yeah, I completely understand the independent data model complication. It's pretty brilliant that the java engine can rely on commonly used interfaces like "iterable" to help facilitate the execution engine, or resolve a type. However, a referencing relationship seems like something everyone would want. Everyone's using a database, almost everyone's database is relational. Some way to explicitedly call out to those relations would be useful.</p>
+
+
+
+<a name="172807654"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieving%20FHIR%20contained%20resources/near/172807654" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieving.20FHIR.20contained.20resources.html#172807654">(Aug 08 2019 at 22:10)</a>:</h4>
+<p><span class="user-mention" data-user-id="194612">@Michael Riley</span> , this is an area that we've spent a lot of time thinking about, but there are several potential ways it could be addressed, all with different levels of effort in different areas of the spec/tooling, and different resulting impacts on the implementation.</p>
+<p>The most transparent way would be to actually use the ELM to detect these types of patterns when they are used within a given expression and within the data provider actually support a kind of rewrite that would push the "include" into the request and transform the "child retrieves" into a reference to a materialized result of the child retrieve. This approach, as you can imagine, would require a fairly sophisticated provider, but it's possible without any change to the translator or the model info. As a con, it does require authors to use certain patterns to access data.</p>
+<p>As Chris alluded to, we've also considered how we might make this transparent behind the model. The idea is that for reference-valued elements in FHIR, the model info element would be class-valued, rather than reference-valued, and it would be up to the data-access layer to resolve that (typically by fetching the instance pointed to by the reference, but you could imagine a more sophisticated implementation along the lines of the previous approach as well).</p>
+<p>These are just potential approaches at this point though, because they require quite a bit of effort to really get working. We have taken steps towards it though in the latest STU with the introduction of RelationshipInfo. Now the model can at least describe how classes in the model are related to eachother.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

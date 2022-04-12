@@ -1,0 +1,140 @@
+[
+    {
+        "content": "<p>Couple questions about differentials and array elements:<br>\n If a base ElementDefinition has elements [A, B, C], and profiled ElementDefinition has [A, modifiedB, C], should the differential include [A, modifiedB, C], or just [modifiedB]?  If just [modifiedB], is there a algorithm to finding which element in the snapshot list it corresponds to (e.g., first field with primitive type \"id\"?</p>\n<p>second, I noticed some things we \"let slide\" in the differential - e.g., constraints on a base definition are copied over to the profile, with the additional \"source\" field listing the base that they came from, but we don't seem to bother to put that in the differential, presumably because it's implied/derivable/not interesting.  are there machine-friendly rules for that?  Another example: \"base\" field - which again is an obvious diff due to the profile-base relationship.</p>",
+        "id": 153999271,
+        "sender_full_name": "Nick George",
+        "timestamp": 1537634024
+    },
+    {
+        "content": "<p>(concrete example of point 2: <a href=\"http://hl7.org/fhir/extension-minvalue.json.html\" target=\"_blank\" title=\"http://hl7.org/fhir/extension-minvalue.json.html\">http://hl7.org/fhir/extension-minvalue.json.html</a> . The second \"constraint\" on \"Extension\" ElementDefinition lists \"Extension\" as the source of the constraint, which is technically speaking a diff from the same constraint on the base Extension, but this does not show up in the differential)</p>",
+        "id": 153999272,
+        "sender_full_name": "Nick George",
+        "timestamp": 1537634188
+    },
+    {
+        "content": "<p>Differential only needs to include the elements that have changed.  However, some of the tools depend on the whole hierarchy to <em>reach</em> the elements also be included.  So, for example, if you wanted to have a differential that asserted a constraint on <a href=\"http://Patient.contact.name\" target=\"_blank\" title=\"http://Patient.contact.name\">Patient.contact.name</a>, you'd have to first include the element for Patient and for Patient.contact.  (Though you wouldn't need to say anything about them other than \"an element with this path exists\".) </p>\n<p>There is indeed an \"algorithm\" for matching elements in a differential to the base and calculating what the snapshot is.  But calling it an \"algorithm\" is a bit misleading.  There's over 1000 lines of really complex (and somewhat evil) code in the Java reference implementation and a similar amount in the other reference implementations that do it.</p>",
+        "id": 153999280,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1537642715
+    },
+    {
+        "content": "<p>interesting, thanks.  How about the repeated elements?</p>",
+        "id": 153999283,
+        "sender_full_name": "Nick George",
+        "timestamp": 1537644060
+    },
+    {
+        "content": "<p>I'm not understanding the question</p>",
+        "id": 153999287,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1537646541
+    },
+    {
+        "content": "<p>let's say the base definition has a field <br>\n[ {id: \"A\", field: \"bar\"},  {id: \"B\", field: \"bar\"}, {id: \"C\",  field: \"baz\"} ],<br>\n and the profile has, for the same field <br>\n[ {id: \"A\", field: \"bar\"},  {id: \"B\", field: \"barModified\"}, {id: \"C\",  field: \"baz\"} ]</p>",
+        "id": 153999289,
+        "sender_full_name": "Nick George",
+        "timestamp": 1537647267
+    },
+    {
+        "content": "<p>would the differential just list <br>\n[{id: \"B\", field: \"barModified\"}]<br>\nor<br>\n[ {id: \"A\", field: \"bar\"}, {id: \"B\", field: \"barModified\"}, {id: \"C\", field: \"baz\"} ]</p>",
+        "id": 153999290,
+        "sender_full_name": "Nick George",
+        "timestamp": 1537647313
+    },
+    {
+        "content": "<p>Well, what you'd actually have is:<br>\nids of A, A.A, A.B and A.C<br>\nThe differential would have A and A.Bmodified</p>",
+        "id": 153999291,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1537647380
+    },
+    {
+        "content": "<p>so, <br>\n[ {id: \"A\"}, {id: \"B\", field: \"barModified\"}, {id: \"C\"} ]<br>\n?</p>",
+        "id": 153999292,
+        "sender_full_name": "Nick George",
+        "timestamp": 1537647561
+    },
+    {
+        "content": "<p>I'm not sure what \"field\" is.  You're going to have a dot-separated path.  And you have to have an element for the \"root\" as well as for the element that was modified.</p>",
+        "id": 153999293,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1537648057
+    },
+    {
+        "content": "<p>So if we take a real example of the Patient resource and you've modified <a href=\"http://Patient.name\" target=\"_blank\" title=\"http://Patient.name\">Patient.name</a> (e.g. made minOccurs=1), then you'd have one element with path \"Patient\" and another with element \"<a href=\"http://Patient.name\" target=\"_blank\" title=\"http://Patient.name\">Patient.name</a>\".  You wouldn't bother including Patient.identifier, Patient.gender, <a href=\"http://Patient.id\" target=\"_blank\" title=\"http://Patient.id\">Patient.id</a>, etc.</p>",
+        "id": 153999294,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1537648123
+    },
+    {
+        "content": "<p>I'm tlaking about on the ElementDefinition itself.  So, say e.g., you can have 3 constraints on the base definition.  On my profile, I have the same three constraints, but I've changed the severity of the middle one</p>",
+        "id": 153999295,
+        "sender_full_name": "Nick George",
+        "timestamp": 1537648309
+    },
+    {
+        "content": "<p>so for the differential for that element definition, we'll need a field for constraints</p>",
+        "id": 153999296,
+        "sender_full_name": "Nick George",
+        "timestamp": 1537648344
+    },
+    {
+        "content": "<p>in this case the array above is of constraints, and field is severity</p>",
+        "id": 153999297,
+        "sender_full_name": "Nick George",
+        "timestamp": 1537648366
+    },
+    {
+        "content": "<p>Ah.  To be honest, I don't know what the tooling will do there.  I don't know that we've had anyone who's ever tried to change the severity of a constraint (as opposed to just adding a new one).  In principle, you should only have to list the changed one and specify the same \"key\".  Whether that'll work or not, you'll need to test.  (And if it doesn't work, submit a change request.)</p>",
+        "id": 153999298,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1537648898
+    },
+    {
+        "content": "<p>fair enough, thanks.  I'm not sure what you mean by \"work\" though - I'm writing my own tooling here and am curious what the correct behavior would be.</p>",
+        "id": 153999299,
+        "sender_full_name": "Nick George",
+        "timestamp": 1537649918
+    },
+    {
+        "content": "<p>The intention is that if the key is the same, it's recognized as the same constraint.  \"Work\" = work with the existing reference implementations that perform snapshot generation.  I don't think we have a test-case that covers this scenario.</p>",
+        "id": 153999300,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1537650100
+    },
+    {
+        "content": "<p>If you're creating your own tooling to determine a snapshot based on a differential, my first recommendation is \"don't\" - we've spent many hundreds of person-hours on the software in the reference implementations trying to cover most of the edge cases.  If you do really want to build your own, then at least look at the test cases included as part of the Java reference implementation.</p>",
+        "id": 153999301,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1537650213
+    },
+    {
+        "content": "<p>heh that's fair - it's a bit of a strange use case though, I'm not sure existing implementations will cover what we're trying to do.  Thanks a lot for your help!</p>",
+        "id": 153999302,
+        "sender_full_name": "Nick George",
+        "timestamp": 1537650429
+    },
+    {
+        "content": "<p>has anyone tried to write down a mathematical spec of what a differential means, i.e  how it defines  snapshot? It's a shame to have such an important part of FHIR defined by test cases and ugly code.</p>",
+        "id": 153999352,
+        "sender_full_name": "robert worden",
+        "timestamp": 1537733700
+    },
+    {
+        "content": "<p>The gist of how it works is defined on the profiling page.   No clue how you'd describe slicing, default slices, re-slicing, etc. mathematically...</p>",
+        "id": 153999355,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1537735078
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"193818\">@robert worden</span>, I agree. Fortunately, <span class=\"user-mention\" data-user-id=\"191351\">@Chris Grenz</span> has made a serious effort trying to describe the rules for generating a snapshot:<br>\n<a href=\"https://github.com/chrisgrenz/FHIR-Primer/wiki/Snapshots-Determining-Refines\" target=\"_blank\" title=\"https://github.com/chrisgrenz/FHIR-Primer/wiki/Snapshots-Determining-Refines\">https://github.com/chrisgrenz/FHIR-Primer/wiki/Snapshots-Determining-Refines</a></p>",
+        "id": 153999414,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1537788306
+    },
+    {
+        "content": "<p>FYI The implementation of the snapshot generator in the .NET API generates and handles sparse differentials. Unconstrained elements can be safely omitted from the differential, as defined by the FHIR spec. The .NET logic is smart enough to deal with orphaned elements in the sparse diff representation. However as Lloyd mentions, the open source publication tooling does not (yet) handle orphaned elements.</p>",
+        "id": 153999416,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1537788852
+    }
+]

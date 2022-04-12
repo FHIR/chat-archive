@@ -1,0 +1,116 @@
+[
+    {
+        "content": "<p>Just to highlight the challenge of limiting to coarse-grained data: as long as there's better, more accurate data available from scraping than from a published API, folks will scrape. <a href=\"https://www.vaccinespotter.org/WI\">https://www.vaccinespotter.org/WI</a> has excellent content, but it's fragile!</p>",
+        "id": 235034749,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1618711012
+    },
+    {
+        "content": "<p>As a general strawman for aggregation, I put together <a href=\"http://getmyvax.org/smart-scheduling/$bulk-publish\">http://getmyvax.org/smart-scheduling/$bulk-publish</a> from data USDR is starting to gather across states (it lists all states, but only a few have data — I suggest looking at NJ).</p>\n<p>It exhibits a lot of the issues around coarse data that I think are reasonably well known, but maybe worth listing here:</p>\n<ul>\n<li>We pull in data from a variety of sources that might not have an authoritative URI for identifiers, so if we don’t have one, we list the identifier’s <code>system</code> as <code>https://fhir.usdigitalresponse.org/identifiers/&lt;SIMPLE_NAME&gt;</code>:</li>\n</ul>\n<div class=\"codehilite\"><pre><span></span><code>&quot;identifier&quot;: [\n  {\n    // CVS Store number\n    &quot;system&quot;: &quot;https://fhir.usdigitalresponse.org/identifiers/cvs&quot;,\n    &quot;value&quot;: &quot;01929&quot;\n  },\n  {\n    // New Jersey Immunization Information System\n    &quot;system&quot;: &quot;https://fhir.usdigitalresponse.org/identifiers/nj_iis&quot;,\n    &quot;value&quot;: &quot;NJ96820&quot;\n  }\n]\n</code></pre></div>\n<p>(Similar, but slightly different from Nick Robison's approach with <code>http://usds.gov/vaccine/source-identifier</code>)</p>\n<ul>\n<li>\n<p>In many cases, we have \"unknown\" availability for a location. We handle that by having a slot with <code>0</code> capacity, but it’s a bit hacky. On the other hand, an original slot publisher should probably never need this kind of feature, so it might be aggregator-specific, and maybe not worth supporting directly in the spec.</p>\n</li>\n<li>\n<p>In many cases, we only know a location has (no) available appointments at some time in the future, so we can’t define a good slot time or capacity. For slot time, we currently just set <code>start</code> and <code>end</code> to cover an 8-hour period in the future, but it might be nice if those could just be omitted to indicate there’s capacity, but at no particular date.</p>\n</li>\n<li>\n<p>In many cases, we only know a location has &gt; 0 available slots, so we list a capacity of 1. CVS is doing something similar, but it might be nice if we had a way (maybe a different extension than capacity).</p>\n</li>\n</ul>\n<p>^ A lot of these issues are not cases we should expect a first-party slot publisher to encounter, or features we would not want to encourage them to use, so I also understand if we don’t think the spec should account for them. But I do think aggregators that use any non-SMART-Scheduling-Links sources will have trouble totally complying with the standard without something to address these.</p>",
+        "id": 235418306,
+        "sender_full_name": "Rob Brackett",
+        "timestamp": 1618953440
+    },
+    {
+        "content": "<p>Thanks for this report <span class=\"user-mention\" data-user-id=\"398591\">@Rob Brackett</span>! A few quick thoughts and questions:</p>\n<blockquote>\n<p>We pull in data from a variety of sources that might not have an authoritative URI for identifiers, so if we don’t have one, we list the identifier’s system</p>\n</blockquote>\n<p>Great! In the case where you're aggregating data that originate through SMART Scheduling Links, you might also consider populating Meta.source with a URL pointing back to the base URL of the system where these data originated (e.g., \"<a href=\"https://github.com/jmandel/wba-appointment-fetch/blob/gh-pages\">https://github.com/jmandel/wba-appointment-fetch/blob/gh-pages</a>\" for my sample data).</p>\n<blockquote>\n<p>In many cases, we have \"unknown\" availability for a location. </p>\n</blockquote>\n<p>I want to understand the intended semantics here. Is this for things like \"source API is down right now, so we don't have any current data\"? If so, it might be worth annotating the <em>schedule</em> rather than creating a placeholder slot.</p>\n<blockquote>\n<p>In many cases, we only know a location has (no) available appointments at some time in the future</p>\n</blockquote>\n<p>If there's no timing information known, we might again think about annotating the Schedule with this kind of information (e.g., a <code>some-availability</code> extension or a <code>no-availability</code> extension), since there's not much Slot-like to say.</p>\n<blockquote>\n<p>In many cases, we only know a location has &gt; 0 available slots, </p>\n</blockquote>\n<p>From an aggregator perspective, a workaround might be to populate a custom extension like <code>capacity-unknown</code> to indicate &gt;0; would want to be clear that original publishers shouldn't annotate slots this way, though. Alternatively, we could switch our estimates from valueInteger to valueRange (so there could be a lower and upper bound), or <code>capacity-min</code> and <code>capacity-max</code> extensions. I'm worried about providing too much sophistication here though.</p>",
+        "id": 235433248,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1618962335
+    },
+    {
+        "content": "<p>Oh, thanks for the <code>Meta.source</code> pointer. I remember seeing that earlier, and then totally forgot about it.</p>\n<blockquote>\n<blockquote>\n<p>In many cases, we have \"unknown\" availability for a location. </p>\n</blockquote>\n<p>I want to understand the intended semantics here. Is this for things like \"source API is down right now, so we don't have any current data\"? If so, it might be worth annotating the <em>schedule</em> rather than creating a placeholder slot.</p>\n</blockquote>\n<p>We actually have 2 flavors of unknown to represent some nuance here:</p>\n<ol>\n<li>We have no source (e.g. Dept. of Health knows about this location, but we don’t have a way to get detailed availability).</li>\n<li>Our data source broke in some way (API is down, message format changed so we can’t parse, etc.).</li>\n</ol>\n<p>Functionally, these are pretty similar for end users (there might be appointments, so you should check unless another location nearby has definite available slots). I think annotating the schedule would be totally reasonable in both cases (especially since either of these flavors of unknown might lead to us showing different, more generic schedules than we otherwise would — i.e. without product/dose info).</p>\n<p>There’s actually a related case this reminded me of that’s not handled well: walk-in clinics. They don’t really have any slots (or there might be walk-ins allowed in addition to the appointment slots), so we probably need something modeled on the schedule level. (In our other APIs, we’re only talking about COVID, so we can annotate this data on the location itself, but that’s probably not reasonable here.)</p>\n<blockquote>\n<blockquote>\n<p>In many cases, we only know a location has (no) available appointments at some time in the future</p>\n</blockquote>\n<p>If there's no timing information known, we might again think about annotating the Schedule with this kind of information (e.g., a <code>some-availability</code> extension or a <code>no-availability</code> extension), since there's not much Slot-like to say.</p>\n</blockquote>\n<p><span aria-label=\"thumbs up\" class=\"emoji emoji-1f44d\" role=\"img\" title=\"thumbs up\">:thumbs_up:</span></p>\n<blockquote>\n<p>From an aggregator perspective, a workaround might be to populate a custom extension like <code>capacity-unknown</code> to indicate &gt;0; would want to be clear that original publishers shouldn't annotate slots this way, though. Alternatively, we could switch our estimates from valueInteger to valueRange (so there could be a lower and upper bound), or <code>capacity-min</code> and <code>capacity-max</code> extensions. I'm worried about providing too much sophistication here though.</p>\n</blockquote>\n<p>The range is pretty neat, but I think you’re right; that’s getting unnecessarily complex.</p>",
+        "id": 235444246,
+        "sender_full_name": "Rob Brackett",
+        "timestamp": 1618971484
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> I begged off drafting spec language for these cases today, but I think I might have time to write them up tomorrow. Just to make sure we’re roughly on the same page:</p>\n<ol>\n<li>\n<p>Is it worth adding guidance about <code>Meta.source</code> to the spec? It’s already part of FHIR and is really only useful to aggregators, so it also seems fair if not.</p>\n</li>\n<li>\n<p>An extension for slots with a url like <code>\"http://fhir-registry.smarthealthit.org/StructureDefinition/slot-capacity-unknown\"</code>. It doesn’t need a <code>value[whatever]</code> field because the extension’s presence implies enough.</p>\n</li>\n<li>\n<p>Thinking about it more, I’m not sure <code>some-availability/no-availability</code> is especially useful. While the timeframe wouldn’t be completely honest, an agggregator could publish a coarse-timeframe slot (e.g. covering the next 14 days) with the above <code>slot-capacity-unknown</code> extension. That would cut down on too many special cases in the spec and I <em>think</em> be just as clear. (Downside: there’s some data savings in putting this info on the schedule, since we don’t need to publish <em>any</em> slots for these schedules.)</p>\n</li>\n</ol>\n<p>Since we want to be extra careful to discourage first-party publishers from using these features, would it be better to add an appendix or separate section for aggregators and put these there, rather than directly in with the definitions for Locations, Schedules, and Slots? (Should we be so strict as to say first-party slot publishers SHALL not use these?)</p>",
+        "id": 236437921,
+        "sender_full_name": "Rob Brackett",
+        "timestamp": 1619574984
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"398591\">@Rob Brackett</span>!  For (2) I just added <a href=\"https://github.com/smart-on-fhir/smart-scheduling-links/pull/35\">https://github.com/smart-on-fhir/smart-scheduling-links/pull/35</a>  before I saw this. I'd rather use a valueBoolean to give you the option of explicitly saying \"no\" (but omitting it is of course fine if the aim is to say \"we don't know\")</p>",
+        "id": 236438705,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619575606
+    },
+    {
+        "content": "<p>That’s covering (3) more than (2), right?</p>",
+        "id": 236438858,
+        "sender_full_name": "Rob Brackett",
+        "timestamp": 1619575743
+    },
+    {
+        "content": "<p>For (1) I think you can just populate Meta.source as you see fit. Happy to take a PR if you want to put this together, as an optional field for aggregators. There's a question of whether to populate it with a server URL (e.g., <code>https://fhir.example.com</code>) or a specific resource URL (e.g., <code>https://fhir.example.com/Slot/123</code>). I think the full resource URL makes it easier to trace/debug, if the data are coming from a SMART Scheduling Links implementation.</p>",
+        "id": 236438903,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619575798
+    },
+    {
+        "content": "<p>Oh yes, my PR was indeed about (3) :-)</p>",
+        "id": 236438983,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619575839
+    },
+    {
+        "content": "<p>I like the idea of putting this into an \"Appendix for Aggregators\", for sure. We could move the has-availability extension there too  if you wind up putting a PR together for (1) or (2).</p>",
+        "id": 236439033,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619575910
+    },
+    {
+        "content": "<p>I think I got a bit mixed up with (2). Thinking back, did we wind up at: it probably isn’t a good idea to directly support (2) in order to discourage publishers from doing it, and consumers should not worry about distinguishing between \"capacity=1 really means &gt;0\" and something that’s a real estimate?</p>",
+        "id": 236439124,
+        "sender_full_name": "Rob Brackett",
+        "timestamp": 1619575999
+    },
+    {
+        "content": "<p>At least that’s where we were somewhere in the middle of the discussion. That was probably when Keith popped in. <span aria-label=\"wink\" class=\"emoji emoji-1f609\" role=\"img\" title=\"wink\">:wink:</span></p>",
+        "id": 236439143,
+        "sender_full_name": "Rob Brackett",
+        "timestamp": 1619576029
+    },
+    {
+        "content": "<p>Yeah, that was where we got on the call -- I wouldn't mind having aggregator-specific guidance for this but don't think we'd want to trouble source publishers with it.</p>",
+        "id": 236439284,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619576162
+    },
+    {
+        "content": "<p>OK, so nothing to add for (2). For <a href=\"https://github.com/smart-on-fhir/smart-scheduling-links/pull/35/files\">https://github.com/smart-on-fhir/smart-scheduling-links/pull/35/files</a>, would you like me to update it by moving it to an aggregator’s appendix, or do that as a separate PR?</p>",
+        "id": 236439374,
+        "sender_full_name": "Rob Brackett",
+        "timestamp": 1619576246
+    },
+    {
+        "content": "<p>Whatever is easiest for you! (The commit history won't be too complicated here.)</p>",
+        "id": 236439484,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619576355
+    },
+    {
+        "content": "<p>Thanks for your help with this.</p>",
+        "id": 236439501,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619576373
+    },
+    {
+        "content": "<p>No problem. :)</p>",
+        "id": 236439670,
+        "sender_full_name": "Rob Brackett",
+        "timestamp": 1619576481
+    },
+    {
+        "content": "<p>Actually, since I don’t have write access, it’s probably better if I do the appendix as a follow-on PR.</p>",
+        "id": 236439694,
+        "sender_full_name": "Rob Brackett",
+        "timestamp": 1619576513
+    },
+    {
+        "content": "<p>Thanks for the PR -- I still owe you a response (on my TODO list)</p>",
+        "id": 236765541,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619740795
+    }
+]

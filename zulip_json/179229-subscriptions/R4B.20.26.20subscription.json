@@ -1,0 +1,80 @@
+[
+    {
+        "content": "<p>FMG approved adding the net new subscription resources to R4B as FMM0/draft.</p>",
+        "id": 235592323,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1619044263
+    },
+    {
+        "content": "<p>Hi, I'm working on a FHIR Subscription implementation in R4 but would like to leverage as much as possible of the new and improved R5 structure (SubscriptionTopic, etc).  Where can I find the latest details about when R4B will be published and what exactly is going to be in it from a subscription standpoint?  So far I was looking at <a href=\"http://hl7.org/fhir/2021Mar/\">http://hl7.org/fhir/2021Mar/</a> and <a href=\"https://build.fhir.org/ig/HL7/fhir-subscription-backport-ig/index.html\">https://build.fhir.org/ig/HL7/fhir-subscription-backport-ig/index.html</a> but neither of those seems to directly reference the new resources.  cc <span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span></p>",
+        "id": 247026233,
+        "sender_full_name": "Steve Atwood",
+        "timestamp": 1627071327
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"359703\">@Steve Atwood</span>.  The best place to find all the work-in-progress would be in <a href=\"https://confluence.hl7.org/display/AP/Subscriptions+Home?src=contextnavpagetreemode\">Confluence</a> - the meeting notes include what is happening, tested, discarded, etc.  I'd also encourage you to join the every-other-week calls (details on the same page).</p>\n<p>That said, the model additions for R4B have not been merged yet.  They can be found in the <code>subscriptions-b</code> branch (<a href=\"http://build.fhir.org/branches/subscription-b/subscriptiontopic.html\">SubscriptionTopic</a> and <a href=\"http://build.fhir.org/branches/subscription-b/subscriptionstatus.html\">SubscriptionStatus</a>).</p>\n<p>The models are being updated (<code>SubscriptionTopic</code> in particular) per the work from ballot feedback (key points are event triggers and multi-resource notification definitions).  Once the working group is happy with the changes, we will be sending them to FHIR-I for review (this should be happening quite soon).</p>\n<p>I am in the process of updating the IG to reflect having the models there, but getting the models updated first made more sense procedurally.</p>",
+        "id": 247027169,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1627071805
+    },
+    {
+        "content": "<p>Ah thanks, Gino!  I was looking at the Confluence home page but had missed that the meeting note links were available in the sidebar.  I will also aim to start joining those calls moving forward.  Thanks again!</p>",
+        "id": 247029209,
+        "sender_full_name": "Steve Atwood",
+        "timestamp": 1627072959
+    },
+    {
+        "content": "<p>As a note, the CI build for the IG will not be working until it supports R4B.  In the interim, I am publishing it locally and pushing the content <a href=\"https://argonautproject.github.io/subscription-backport-ig/\">here</a>.</p>",
+        "id": 247961532,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1627933121
+    },
+    {
+        "content": "<p>Hi all!  I know this isn't normally posted, but there has been a lot of restructuring applied to the Subscription R4 side and I wanted to give people a chance to review.  For anyone not following closely, there are now to additional resources in R4B: <a href=\"http://build.fhir.org/branches/R4B/subscriptiontopic.html\">SubscriptionTopic</a> and <a href=\"http://build.fhir.org/branches/R4B/subscriptionstatus.html\">SubscriptionStatus</a>.  With the new resources, the <a href=\"https://argonautproject.github.io/subscription-backport-ig/\">Backport IG</a> (note: currently on <a href=\"http://github.io\">github.io</a>, because of build dependencies) has been refactored quite a bit - e.g., many things that were in the IG are now in the core spec.</p>\n<p>Other recent changes of note are the resolutions to some long-open questions, specifically:</p>\n<ul>\n<li>SubscriptionTopic has a way to use event triggers (in addition to the previous resource-based triggers)</li>\n<li>SubscriptionTopic includes a <code>notificationShape</code> backbone element, which describes related resources that MAY be included with notifications.</li>\n</ul>\n<p>We'll be focusing on this at the Connectathon, but I know that many people interested in this are committed to other tracks.  Cheers!</p>",
+        "id": 250361713,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1629729929
+    },
+    {
+        "content": "<p>I wasn't able to attend the most recent call but had one comment reviewing the latest iteration of SubscriptionStatus.  Could we consider making the notificationEvent.eventNumber an optional field?  I am working on an implementation that uses a distributed queue for high availability so assigning a strict sequential number to each event becomes somewhat difficult.  Instead we assign a UUID to each event to uniquely identify it (strict ordering is not guaranteed).  Seems like BackboneElement already inherits a string \"id\" field so we could use that in our implementation in lieu of the eventNumber, or an explicit (optional) eventId field could be added with constraint to populate at least one of eventId or eventNumber.  Thoughts?</p>",
+        "id": 251766985,
+        "sender_full_name": "Steve Atwood",
+        "timestamp": 1630608766
+    },
+    {
+        "content": "<p>No worries Steve, and it's often good to have these types of discussions here anyway  =)</p>\n<p>Right now, <code>eventNumber</code> is the only way a client has for figuring out it missed an event.  That element has been reviewed many times over the past few years and always comes back as a necessary evil.  (Otherwise, clients need to poll the server regularly - which defeats many purposes of subscriptions.)</p>\n<p>Always open to discussing if there's another proposal for how that can work.  However, we can't lose the ability for clients to detect missed events, since that was one of the needs identified for the redesign.</p>",
+        "id": 251770056,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1630609891
+    },
+    {
+        "content": "<p>Hmm yeah that's a tricky constraint.  Just to confirm, the requirement is that these sequence numbers MUST be maintained per subscription and MUST be sequential without any gaps?  I can see how that makes it easy for clients to know if they have missed something but it also seems to make it very difficult to implement in a distributed system without introducing some centralized component that would nullify many of the benefits of using a distributed system in the first place.  Have others run into this and found a good solution?</p>\n<p>Also curious how clients would typically use this in practice since event notifications could arrive out of order at least for some channel types.  Seems like there are three aspects to this on the client side:  (1) detecting that you've missed something (not just slightly delayed due to networking, processing backlog, etc), (2) figuring out <em>which</em> events you've missed, and (3) somehow fetching those missing events from the server.</p>\n<p>It seems like \"eventsSinceSubscriptionStart\" conveys enough information for #1 while \"eventNumber\" is more aimed at #2 and the (optional?) $events operation is designed for #3, but that's only going to work for as long as the system retains delivered events anyway.  What if $events (or some other operation) could optionally take a time window (start/end) to retrieve the list (and/or count) of events which occurred during that window?</p>\n<p>For some channels, you can make successful delivery the server's problem.  For example, server can retry until it gets successful response from client's webhook, log to dead-letter queue upon persistent failure, etc.</p>",
+        "id": 251948463,
+        "sender_full_name": "Steve Atwood",
+        "timestamp": 1630706923
+    },
+    {
+        "content": "<p>I'll try to respond to everything now (before the long weekend), but it's dinner time already so apologies if I miss something =)</p>\n<p><code>$events</code> is new and optional - it is not suitable for a replacement of core functionality.</p>\n<p>The ordering and detection from the client side is fairly straightforward.  The general process I've run through is to always track the highest number received and allow a time window (based on channel expectations) to become consistent for any gaps (<a href=\"https://github.com/argonautproject/subscriptions/blob/master/ErrorStateWorkflows/svg/DelayedFailureLong.svg\">diagram</a>).</p>\n<p>One problem with storing such information server side (e.g., an operation) is that unless the events are in-order and sequential, the client has to poll the server in order to discover any issues.  If we're polling the server frequently enough to satisfy the risk for missed events, we can just have a queue of messages to query for and don't need a notification system.</p>\n<p><code>eventNumber</code> doesn't give any additional information that you can't derive from <code>eventsSinceSubscriptionStart</code> and <code>eventsInNotification</code>, the <code>notificationEvent</code> structure is just to correlate additional resources and disambiguate between them if multiple events are batched.</p>\n<p>Yes, a reliable delivery mechanism would alleviate the need for this.  The mechanism is defined because a reliable delivery mechanism was deemed unsuitable for the core specification (too high a bar for implementation of core functionality).  I think it's worth discussing if there's a way to build in that type of exception; make it optional if and only if the channel supports reliable delivery... I don't know if it's something that can make it in before R4 publication or not, but I'll add it to the agenda for next week.</p>",
+        "id": 251950402,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1630708341
+    },
+    {
+        "content": "<p>Realized last night that this is actually a non-issue if you are defining a new channel type, assuming you define it in an IG.  You can just specify that <code>eventsSinceSubscriptionStart</code> is set to zero, and the <code>eventNumber</code> is relative to the notification bundle (e.g., 1, 2).</p>\n<p>I'll leave it on the agenda for next week, but looks like if you want to define a reliable channel type you can remove the dependency on event number.</p>",
+        "id": 252008044,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1630769369
+    },
+    {
+        "content": "<p>If we want to leave this open for channels to decide, we probably want to be explicit about this in Core (e.g., our documented logic for detecting missing events may need some caveats baked in).</p>",
+        "id": 252012136,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1630773747
+    },
+    {
+        "content": "<p>Yeah, it also causes odd interaction with <code>$events</code>, since those are currently defined on a number range.</p>",
+        "id": 252104070,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1630878601
+    }
+]

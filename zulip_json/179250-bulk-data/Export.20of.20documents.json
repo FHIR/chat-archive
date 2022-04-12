@@ -1,0 +1,80 @@
+[
+    {
+        "content": "<p>Hello everybody. We have the following use case. A client wants to export a large number of documents (10K+) from our system. The IDs of these documents are already known by the client ahead of time. The client wants the metadata and the actual content of the documents. <br>\nWe want to deliver this functionality using $export but we have 2 outstanding items:</p>\n<ol>\n<li>How to use the 10K+ IDs as part of the $export command? (we started looking at Group but group doesn't allow for DocumentReference to be a member yet)</li>\n<li>How to return the content of the document in the ndjson?</li>\n</ol>",
+        "id": 177805070,
+        "sender_full_name": "Veliyan Georgiev",
+        "timestamp": 1570711244
+    },
+    {
+        "content": "<p>For (1) create a group with the patients those documents belongs to and then use that for the export<br>\nFor (2) I remember some discussion  but not conclusions - but the document content can be inside the document themselves</p>",
+        "id": 177809535,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1570714185
+    },
+    {
+        "content": "<p>Thanks Michele. <br>\n1) The client actually doesn't want all documents for a patient. The client has the actual document IDs of the documents of interest<br>\n2) I'd love to dig deeper into it. I also remember conversations but not actual conclusion.</p>",
+        "id": 177809804,
+        "sender_full_name": "Veliyan Georgiev",
+        "timestamp": 1570714328
+    },
+    {
+        "content": "<p>Interesting. The export operation as currently defined doesn't have a good way to enumerate large numbers of individual resources, but the general pattern of async search might help for (1) --- which is, outside of $export in theory you could do a search for <code>DocumentReference?_id=1,2,3,500</code>, (or inside of $export, you could try the experimental <code>_typeFilter</code> parameter to pass through this kind of filter). Probably 10000 individual IDs will break in a single URL query.</p>\n<p>For (2), we mostly talked about using FHIR Binary resources and returning using the standard async output mechanism, or just having the client issue a pile of parallel queries for the content if it's not modeled as Binary.</p>",
+        "id": 177870614,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1570758341
+    },
+    {
+        "content": "<p>(Clearly the use case you're describing isn't quite the thing $export is designed for, and it's a struggle to make it fit.)</p>",
+        "id": 177870662,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1570758379
+    },
+    {
+        "content": "<p>Is this part of a conversion?, what's the use case?, how does the client already know the document ids?<br>\nThis info may help to generalize the need.</p>",
+        "id": 177871076,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1570759020
+    },
+    {
+        "content": "<p>Josh - we thought of something similar and came to the same conclusion - GET will most likely break. Obviously making $export a POST request will get around the limitation and to some extent even represent the change in state more accurately (an export command is being created on the server). The subsequent status checks can be GET of course. <br>\nOn (2) - I think it is worth brainstorming on this one a bit more and even talk F2F next month. We proposed very similar workaround to the dev team and committed to starting this conversation here. Couple points that were brought up were - if we fast forward in the future - how would  a $import work using the output from $export? - a 2-step process of getting the metadata first and then the binaries might end up making the job of resolving references much harder if not impossible.</p>\n<p>Isaac - this is a part of a payer workflow in which the \"payer\" selects only those documents that need to be presented as evidence (so it is not all documents per patient). The closest example that comes to mind is a shopping cart-style workflow - they browse the store (document repository) and select the products (documents) and eventually those products show up in a package (fhir export)</p>",
+        "id": 177901890,
+        "sender_full_name": "Veliyan Georgiev",
+        "timestamp": 1570796782
+    },
+    {
+        "content": "<p>But for a shopping cart, the numbers just aren't that large. Is there something about your process for selecting documents that causes you to go from having 0 documents of interest to having huge numbers all at once?</p>",
+        "id": 177910704,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1570803371
+    },
+    {
+        "content": "<p>For a folder of documents there is DocumentManifest and List. Both of these are used in interfacing with XDS/XCA/XDM/XDR environments. A DocumentManifest is the same as an XD* SubmissionSet, and a List is the same as a XD* Folder.</p>",
+        "id": 177932158,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1570816828
+    },
+    {
+        "content": "<p>Josh - yeah. There is a particular workflow. All documents are NLP-ed and the extracted information is what the user performs searches on. Once the user searches the NLP extract on let's say \"give me all documents between these 2 dates that are radiology reports and have mention of nodules etc..\" (which could be tens of thousands) - then the user will request an export of the underlying documents. The only thing the user has at this time is pointers to the original documents (those are also stored in the NLP metadata of course)</p>",
+        "id": 178099770,
+        "sender_full_name": "Veliyan Georgiev",
+        "timestamp": 1571057433
+    },
+    {
+        "content": "<p>As a data point on something similar, the Google Cloud DICOM store has a filtered export operation (in alpha) that takes a path to a cloud storage bucket containing a flat file with a list of studies/series/instances to export. This may not be easily standardized, but it's indicative of what we had to do to facilitate certain use cases.</p>\n<p>In any kind of cohort selection process the user will often come up with a very large \"shopping list\" of items to get from the server. Even if the items are patient bundles and Group $export applies, FHIR needs a scalable pattern for communicating that group to the server. The discussion of paginated Group/List with $add/$remove operations is enough to make it possible, but doing 100,000 $add operations to build a temporary Group as a parameter to a one-off export is inefficient.</p>",
+        "id": 178205216,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1571153891
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span> I was just about to type up today that we have the exact same situation with our DICOM repo as well. Very interesting to see how Google is addressing it</p>",
+        "id": 178221224,
+        "sender_full_name": "Veliyan Georgiev",
+        "timestamp": 1571164377
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197402\">@Veliyan Georgiev</span>  i would simply use the <code>List</code> resource. </p>\n<ol>\n<li>create a list with the 10k documents</li>\n<li>give the list <code>id</code> to your client.</li>\n<li>the client use the <code>_list</code> parameter over the <code>Composition</code> resource</li>\n</ol>\n<p>in this scenario, there is no transfer of the 10k docuemnt ids.</p>",
+        "id": 178559859,
+        "sender_full_name": "natus",
+        "timestamp": 1571513428
+    }
+]

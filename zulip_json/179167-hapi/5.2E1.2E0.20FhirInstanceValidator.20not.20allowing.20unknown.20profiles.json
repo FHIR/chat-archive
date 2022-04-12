@@ -1,0 +1,20 @@
+[
+    {
+        "content": "<p>Hi.</p>\n<p>We ran to an issue where the FhirInstanceValidator (and by proxy ValidatorWrapper and InstanceValidator) always considers an unknown profile reference as IssueType.ERROR.</p>\n<p>The following culprit seems to be the lines 182-184 in the ValidatorWrapper-class:</p>\n<div class=\"codehilite\"><pre><span></span><code>        if (message.endsWith(&quot;&#39; could not be resolved, so has not been checked&quot;) &amp;&amp; next.getLevel() == ValidationMessage.IssueSeverity.WARNING) {\n            next.setLevel(ValidationMessage.IssueSeverity.ERROR);\n        }\n</code></pre></div>\n\n\n<p>FhirInstanceValidator has a method we can use in the registration process called setErrorForUnknownProfiles(boolean errorForUnknownProfiles), but this set boolean is not accessed or referred anywhere in the business logic of the FhirInstanceValidator/ValidatorWrapper/InstanceValidator-class. The boolean is simply set as a value for the new instance of ValidatorWrapper and InstanceValidator.</p>\n<p>I believe I can deal with this error by handling this validation result specifically after all the validations have been run.</p>\n<p>However, is this behavior intended for the FhirInstanceValidator?</p>",
+        "id": 211606538,
+        "sender_full_name": "Juuso Oksanen",
+        "timestamp": 1601377747
+    },
+    {
+        "content": "<p>I wrote a junit test for this, and as you say it looks like the setErrorForUknownProfiles doesn't seem to do anything, the test fails with the profile error.</p>\n<div class=\"codehilite\"><pre><span></span><code>@Test\npublic void validateResource() throws  IOException {\n\n    FhirContext r4Context = FhirContext.forR4();\n\n    FhirValidator validator = new FhirValidator(r4Context);\n\n    ValidationSupportChain validationSupportChain = new ValidationSupportChain(\n        new DefaultProfileValidationSupport(r4Context),\n        new InMemoryTerminologyServerValidationSupport(r4Context),\n        new CommonCodeSystemsTerminologyService(r4Context),\n        new SnapshotGeneratingValidationSupport(r4Context));\n\n    FhirInstanceValidator instanceValidator = new FhirInstanceValidator(validationSupportChain);\n    validator.registerValidatorModule(instanceValidator);\n    instanceValidator.setErrorForUnknownProfiles(false);\n\n    ValidationResult res = validator.validateWithResult(new  Observation().setStatus(ObservationStatus.FINAL).setCode(new CodeableConcept(new Coding(&quot;baz&quot;, &quot;baa&quot;, &quot;123&quot;))).setMeta(new Meta().addProfile(&quot;http://foobar&quot;)));\n\n    assertEquals(&quot;Profile reference &#39;http://foobar&#39; could not be resolved, so has not been checked&quot;, res.getMessages().get(0));\n    assertEquals(1, res.getMessages().size());\n    assertTrue(res.isSuccessful());\n}\n</code></pre></div>",
+        "id": 213125441,
+        "sender_full_name": "Eeva Turkka",
+        "timestamp": 1602578184
+    },
+    {
+        "content": "<p>Wondering if there have been any updates on this, and whether there is a way to circumvent errors being thrown for unknown/unresolvable profile URLs during validation. Does this behaviour also apply for unknown/unresolvable extension URLs?</p>",
+        "id": 227625125,
+        "sender_full_name": "Ken Sinn",
+        "timestamp": 1614183474
+    }
+]

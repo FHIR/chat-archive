@@ -1,0 +1,902 @@
+[
+    {
+        "content": "<p>Da Vinci has based a number of their profiles on U.S. Core because, in many cases, there's a need to convey data either from the 'clinical' world to payers or from payers back to the clinical world.  That mostly works well, but there are a few cases where the US Core vocabulary bindings cause challenges - specifically in the area of diagnosis, where for billing purposes what's generally desired is ICD-10, while US Core says SNOMED.</p>\n<p>Both choices make sense for their respective spaces.  ICD-10 is a classification system - which is what you want for billing.  SNOMED provides nuanced codes appropriate for clinical rigor.  The challenge is how to make data flow 'safely' when payment data is shared to help inform clinical decisions and/or clinical data is shared to help inform financial decisions.</p>\n<p>There are two options that we've come up with in Da Vinci:</p>\n<ol>\n<li>\n<p>Create parallel profiles (where necessary) that are 'aligned' with the US Core profiles and then do our best to maintain that alignment as US Core is updated.  The Da Vinci parallel profiles would have looser vocabulary binding.  The downside of this approach is that maintaining alignment will be an ongoing challenge.  Da Vinci implementers who just have an ICD10 code would have no obligation to send SNOMED.</p>\n</li>\n<li>\n<p>Create derived profiles (where necessary) that introduce an extension that allows us to flag a coding as \"translated\" to make clear if a code has been included by translation and might not have terribly robust semantics.  This would allow systems to send both codes, but flag whichever one was not the original as 'suspect'.  This <em>would</em> however require payers to do an ICD-10 to SNOMED translation, which they're not currently set up to do.  Presumably we'd want to make available a public map if we can find one</p>\n</li>\n</ol>\n<p>Before making a decision on approach, we wanted to consult with the Argonaut/US-Core implementers to see if they had any strong opinions or had additional options we should be considering.</p>",
+        "id": 176962504,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1569869946
+    },
+    {
+        "content": "<blockquote>\n<p>introduce an extension that allows us to flag a coding as \"translated\"</p>\n</blockquote>\n<p>Isn't this what 'userSelected' is for (with the opposite meaning: tag the original terms, the other would be 'translations') ?</p>",
+        "id": 176963677,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1569870712
+    },
+    {
+        "content": "<p>userSelected is what the user originally saw/selected.  If data was post-coded, it wouldn't be marked as userSelected.  But otherwise, yes, this would be similar</p>",
+        "id": 176966549,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1569872603
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> <span class=\"user-mention\" data-user-id=\"197115\">@Steve Posnack</span>  This is great example of something that should be presented to US Realm Steering Committee</p>",
+        "id": 176967862,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1569873452
+    },
+    {
+        "content": "<p>Thanks for highlighting Brett, I agree.  Different use cases in mind and different points of origin for data demands. I'd note that from a ONC certification perspective, in certain certification criteria, we have had a separate data element referenced \"encounter diagnosis\" to deal with ICD-10 and SNOMED CT uses.  Our Transitions of Care certification criterion as an example (which permits developers to use one or the other to represent encounter diagnosis).  But that being said, \"encounter diagnosis\" was not part of the CCDS (now evolving to the USCDI) so I guess that's why it wasn't immediately addressed by the teams that have focused on the CCDS.</p>",
+        "id": 176969626,
+        "sender_full_name": "Steve Posnack",
+        "timestamp": 1569874456
+    },
+    {
+        "content": "<p>Reading this, I had a 'gut' reaction to option 1 (which I try to explore below :-).  That said, I've not been following this topic, so its fully possible I've missed something obvious.  I'm also not invested in the outcome, but I needed a mental break from my other tasks and this looked interesting.  Properly disclaimed?  Good!</p>\n<p>If a facility (where the diagnosis occurs) is adhering to US Core, the diagnosis would be coded in SNOMED.  If a payer (or anyone else) wants a different coding, then they would need to support translating it from SNOMED to their preferred system (e.g., ICD-10).  This makes sense because they would be translating the required coding into <em>their</em> preferred coding.</p>\n<p>If that same diagnosis is then sent to a care provider, they would see the original SNOMED coding and choose what to do with the ICD-10 or other codings (e.g., ignore, display, etc.).  I don't have a link, but recall a recent discussion about how to handle multiple code systems for this (e.g., a facility may generate both SNOMED and ICD-10 at origin and what to do when processing it - the thread was about equivalency of multiple values, IIRC).</p>\n<p>In the case of adding a new coding, I would posit that payers should be required to preserve the original if the data has the potential to be used in clinical decisions.</p>\n<p>I agree that flagging values as translations/derived/etc. would be a good idea (e.g., if a coding is a derived/translated value, it should be flagged as such, preferably with info about which value it was derived from - since there can be multiple 'userSelected' values in the list).  It looks like there is a mechanism for some of this, but it may need to be expanded (e.g., adding a field: <code>derivedFrom:Coding</code> to Coding, adding a <code>derivedBy:Reference(Organization)</code>? etc.).</p>\n<p>With all of that said, I feel like creating a second profile that providers need to support to interact with payers would mean the translation is done at the provider.  It's the same work, but being done by people who aren't interested in the output of the translation.</p>\n<p>After chewing on this a while, I feel like that's where my reaction comes from.  If providers aren't interested in the translation, how can they be responsible for it?  As an example, how would the eventual transition to ICD-11 be handled?  Providers would at some point need to 'flip-the-switch' on implementation, but payers wouldn't have the data until they do, etc., etc..</p>",
+        "id": 176975362,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1569878041
+    },
+    {
+        "content": "<p>If the payers are given SNOMED, it's probably a reasonable imposition for them to return it.  Where things get messy is where they only receive the ICD-10 code (likely in a claim or a prior authorization, and quite likely not over FHIR or even HL7 standards).  From the claims data, they 'assemble' a local view of the patient's problem lists, recent procedures, encounters, etc.   And Da Vinci standards allow them to share that information with downstream payers, with other practitioners or potentially with the patient.  If they sent that data in compliance with a profile that did not require the use of SNOMED, life would be easier for payers, but presumably harder for the clinical systems or patient apps trying to do anything with the data.  On the other hand, if the payers send both the IDC-10 (or 11 or whatever) code along with a SNOMED translation, then life for the provider EHR and clinical apps is easier.  However, the payers are then taking on the legal risk of doing the translation.</p>",
+        "id": 176983685,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1569885771
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191410\">@Brett Marquard</span> is there anything I need to do to get it on the US Realm agenda beyond saying \"please\"? :)</p>",
+        "id": 176983705,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1569885804
+    },
+    {
+        "content": "<p>if you are free tomorrow (Tuesday 1-2 PM ET), we will make time for you - feel free to join at 115</p>",
+        "id": 176986605,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1569888978
+    },
+    {
+        "content": "<p>just let me know you are joing...</p>",
+        "id": 176986613,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1569888987
+    },
+    {
+        "content": "<p>Amazingly enough, I am free ;)  See you tomorrow</p>",
+        "id": 177015736,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1569901173
+    },
+    {
+        "content": "<p>I don't see call details in the HL7 call calendar.  Can you send me the info?</p>",
+        "id": 177015969,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1569901225
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span>  </p>\n<blockquote>\n<p>but being done by people who aren't interested in the output of the translation.</p>\n</blockquote>\n<p>...they have an interest in getting paid..   :-)</p>",
+        "id": 177065446,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1569943187
+    },
+    {
+        "content": "<blockquote>\n<p>...they have an interest in getting paid..   :-)</p>\n</blockquote>\n<p>That's not interest, that's being a hostage  :-)</p>",
+        "id": 177066990,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1569944108
+    },
+    {
+        "content": "<p>US Clinicians tend to be more familiar with ICD10 codes than SNOMED  (and the older ones remember ICD9  and HCC)</p>",
+        "id": 177072424,
+        "sender_full_name": "Peter Muir",
+        "timestamp": 1569947388
+    },
+    {
+        "content": "<p>From the last US Realm call, I was asked to identify other places where there might be a disconnect between the US Core terminology requirements (often driven by regulatory requirements) and what payers typically accept/have available.  I haven't had a chance to do a full review, but the Da VInci team did come up with at least a couple of extra ones.  In addition to Condition (where payers often only have ICD10):</p>\n<ul>\n<li>For drug codes, US Core restricts to RxNorm.  Payers also allow NDC codes</li>\n<li>For procedure codes, payers allow HCPCS codes - which are a super-set of the CPT codes.  (CPT alone isn't enough)</li>\n</ul>",
+        "id": 177556960,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570479882
+    },
+    {
+        "content": "<p>there is nothing stopping US Core users from providing additional codings for NDC codes.  I am not sure what you are asking here by declaring a 'disconnect'.  As you state, the regs call out a code system.  Are you suggesting that we lose the binding and sacrifice code interoperability or add the burden of mapping them to the data source or push the mapping to the data receiver?</p>",
+        "id": 177568842,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1570488881
+    },
+    {
+        "content": "<p>for procedure the code binding is extensible.  why does that not work?</p>",
+        "id": 177569082,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1570489095
+    },
+    {
+        "content": "<p>Extensible means you can only send an NDC code if the drug isn't covered by an RxNorm code - I'm assuming that pretty much never happens.</p>",
+        "id": 177572300,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570492537
+    },
+    {
+        "content": "<p>Extensible doesn't allow you to send other codes just because the granularity of the code is different.</p>",
+        "id": 177572375,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570492612
+    },
+    {
+        "content": "<blockquote>\n<p>Are you suggesting that we lose the binding and sacrifice code interoperability or add the burden of mapping them to the data source or push the mapping to the data receiver</p>\n</blockquote>\n<p>There's another choice not listed here, which is a better choice: define US-Base that has more vocab choices, and make US-Core as a terminology, cardinality, and must-support constraint on US-Base that still says the same thing</p>",
+        "id": 177573176,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570493532
+    },
+    {
+        "content": "<blockquote>\n<p>Extensible doesn't allow you to send other codes just because the granularity of the code is different.</p>\n</blockquote>\n<p>So HCPCS are not unique concepts but a different level of granularity for CPT?</p>",
+        "id": 177575007,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1570496021
+    },
+    {
+        "content": "<blockquote>\n<p>Extensible means you can only send an NDC code if the drug isn't covered by an RxNorm code - I'm assuming that pretty much never happens.</p>\n</blockquote>\n<p>I agree with that but I was not implying that they were new concepts,   in the case of NDS these are <strong>additional</strong> codings</p>",
+        "id": 177575112,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1570496145
+    },
+    {
+        "content": "<p>I still think this is  fundamenally a code interop issue.   They will have to be mapped somewhere along  the chain.</p>",
+        "id": 177575250,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1570496332
+    },
+    {
+        "content": "<p>HCPCS is a broad set of codes of which CPT codes are a subset.  HCPCS also include codes for other types of procedures that also get billed for.  (And the payers were quite surprised they weren't allowed as they felt the other set was pretty essential.)  I personally wouldn't know a an HCPCS or CPT code if they bit me on the nose :)</p>",
+        "id": 177612260,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570540604
+    },
+    {
+        "content": "<p>The payers are (rightly) concerned about forcing mappings when the mappings may imply a degree of accuracy that isn't there. And I don't think that just loosening the set of allowed codes is going to get us where we need to be.  Consider a few things:<br>\n- even if the payers magically shifted to using SNOMED for billing rather than ICD10 (not that that's really on the table).  Also imagine that payers are sharing data with clinical systems that include a mix of clinical data passed to them from other provider systems as well as billing data they've received from other provider systems.  (That's very much on the table and is a key part of what Da Vinci is working to enable.)  As a consuming clinical system, you'd really want to be able to differentiate the clinical information sourced from a clinical system from the clinical information inferred from billing information.  Because the reality is that any codes used for billing are at best constrained by, and at worst warped or manipulated due to the fact that they're used for billing.  You absolutely want to treat such codes with a grain of salt.  What that means is that just providing a SNOMED translation without doing anything else is <em>dangerous</em>. <br>\n- transformations aren't necessarily easy between code systems.  There is often a loss of granularity.  More importantly, if you have systems performing translations that don't depend on those translations, you run into two problems: a) there's no feedback loop, so the quality of the translations is often poor, and typically gets worse over time; b) the system performing the translation tends to be concerned about the liability created by performing a translation where the translation isn't accurate<br>\n- on the other hand, if we were to take Grahame's solution of \"just loosen the rules in the base profile and tighten up the data for meaningful-use covered exchanges\", that really just shifts the problem around.  The payers would certainly be off the hook.  They could pass ICD10 or NDC or HCPCS codes to the EHRs freely.  However, the challenge then becomes what the EHR should do with that data when the time comes to expose it to downstream clinical and patient systems that <em>are</em> covered by the meaningful use rules.  I see several options:</p>\n<ol>\n<li>don't share the data (bad for interoperability and maybe for patient safety)</li>\n<li>force the EHR to add translations (which then creates the same issues mentioned above</li>\n<li>meet the technical letter of the regulation by sending a SNOMED code, but pick one that's utterly useless (and is thus unlikely to cause clinical error).  E.g <code>55607006 | Problem (finding)</code>.  (Not likely to make our regulators super happy and sort of defeating the purpose of creating interoperability; plus it sets the precedent to then send your local code and \"Problem\" to meet the regulatory requirement and then all standardization goes out the window.)</li>\n<li>carve out a set of exceptions with different rules (e.g. ICD10 is fine for diagnoses but not 'problems'; NDC is fine for dispenses but not medication summary; no clue what to do about HCPCS??), though that means that a provider who knows about a 'problem' and just has an ICD10 code can't put it in the problem list; same issues for medication summary.  So still sort of sucks.</li>\n<li>Someone somewhere creates a mapping, including ensuring we add all relevant concepts into SNOMED/RxNorm/whatever to allow precise mappings (and also introduce into the standard a way to flag data that was created for billing purposes).  In some senses, this would be ideal, but it's a <em>huge</em> amount of work - and ongoing work too.</li>\n<li>Get the regulations changed to support the sharing of billing codes in meaningful use</li>\n<li>others?</li>\n</ol>",
+        "id": 177614317,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570541755
+    },
+    {
+        "content": "<p>Thanks Lloyd for taking time to develop a list...have you thought about what you recommend?</p>",
+        "id": 177619467,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1570544368
+    },
+    {
+        "content": "<p>My sense today, based on your/other comments, is folks want the ability to send what they support today and mapping or changing codesystems isn't on the table. I would love <span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> to chime in on which codesystems would support straight forward inclusion of translations (NDC --&gt; RxNorm) and which ones clearly don't (ICD --&gt; SNOMED).<br>\nProfessionally, I completely understand how we have evolved to the multiple code systems for specific purposes, and we want the data to flow. Putting my patient hat on, I find it maddening that we have clinical code systems and billing which don't seem to play nice together...</p>",
+        "id": 177620144,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1570544669
+    },
+    {
+        "content": "<p>Agree with you, Brett.  What we want (and need) is for the provider coding to be done for clinical based on clinically oriented code systems (e.g. SNOMED CT, LOINC and RxNorm) and then the billing/reimbursement classification coding (e.g. ICD-10-CM, ICD-10-PCS, CPT and HCPCS) should be derived from that (ideally automatically).  But we seem to be nowhere close to that world yet.  And in the meantime we have to deal with these separate coding systems and purposes which generally should stay separate.  Coding done using classifications for billing/reimbursement purposes generally should stay in that space, because it tends not be be very accurate or safe for use in providing clinical care, and without it being initially recorded for clinical use there is no consistent and reliable way to transform or translate it to make it fit for that use afterward.</p>",
+        "id": 177622761,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1570545900
+    },
+    {
+        "content": "<blockquote>\n<p>They could pass ICD10 or NDC or HCPCS codes to the EHRs freely. However, the challenge then becomes what the EHR should do with that data when the time comes to expose it to downstream clinical and patient systems that are covered by the meaningful use rules</p>\n</blockquote>\n<p>I'm confused by this statement. Why wouldn't this already be a problem?</p>",
+        "id": 177622963,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570546019
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> it's not already a problem because payers haven't had the ability to share their data with clinical systems previously.  (So we're moving from a place where the data couldn't be shared at all to a place where the data can now be shared, but not in the form regulation expects it to be subsequently shareable)</p>\n<p><span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> \"Codes should stay in that space\" - are you suggesting that in situations where a payer is aware of clinically significant information it shouldn't share that information with a practitioner who might not have any awareness of it?  Obviously data that comes from a non-clinical source needs to be considered distinctly from 'regular' clinical data - but it's still much better than nothing.  I agree that one of the things we absolutely need to do is come up with a standardized way of differentiating \"billing-originated\" data from \"clinically-orginiated\" data.  But I don't know that we can keep them stored completely separately.</p>\n<p><span class=\"user-mention\" data-user-id=\"191410\">@Brett Marquard</span> I think mapping is on the table if a standard mapping is available that doesn't introduce accuracy/liability issues.  I'm hoping that RxNorm/NDC is one of those.  However, if reliable mapping isn't possible, I think the only solution implementers would be comfortable is a non-useful mapping (e.g. 'Problem') unless we had a solution where concerns about fidelity and liability could be addressed.</p>",
+        "id": 177627505,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570548610
+    },
+    {
+        "content": "<blockquote>\n<p>So we're moving from a place where the data couldn't be shared at all to a place where the data can now be shared, but not in the form regulation expects it to be subsequently shareable</p>\n</blockquote>\n<p>Well, I think that asking about the profile of data coming out the system isn't really the important question then. It's about what data will be acceptable to the system - how it will be handled. If it's going to be accepted as is, then the outgoing profile will change.</p>",
+        "id": 177627607,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570548679
+    },
+    {
+        "content": "<p>but it's the secondary question</p>",
+        "id": 177627618,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570548690
+    },
+    {
+        "content": "<p>we do have security integrity tags for that -- PAYRPT -- <a href=\"http://build.fhir.org/v3/SecurityIntegrityObservationValue/vs.html\" target=\"_blank\" title=\"http://build.fhir.org/v3/SecurityIntegrityObservationValue/vs.html\">http://build.fhir.org/v3/SecurityIntegrityObservationValue/vs.html</a></p>",
+        "id": 177628204,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1570549030
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> I agree that saying that the coding \"should stay in that space\" is probably somewhat too strong, as having something is (usually, but not always) better than nothing.  And having a standardized way of differentiating \"billing-originated\" data from \"clinically-orginated\" data is in the spirit of the separate space that I was suggesting.</p>",
+        "id": 177628247,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1570549066
+    },
+    {
+        "content": "<p>I would like to know more about the CPT vs H CPCS because I am in the same boat as Lloyd.  Without detailed understanding of the differences there can not say there is a disconnect.</p>",
+        "id": 177629743,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1570550004
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191401\">@Eric Haas</span> This seems to be helpful (thanks Google :&gt;) <a href=\"https://www.hcpro.com/HIM-284009-8160/Note-similarities-and-differences-between-HCPCS-CPT-codes.html\" target=\"_blank\" title=\"https://www.hcpro.com/HIM-284009-8160/Note-similarities-and-differences-between-HCPCS-CPT-codes.html\">https://www.hcpro.com/HIM-284009-8160/Note-similarities-and-differences-between-HCPCS-CPT-codes.html</a></p>\n<p>Essentially CPT = clinician codes, but HCPCS level II and III are for non-clinician and/or specialized program services - and are certainly relevant for payment and are presumably at least sometimes relevant on the clinical side too.</p>",
+        "id": 177632929,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570551922
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span> That could be the appropriate way to flag.  It has the benefit of flagging the whole record, not just the code.</p>",
+        "id": 177633049,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570552000
+    },
+    {
+        "content": "<p>What do we think of bindings enforced by invariants that depend on the presence or absence of the PAYAST flag?</p>",
+        "id": 177633105,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570552040
+    },
+    {
+        "content": "<p>OK so it sound like the extensible binding to CPT would allow for systems to extend to HCPCS code sinces they appear to be unique concepts from <br>\nCPT.  ( again I am only a \"Google expert\" which is even worse  than no expertise :-))</p>",
+        "id": 177633421,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1570552286
+    },
+    {
+        "content": "<p>Except the value set includes SNOMED and there's a SNOMED code that covers everything in all of HCPCS, so no, extensible doesn't fly.</p>",
+        "id": 177634228,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570552861
+    },
+    {
+        "content": "<p>unenforceable extensible makes me scratch my head for standard terminologies.</p>",
+        "id": 177636881,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1570554602
+    },
+    {
+        "content": "<p>Extensible works best when the base value set has a set of codes that are pretty much at the same level - and has no codes that say something like \"other\" or \"not elsewhere specified\".  Because then things are nice and clear - if your concept fits one of those in the list (or is a proper specialization of one of them), you have to use the code from the list and otherwise you send your own code.  However, when you say your value set is \"all SNOMED procedure codes\", then your value set includes the code \"55607006 | Problem (finding)\", and the domain space is 'problems', then it's impossible to have a code from <em>any</em> code system that isn't a specialization of a code in your value set.  Even if you defined your SNOMED value set to be \"all specializations of 55607006, excluding code 55607006\", SNOMED still has codes for \"foot problem\", \"ear problem\", \"problem - manageable\", etc. that are going to subsume pretty much every ICD10 code that exists.</p>\n<p>And this isn't an issue with the fact that you bound to SNOMED.  The same problem would have existed if you'd bound to ICD10 extensible, and then were trying to send a SNOMED code.  Because ICD10 has \"not otherwise specified\" codes all over the place, it'd be exceedingly hard to find a concept that could be expressed with a SNOMED code that wouldn't fall under one of the ICD10 codes.</p>\n<p>We could back off on the strictness of the meaning of 'extensible', but the end result of that would almost certainly end up that from a formal conformance perspective, 'extensible' and 'preferred' would become indistinguishable.</p>",
+        "id": 177644328,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570559295
+    },
+    {
+        "content": "<p>Thanks Lloyd, I appreciate the response.</p>",
+        "id": 177647201,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1570560994
+    },
+    {
+        "content": "<p>@lloyd  I think we crossed the Rubicon already binding to both SCT and CPT so why all the fuss re HCPCS</p>",
+        "id": 177653587,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1570565104
+    },
+    {
+        "content": "<p>Because we need HCPCS level II and III codes too?</p>",
+        "id": 177675406,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570585850
+    },
+    {
+        "content": "<p>where do the payers get this data in the first place?</p>",
+        "id": 177675426,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570585895
+    },
+    {
+        "content": "<p>Provider systems</p>",
+        "id": 177675500,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570586025
+    },
+    {
+        "content": "<p>yes, exactly</p>",
+        "id": 177675552,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1570586070
+    },
+    {
+        "content": "<p>But <em>if</em> they code it with SNOMED too, that doesn't propagate to the payers (in part because the claims standards wouldn't allow it and in part because it's not relevant to claims)</p>",
+        "id": 177675562,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570586080
+    },
+    {
+        "content": "<p>I don't believe I've ever seen anyone code in SNOMED, too, anything that has been or is going to be coded in CPT and HCPCS</p>",
+        "id": 177675676,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1570586217
+    },
+    {
+        "content": "<p>And HCPCS is needed by provider systems for the codes for procedure and procedure related items that CPT <strong>does not</strong> cover</p>",
+        "id": 177675740,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1570586284
+    },
+    {
+        "content": "<p>because that's what CMS expects (requires) you to send when you make a claim</p>",
+        "id": 177675763,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1570586334
+    },
+    {
+        "content": "<p>So - given that we've missed the boat on the current US-Core STU update, what would be the appetite to a second STU update that (once we've agreed on any necessary constraints/language to ensure regulatory obligations aren't violated), allowed HCPCS and ICD10 to be communicated in those cases where it makes sense to do so and formalizes the ability to differentiate the source of the data.  (Clearly we'd want to call out 'payer'-sourced data, but we might also want to disambiguate 'patient'-sourced data too.)  Adding support for additional code systems wouldn't break anyone who'd already implemented the first STU update.  Imposing the second would be work, but it would technically only be work for those systems that were accepting data from payer, which isn't generally rolled out yet, so presumably would be implemented as part of that larger chunk of work.</p>",
+        "id": 177675936,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570586584
+    },
+    {
+        "content": "<p>maybe that's reasonable<br>\nbut we do need to keep in mind that provider systems (and often the providers themselves) are the original source of the data that is communicated with the payers - I'm not sure that there actually is anything (or at least not very much) that is truly \"payer <strong>sourced</strong>\"<br>\nmaybe the best distinction to be thinking of is \"clinical\" vs. \"claims\" (particularly in the US)</p>",
+        "id": 177676251,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1570587062
+    },
+    {
+        "content": "<p>Whether we call it \"payer sourced\" or \"for payer purpose\", I don't much care.  (The security tags currently use the former language, but it may be that the latter is better.)</p>",
+        "id": 177676606,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570587537
+    },
+    {
+        "content": "<p>something like that - I don't care that much about the specific name, either, but with my clinician hat on the \"sourced\" does seem a bit off</p>",
+        "id": 177676851,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1570587841
+    },
+    {
+        "content": "<p>I feel as though this discussion has the cart before the horse. I'd like to hear from the system designers about how they think these workflows are going to work. Taking badly coded data from the payers into the clinical data base sounds like both a scary and a big project to me. Like massive. And then out the other end would come some consensus about the implications. I'd hardly be surprised if the answer was: we'll only take data on the way in if we can upcode it so it doesn't change our internal workflows</p>",
+        "id": 177676926,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570587906
+    },
+    {
+        "content": "<p>in which case it doesn't change the argonaut specs</p>",
+        "id": 177676934,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570587933
+    },
+    {
+        "content": "<p>In principle, the EHRs have agreed to consume the data.  That's what the Da Vinci PDex guide defines. And there's been no discussion of upcoding so far.  <span class=\"user-mention\" data-user-id=\"192607\">@Robert Dieterle</span></p>",
+        "id": 177677431,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570588694
+    },
+    {
+        "content": "<p>I think Lloyd framed the issue pretty much correctly in his original post.  The reality is that most of the data that's flowing around in the US (and probably similar in many other places) is ICD-10-CM, ICD-10-PCS, CPT and HCPCS.  That <strong>could</strong> (but almost never would) be \"upcoded\" to SNOMED, but probably not with any reasonable degree of clinical utility and safety.  The rule-based SNOMED CT to ICD-10-CM maps that NLM developed were designed in that direction, because that is what would make sense - <strong>if</strong> you already had or could get the data first coded in SNOMED CT.  Mapping in the other direction could be done, but, as I said, probably wouldn't be that useful.  So it seems to me that there needs to be a way to accommodate the  ICD-10-CM, ICD-10-PCS, CPT and HCPCS data in US Core <strong>without</strong> requiring SNOMED.  The alternative would be to keep that data stream separate from US Core, but as Lloyd just posted, it seems that the sense is for the EHRs (and therefore presumably US Core) to be able to consume and handle that data.</p>",
+        "id": 177677509,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1570588827
+    },
+    {
+        "content": "<blockquote>\n<p>Whether we call it \"payer sourced\" or \"for payer purpose\", I don't much care.  (The security tags currently use the former language, but it may be that the latter is better.)</p>\n</blockquote>\n<p>The alternative that is also available in the security tags is to use the PurposeOfUse vocabulary. For those things created within treatment, they would have the treatment purposeOfUse. For those things generated purely for payer, they would have the payer purposeOfUse. For those that were just modified from treatment into payer, they might have both. This would be an expected use of this vocabulary when applied to data, as an indicator of what purpose caused this data to exist.   Typically an EHR system doesn't tag everything, as it knows anything within the EHR is implicitly treatment. However out in the Interop space carrying this detail can be useful, as this stream shows. <a href=\"http://build.fhir.org/v3/PurposeOfUse/vs.html\" target=\"_blank\" title=\"http://build.fhir.org/v3/PurposeOfUse/vs.html\">http://build.fhir.org/v3/PurposeOfUse/vs.html</a></p>",
+        "id": 177708641,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1570624502
+    },
+    {
+        "content": "<blockquote>\n<p>But <em>if</em> they code it with SNOMED too, that doesn't propagate to the payers (in part because the claims standards wouldn't allow it and in part because it's not relevant to claims)</p>\n</blockquote>\n<p>Is that where the ConceptMap/$translate to be used?</p>",
+        "id": 177710405,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1570625701
+    },
+    {
+        "content": "<p>I'll add a comment that on the EHR side, we often have more CPT codes on our clinical data than SNOMED.  This is due to the fact that in order to bill, we need CPTs mapped, and folks have been billing for clinical services for a while now :).  Use of SNOMED mappings are increasing, but for most of our content, we will more often have CPT than SNOMED.   And we don't do upcoding/downcoding.  There be dragons.  It's all double mapping.  Typically SNOMED mapping is prioritized.  I.e. the most common procedures are mapped to SNOMED, or the content that needs to be for quality reporting, etc.  Uncommon procedures often just aren't SNOMED mapped (yet), but they normally will be CPT mapped.</p>",
+        "id": 177722069,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1570633208
+    },
+    {
+        "content": "<p>Nobody is really disputing the need and we are all in violent agreement and we talking about fricken window dressings.  We <em>already</em> support CPT and I am contending much to @Lloyd's dismay that we bind to both CPT and SCT in Procedure which already blows the pants off of the pure as driven snow  FHIR definition of extensible ... So there is no harm no foul in implementers extending to the HSPSC level II codes too without nary a change to the IG.    Yes we all screwed the pooch on the on ignoring ICD-10 codes in Condition, but it is what it is and again much to @Lloyd's dismay let the implmenters bind to both SCT and extend to ICD-10  and hang an extension on it-  no harm no foul no change to IG and no 2nd STU comment period.</p>\n<p>USCDI is about problems and health concerns and the code systems mandated for that is SCT -  I expect that would be the context for app certification.</p>",
+        "id": 177754777,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1570654136
+    },
+    {
+        "content": "<p>I think the \"pure as driven snow\" FHIR definition of extensible will always be an immediate casualty of what systems actually have mapped.</p>",
+        "id": 177755952,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1570654950
+    },
+    {
+        "content": "<p>why don't profilers just use Preferred if that is what they mean?  To argue that Extensible  has a \"pure as driven snow\" definition and want to use it like it was Preferred seems strange.</p>",
+        "id": 177756109,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1570655055
+    },
+    {
+        "content": "<p>And the USCDI \"mandate\", just like CCDS, is very silent on exactly what needs to be mapped to SCT.  E.g. historical data, 3rd party provided data, patient entered data, or low usage content, etc.  When you think about data in that context it really is preferred rather than extensible as <span class=\"user-mention\" data-user-id=\"192166\">@Jean Duteau</span> mentions.  I don't think USCDI is suggesting that folks go back and manually map 10 year old data that is exposed via the FHIR API, so really the meaning is that SCT is recommended (/required?) for future data.   But since the US Core profile also covers historical stuff preferred seems better.</p>",
+        "id": 177756287,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1570655193
+    },
+    {
+        "content": "<p>But that is me interpreting regulatory intent, and I'm very aware that there be dragons...</p>",
+        "id": 177756651,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1570655509
+    },
+    {
+        "content": "<p>'required', 'extensible' and 'preferred' all mean <em>very</em> specific things from a conformance capability.  If I send a bare HCPCS code (i.e. no accompanying SNOMED) in a Procedure instance, that instance <strong>cannot</strong> claim conformance to US Core as it currently stands.  End stop.  If I try to, then any reputable testing/certification/regulatory service/lawyer that cares to validate my claim can clearly show it to be false and I'd have to face the consequences.</p>",
+        "id": 177756961,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570655742
+    },
+    {
+        "content": "<p>If you want to cover off all procedures from a clinical perspective, SNOMED alone will do it.  There's no need for CPT codes at all from a 'scope' or a 'precision' perspective.  CPT codes were included in US Core for Procedure because there are lots of times that's all the EHR systems have.  However, the same issue also holds (at a minimum) for HCPCS level II codes.  As soon as you care about procedures performed by someone other than physicians, the common way those procedures are captured and shared is HCPCS level II.  Is it possible they could be mapped to SNOMED?  Maybe.  However, the question would then be - why do physiotherapist and dental systems need to map and physician systems don't?  And how do we address the fact that payers will be sharing HCPCS and CPT codes and never SNOMED codes, forcing the EHRs to translate the HCPCS codes when they don't have to translate the CPT codes?</p>",
+        "id": 177757293,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570655968
+    },
+    {
+        "content": "<p>So it really sounds like all (or most) of the USCDI-defined terminologies need to be preferred bindings in US Core.  Otherwise historical data will make EHRs non-compliant.</p>",
+        "id": 177757665,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1570656289
+    },
+    {
+        "content": "<blockquote>\n<p>If I send a bare HCPCS code (i.e. no accompanying SNOMED) in a Procedure instance, that instance cannot claim conformance to US Core as it currently stands.</p>\n</blockquote>\n<p>This is interesting.  I hadn't really thought too much about when conformance claims are made.  But for us, mapping and FHIR support are really separate things.  We could develop FHIR support that <em>could</em> be compliant, and if some health care systems map according to FHIR rules, then their instances would be conformant, but another health system that mapped differently may be non-conformant when running the very same code.  So it isn't really an EHR that is conformant to a profile it is the instance of an EHR at a specific health system, at a specific point in time.  Not sure how the Inferno folks are going to deal with that...</p>",
+        "id": 177758612,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1570657118
+    },
+    {
+        "content": "<p>From US physician perspective, EHR interactions (including FHIR) really need to have capability of handling ICD-10 (required for prior auth, scheduling, billing, etc) for diagnosis and procedure codes, ICD-9 for chart data before Oct 2015, HCC coding for risk stratification  and cost of care,  HCPCS for CMS items, SNOMED is being used in addition to ICD-10 for problem lists and medical/surgical history  lists.   SNOMED is not used as much for visit types etc since CPT codes required for billing.    Clinician time is spent matching spinning cherries on the wheel to the detriment of patient interaction.    All of this information needs to be able to flow to meet clinical day to day care.  FHIR will need to  be able to accommodate.   Didn't say it was easy - but easier to add more computing power than increase the physician brain case.</p>",
+        "id": 177759394,
+        "sender_full_name": "Peter Muir",
+        "timestamp": 1570657921
+    },
+    {
+        "content": "<blockquote>\n<p>If I send a bare HCPCS code (i.e. no accompanying SNOMED) in a Procedure instance, that instance cannot claim conformance to US Core as it currently stands. End stop.</p>\n</blockquote>\n<p>You will have to walk me through this one.   binding is extensible and HCPCS II code Y is used. you assume there is no other concept that represents Y  (in reality are you going to sit down and compare code Y to all of SNOMED and CPT to check that?) so you send Y.  how is that noncomformant - what am I missing?</p>\n<p>- Preferred is more like a suggestion but really the same as example - ie use what ever you want.<br>\n- Extensible is use these codes first and fill in the (real or perceived gaps) with whatever you got.  From a testing perspective at least with Extensible you can supply data and test for conformance when the proper code system is used. ( is weak but with preferred can't even say that)</p>",
+        "id": 177764133,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1570662391
+    },
+    {
+        "content": "<p>Once again not arguing against using the codes - just that it can be done now with the current bindings.</p>",
+        "id": 177764268,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1570662524
+    },
+    {
+        "content": "<p>I love snow. Just wanted to say that.</p>",
+        "id": 177765685,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1570664091
+    },
+    {
+        "content": "<p>I love snow too, for a limited period of time.  I live in a country that frequently exceeds that time-period... :)</p>\n<p><span class=\"user-mention\" data-user-id=\"191401\">@Eric Haas</span> Extensible binding means \"you MUST send one of these codes if one of them applies\".  The procedure value set for US-core includes the code \"71388002 (Procedure)\" as well tons of high-level codes for procedures on different body types and with different categories.  <em>No</em> HCPCS II codes exist that could not be categorized as a \"71388002 (Procedure)\" and I expect all of them could be coded as quite a few other lower-level codes too.  I.e. There will <em>always</em> be a SNOMED code that could be used for a given HCPCS II code.  That means that it's not permitted to have an HCPCS II code by itself because HCPCS II codes cannot ever be 'extensions'.  They're always codes that can be represented (at some level of granularity) by one of the codes allowed in the value set.</p>",
+        "id": 177766303,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570664664
+    },
+    {
+        "content": "<blockquote>\n<p>If I send a bare HCPCS code (i.e. no accompanying SNOMED) in a Procedure instance, that instance cannot claim conformance to US Core as it currently stands. End stop. If I try to, then any reputable testing/certification/regulatory service/lawyer that cares to validate my claim can clearly show it to be false and I'd have to face the consequences.</p>\n</blockquote>\n<p>If this becomes a giant 'legal' issue won't systems just pick a high-level SNOMED concept and stuff the HCPCS in the translation?  I agree 'preferred' would work but it seems to weak, we wants folks to use the codes suggested first.</p>",
+        "id": 177766374,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1570664756
+    },
+    {
+        "content": "<p>Essentially because the scope of the element is \"types of procedure\" and there's a SNOMED code that covers \"all possible types of procedure\", marking the element as 'extensible' doesn't accomplish anything.  There can't ever be a code that's appropriate for use in the attribute that doesn't fall within the scope of the highest level code.</p>",
+        "id": 177766420,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570664775
+    },
+    {
+        "content": "<p>I'm not advocating for 'preferred'.  However, if we're going to force a binding, then we're essentially saying \"translations must occur\".  We need to make sure that implementers are comfortable with the notion of doing translation and that we're not going to cause patient harm by doing so.</p>",
+        "id": 177766457,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570664850
+    },
+    {
+        "content": "<p>Shoving in high-level code just to put a specific one in translation is not something I am proposing, it seems silly to me</p>",
+        "id": 177766469,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1570664879
+    },
+    {
+        "content": "<p>Agree.  That's only an acceptable solution in my books if we decide that letter of the law is more important than spirit of the law and we can't come up with a better compromise.  A single high-level translation is an easy-out that wipes out any prospect of standardization anywhere.</p>",
+        "id": 177766555,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570664960
+    },
+    {
+        "content": "<p>(or at least carries that risk)</p>",
+        "id": 177766563,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570664969
+    },
+    {
+        "content": "<p>If the spec were going for 'ballot' today we would likely add HCPCS on Procedure and ICD on Condition. My understanding of extensible and the strict interpretation of is more clear then when eric and I made these bindings. I have a feeling implementations will not interpret extensible as pure as you Lloyd.</p>",
+        "id": 177766805,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1570665201
+    },
+    {
+        "content": "<p>Implementations can 'interpret' things as they see fit, but that doesn't change what the spec formally says, nor does it change the fact that those who interpret in certain ways will end up with instances that are non-conformant.  If we agree that the target is to allow those code systems, then making a conscious decision to be non-conformant now because you're aligning with the \"to-be\" standard and meeting valid use-cases is a completely viable strategy as long as you're not concerned about regulators coming down on your head.  (It would be nice to get some clarity from the regulators on that bit :))</p>",
+        "id": 177773123,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570673376
+    },
+    {
+        "content": "<p>I think that we should ask ONC for an opinion on this - it certainly sounds like an <code>extensible</code> binding isn't a real world proposition in the slightest, and I'd be surprised if it's being observed today. <span class=\"user-mention\" data-user-id=\"191942\">@Matt Rahn</span> <span class=\"user-mention\" data-user-id=\"192087\">@Avinash Shanbhag</span></p>",
+        "id": 177777590,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570680649
+    },
+    {
+        "content": "<p>two related ideas to take up elsewhere:<br>\n- probably what we're really trying to say with the extensible binding is something about must-support for a terminology subset. <br>\n- we should probably only look to use extensible where there's some kind of classification going on (e.g. all the .category elements)</p>",
+        "id": 177777663,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570680782
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 177811198,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1570715342
+    },
+    {
+        "content": "<p>SD spent chunk of time discussing adding ICD to Condition, and HCPCS to procedure. Nailing down access to HCPCS code system is being worked on by our fearless Robs (<span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> <span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> ). Assuming this can be resolved SD will vote up or down next Thursday 10/17. Since this is a change in scope to the STU update we will be posting to co-chair list and all prior lists...</p>",
+        "id": 177825774,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1570723912
+    },
+    {
+        "content": "<p>So, to be clear, this means keeping the bindings as <code>extensible</code> and just adding those code systems to the ValueSets?</p>",
+        "id": 177830901,
+        "sender_full_name": "Jason Walonoski",
+        "timestamp": 1570727158
+    },
+    {
+        "content": "<p>correct.</p>",
+        "id": 177834249,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1570729346
+    },
+    {
+        "content": "<p>see <a href=\"#narrow/stream/179175-argonaut/topic/Proposal.3A.20.20HCPCS.20to.20Procedure.2FICD.20to.20Condition/near/177840451\" title=\"#narrow/stream/179175-argonaut/topic/Proposal.3A.20.20HCPCS.20to.20Procedure.2FICD.20to.20Condition/near/177840451\">Proposal:  HCPCS to Procedure/ICD to Condition</a></p>",
+        "id": 177840489,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1570732781
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 178193902,
+        "sender_full_name": "Avinash Shanbhag",
+        "timestamp": 1571146854
+    },
+    {
+        "content": "<p>What is being suggested here? To  allow legacy data?</p>",
+        "id": 178194064,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1571146970
+    },
+    {
+        "content": "<p>Sorry, I did not tag the actual topic:) I was responding to the issue of the meaning of the term \"Extensible\". I have moved my response to clarify my comment.  Hope this helps.</p>",
+        "id": 178194478,
+        "sender_full_name": "Avinash Shanbhag",
+        "timestamp": 1571147177
+    },
+    {
+        "content": "<blockquote>\n<p>I think that we should ask ONC for an opinion on this - it certainly sounds like an <code>extensible</code> binding isn't a real world proposition in the slightest, and I'd be surprised if it's being observed today. <span class=\"user-mention silent\" data-user-id=\"191942\">Matt Rahn</span> <span class=\"user-mention silent\" data-user-id=\"192087\">Avinash Shanbhag</span></p>\n</blockquote>\n<p>Hi <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> , wanted to let you know that Matt and I are aware of the issue. While we cannot provide any opinion due to pending regulation, it does seem to make sense what is being suggested here , especially since the nuance of the meaning escaped many of the FHIR SMEs. Hope this helps.</p>",
+        "id": 178194981,
+        "sender_full_name": "Avinash Shanbhag",
+        "timestamp": 1571147440
+    },
+    {
+        "content": "<p>Hey Guys -- I've read this entire thread (on mobile <span aria-label=\"thumbs up\" class=\"emoji emoji-1f44d\" role=\"img\" title=\"thumbs up\">:thumbs_up:</span> to zulip!). I want to question your basic premise.  Over the past few months Lloyd has described the problem like so:</p>",
+        "id": 181076825,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1574130955
+    },
+    {
+        "content": "<blockquote>\n<p>there's a need to convey data either from the 'clinical' world to payers or from payers back to the clinical world<br>\nFrom the claims data, they 'assemble' a local view of the patient's problem lists, recent procedures, encounters, etc ...On the other hand, if the payers send both the IDC-10 ...  along with a SNOMED translation, then life for the provider EHR and clinical apps is easier. However, the payers are then taking on the legal risk of doing the translation.<br>\nThe payers are (rightly) concerned about forcing mappings when the mappings may imply a degree of accuracy that isn't there.<br>\nAs a consuming clinical system, you'd really want to be able to differentiate the clinical information sourced from a clinical system from the clinical information inferred from billing information.</p>\n</blockquote>",
+        "id": 181077893,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1574132501
+    },
+    {
+        "content": "<p>Lloyd excellently captured the question, <a href=\"#narrow/stream/179175-argonaut/topic/Interacting.20with.20payment.20world/near/177614317\" title=\"#narrow/stream/179175-argonaut/topic/Interacting.20with.20payment.20world/near/177614317\">here</a>.</p>",
+        "id": 181077897,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1574132511
+    },
+    {
+        "content": "<p>Most of this conversation has been about the details of terminology between billing and clinical FHIR resource with the unquestioned  assumption that financial data should be represented as clinical data. ... I'd like to question this.</p>",
+        "id": 181077938,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1574132523
+    },
+    {
+        "content": "<p>Billing data is different than clinical data. Deriving clinical data from billing data has risks (there be dragons). Is a claim the same as a diagnosis? No, it's not. Payers should represent billing data as  ... billing data. I question the assumption that representing billing data as clinical data is easier for providers (example: this thread), and regardless of ease, is it right?</p>",
+        "id": 181077939,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1574132529
+    },
+    {
+        "content": "<p>The root problem is that we're trying to use FHIR clinical resources to represent billing data; rather, we should be testing, implementing and maturing FHIR billing resources.</p>",
+        "id": 181077940,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1574132530
+    },
+    {
+        "content": "<p>This sounds like a false dichotomy to me. I completely agree that billing data (and billing codes) are not clinical codes. But I don't think it's true, from the discussion that we've had, that payers don't have clinical codes at all - I think they have them as supporting evidence, no? Though I think that's not the point anyway, since it's all Condition resource</p>\n<p>But perhaps you're suggesting that we would have 2 different profiles on Condition, with different category values, and with different constraints on the code?</p>",
+        "id": 181078058,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1574132744
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span> The usecase is that payers may know something about the patient that a given clinical system does not - a medication, a past procedure, a health condition, etc.  The desire is that this information propagates to the clinical system so that it can be viewed by clinicians and considered by CDS systems as part of   delivering patient care.  The question is what the workflow should be to make that happen?  </p>\n<p>Will clinicians look for past procedures, meds and conditions in persisted claims data?  Will EHRs provide an integrated view?  Will CDS systems look at claims data too?</p>",
+        "id": 181102052,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1574162299
+    },
+    {
+        "content": "<p>It seems that the assumption is that \"claims data\" is a thing that is persisted in a silo. If that's the case, then having the same data available in a different \"clinical\" representation from the payer system is probably useful, but not all systems treat payer data in silos. </p>\n<p>I think  that this  different clinical representation shouldn't be the only, or even the primary interface to get the data. Just like for codes \"forcing mappings when the mappings may imply a degree of accuracy that isn't there\", for resources, forcing the data in a different structure  when the structure may imply clinical judgement that isn't there can be problematic.</p>\n<p>Ideally, if there is clinical data not known by the clinical system, the best way to obtain the data would be to query the other clinical system that owns it. Is there currently a way to relay the source of data from the payer to the clinical system?</p>",
+        "id": 181113812,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1574172691
+    },
+    {
+        "content": "<p>Data gets passed to the payer via different means.  Most commonly as part of claims or prior authorizations.  That might be data that's coded specifically for the claim (e.g. ICD-10 codes, CPT billing codes) or as clinical attachments (which might be coded a variety of ways or not coded at all.  In principle, there could be Provenance instances associated with all of that data.  The Da Vinci interactions typically call for the payer to 'push' the data to the clinical system - as the clinical system wouldn't likely have a reason to query that particular payer for that particular data.  That means that the EHR would need to store - and make available to the clinician and/or SMART apps/CDS Hooks services/other CDS solutions - the data received.  Even if the data came as pure clinical US-core conformant data, the fact that it was originally submitted in support of a claim/prior authorization would presumably 'color' the data's interpretation, so I think there's likely a need for a flag even if no conversion takes place.  Obviously, if conversion is necessary for the clinical system and/or other systems to access the appropriate data, then a flag is even more necessary (regardless of which end the conversion happens at)</p>",
+        "id": 181114836,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1574173325
+    },
+    {
+        "content": "<p>Right, so is the following taken into consideration:</p>\n<p>Payer gets data for claims or prior authorization -&gt; payer pushes claim/PA data to clinical system, including source of data -&gt; clinical system decides if that is enough, or it queries the clinical source of data, or it asks for available clinical representation of data from payer?</p>\n<p>Sounds like we are jumping to the last part (clinical representation of payer data) right away, and I am wondering if that is indeed the starting point.  At the point where clinical data representation of payer data is necessary, then having a way to \"flag\" it is necessary, I agree.</p>",
+        "id": 181116836,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1574174501
+    },
+    {
+        "content": "<p>It's unlikely the clinical system is going to be able to ask the payer for any more than it gets.  The payer is going to share everything it knows/is allowed to in the first go.</p>",
+        "id": 181118131,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1574175253
+    },
+    {
+        "content": "<p>The presumption was that payer data needed to be represented as clinical data in order for SMART apps, CDS Hooks and even the EMRs themselves to make use of it.  I think that assumption is born out by current system behavior, but it's certainly an assumption we could revisit.</p>",
+        "id": 181118222,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1574175317
+    },
+    {
+        "content": "<p>The goal of the Basic Provenance project is to address these kinds of intermediaries. If the data ends up at a clinical setting having come from a payer setting without original author Provenance; then it should be seen as 'payer' quality. Payer quality might be seen as useful, but it should be seen for what it is, payer quality and not clinical quality.  If the Divinci team want to be taken seriously then they need to take on Basic Provenance. If they did that, then the bread-crumbs back to the author would be available.</p>",
+        "id": 181119818,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1574176210
+    },
+    {
+        "content": "<p>I agree that there are differences in clinical and financial data, but we aggregate the data today for a variety of use cases (e.g. pop health use cases as well as keeping the local EHR updated/current).  While terminologies are often different (e.g. RxNorm vs NDC, SNOMED vs ICD), there are other variances which cause us more grief when transforming that financial data from a claim into a US Core FHIR resource.  For example:</p>\n<ul>\n<li>Clinical concepts extracted from a claim (e.g. immunizations, procedures, medications, conditions) don't have a status, yet FHIR (and often the EHR) requires a status.</li>\n<li>Claim diagnoses, specifically, tend to be the most unreliable (for clinical purposes) since they are \"point in time\" and never get updated to denote \"this diagnosis has since been refuted or ruled out\".   </li>\n<li>Claim procedures have modifiers whereas clinical EHRs may not.  <a href=\"#narrow/stream/179166-implementers/topic/CPT.20Code.20Modifiers\" title=\"#narrow/stream/179166-implementers/topic/CPT.20Code.20Modifiers\">https://chat.fhir.org/#narrow/stream/179166-implementers/topic/CPT.20Code.20Modifiers</a> started the discussion about how to convey modifiers using FHIR (e.g. single Procedure.code expression vs modifiers represented independently from code).  The challenge is that some modifiers impact status (e.g. 52, 53, 73, 74) and others have a clinical significance that can impact CDS (e.g. whether a patient had a bilateral mastectomy versus unilateral mastectomy).  Simply stated, modifiers can't be ignored.</li>\n</ul>\n<p>In sum, I support the need to aggregate clinical (EHR) and financial (claims) data together even though the variances I mentioned do introduce some challenges.</p>",
+        "id": 181122257,
+        "sender_full_name": "Michelle (Moseman) Miller",
+        "timestamp": 1574177580
+    },
+    {
+        "content": "<p>Lloyd, your description has a bunch of passive-voice assertions like \"the assumption was\" or \"data gets passed\". Can you clarify who is defining these workflows and whether that group is distinct from the people discussing here?</p>",
+        "id": 181123595,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1574178290
+    },
+    {
+        "content": "<p>I feel like we might just have a problem of different assumptions.</p>",
+        "id": 181123608,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1574178297
+    },
+    {
+        "content": "<p>Several Da Vinci projects - CDex, PCDE, PAS, and probably others.  And some of those in this stream have been involved in those Da Vinci calls.</p>",
+        "id": 181124758,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1574178850
+    },
+    {
+        "content": "<p>Okay -- and these projects have defined an approach written into the balloted guides, with buy-in from EHR vendor participants? Or still in progress? Or published but now questioned?</p>",
+        "id": 181125042,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1574178983
+    },
+    {
+        "content": "<p>I would call it \"in progress\".  Step one (which Argonaut has done) was loosening the US Core profiles to allow conveying things like ICD-10 so we weren't in a position where payers had to translate to SNOMED.  However, there's still questions about if/how such data should be integrated.</p>",
+        "id": 181125392,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1574179168
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191403\">@Michelle (Moseman) Miller</span>  When you aggregate the information to you include an indicator it came from a claim vs a clinical system?</p>",
+        "id": 181129349,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1574181202
+    },
+    {
+        "content": "<p>To me, and it appears <span class=\"user-mention\" data-user-id=\"192685\">@Vassil Peytchev</span>  and <span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span> , agreeing on an approach to flagging the clinical representation of payer data is something for us to all agree on. This doesn't solve all the items mentioned here, but it's a start.</p>",
+        "id": 181129763,
+        "sender_full_name": "Brett Marquard",
+        "timestamp": 1574181453
+    },
+    {
+        "content": "<p>We aggregate clinical + financial (e.g. claims) data in our HealtheIntent platform.  Yes, we do maintain the data source that sent us the data and can also support knowing author provenance (optional, when provided) or document entity provenance (optional, when applicable / when we extract data from a CDA document).  For the use case when we use the aggregated, longitudinal record data in HealtheIntent to update the Millennium EHR, the Millennium EHR will retain Provenance as well.</p>",
+        "id": 181130414,
+        "sender_full_name": "Michelle (Moseman) Miller",
+        "timestamp": 1574181872
+    },
+    {
+        "content": "<p>And in the context of Healtheintent, do you have individual tables for things like Conditions that include conditions derived from claims as well as conditions explicitly stated in a medical record? If so, who does the derivation? The source of the data or your platform?</p>",
+        "id": 181130609,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1574182008
+    },
+    {
+        "content": "<p>Using Condition as an example, yes, we have a single condition information model / schema, which includes conditions from any type of data source.  Additionally, we have document and claim/EOB models as well.  When a data source sends us a CDA document or a claim/EOB, our platform will persist the claim or document in its entirety as well as derive the discrete clinical concepts.  For example, our conditions includes conditions from EHRs, conditions from billing systems, and conditions we derived from CDA or claims/EOBs.</p>",
+        "id": 181131285,
+        "sender_full_name": "Michelle (Moseman) Miller",
+        "timestamp": 1574182500
+    },
+    {
+        "content": "<p>To me this seems like a good pattern: get the data source to proof the information in a form they know and can vouch for, and allow the recipient to retain the original whilst pulling out any important bits for subsequent use.</p>",
+        "id": 181131654,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1574182739
+    },
+    {
+        "content": "<p>But is this not an odds with the approach discussed above, where the sender would be expected to create a clinical resource from the information it had (rather than allowing the receiver to decide how to do this appropriately)?</p>",
+        "id": 181131724,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1574182786
+    },
+    {
+        "content": "<p>So josh to rephrase are you saying that Da Vinci approach of using clinical resources to transact billing data is suspect?   Should we have have put up a stronger defense to adding billing codes to us core clinical profiles. And should we adopt a more robust strategy in the future?</p>",
+        "id": 181135995,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1574185424
+    },
+    {
+        "content": "<p>I hate to see all the after the fact hand wringing.</p>",
+        "id": 181136072,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1574185460
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191401\">@Eric Haas</span> I don't think Josh is arguing against being able to include billing codes in clinical resources.  I expect that the system Michelle is describing would still create those.  Also, there will be data that comes <em>in</em> to payers (in the form of claims or prior authorization attachments) that will also contain such billing codes.  I think the discussion right now is about \"where should the derivation occur and should the source for the derivation be available to whoever receives the derivation.</p>",
+        "id": 181136535,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1574185819
+    },
+    {
+        "content": "<p>In the case of a claim, it's quite likely that the Claim itself is not shareable except in a highly redacted (and potentially even non-conformant) manner.  You can't know who submitted the claim or for how much or how much was paid.  All you can know is that the claim included certain procedure, medication and/or diagnosis codes.  Is it more useful to send that non-conformant claim instance than it is to send Condition, Procedure and MedicationStatements with a flag that says they're claim-derived?</p>",
+        "id": 181136706,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1574185951
+    },
+    {
+        "content": "<p>The derivation process can happen at multiple stages.  An EHR might derive some information then send it to a payer who might integrate it with other data and derive more information who might send that to another EHR.  I'm not sure how practical it will be to send the long-tail of the source material all the time.</p>",
+        "id": 181136878,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1574186052
+    },
+    {
+        "content": "<p>If I understand, they are not removing any detail, just embellishing. right?  They are taking a clinical object, and adding the billing worthy codes (adding the ICD equiv) would be a form of amendment. right?<br>\n     Provenance.activity = <a href=\"http://build.fhir.org/codesystem-iso-21089-lifecycle.html#iso-21089-lifecycle-amend\" target=\"_blank\" title=\"http://build.fhir.org/codesystem-iso-21089-lifecycle.html#iso-21089-lifecycle-amend\">http://build.fhir.org/codesystem-iso-21089-lifecycle.html#iso-21089-lifecycle-amend</a><br>\nMight be useful to define a more specific activity code for this kind of amendment. ?</p>",
+        "id": 181139021,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1574187412
+    },
+    {
+        "content": "<p>I think there is worry, as this embellishing without changing the data that was there, is not always true today. As some transformation of data happens, thus loss of quality.</p>",
+        "id": 181139374,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1574187659
+    },
+    {
+        "content": "<p>That is where I am confused ( and I imagine are others)  what I am hearing is:</p>\n<ol>\n<li>There should be a bright line between billing and clinical on the data source/sender side.... whether through provenance or separate resources or profiles.</li>\n<li>let the receiver sort it out.</li>\n<li>the question of codes has not been directly addressed but from the initial discussion waaaayyy up at the top of this thread everybody who chimed in was all for mixing in billing with clinical codes.  I regret not getting more input or asking the right questions before adding it in (which we editors will own up to) at the 11th hour.  (Hence trying to get some take aways for next time.)</li>\n</ol>",
+        "id": 181139732,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1574187931
+    },
+    {
+        "content": "<p>I haven't heard anyone say that allowing mixed codes was the wrong call <span class=\"user-mention\" data-user-id=\"191401\">@Eric Haas</span></p>",
+        "id": 181139835,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1574187993
+    },
+    {
+        "content": "<p>That was this whole thread at its core is about....</p>",
+        "id": 181139858,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1574188018
+    },
+    {
+        "content": "<p>you started it  :-)</p>",
+        "id": 181139877,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1574188029
+    },
+    {
+        "content": "<p>I did.  And US Core added support for ICD10 and HCPCS level 2 codes.  And I don't think anyone's suggesting that's a mistake.  The questions now are:</p>\n<ol>\n<li>Should data that payers derive from a claim be sent as a claim, as Condition/Procedure/etc. or both?</li>\n<li>Should data from payers be flagged if it was received by the payer in the context of billing, and if so, how?</li>\n</ol>",
+        "id": 181140807,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1574188595
+    },
+    {
+        "content": "<p>smallest impact - liberal use of .meta.security by payers of <a href=\"http://build.fhir.org/v3/ObservationValue/cs.html#v3-ObservationValue-PAYAST\" target=\"_blank\" title=\"http://build.fhir.org/v3/ObservationValue/cs.html#v3-ObservationValue-PAYAST\">http://build.fhir.org/v3/ObservationValue/cs.html#v3-ObservationValue-PAYAST</a></p>",
+        "id": 181142635,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1574189728
+    },
+    {
+        "content": "<p>I don't see that as separate.... if yes to 1. above then Condition and Procedure codes would not need the billing codes since they get sent in Claim...</p>",
+        "id": 181142639,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1574189731
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span> it's hard for me to think of 'payer asserted' as a <em>security</em> statement in this context.</p>",
+        "id": 181180006,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1574225964
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191401\">@Eric Haas</span></p>\n<blockquote>\n<p>I hate to see all the after the fact hand wringing.</p>\n</blockquote>\n<p>it seems to me that we are revisiting this because in the light of practical experience, our understanding of requirements has changed.</p>",
+        "id": 181180081,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1574226060
+    },
+    {
+        "content": "<p>Generally, I'm hearing that US Core should have 2 profiles on Condition, one for problem and one for other uses</p>",
+        "id": 181180096,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1574226082
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> are you asserting that payers can't assert/share problems?  (because I don't think that's true...)</p>",
+        "id": 181186428,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1574236776
+    },
+    {
+        "content": "<p>sorry, I meant \"problem list\", I think it's clear that payers don't manage clinical problem lists</p>",
+        "id": 181190136,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1574241111
+    },
+    {
+        "content": "<p>I agree they don't manage the lists, but I don't think it's true that payer-provided content won't ever appear in a List maintained within an EHR.  (The other challenge is that the EHRs aren't exposing the List instances.)</p>",
+        "id": 181198258,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1574248723
+    },
+    {
+        "content": "<blockquote>\n<p><span class=\"user-mention silent\" data-user-id=\"191404\">John Moehrke</span> it's hard for me to think of 'payer asserted' as a <em>security</em> statement in this context.</p>\n</blockquote>\n<p>Too often people think of \"Security\" as only access controls and encryption. Security is the mechanism to protect against \"risks\" to \"Confidentiality\", \"Integrity\", and \"Availability\". The vocabulary from which PAYAST comes from is addressing \"Integrity\", in that it is a vocabulary that holds a set of statements of the trustability and authority of the data. So it does fit the proper definition of \"Security\".</p>",
+        "id": 181209025,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1574258464
+    },
+    {
+        "content": "<p>I think we need to do better documentation and definitions in the spec then - say, for Meta.security</p>",
+        "id": 181220227,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1574265315
+    },
+    {
+        "content": "<p>please create a CR</p>",
+        "id": 181222908,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1574266989
+    },
+    {
+        "content": "<p>Grahame it might not accurate to state that payers don't manage clinical problem list.  Depending on the employer contract, payers sometimes have on-site case or care managers on site at facilities, and use their own population health system to create, track and shar clinical problem lists...as part of the services to members/staff of the employer, per the terms and care plan requirements the payer product.   AND those payer clinical problem would be shared with the medical staff of the facility.  Unknown to me?  The role and challenge of ICD-10 versus SNOMED in the payer's population health tools, and the level of data exchange with the clinician EHR, if at all.</p>",
+        "id": 181237663,
+        "sender_full_name": "Lenel James",
+        "timestamp": 1574276511
+    },
+    {
+        "content": "<p>well... payers aren't acting as payers there, they're acting as care providers...</p>",
+        "id": 181278505,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1574315834
+    },
+    {
+        "content": "<p>Except that the data they're working with may well include payer-directed data (i.e. ICD-10, etc.)</p>",
+        "id": 181281437,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1574320466
+    }
+]

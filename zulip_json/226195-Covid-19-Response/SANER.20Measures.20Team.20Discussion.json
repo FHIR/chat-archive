@@ -1,0 +1,104 @@
+[
+    {
+        "content": "<p>Per discussion on this morning's call, created a new thread here.</p>\n<p>I've done a pass updating what I had based on the current posted <a href=\"https://audaciousinquiry.github.io/fhir-saner/Measure-CDCPatientImpactAndHospitalCapacity.json.html\" title=\"https://audaciousinquiry.github.io/fhir-saner/Measure-CDCPatientImpactAndHospitalCapacity.json.html\">CDC Patient Impact</a> and the <a href=\"https://audaciousinquiry.github.io/fhir-saner/Measure-FEMADailyHospitalCOVID19Reporting.json.html\" title=\"https://audaciousinquiry.github.io/fhir-saner/Measure-FEMADailyHospitalCOVID19Reporting.json.html\">FEMA Daily Reporting</a> templates.</p>\n<p>Based on my understanding from this morning, I'm working on the \"non-computable\"/\"generic\" versions, so I've set all the expressions to be based on the guidance text.  I've tried to match the structure to the posted versions, excluding fields that don't exist in the matching documentation.</p>\n<ul>\n<li>HAPI <a href=\"https://covid19-under-fhir.smilecdr.com/baseR4/Measure/CDCPatientImpactAndHospitalCapacity\" title=\"https://covid19-under-fhir.smilecdr.com/baseR4/Measure/CDCPatientImpactAndHospitalCapacity\">CDC Patient Impact</a>, <a href=\"https://covid19-under-fhir.smilecdr.com/baseR4/Measure/FEMADailyHospitalCOVID19Reporting\" title=\"https://covid19-under-fhir.smilecdr.com/baseR4/Measure/FEMADailyHospitalCOVID19Reporting\">FEMA</a></li>\n<li>GitHub JSON <a href=\"https://github.com/microsoft-healthcare-madison/learning-spike-erp/blob/master/generated/t0/Measures-CDC.json\" title=\"https://github.com/microsoft-healthcare-madison/learning-spike-erp/blob/master/generated/t0/Measures-CDC.json\">CDC Patient Impact</a>, <a href=\"https://github.com/microsoft-healthcare-madison/learning-spike-erp/blob/master/generated/t0/Measures-FEMA.json\" title=\"https://github.com/microsoft-healthcare-madison/learning-spike-erp/blob/master/generated/t0/Measures-FEMA.json\">FEMA</a></li>\n</ul>\n<p>I've broken up my questions/comments into a few sections below.</p>\n<p><strong>Critical</strong>:</p>\n<ul>\n<li>\n<p>FEMA field mapping:</p>\n<ul>\n<li>Since field names aren't specified in source, the field names in the measure don't correlate to fields in the sheet (e.g., \"totalOrders\" for \"Cumulative Diagnostic Tests Ordered / Received\").</li>\n<li>In my version, I have stayed with my original model (camel casing the data element text, remove '/', replace \"COVID-19\" with C19 (per CDC)). E.g., \"cumulativeDiagnosticTestsOrderedReceived\"</li>\n<li>I think this avoids confusion and prevents future collisions</li>\n<li>\n<p>This issue also occurs in the group names</p>\n<ul>\n<li>\"positiveIncreasePercent\" and \"positivePercent\" are impenetrable</li>\n<li>Suggest: \"percentPositiveAmongNewlyResultedTests\" and \"cumulativePercentPositiveAmongNewlyResultedTests\"</li>\n</ul>\n</li>\n<li>\n<p>I think these need to match across everything we define</p>\n</li>\n<li>Thoughts / feedback?</li>\n</ul>\n</li>\n</ul>\n<p>Measure General:</p>\n<ul>\n<li>I added <code>http://hl7.org/fhir/4.0/StructureDefinition/Measure</code> to Measure.profile for version-awareness</li>\n<li>My old version had Measure.type = composite.  I've kept for now, but can remove.</li>\n<li>My old version had Measure.subject (Location) to allow linking to location without extensions.  I've kept for now, but feel like this needs discussion</li>\n<li>I added Citations to RelatedArtifacts</li>\n</ul>\n<p>CDC:</p>\n<ul>\n<li>Measure.group<a href=\"http://encounters\" title=\"http://encounters\">2</a>.extension...measure-type is structure, should this be outcome?</li>\n<li>definition is list of markdown.  I the output looks better with each definition being a line or changing it into a markdown page formatted with a header, etc.  I've chosen the former for now (no real preference)</li>\n</ul>\n<p>Copy/Paste errors found in published versions:</p>\n<ul>\n<li>CDC Patient Impact<ul>\n<li>numC19Pats expression - beginning is chopped</li>\n<li>numC19HOPats expression - beginning is chopped</li>\n<li>Measure.group<a href=\"http://ventilators\" title=\"http://ventilators\">1</a>.code.text \"Ventilators\" should be \"Ventilator\"</li>\n</ul>\n</li>\n<li>FEMA<ul>\n<li>Measure.author[0].telecom[0].value has a trailing space</li>\n</ul>\n</li>\n</ul>\n<p>I'm going to work on getting the generator to work with these definitions to create MeasureReports next (the structure changes broke my simpler implementation).</p>",
+        "id": 195775337,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1588197322
+    },
+    {
+        "content": "<p>For FEMA Tests Ordered Received, where is this information coming from (which information system)?  Also does this include outpatient, inpatient and employee health testing?</p>",
+        "id": 195788213,
+        "sender_full_name": "Andrea Pitkus, PhD, MLS(ASCP)CM, CSM",
+        "timestamp": 1588207756
+    },
+    {
+        "content": "<p>I've been mulling on something here and had some brief discussions - I wanted to bring it up here in case of easy consensus, or can add it to the list for tomorrow's call.</p>\n<p>I think we need to have the core Measure structure be each field as a group within the measure (e.g., 1:1 mapping from a CDC/FEMA field to a Measure.group), with the value being the score.</p>\n<ul>\n<li>The general structure (most recent) is that Measure groups are categories (e.g., beds), and each field is a population within the group.</li>\n<li>In the FEMA Daily Measure, there are already some places where that doesn't work.<ul>\n<li>Some of the fields are the scores of the groups, while others are populations (e.g., the percentage fields).</li>\n<li>In our first two reports, we already need to handle two 'styles' of generating/parsing fields.</li>\n</ul>\n</li>\n<li>Looking at additional forms already published, we have things like multiple-choice questions.<ul>\n<li>So far, the best structure I found is for the field to be a group, and each choice a population within it (counting the number of positives/negatives).</li>\n</ul>\n</li>\n<li>This means that we have another method of generating/parsing.</li>\n<li>Someone also brought up that there will likely be collisions in future requests (e.g., asking for a % positive and a % negative), which will yield large quantities of repeated data.</li>\n<li>While each Measure is individually clearer, we lose consistency across instances.</li>\n</ul>\n<p>In short, if we try to specifically model each form individually in it's \"best\" way, we open the possibility of another structure for processing.  I feel that's in opposition to what we're trying to achieve.</p>\n<p>Thoughts/questions/feedback?<br>\n(apologies in advance, but tags because I'm somewhat blocked: <span class=\"user-mention\" data-user-id=\"191387\">@Keith Boone</span> , <span class=\"user-mention\" data-user-id=\"191689\">@Hans Buitendijk</span> , <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> , <span class=\"user-mention\" data-user-id=\"191936\">@Michael Donnelly</span> )</p>",
+        "id": 195878891,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1588270170
+    },
+    {
+        "content": "<p>I had the chance to talk through these points with Gino earlier today, and I think we should take this up on tomorrow's call. It's important to make sure that our Measures tie back directly to what's in the source reporting requirements, and I'm worried that the current drafts are getting a bit \"clever\".</p>",
+        "id": 195929097,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1588304502
+    },
+    {
+        "content": "<p>\"Doesn't really work\" doesn't really tell me what the problem is.</p>\n<p>A \"Score\" is a computation based on counts.  % positive is a score.  It's a measureValue.  It's based on two populations, a numerator and a denominator, with a common initial population.  These are described in Measure.</p>\n<p>\"best\" is evaluating from  a perspective that isn't really expressed.  What I'm reading is \"best\" is being evaluated as what is easiest to produce based on a certain context.  I agree, what you suggest is certainly extremely easy to produce.  </p>\n<p>But it lacks conveyance of meaning and semantics.  We do the hard work of that by describing Measure using our expertise, which is what makes it easy to map these fields subsequently into MeasureReport.  The layout of Measure tells a system where to stick stuff in a MeasureReport, and we have a very simple way to express a collection of numbers as name value pairs that can be \"dumped into\" a measure report based on code... be it population.code or group.code.</p>\n<p>Yes, there's a little more complexity in the expression of MeasureReport, but not so much b/c it's guided by Measure.</p>\n<p>Let's address this as a hot topic tomorrow as you say, b/c if you are blocked, then I am too.</p>\n<p>As for % positive and % negative, yes, that could conceivably happen, BUT, we hope to avoid that by getting people to create measures smartly, instead of throwing spreadsheets over the wall.  We're starting to get the kind of attention needed to make that happen through process and policy.</p>",
+        "id": 195934788,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1588312864
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> There's measure and there's what organizations ask for.  If we're going to treat them as measures, that implies a certain approach, which has a set of semantics that we should use.  If we're going to treat them as fill in the blank forms, that's a different approach.  They aren't \"incompatible\" with each other, but they do have some implications with respect to structure that we should consider.  I like the idea of having an A leads to B approach from Questionnaire --&gt; MeasureReport but we only got to that point last week and haven't adopted it fully.  I think we want to explore that further.  Questionnaire has less implicit structure and can easily address the \"use this one common structure\" mechanism to simply address the need, and that can map through to MeasureReport.</p>\n<p>There's some benefit there as well due to alignment with the NHSN IGs which we should also review.</p>",
+        "id": 195935093,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1588313457
+    },
+    {
+        "content": "<p>The <a href=\"http://build.fhir.org/ig/HL7/HAI\" title=\"http://build.fhir.org/ig/HL7/HAI\">http://build.fhir.org/ig/HL7/HAI</a> and <a href=\"https://build.fhir.org/ig/HL7/NHSN-LTC/\" title=\"https://build.fhir.org/ig/HL7/NHSN-LTC/\">https://build.fhir.org/ig/HL7/NHSN-LTC/</a> are the two NHSN FHIR IG guides that I'm aware of.  <span class=\"user-mention\" data-user-id=\"279658\">@Austin Kreisler</span> <span class=\"user-mention\" data-user-id=\"191407\">@Rick Geimer</span>  are you aware of others?</p>",
+        "id": 195935198,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1588313614
+    },
+    {
+        "content": "<p>and how about the HL7 ELR guide (v 2.51, not FHIR) and potentially Lab Results Reporting Initiative (LRI), and EHR-S receipt of Lab results in the EHR?  LRI would communicate COVID-19 results from origination in the LIS to the hospital EHR (as long as not shared database as those aren't interfaced).  Then results can be used for HAI and eCR reporting from the EHR side of the fence, so to speak.  These guides aren't 100% aligned to provide complete interoperability and flow of lab results, but rather more of a point to point messaging between systems.</p>",
+        "id": 195952349,
+        "sender_full_name": "Andrea Pitkus, PhD, MLS(ASCP)CM, CSM",
+        "timestamp": 1588332520
+    },
+    {
+        "content": "<p>Are folks following <a href=\"http://build.fhir.org/ig/HL7/HAI-LTCF/\" title=\"http://build.fhir.org/ig/HL7/HAI-LTCF/\">http://build.fhir.org/ig/HL7/HAI-LTCF/</a> as it relates to NHSN reporting?</p>",
+        "id": 195969351,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1588345331
+    },
+    {
+        "content": "<p>It's also defining Questionnaires for NHSN, though not specifically on COVID modiules.</p>",
+        "id": 195969493,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1588345420
+    },
+    {
+        "content": "<p>Those are the two FHIR IG's developed for NHSN reporting and balloted through HL7.</p>",
+        "id": 195975360,
+        "sender_full_name": "Austin Kreisler",
+        "timestamp": 1588348614
+    },
+    {
+        "content": "<p>Are they meant to be a \"Framework\" to apply to all NHSN modules, or are they scoped to a specific set of modules?</p>",
+        "id": 195977513,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1588349777
+    },
+    {
+        "content": "<p>The IG's provide frameworks for the two main types of NHSN reports, individual patient reports, and summary reports. There are also examples of individual NHSN reports for each framework.</p>",
+        "id": 195980472,
+        "sender_full_name": "Austin Kreisler",
+        "timestamp": 1588351403
+    },
+    {
+        "content": "<p>Are the COVID modules examples of \"summary reports\"? Is there info we should be using from these IGs to inform our questionnaire design?</p>",
+        "id": 195980727,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1588351531
+    },
+    {
+        "content": "<p>They should be, but that IG development work has not happened at this point.</p>",
+        "id": 195981039,
+        "sender_full_name": "Austin Kreisler",
+        "timestamp": 1588351677
+    },
+    {
+        "content": "<p>Question (not urgent) while processing the <a href=\"https://www.cdc.gov/nhsn/pdfs/covid19/57.131-covid19-hwp-blank-p.pdf\" title=\"https://www.cdc.gov/nhsn/pdfs/covid19/57.131-covid19-hwp-blank-p.pdf\">CDC Healthcare Worker Staffing Pathway</a> - what are we doing with text fields?  In the form, there is a text box for listing what kinds of workers a facility is short (not restricted to clinical responsibility).<br>\nSimple for Questionnaire/QuestionnaireResponse.  But, I'm not sure for direction what would be done generically for Measure/MeasureReport (especially in the context of aggregation).</p>",
+        "id": 196012421,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1588368700
+    },
+    {
+        "content": "<p>Yeah, on the aggregation, could imagine just counting \"Yes\" values, or accumulating lists of responses... it's not clear that this is a \"measure-y\" thing.</p>",
+        "id": 196012876,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1588368970
+    }
+]

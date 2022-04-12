@@ -1,0 +1,278 @@
+[
+    {
+        "content": "<p>I've been troubleshooting some places where our JSON seems to be parsing and validating, even though we don't think it should. Given this json:<br>\n<code>{\"resourceType\": \"Patient\",\n  \"id\": 123,\n  \"meta\": {\n    \"versionId\": \"29\",\n    \"lastUpdated\": \"2015-12-22T19:53:11.000Z\"\n  },\n  \"communication\": {\n    \"language\": {\n      \"coding\": [\n        {\n          \"system\": \"urn:ietf:bcp:47\",\n          \"code\": \"hi\",\n          \"display\": \"Hindi\",\n          \"userSelected\": false\n        }],\n      \"text\": \"Hindi\"\n    },\n    \"preferred\": true\n  }\n}</code></p>",
+        "id": 153863802,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1481930799
+    },
+    {
+        "content": "<p>I would expect at least an error about the id not being a string, and the communication not being a list.</p>",
+        "id": 153863804,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1481930842
+    },
+    {
+        "content": "<p>me too :-)</p>",
+        "id": 153863805,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1481930862
+    },
+    {
+        "content": "<p>My context is set up with the StrictErrorHandler, and the SchemaBaseValidator and SchematronBaseValidator, and I've stepped into validation code and confirmed both end up in the validators list</p>",
+        "id": 153863806,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1481930933
+    },
+    {
+        "content": "<p>I've tried a few ways to validate:</p>\n<p><code>IBaseResource fakeresource = context.newJsonParser().parseResource(fakeBody);\nValidationResult validationResult = validator.validateWithResult(fakeBody);\nValidationResult otherResult = validator.validateWithResult(fakeresource);</code></p>",
+        "id": 153863807,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1481931001
+    },
+    {
+        "content": "<p>All success/no issues. If I step through it, the JSON raw gets converted to XML. The XML ends up as:</p>\n<div class=\"codehilite\"><pre>&lt;Patient xmlns=&quot;http://hl7.org/fhir&quot;&gt;\n&lt;id value=“123&quot;/&gt;\n&lt;meta&gt;\n    &lt;versionId value=&quot;29&quot;/&gt;\n    &lt;lastUpdated value=&quot;2015-12-22T19:53:11.000Z&quot;/&gt;\n&lt;/meta&gt;\n&lt;communication&gt;\n    &lt;language&gt;\n        &lt;coding&gt;\n            &lt;system value=&quot;urn:ietf:bcp:47&quot;/&gt;\n            &lt;code value=&quot;hi&quot;/&gt;\n            &lt;display value=&quot;Hindi&quot;/&gt;\n            &lt;userSelected value=&quot;false&quot;/&gt;\n        &lt;/coding&gt;\n        &lt;text value=&quot;Hindi&quot;/&gt;\n    &lt;/language&gt;\n    &lt;preferred value=&quot;true&quot;/&gt;\n&lt;/communication&gt;\n&lt;/Patient&gt;\n</pre></div>",
+        "id": 153863808,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1481931172
+    },
+    {
+        "content": "<p>Which is, unfortunately for us, valid</p>",
+        "id": 153863809,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1481931193
+    },
+    {
+        "content": "<p>I'm not sure if there's a better way for me to run this through validation and have it actually catch these? And is this just an expected result since the source is JSON? It feels like a bug, but I know the validation logic is relatively recent.</p>",
+        "id": 153863810,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1481931333
+    },
+    {
+        "content": "<p>To make this more fun (and a warning to others): if you try to log the result of the client call (assuming it's in resource form and you call encodeResourceToString), the JSON will come back out valid since it starts from the resource. This makes sense, given that it's starting from the resource, but threw us for a loop since not only did the JSON parser not error, the JSON getting logged looked great :)</p>",
+        "id": 153863812,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1481931552
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> the validator validates JSON/stream/byte[] directly now - no need to convert to XML </p>",
+        "id": 153863813,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1481935137
+    },
+    {
+        "content": "<p>I'll have to check whether the underlying validator is right on this one</p>",
+        "id": 153863814,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1481935158
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191356\">@Jenni Syed</span> How are you setting up the validator? (ie. which modules are you feeding it)?</p>\n<p>If you're using the <code>FhirInstanceValidator</code> I would expect it to catch these issues. You'd need to do the following to register that validator if you haven't already:</p>\n<div class=\"codehilite\"><pre><span></span><span class=\"n\">FhirInstanceValidator</span> <span class=\"n\">instanceValidator</span> <span class=\"o\">=</span> <span class=\"k\">new</span> <span class=\"n\">FhirInstanceValidator</span><span class=\"o\">();</span>\n<span class=\"n\">validator</span><span class=\"o\">.</span><span class=\"na\">registerValidatorModule</span><span class=\"o\">(</span><span class=\"n\">instanceValidator</span><span class=\"o\">);</span>\n</pre></div>\n\n\n<p>If you're validating without that part, it's probably just running your JSON through the XSD validator and it does an automatic conversion to XML before proceeding with that.</p>\n<p>I'm guessing this is related to your other question.. this gives me an idea. We have a server interceptor that automatically validates the raw request and response, but no such interceptor on the client. Sounds like that is exactly what you want really.</p>",
+        "id": 153864015,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1482163876
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> I was using the Schema/Schematron ones. I originally started this on an older version of HAPI, not sure if I saw the FHIRInstance option. I can try that out.</p>",
+        "id": 153864020,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482164238
+    },
+    {
+        "content": "<p>The interceptor would be nice, but the one line we have that is checking this isn't too cumbersome since we already do a lot with the requests/responses as is :)</p>",
+        "id": 153864022,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482164348
+    },
+    {
+        "content": "<p>hrm. Or I couldn't find it :) Having issues getting that class to resolve. I'll look around a bit.</p>",
+        "id": 153864023,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482164637
+    },
+    {
+        "content": "<p>If you're doing DSTU2, you need to add the <code>hapi-fhir-structures-dstu2-hl7org</code> dependency to your pom/project. The validator doesn't live in the same place as the DSTU2 structures in the pre-STU3 HAPI world..</p>",
+        "id": 153864025,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1482164738
+    },
+    {
+        "content": "<p>which is different than hapi-fhir-structures-hl7org-dstu2?? or typo? (that's in the classpath)</p>",
+        "id": 153864028,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482164821
+    },
+    {
+        "content": "<p>oops, sorry that's just my typo.. you have the right one.</p>\n<p>The class you're after is <code>org.hl7.fhir.instance.hapi.validation.FhirInstanceValidator</code> if that helps</p>",
+        "id": 153864031,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1482164930
+    },
+    {
+        "content": "<p>How about org.hl7.fhir.instance.validation.InstanceValidator?</p>",
+        "id": 153864032,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482165001
+    },
+    {
+        "content": "<p>that's all I see in that jar, that's similar :)</p>",
+        "id": 153864033,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482165019
+    },
+    {
+        "content": "<p>well, at least I thought</p>",
+        "id": 153864034,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482165111
+    },
+    {
+        "content": "<p>Weeeeeird. You aren't on a super-old version of that JAR are you? Maven sees it in there as of 1.4:</p>\n<p><a href=\"http://search.maven.org/#search%7Cga%7C1%7Cfc%3A%22org.hl7.fhir.instance.hapi.validation.FhirInstanceValidator%22\" target=\"_blank\" title=\"http://search.maven.org/#search%7Cga%7C1%7Cfc%3A%22org.hl7.fhir.instance.hapi.validation.FhirInstanceValidator%22\">http://search.maven.org/#search%7Cga%7C1%7Cfc%3A%22org.hl7.fhir.instance.hapi.validation.FhirInstanceValidator%22</a></p>",
+        "id": 153864035,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1482165139
+    },
+    {
+        "content": "<p>I think something is funky with my IDE-created classpath... let me play a bit with the maven resolution</p>",
+        "id": 153864036,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482165212
+    },
+    {
+        "content": "<p>It *thinks* i'm on 2.1, but it doesn't see that class</p>",
+        "id": 153864037,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482165247
+    },
+    {
+        "content": "<p>Ok, forced it to regenerate the classpath... seems to be finding it now, and I can see it.<br>\nDo the schema/schematron validators do anything for me that the FHIRInstance one won't do?</p>",
+        "id": 153864038,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482165565
+    },
+    {
+        "content": "<p>I'm not getting errors with the FHIRInstanceValidator either, going to try cutting it back down to a smaller test case again</p>",
+        "id": 153864039,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482165793
+    },
+    {
+        "content": "<p>Hmm, let me try plugging your example into a test case.</p>",
+        "id": 153864045,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1482166626
+    },
+    {
+        "content": "<p>It looks like it's a warning/info. Though not seeing anything for the id</p>",
+        "id": 153864046,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482166648
+    },
+    {
+        "content": "<p>Hmm.. Yeah, I don't even see any relevant errors in the validator output. Weird. Let me dig into it... </p>\n<div class=\"codehilite\"><pre>12:00:17.288 [main] INFO  c.u.f.v.FhirInstanceValidatorTest [FhirInstanceValidatorTest.java:172] - Result 0: INFORMATION - /communication/language - Binding by URI reference cannot be checked\n12:00:17.289 [main] INFO  c.u.f.v.FhirInstanceValidatorTest [FhirInstanceValidatorTest.java:172] - Result 1: INFORMATION - /communication/language/coding - Binding for path /communication/language/coding has no source, so can&#39;t be checked\n</pre></div>",
+        "id": 153864048,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1482166948
+    },
+    {
+        "content": "<p>Hmm, yeah. It seems like the DSTU2 validator doesn't catch either of these issues. Interestingly the STU3 validator catches the numeric ID but not the array one:</p>\n<div class=\"codehilite\"><pre><span class=\"p\">{</span>\n  <span class=\"nt\">&quot;resourceType&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;OperationOutcome&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;issue&quot;</span><span class=\"p\">:</span> <span class=\"p\">[</span>\n    <span class=\"p\">{</span>\n      <span class=\"nt\">&quot;severity&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;error&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;code&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;processing&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;diagnostics&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;Error parsing JSON: the primitive value must be a string&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;location&quot;</span><span class=\"p\">:</span> <span class=\"p\">[</span>\n        <span class=\"s2\">&quot;/Patient/id&quot;</span>\n      <span class=\"p\">]</span>\n    <span class=\"p\">},</span>\n    <span class=\"p\">{</span>\n      <span class=\"nt\">&quot;severity&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;warning&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;code&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;processing&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;diagnostics&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;None of the codes provided are in the value set http://hl7.org/fhir/ValueSet/languages (http://hl7.org/fhir/ValueSet/languages, and a code should come from this value set unless it has no suitable code) (codes = urn:ietf:bcp:47#hi)&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;location&quot;</span><span class=\"p\">:</span> <span class=\"p\">[</span>\n        <span class=\"s2\">&quot;Patient.communication.language&quot;</span>\n      <span class=\"p\">]</span>\n    <span class=\"p\">}</span>\n  <span class=\"p\">]</span>\n<span class=\"p\">}</span>\n</pre></div>",
+        "id": 153864052,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1482167750
+    },
+    {
+        "content": "<p>It also doesn't seem to like hi for hindi in STU3?</p>",
+        "id": 153864055,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482168361
+    },
+    {
+        "content": "<p>Yeah, there's no built-in BCP47 validator yet... Not sure why that's the error message it gives for that. </p>\n<p>As a short-term fix, I'm just looking at cleaning up the JsonParser so that StrictErrorHandler will alos fail for these issues. It really should.</p>",
+        "id": 153864057,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1482168459
+    },
+    {
+        "content": "<p>I have a unit test for this now too, so I can dig into why the instancevalidator isn't catching this stuff at some point..</p>",
+        "id": 153864058,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1482168493
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191356\">@Jenni Syed</span> in STU3, there's nothing that schema/schematron test that isn't tested by the validator</p>",
+        "id": 153864073,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482175704
+    },
+    {
+        "content": "<p>What about DSTU2 (which is where I am right now)</p>",
+        "id": 153864074,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482175728
+    },
+    {
+        "content": "<p>I can't remember when I started validating order in the instance validator </p>",
+        "id": 153864075,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482175830
+    },
+    {
+        "content": "<p>looks like the DSTU2 validator does not check order; it assumes that schema is used for that</p>",
+        "id": 153864076,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1482175953
+    },
+    {
+        "content": "<p>The errors for \"has no source, so cannot be checked\" - is that an error related to HAPI not knowing the system being returned? IE: its binding in core FHIR isn't required? </p>\n<p>It seems that way, looking through some of the code. EG: <a href=\"https://github.com/jamesagnew/hapi-fhir/blob/191e3b6d4d29fd36c35bc8f0b5d9c08f8ce618a3/hapi-fhir-structures-dstu3/src/main/java/org/hl7/fhir/dstu3/validation/InstanceValidator.java#L666\" target=\"_blank\" title=\"https://github.com/jamesagnew/hapi-fhir/blob/191e3b6d4d29fd36c35bc8f0b5d9c08f8ce618a3/hapi-fhir-structures-dstu3/src/main/java/org/hl7/fhir/dstu3/validation/InstanceValidator.java#L666\">https://github.com/jamesagnew/hapi-fhir/blob/191e3b6d4d29fd36c35bc8f0b5d9c08f8ce618a3/hapi-fhir-structures-dstu3/src/main/java/org/hl7/fhir/dstu3/validation/InstanceValidator.java#L666</a></p>",
+        "id": 153864082,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482179064
+    },
+    {
+        "content": "<p>er, no, marital status seems to be required but getting that error. So then - HAPI just doesn't know it?</p>",
+        "id": 153864083,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482179164
+    },
+    {
+        "content": "<p>I think I have something else wrong in my config... I see some of these valuesets defined, and the codes for them, in the XML files. On to more troubleshooting! :)</p>",
+        "id": 153864086,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482180036
+    },
+    {
+        "content": "<p>This just appears to be a bug in the DSTU2 validator (which is already fixed in the STU3 one). I'm fixing it now.</p>\n<p>Man, I'm really excited to see Grahame's \"validate DSTU2 resources using the DSTU3 validator\" module. Having one validator codebase is going to be awesome!</p>",
+        "id": 153864270,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1482243312
+    },
+    {
+        "content": "<p>Argh, that \"has no source\" is a pain. I don't think it's going to get fixed now after all.. Presumably this would require a bunch of work, and it's probably not worth the effort since we're about to swap out the validator anyhow (and the message is just an INFO one, not an actual error). </p>\n<p>Basically the validator sees the binding on <code>Patient.maritalStatus</code> but doesn't see it when it goes to validator <code>Patient.maritcalStatus.coding</code>. So the codes do get validated, you just get a spurious info message.</p>",
+        "id": 153864275,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1482244239
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span>  Thanks :) Now I just have to figure out how to ignore that one (and other similar ones that  I think are \"fake\") but still get the errors for the communication issue...</p>",
+        "id": 153864292,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482248534
+    },
+    {
+        "content": "<p>Is there a way to use the new single code base yet, or is that still pending release (and when?? :) )?</p>",
+        "id": 153864293,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482248646
+    },
+    {
+        "content": "<p>Grahame's got it in the RI codebase, so you could certainly pull that into your project... My aim is to release HAPI 2.2 today, and start working on getting the joined validator into the next snapshot building within a week or so, if that helps</p>",
+        "id": 153864301,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1482250134
+    },
+    {
+        "content": "<p>That will help - I'll watch for the newer snapshots and versions so we can upgrade</p>",
+        "id": 153864304,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1482250798
+    }
+]

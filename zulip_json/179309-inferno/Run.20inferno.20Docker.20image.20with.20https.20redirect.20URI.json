@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p>I feel like I'm missing something obvious, but I'm running the Inferno docker containers pretty much out of the box.  However, the redirect, launch, and JWK URLs that are auto-generated using request.base_url are picking up the \"http\" scheme (vs. https).  I think this is because the docker/nginx.conf file is set up to listen on port 80.  I have an Apache server in front of the container that is fronting the https endpoint, however I ProxyPass to <a href=\"http://inferno.epic.com:4597\">http://inferno.epic.com:4597</a>.  I think in order to get the inferno container to generate a redirect URI that is https (which we require), I'd need to either update the nginx.conf to use port 443, and bind a certificate, or get Inferno to update the ruby code to have an option to specify an override for request.base_url in config.yml such that we can tell Inferno to use a proxy URL.</p>",
+        "id": 245704018,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1626104269
+    },
+    {
+        "content": "<p>I did submit <a href=\"https://github.com/onc-healthit/inferno-program/issues/317\">https://github.com/onc-healthit/inferno-program/issues/317</a>, but if anyone has ideas on how to get the Inferno container to pick up an https scheme without a code fix, please let me know.</p>",
+        "id": 245704095,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1626104301
+    },
+    {
+        "content": "<p>I saw the github issue before I saw this message, so I left a response there.</p>\n<blockquote>\n<p>As a quick workaround, the configuration for our deployed instances (which use https) lives here: <a href=\"https://github.com/onc-healthit/inferno.healthit.gov\">https://github.com/onc-healthit/inferno.healthit.gov</a></p>\n<p>That repo deploys more than just program, so you could either comment out the services you don't need from that docker-compose and have it load your certs, or use its nginx configuration as a model for yours.</p>\n</blockquote>\n<p>I am also not an nginx expert, so I basically look at that repo whenever I need to figure out how to do something deployment related.</p>",
+        "id": 245705591,
+        "sender_full_name": "Stephen MacVicar",
+        "timestamp": 1626104990
+    },
+    {
+        "content": "<p>Actually, we describe some options for this in response to a previous issue: <a href=\"https://github.com/onc-healthit/inferno-program/issues/314#issuecomment-875616942\">https://github.com/onc-healthit/inferno-program/issues/314#issuecomment-875616942</a></p>",
+        "id": 245708216,
+        "sender_full_name": "Stephen MacVicar",
+        "timestamp": 1626106026
+    },
+    {
+        "content": "<p>Thanks for this info.  It was helpful.  I'm working through it now, and I think I'm starting to get the picture.   Here is my understanding of how the architecture works: <br>\n1) Client connects to the https port on the nginx container.<br>\n2) Nginx terminates the SSL connection and forwards traffic to the inferno container over http (port 4567).<br>\n3) The Inferno container is running the main ruby code on a jetty web server on 4567.</p>\n<p>Because the ruby code that generates the base URL is running in jetty, and not in nginx, it relies on the X-Forwarded-* headers to know what the request.base_url is.  </p>\n<p>The <a href=\"https://github.com/onc-healthit/inferno-program/blob/main/docker/nginx.conf\">nginx.conf in inferno-program</a> doesn't do any scheme forwarding.  However your <a href=\"https://github.com/onc-healthit/inferno.healthit.gov/blob/master/nginx/nginx.conf\">nginx.conf in inferno.healthit.gov</a> does.  Ultimately, all I needed was to add this to the nginx.conf:</p>\n<div class=\"codehilite\"><pre><span></span><code>proxy_set_header X-Forwarded-Proto https;\n</code></pre></div>\n<p>This is hard-coding https, instead of relying on the actual schemed used, but since I couldn't figure out how to get the nginx-&gt;jetty to use http (which would involve diving into jetty and ruby), I'm satisfied with this solution for now.</p>",
+        "id": 245725005,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1626113482
+    },
+    {
+        "content": "<p>However, I don't really understand how <a href=\"http://inferno.healthit.gov\">inferno.healthit.gov</a> is working.  Do you have the jetty server set up to run https there, such that the nginx-&gt;jetty connection is over https?  I didn't see any jetty changes in the overlay repo.</p>",
+        "id": 245725262,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1626113600
+    },
+    {
+        "content": "<blockquote>\n<p>main ruby code on a jetty web server on 4567.</p>\n</blockquote>\n<p>We aren't using Jetty for Inferno (Jetty is for Java, right?) -- but the same basic concept in Ruby I think (Sinatra running on the Thin webserver).  We may be using Jetty for the \"reference server\" that we use to demonstrate our tests against, as it is based on HAPI.</p>",
+        "id": 245725730,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1626113841
+    },
+    {
+        "content": "<p>For the docker-compose for 'inferno-program', we stand up an nginx server that doesn't expect SSL (it doesn't terminate SSL, and we didn't try to configure it properly if something else in front of it is terminating SSL).</p>",
+        "id": 245727334,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1626114706
+    },
+    {
+        "content": "<p>For the docker-compose for '<a href=\"http://inferno.healthit.gov\">inferno.healthit.gov</a>', we stand up an nginx server with a different configuration, that terminates SSL and passes along a header to the services running behind (including Inferno running on Thin in Ruby) that they should act as if they are https, so they can create absolute urls properly.</p>",
+        "id": 245727859,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1626114887
+    },
+    {
+        "content": "<p>Both situations use the same copy of the inferno container, which is smart enough to pay attention to the X-Fowarded-Proto header if it is available.  We just may not make it available in the docker-compose in 'inferno-program' if you terminate SSL in front of the nginx server.</p>",
+        "id": 245728685,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1626115166
+    },
+    {
+        "content": "<blockquote>\n<p>This is hard-coding https, instead of relying on the actual schemed used, but since I couldn't figure out how to get the nginx-&gt;jetty to use http (which would involve diving into jetty and ruby), I'm satisfied with this solution for now.</p>\n</blockquote>\n<p>Could you try having Apache send the x-forwarded-* headers to nginx instead?  I think nginx may just pass them through automatically, but I'm not sure.  Something like this (disclaimer, I just found this on StackOverflow, I have not configured Apache in a long time)</p>\n<div class=\"codehilite\"><pre><span></span><code>RequestHeader set X-Forwarded-Proto &quot;https&quot;\n</code></pre></div>\n<p>or dynamically</p>\n<div class=\"codehilite\"><pre><span></span><code>RequestHeader set &quot;X-Forwarded-Proto&quot; expr=%{REQUEST_SCHEME}\n</code></pre></div>\n<p>If you are sure that Apache is sending that, and it appears that nginx is stripping them instead of passing them through, we can upgrade our nginx config on inferno-program to make sure that it allows those headers through.</p>",
+        "id": 245731733,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1626116358
+    },
+    {
+        "content": "<p>Separately, have you had any problems with tests appearing to hang if they run for longer than a certain duration, but if you refresh the page the results continue to be updated? Be aware that Inferno requires long-running connections to receive updates on tests during a test run, and if the server closes the connection the test progress bar will stop updating.  Some of the other lines in our nginx config file are there to make sure that nginx doesn't time-out the connection.  I do not know if Apache needs anything like that too.  Not a huge deal, since you can just keep refreshing the page to get updated results, but it is not a good user experience.</p>",
+        "id": 245733357,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1626117006
+    }
+]

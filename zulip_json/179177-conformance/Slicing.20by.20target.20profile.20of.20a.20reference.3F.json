@@ -1,0 +1,284 @@
+[
+    {
+        "content": "<p>Is it possible to slice by target profile of a reference, and if so: what's the discriminator?</p>",
+        "id": 153901122,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1502277389
+    },
+    {
+        "content": "<p>I would have guesses \"Type:Profile Path:reference\" but that doesn't seem to work</p>",
+        "id": 153901123,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1502277457
+    },
+    {
+        "content": "<p>Great question...!</p>\n<p>The spec  may provide some clues:<br>\n<a href=\"https://www.hl7.org/fhir/profiling.html#discriminator\" target=\"_blank\" title=\"https://www.hl7.org/fhir/profiling.html#discriminator\">https://www.hl7.org/fhir/profiling.html#discriminator</a></p>\n<p>I think discriminator type \"profile\" is specifically intended to match type.profile and not type.targetProfile. Maybe you could leverage the special .resolve() fhir path expression that is specifically allowed in this context?</p>",
+        "id": 153901135,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1502284957
+    },
+    {
+        "content": "<p>Looks like the LipidProfile example tries to slice DiagnosticReport.result on target profile:<br>\n<a href=\"http://hl7.org/fhir/lipidprofile.profile.xml.html\" target=\"_blank\" title=\"http://hl7.org/fhir/lipidprofile.profile.xml.html\">http://hl7.org/fhir/lipidprofile.profile.xml.html</a></p>\n<div class=\"codehilite\"><pre><span></span>&lt;discriminator&gt;\n  &lt;type value=&quot;value&quot;/&gt;\n  &lt;path value=&quot;reference.code&quot;/&gt;\n&lt;/discriminator&gt;\n</pre></div>\n\n\n<p>However I'm not sure if this is actually correct, as the documentation on discriminators suggests the use of the resolve() operator...?</p>",
+        "id": 153901136,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1502285543
+    },
+    {
+        "content": "<p>The official documentation suggests the following syntax:</p>\n<p>Context: List.entry<br>\nDiscriminator type: profile<br>\nDiscriminator path: item.reference.resolve()</p>\n<p>\"Entries are differentiated by a profile tag on the <em>target</em> of the reference, as specified by a structure definition\"</p>",
+        "id": 153901137,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1502285718
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> &amp; <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> any suggestions?</p>",
+        "id": 153901139,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1502285775
+    },
+    {
+        "content": "<p>I'll defer to <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> on this one.</p>",
+        "id": 153901361,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1502310752
+    },
+    {
+        "content": "<p>well, the lipid thing looks wrong, though the validator works on it. weird.</p>",
+        "id": 153901416,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1502340695
+    },
+    {
+        "content": "<p>the official documentation Michel quoted is what I think is correct</p>",
+        "id": 153901417,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1502340738
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> <span class=\"user-mention\" data-user-id=\"191336\">@Michel Rutten</span>  I'm re-engaging this topic as we have the same question now for the IPS IG and haven't yet found a working FHIRPath expression for the discriminator path.  The documentation on this has changed for R4, as 'reference' has been removed and for the List.entry example the discriminator path is now <code>item.resolve()</code>.  We're slicing on the Composition.section.entry reference of an already sliced section (for example Composition.section:sectionMedications.entry).  Composition.section.entry is modeled differently from List.entry which is used in the documentation, as Composition.section:sectionMedications.entry itself is of type Reference rather than the additional List.entry.item element.   An example of what we have right now (we've tried various permutations) is:</p>\n<div class=\"codehilite\"><pre><span></span>        &lt;element id=&quot;Composition.section:sectionMedications.entry&quot;&gt;\n            &lt;path value=&quot;Composition.section.entry&quot;/&gt;\n            &lt;slicing&gt;\n                &lt;discriminator&gt;\n                    &lt;type value=&quot;profile&quot;/&gt;\n                    &lt;path value=&quot;resolve()&quot;/&gt;\n                &lt;/discriminator&gt;\n                &lt;rules value=&quot;openAtEnd&quot;/&gt;\n            &lt;/slicing&gt;\n            &lt;min value=&quot;1&quot;/&gt;\n            &lt;mustSupport value=&quot;true&quot;/&gt;\n        &lt;/element&gt;\n        &lt;element id=&quot;Composition.section:sectionMedications.entry:medicationStatement&quot;&gt;\n            &lt;path value=&quot;Composition.section.entry&quot;/&gt;\n            &lt;sliceName value=&quot;medicationStatement&quot;/&gt;\n            &lt;min value=&quot;1&quot;/&gt;\n            &lt;type&gt;\n                &lt;code value=&quot;Reference&quot;/&gt;\n                &lt;targetProfile value=&quot;http://hl7.org/fhir/uv/ips/StructureDefinition/MedicationStatement-uv-ips&quot;/&gt;\n            &lt;/type&gt;\n            &lt;mustSupport value=&quot;true&quot;/&gt;\n        &lt;/element&gt;\n        &lt;element id=&quot;Composition.section:sectionMedications.entry:medicationStatement.reference&quot;&gt;\n            &lt;path value=&quot;Composition.section.entry.reference&quot;/&gt;\n            &lt;min value=&quot;1&quot;/&gt;\n            &lt;mustSupport value=&quot;true&quot;/&gt;\n        &lt;/element&gt;\n</pre></div>\n\n\n<p>And when parsing an IPS bundle example the QA shows this error:</p>\n<div class=\"codehilite\"><pre><span></span>Bundle/IPS-examples-Bundle-01: Bundle.entry[5].resource.code.coding error   Unable to resolve discriminator\n</pre></div>\n\n\n<p>Most likely we're doing something wrong, so any suggestions as to what the correct FHIRPath syntax should be for this would be most welcome.</p>",
+        "id": 154022055,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1543571101
+    },
+    {
+        "content": "<p>I've looked into where the 'Unable to resolve discriminator' exception is thrown in FHIRPathEngine, but so far that hasn't really shed any light on the issue.</p>",
+        "id": 154022059,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1543571556
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span>, hard to say... the snapshot generator and validator in the FHIR .NET API haven't been updated to R4 yet, so we can't actually test your example. However <span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span> recently mentioned that he had implemented support for profile-based discriminators. Ewout, can you provide some clarification?</p>",
+        "id": 154022060,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1543571738
+    },
+    {
+        "content": "<p>I think this issue was different than we originally thought and the error messages are now resolved.  But if anyone is able to confirm that the syntax we are using is correct (or not), that would be great.</p>",
+        "id": 154022109,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1543589830
+    },
+    {
+        "content": "<p>I believe that the <code>resolve()</code> syntax for the path expression is correct, as that fixes the 'Unable to resolve discriminator' error.  But, unfortunately, it results in a new type of error when evaluating the example bundle:</p>\n<div class=\"codehilite\"><pre><span></span>Problem evaluating slicing expression for element in profile http://hl7.org/fhir/uv/ips/StructureDefinition/Composition-uv-ips path Bundle.entry[1].resource.section[1].entry (fhirPath = true and resolve().conformsTo(&#39;http://hl7.org/fhir/uv/ips/StructureDefinition/Condition-uv-ips&#39;)): null\n</pre></div>\n\n\n<p>The reference to the Condition-uv-ips profle is the correct one, but it doesn't recognize the identified resource in the bundle as being one of those, even though the resource instance in the bundle has the meta profile tag:</p>\n<div class=\"codehilite\"><pre><span></span>                &lt;meta&gt;\n                    &lt;profile value=&quot;http://hl7.org/fhir/uv/ips/StructureDefinition/Condition-uv-ips&quot;/&gt;\n                &lt;/meta&gt;\n</pre></div>\n\n\n<p>Not sure at this point where to look next to fix this, so any suggestions are very welcome.</p>",
+        "id": 154022357,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1543763728
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> <span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span>  <span class=\"user-mention\" data-user-id=\"191336\">@Michel Rutten</span>?</p>",
+        "id": 154022358,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1543763781
+    },
+    {
+        "content": "<blockquote>\n<p>Hi <span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span>, hard to say... the snapshot generator and validator in the FHIR .NET API haven't been updated to R4 yet, so we can't actually test your example. However <span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span> recently mentioned that he had implemented support for profile-based discriminators. Ewout, can you provide some clarification?</p>\n</blockquote>\n<p>Since I have not implemented this at all yet, these errors must come from the Java IG/validator ;-)  </p>\n<p>Syntax-wise, the single \"resolve()\" looks ok, since that is in line with the List.entry example here (<a href=\"http://build.fhir.org/profiling.html#discriminator\" target=\"_blank\" title=\"http://build.fhir.org/profiling.html#discriminator\">http://build.fhir.org/profiling.html#discriminator</a>).</p>",
+        "id": 154022451,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1543833719
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> </p>\n<div class=\"codehilite\"><pre><span></span>Bundle/IPS-examples-Bundle-01: Bundle.entry[5].resource.code.coding error   Unable to resolve discriminator\n</pre></div>\n\n\n<p>This error from the ValidationEngine is pointing to the 5th Bundle entry of the IPS-examples-Bundle-01 example resource which is a Condition. The specific path points to the Condition.code.coding element. The \"Unable to resolve discriminator\" message is being thrown because the IPS Condition Profile's slicing definition on the Condition.code.coding element does not contain a discriminator.path.</p>\n<p>Here's the differential definition of the IPS Condition Profile Condition.code.coding element:</p>\n<div class=\"codehilite\"><pre><span></span>    <span class=\"nt\">&lt;element</span> <span class=\"na\">id=</span><span class=\"s\">&quot;Condition.code.coding&quot;</span><span class=\"nt\">&gt;</span>\n        <span class=\"nt\">&lt;path</span> <span class=\"na\">value=</span><span class=\"s\">&quot;Condition.code.coding&quot;</span><span class=\"nt\">/&gt;</span>\n        <span class=\"nt\">&lt;slicing&gt;</span>\n            <span class=\"nt\">&lt;description</span> <span class=\"na\">value=</span><span class=\"s\">&quot;Discriminated by value set biding&quot;</span><span class=\"nt\">/&gt;</span>\n            <span class=\"nt\">&lt;rules</span> <span class=\"na\">value=</span><span class=\"s\">&quot;open&quot;</span><span class=\"nt\">/&gt;</span>\n        <span class=\"nt\">&lt;/slicing&gt;</span>\n        <span class=\"nt\">&lt;definition</span> <span class=\"na\">value=</span><span class=\"s\">&quot;Identification of the condition, problem or diagnosis or recording of &amp;quot;problem absent&amp;quot; or of &amp;quot;problems unknown&amp;quot;.&quot;</span><span class=\"nt\">/&gt;</span>\n        <span class=\"nt\">&lt;min</span> <span class=\"na\">value=</span><span class=\"s\">&quot;1&quot;</span><span class=\"nt\">/&gt;</span>\n        <span class=\"nt\">&lt;mustSupport</span> <span class=\"na\">value=</span><span class=\"s\">&quot;true&quot;</span><span class=\"nt\">/&gt;</span>\n    <span class=\"nt\">&lt;/element&gt;</span>\n</pre></div>\n\n\n<p>As you can see, the slicing element does not contain a discriminator. So, the FHIRPathEngine does not have a path to evaluate.</p>",
+        "id": 154022489,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1543845390
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191370\">@Richard Ettema</span> Yes, that's what I was referring to (but not explicitly) when I said \"I think this issue was different than we originally thought and the error messages are now resolved\".  We had the \"Unable to resolve discriminator\" error when the discriminator path was there, and  removing the discriminator path (and therefore the entire discriminator including the type since path is required) is what we did to resolve the errors.  And I think that makes sense, as the discriminator isn't always required and in this case as long as the value sets that are bound for each slice are not overlapping (as is supposed to be the case) then when they are evaluated the validator can determine the correct slice.</p>",
+        "id": 154022667,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1543893150
+    },
+    {
+        "content": "<p>If you remove the discriminator, then you're not slicing anymore (or if you are, you're declaring new slices based on the discriminator of the parent...)</p>",
+        "id": 154024245,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1544479997
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  Not sure about that.  It's obviously not <strong>recommended</strong>, but this statement on the profiling.html page clearly indicates that it is allowed: \"A structure definition is not required to designate any discriminator at all for a slice, but those that don't identify discriminators are describing content that is very difficult to process, and so this is discouraged.\"  With that said, though, I think we do need a discriminator - but it needs to be one that actually works when validating instance data.  So far I haven't been able to discover what that is exactly.  If you are now back and have some availability, I would like to find some time to go over with you the details of the slicing and discriminators and the issues that we are having, and either see what we need to do differently for it to work correctly, see what might need still to be fixed in the spec or tooling, or see what we think Grahame may need to agree to pass as an acceptable error or warning.</p>",
+        "id": 154024261,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1544481342
+    },
+    {
+        "content": "<p>If you're just declaring slicing with a description, you can, but that means there's no computable behavior happening with validators or anything else that doesn't write custom code based on what you put in slicing.description.</p>",
+        "id": 154024264,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1544481928
+    },
+    {
+        "content": "<p>The validator doesn't currently support slicing by profile of a target reference.  Doing so is quite processing intensive.  The general recommendation is to instead slice by something that's distinct for each profile (e.g. a fixed code or something).   One thing you can do is have your profiles mandate that they're declared in meta.profile and then slice by value looking at that.</p>",
+        "id": 154024265,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1544482101
+    },
+    {
+        "content": "<p>Agree.  We do want the discriminator.  We ended up removing it because that wasn't \"wrong\" and was the only way that we found to resolve some errors.  But I want to put it back and have it work.</p>",
+        "id": 154024268,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1544482273
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> any progress?</p>",
+        "id": 156581755,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1548135773
+    },
+    {
+        "content": "<p>We have similar problems. When slicing by profile:resolve() the ig publisher give the error</p>\n<blockquote>\n<p>Problem evaluating slicing expression for element in profile <a href=\"http://ns.electronichealth.net.au/ci/fhir/3.0/StructureDefinition/composition-phs-1\" target=\"_blank\" title=\"http://ns.electronichealth.net.au/ci/fhir/3.0/StructureDefinition/composition-phs-1\">http://ns.electronichealth.net.au/ci/fhir/3.0/StructureDefinition/composition-phs-1</a> path Composition.section[1].entry (fhirPath = true and resolve().conformsTo('<a href=\"http://ns.electronichealth.net.au/ci/fhir/3.0/StructureDefinition/allergyintolerance-summary-1\" target=\"_blank\" title=\"http://ns.electronichealth.net.au/ci/fhir/3.0/StructureDefinition/allergyintolerance-summary-1\">http://ns.electronichealth.net.au/ci/fhir/3.0/StructureDefinition/allergyintolerance-summary-1</a>')): null</p>\n</blockquote>\n<p>If I have an example that tries to meet the profile. <br>\nWe are using STU3</p>",
+        "id": 156582069,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1548136313
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191682\">@Richard Townley-O'Neill</span> I didn't get back to this over the holidays or leading up to the WGM and we didn't manage to get to it in our evening session on IGs or another time during the week last week in San Antonio.  But we need to get it resolved for IPS (using R4).  I think I'll start with <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>'s suggestion to mandate that the instance declares meta.profile and try to slice by value on that via the reference and see if that proves to be a sufficiently workable approach.  Not as powerful, but it seems as if it should work.  <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> also will be working on IGs and will need time from him if there are still issues.</p>",
+        "id": 156582545,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1548137033
+    },
+    {
+        "content": "<p>Our profiles are mandating meta.profile:</p>\n<div class=\"codehilite\"><pre><span></span>      &lt;constraint&gt;\n        &lt;key value=&quot;inv-dh-cmp-01&quot;/&gt;\n        &lt;severity value=&quot;error&quot;/&gt;\n        &lt;human value=&quot;One meta.profile shall be http://ns.electronichealth.net.au/ci/fhir/3.0/StructureDefinition/composition-phs-1&quot;/&gt;\n        &lt;expression value=&quot;meta.profile.where($this=&amp;#39;http://ns.electronichealth.net.au/ci/fhir/3.0/StructureDefinition/composition-phs-1&amp;#39;).exists()&quot;/&gt;\n      &lt;/constraint&gt;\n</pre></div>",
+        "id": 156582751,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1548137369
+    },
+    {
+        "content": "<p>Oh!. Just reread Lloyd's suggestion. I'll give that a go.</p>",
+        "id": 156582834,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1548137498
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191682\">@Richard Townley-O'Neill</span> <span class=\"user-mention\" data-user-id=\"191336\">@Michel Rutten</span>  Does anyone have example(s) of the correct syntax for doing this with resolve()?  I'm trying to slice on the fixed canonical value of meta.profile across the reference.  I think I'm getting close, but I haven't figured out the correct syntax that works yet.</p>",
+        "id": 157519493,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1549283640
+    },
+    {
+        "content": "<p>The documentation seems rather sparse on this.</p>",
+        "id": 157519579,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1549283715
+    },
+    {
+        "content": "<p>I'll have a chance to look at this on Wednesday my time</p>",
+        "id": 157519891,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1549284100
+    },
+    {
+        "content": "<p>great</p>",
+        "id": 157519955,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1549284157
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> Did you have a chance to take a look at this?  I'll keep doing some work on it further in the meantime.</p>",
+        "id": 157727481,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1549488211
+    },
+    {
+        "content": "<p>do you want to add a test case for this, and we'll iterate on it</p>",
+        "id": 157739172,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1549497752
+    },
+    {
+        "content": "<p>ok - will do that</p>",
+        "id": 157739783,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1549498396
+    },
+    {
+        "content": "<p>I <span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span>, I can't find a concrete example of such an expression. You may be able to get some inspiration from a profile created by colleague @Vadim: <a href=\"https://simplifier.net/temporary-swedish-pa/mymedicationrequest\" target=\"_blank\" title=\"https://simplifier.net/temporary-swedish-pa/mymedicationrequest\">https://simplifier.net/temporary-swedish-pa/mymedicationrequest</a><br>\nSpecifically, look at the expression for constraint \"medication-1\" on the root element. This expression uses resolve() to inspect another (sibling) element.</p>",
+        "id": 158022631,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1549883039
+    },
+    {
+        "content": "<p>I'd expect NOT to use resolve when profiling across a reference and instead to rely on the targetProfile element of type.  However, that seems to be at odds with the valueset comments.  Here's an example:</p>\n<div class=\"codehilite\"><pre><span></span>{\n    &quot;differential&quot;: {\n        &quot;element&quot;: [\n            {\n        &quot;id&quot;:&quot;Encounter.participant&quot;,\n                &quot;path&quot;: &quot;Encounter.participant&quot;,\n                &quot;slicing&quot;: {\n                    &quot;discriminator&quot;: [{\n                        &quot;type&quot;: &quot;profile&quot;,\n                        &quot;path&quot;: &quot;individual.reference&quot;\n                    }],\n                    &quot;rules&quot;: &quot;open&quot;\n                }\n            },\n            {\n        &quot;id&quot;: &quot;Encounter.participant:withParticularID&quot;,\n                &quot;path&quot;: &quot;Encounter.participant&quot;,\n                &quot;sliceName&quot;: &quot;withParticularID&quot;\n            },\n            {\n        &quot;id&quot;: &quot;Encounter.participant:withParticularID.individual.reference&quot;,\n                &quot;path&quot;: &quot;Encounter.participant.individual.reference&quot;,\n                &quot;type&quot;: [{\n                    &quot;code&quot;: &quot;string&quot;,\n                    &quot;targetProfile&quot;: &quot;http://example.com/fhir/StructureDefinition/practitioner-with-particular-id&quot;\n                }]\n            }\n        ]\n    }\n}\n</pre></div>",
+        "id": 160555860,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1552383816
+    },
+    {
+        "content": "<p><a href=\"http://hl7.org/fhir/STU3/valueset-discriminator-type.html\" target=\"_blank\" title=\"http://hl7.org/fhir/STU3/valueset-discriminator-type.html\">http://hl7.org/fhir/STU3/valueset-discriminator-type.html</a> in STU3 is silent on the matter.  R4 clarified (badly IMO): <a href=\"http://hl7.org/fhir/valueset-discriminator-type.html\" target=\"_blank\" title=\"http://hl7.org/fhir/valueset-discriminator-type.html\">http://hl7.org/fhir/valueset-discriminator-type.html</a> that resolve() was to be used.  This requires the validator to match a .resolve() path with <code>type.targetProfile</code> (backtracking) and a non resolve() path with <code>type.profile</code>.</p>",
+        "id": 160556102,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1552383985
+    },
+    {
+        "content": "<p>This leaves the question of when both profile and targetProfile are set (which is legal as far as I can tell...)?  Is one to be treated as discriminator and the other as validation?</p>",
+        "id": 160556177,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1552384063
+    },
+    {
+        "content": "<p>Thanks, <span class=\"user-mention\" data-user-id=\"191351\">@Chris Grenz</span>  In IPS we still have these questions, and would like to get this \"resolved\". :)</p>",
+        "id": 160568019,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1552396144
+    },
+    {
+        "content": "<p>I don't know the answer to this</p>",
+        "id": 160757613,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1552548424
+    },
+    {
+        "content": "<p>WGM topic?</p>",
+        "id": 161744015,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1553592145
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> - maybe open a clarification tracker that can be triaged to WGM in person.</p>",
+        "id": 161744140,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1553592260
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191351\">@Chris Grenz</span> good suggestion - I'll probably do that on the plane home from Finland on Sunday (or maybe tomorrow, but don't think I will get to it tonight after a good but intense week)</p>",
+        "id": 162087702,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1553897414
+    },
+    {
+        "content": "<p>do we now know the answer to this? I have a also a related question: if i slice on the resource/target profile. Which counts: meta statement about the profile in the target, or if the entry validates against one of the slices, what happens if it validates against 2 slices?</p>",
+        "id": 173061216,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1565644415
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191451\">@Patrick Werner</span>, interesting question. Ewout explains that the .NET Validator probably performs a \"greedy\" match, i.e. map to the first slice entry with a matching targetProfile and ignore any others. An advanced validator implementation could try to match against all specified targetProfiles and report ambiguous matches. However this would be quite cpu-intensive, hence the current \"greedy\" approach.</p>",
+        "id": 173095708,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1565685260
+    },
+    {
+        "content": "<p>I think the Java reference implementation currently tries to match everything and hollers if it finds more than one (or none).  Profiles certainly shouldn't rely on a greedy match approach (i.e. all target profiles need to be mutually exclusive)</p>",
+        "id": 173510823,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1566179785
+    }
+]

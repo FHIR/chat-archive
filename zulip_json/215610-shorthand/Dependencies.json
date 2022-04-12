@@ -1,0 +1,506 @@
+[
+    {
+        "content": "<p>Hi everyone! I am getting started using shorthand for a profile/IG that has to extend the german base profile. I have found it in the hl7 registry, the top version points at <a href=\"https://ig.fhir.de/basisprofile-de/0.2.30/\">https://ig.fhir.de/basisprofile-de/0.2.30/</a> - but I cannot get Sushi to find the dependency. I have tried various ways of specifying the id, the url, the version (also tried the r4 version), but I cannot get it to work. Does anyone know how to specify this dependency correctly in config.yml?</p>",
+        "id": 230478530,
+        "sender_full_name": "Max Körlinge",
+        "timestamp": 1615884875
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"397998\">@Max Körlinge</span> -- I was able to find that IG in the FHIR Registry here: <a href=\"https://registry.fhir.org/package/basisprofil.de|0.2.30\">https://registry.fhir.org/package/basisprofil.de|0.2.30</a></p>\n<p>A few things to note about it:</p>\n<ul>\n<li>There is actually a new version (0.2.40)</li>\n<li>It is based on FHIR STU3</li>\n</ul>\n<p>Since it is based on FHIR STU3, and SUSHI only supports FHIR R4, I cannot recommend using it in your own IG.  The version mismatch would cause problems.  It appears that SUSHI <em>does</em> allow you to indicate it as a dependency, but I think this is a bug in SUSHI -- as it <em>should</em> reject IGs that are from a different major version of FHIR from the IG that depends on them.</p>\n<p>We don't currently have any plans to support FHIR STU3 in SUSHI, so unfortunately I don't think you'll be able to depend on this IG until it has an R4 version -- or you'll need to develop your own IG using a different tool that supports FHIR STU3.</p>",
+        "id": 230504702,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1615898502
+    },
+    {
+        "content": "<p>Thank you <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> ! I have located a R4 alpha version to use instead at <a href=\"https://simplifier.net/Basisprofil-DE-R4/~introduction\">https://simplifier.net/Basisprofil-DE-R4/~introduction</a>. And Sushi compiles without errors with</p>\n<div class=\"codehilite\"><pre><span></span><code>dependencies:\n  de.basisprofil.r4:\n     uri: http://fhir.de/ImplementationGuide/basisprofil-de-r4\n     version: 1.0.0-alpha9\n</code></pre></div>\n<p>It really was some detective work to find the URI - going to the package files and finding the implementation guide. Is there supposed to be a simpler way to find out which URI to depend on for packages? <br>\nI haven't tried to extend anything from it yet though so it remains to be seen if that works.</p>",
+        "id": 230522019,
+        "sender_full_name": "Max Körlinge",
+        "timestamp": 1615905182
+    },
+    {
+        "content": "<p>Thanks for the update, <span class=\"user-mention\" data-user-id=\"397998\">@Max Körlinge</span>.  I'm glad that there is an R4 version!</p>\n<p>When SUSHI downloads the package, it tries to find the IG URL itself by looking through any <code>ImplementationGuide</code> resources found in the package.  When it does that, it is looking specifically for an <code>ImplementationGuide</code> with a <code>packageId</code> value matching the package id in your declared dependencies.  It looks like Simplifier does not populate the <code>ImplementationGuide.packageId</code> field -- so it doesn't recognize the IG file as a match.  <span class=\"user-mention\" data-user-id=\"203235\">@Ward Weistra</span> -- is there a reason Simplifier does not populate <code>packageId</code> or is this something you could potentially support in the future?</p>",
+        "id": 230526908,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1615906708
+    },
+    {
+        "content": "<p>Is the URI I input in the dependencies section correct then? To refer directly to the implementation guide uri? </p>\n<p>As you can tell, I am a beginner with FSH and FHIR as well <span aria-label=\"sweat smile\" class=\"emoji emoji-1f605\" role=\"img\" title=\"sweat smile\">:sweat_smile:</span> just a developer who has to define a profile based on the german national one for our startup. FSH appealed to me because it is code, which I'm used to working with. If I want to create a profile based on one of the german profiles - take for example this one <a href=\"https://simplifier.net/Basisprofil-DE-R4/VitalSignDE/~overview\">https://simplifier.net/Basisprofil-DE-R4/VitalSignDE/~overview</a> - how would I reference that in the \"Parent\" section of my profile?</p>\n<div class=\"codehilite\"><pre><span></span><code>Profile: MyObservation\nParent: http://fhir.de/StructureDefinition/observation-de-vitalsign\n</code></pre></div>\n<p>or</p>\n<div class=\"codehilite\"><pre><span></span><code>Profile: MyObservation\nParent:  VitalSignDE\n</code></pre></div>\n<p>both give me <code>Structure Definition ... is missing snapshot. Snapshot is required for import</code> error. I am not sure if this means that the dependency failed to import correctly or if it means I am putting the wrong thing in \"Parent\" - or if I am completely doing the wrong thing here</p>\n<p>If there is some documentation that deal with this usecase (extending/profiling from another IG/profile) please direct me there, I haven't been able to find any through google :/</p>",
+        "id": 230531383,
+        "sender_full_name": "Max Körlinge",
+        "timestamp": 1615908017
+    },
+    {
+        "content": "<p>Either approach (full canonical URL or formal name) is valid for indicating the parent.  The issue you are running into here is separate... The dependency package that was downloaded apparently does not include the <code>snapshot</code> section in its profiles -- and SUSHI requires the snapshot in order to process the parent definition correctly.  I'm not sure the best way forward here, so I will tag a few people and then present one potential approach.</p>\n<ul>\n<li>\n<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> -- At one point a while ago, you suggested that you might build in an option on the validator to update a package in the FHIR cache w/ snapshots.  I don't see any documentation about this, so I'm assuming that has not been implemented, but wanted to double-check.</p>\n</li>\n<li>\n<p><span class=\"user-mention\" data-user-id=\"203235\">@Ward Weistra</span>  -- Can you remind me what the current thinking is on this topic?  Is Simplifier considering publishing w/ snapshots?  Do you have any suggestions for how users can use SUSHI w/ published IGs having no snapshots?</p>\n</li>\n</ul>\n<p>Here is a workaround you can use if you'd like.  It's clunky, but it should work:</p>\n<ol>\n<li>Go to the specific package you want on Simplifier (from the project, click \"Packages\" tab, then click the specific package)</li>\n<li>On the top right, click \"Download\" and then \"Download snapshots\" (note: you must be logged in)</li>\n<li>This will download a <code>.tgz</code> file representing the package (e.g., <code>de.basisprofile.r4-1.0.0-alpha9.tgz</code>)</li>\n<li>Find the corresponding folder in your FHIR cache.  For example, on a mac, this is likely something like: <code>~/.fhir/packages/de.basisprofil.r4#1.0.0-alpha9</code>.  If the folder doesn't exists, create it.  If the folder does exist, delete its contents.</li>\n<li>Unzip the <code>.tgz</code> into that folder in your FHIR cache</li>\n<li>You've just replaced the package in your cache w/ one that has snapshots, so SUSHI should work now.</li>\n</ol>\n<p>That's not ideal.  I know.  If someone has any better approaches, I'd love to hear them!</p>",
+        "id": 230538588,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1615910405
+    },
+    {
+        "content": "<p>Thanks a lot Chris! For my usecase, since I will only be using one external profile, the workaround will do just fine (I will try it tomorrow in practice). If I have time I will try to write some blog post on this process when it's done for posterity =)</p>",
+        "id": 230565205,
+        "sender_full_name": "Max Körlinge",
+        "timestamp": 1615918723
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"397998\">@Max Körlinge</span> -- that would be splendid!  SUSHI and FSH are still young -- so we're still working through things like this, especially as it relates to interaction w/ other tools in the ecosystem... Let me know if you run into any issues trying this out.</p>",
+        "id": 230585367,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1615926444
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> <span aria-label=\"wave\" class=\"emoji emoji-1f44b\" role=\"img\" title=\"wave\">:wave:</span> <br>\nOn pointing to the package from the IG resource: Yes, we look at this next sprint. In our publishing process this wasn't straightforward, but indeed it's mandatory in R4.</p>\n<p>On snapshots in packages: Indeed, we discussed this before and I see why this would be useful for non-Java and .NET based tooling. From a technical standpoint we've never been a fan of it because it bloats the size of packages by quite a bit and snapshot generation between the stacks isn't consistent enough to rely on each other's snapshots (although it's being worked on).</p>\n<p>On top of that there's also practical impossibilities I learned today: Packages can specify wildcard dependencies, like <a href=\"https://simplifier.net/nictizstu3-questionnaires/package\">this Nictiz project</a> is specifying a dependency on the latest version of the <code>2.0.x</code> range of versions of the <code>nictiz.fhir.nl.stu3.zib2017</code> package. That makes the snapshots of the package necessarily a function of time. Including snapshots would require to update the package every time a new dependency package is added to the range, which would change the NPM API checksum and break the promise of never changing packages.</p>\n<p>The 'Download with Snapshots' option you referred to, which we provide on any package page, will calculate the snapshots at that time. And perhaps we can provide that via a non-NPM (because changing packages with changing checksums) API, although that might not in an acceptable time frame.<br>\nWould it be an option to add a Java or .NET based 'calculate the snapshots we need' step to sushi? I understand you'd prefer to prevent that dependency if possible, but I'm not sure if there's a good alternative.</p>",
+        "id": 230725234,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1615999407
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"203235\">@Ward Weistra</span>.  Oh, that is complex, isn't it?  I also was not aware of wildcard dependencies like you describe (although <code>current</code> is a type of wildcard I guess).</p>\n<p>I have to admit, though, I was under the impression that a given package version represented the state of affairs as of when that package was released.  While a wildcard dependency is fine during the development cycle, I'd suggest that all dependencies must be fixed to specific versions at publication time.  Otherwise it seems to me we could land in a real interoperability mess.  What does it mean for a system to support <code>Acme 1.2.0</code> if the technical definition of <code>Acme 1.2.0</code> can change at any moment?  FHIR packages aren't software -- they are formal specifications; so it seems to me that introducing the possibility of unpredictable variation in a published release is a real problem.</p>\n<p>That's probably a whole different conversation that should be had somewhere else though.  If it's impractical for you to publish packages w/ snapshots I think we can try to find some other creative solutions.  One could be to invoke the Java tools to generate the snapshots (although that raises some other questions). Another could be to add a switch to SUSHI to automate steps 4-6 above for any <code>tgz</code> package (or to support loading a <code>tgz</code>package dependency in place). Another would be Grahame's idea of supporting a mode on the validator that populates snapshots for a package already in the FHIR cache...</p>",
+        "id": 230758672,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1616011977
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> I understand your worry with wildcards, but it also solves entire trees of dependencies updating only for trivial changes. In the spec the standard wildcards of NPM have already been <a href=\"https://confluence.hl7.org/pages/viewpage.action?pageId=35718629#NPMPackageSpecification-Versionreferences\">limited to the patch version number only</a>. So, changes SHOULD only be trivial and not impact conformance. (another reason why we should understand and apply good semver versioning in the FHIR community for packages...)</p>\n<p>Some way to have the Java (validator?) or .NET (via <a href=\"http://Simplifier.net\">Simplifier.net</a> download or Firely Terminal) stack calculate the correct snapshots at a certain timepoint would indeed work. Such a tool should also look at the wildcard dependencies and update any dependency packages if needed and (re)calculate the snapshots if needed.</p>",
+        "id": 230830282,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1616057614
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"397998\">@Max Körlinge</span> if you have any questions regading the german base profiles, please join us in <a href=\"#narrow/stream/179183-german-(d-a-ch)\">https://chat.fhir.org/#narrow/stream/179183-german-(d-a-ch)</a></p>",
+        "id": 230840011,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1616062888
+    },
+    {
+        "content": "<p>thanks <span class=\"user-mention\" data-user-id=\"191450\">@Simone Heckmann</span></p>",
+        "id": 230854577,
+        "sender_full_name": "Max Körlinge",
+        "timestamp": 1616070810
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191469\">Chris Moesel</span> <a href=\"#narrow/stream/215610-shorthand/topic/Dependencies/near/230585367\">said</a>:</p>\n<blockquote>\n<p><span class=\"user-mention silent\" data-user-id=\"397998\">Max Körlinge</span> -- that would be splendid!  SUSHI and FSH are still young -- so we're still working through things like this, especially as it relates to interaction w/ other tools in the ecosystem... Let me know if you run into any issues trying this out.</p>\n</blockquote>\n<p>This is still an issue i'd like to support to fix. <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> Would a java cli tool help you which does the snapshot generation for you help?</p>",
+        "id": 233326518,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1617718803
+    },
+    {
+        "content": "<p>If yes i can probably help.</p>",
+        "id": 233326663,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1617718848
+    },
+    {
+        "content": "<p>This tool then would snapshot a package and then..? I don't like the idea of overwriting a package in the fhir cache too much, also i don't like creating snapshots every run.<br>\nWhat about adding the snapshots to the sushi project?</p>",
+        "id": 233327090,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1617719019
+    },
+    {
+        "content": "<p>Ideally there would be a JS snapshot generator, but I'm not aware of any.  <span class=\"user-mention\" data-user-id=\"191782\">@Brian Kaney</span> -- your shop hasn't done anything like that, has it?  Assuming not then we could potentially launch a Java jar to generate a snapshot -- but I do have a few concerns there:</p>\n<ul>\n<li>We'd have to rely on the user having Java installed correctly.</li>\n<li>We'd also need to figure out where the jar comes from (do we package it in our npm package, download it on the fly, etc).</li>\n<li>As you noted, we'd probably want some caching mechanism so we don't run snapshot generation every time.</li>\n<li>It wouldn't work on web-based versions of SUSHI (e.g., FSH Online).</li>\n</ul>\n<p>But those all may be worth it in order to have a working solution for folks using packages without snapshots.</p>\n<p>Another potential approach would be to use a web service that does snapshot generation on the fly, but we're not in the position to host such a thing, so someone else would need to provide that.</p>\n<p>And one more approach would be to better automate some (or all???) of the steps I noted above (assuming that  90+% of the snapshot-less IGs are coming from Simplifier).</p>",
+        "id": 233370086,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1617735178
+    },
+    {
+        "content": "<blockquote>\n<p>We'd also need to figure out where the jar comes from (do we package it in our npm package, download it on the fly, etc).</p>\n</blockquote>\n<p>The <a href=\"https://confluence.hl7.org/display/FHIR/Using+the+FHIR+Validator\">FHIR Java validator</a> has the capability to generate snapshots for a profile with the  -snapshot option.</p>",
+        "id": 233373318,
+        "sender_full_name": "Oliver Egger",
+        "timestamp": 1617736594
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191469\">Chris Moesel</span> <a href=\"#narrow/stream/215610-shorthand/topic/Dependencies/near/233370086\">said</a>:</p>\n<blockquote>\n<p>And one more approach would be to better automate some (or all???) of the steps I noted above (assuming that  90+% of the snapshot-less IGs are coming from Simplifier).</p>\n</blockquote>\n<p>Yes the easiest solution would be that all FHIR packages are containing Snapshots.</p>",
+        "id": 233445750,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1617781238
+    },
+    {
+        "content": "<p>Second easiest would be a webservice as a proxy to the fhir package registry, snapshoting and caching the packages</p>",
+        "id": 233445836,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1617781288
+    },
+    {
+        "content": "<p>The <code>.fhir</code> FHIR cache folder currently contains a <code>packages</code> directory. Tools not being able to generate snapshots themselves could perhaps use a sibling <code>packages-with-snapshots-added</code> folder with the same setup? Not a source of original truth, but a derived folder from the content of <code>packages</code>.<br>\nThat could then be populated with the Java Validator or Firely Terminal. This would be cleanest given that range dependencies will update and that snapshot generation is not a fixed art yet.</p>\n<p>We can also look into making the 'download package with snapshots' endpoint from Simplifier available as an API, but that would then probably be a non-NPM API with some free rate limit per user. I wouldn't want two competing FHIR Package Registry NPM APIs. And preferably not any packages in <code>packages-with-snapshots-added</code> that are not in <code>packages</code>, because then other tools can't necessarily reuse an already downloaded package.</p>",
+        "id": 233450520,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1617783857
+    },
+    {
+        "content": "<p>i like the idea of the <code>packages-with-snapshots-added</code>folder next to the package folder</p>",
+        "id": 233450870,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1617784073
+    },
+    {
+        "content": "<p>Are the current packages in the cache without snapshots?</p>",
+        "id": 233451373,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1617784341
+    },
+    {
+        "content": "<p>mixed, All IG Publisher packages are including snapshot, Simplifier doesn't</p>",
+        "id": 233451435,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1617784387
+    },
+    {
+        "content": "<p>The FHIR package spec doesn't state anything on snapshot vs no snapshot</p>",
+        "id": 233451480,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1617784412
+    },
+    {
+        "content": "<p>ok, thanks</p>",
+        "id": 233452416,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1617784956
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 240978923,
+        "sender_full_name": "Janaka Peiris",
+        "timestamp": 1622569796
+    },
+    {
+        "content": "<p>What can be done here?</p>",
+        "id": 241158640,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1622644925
+    },
+    {
+        "content": "<p>I think I also like the idea of a sibling, but could it be under the same package structure? <br>\ni.e. could a package contain two sets of files, one with and the other without the snapshots? or is that really another package (which makes it simpler to implement, but I guess harder to maintain)</p>",
+        "id": 241158961,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1622645055
+    },
+    {
+        "content": "<p>alternatively: <br>\ncould Simplifier open the downloads of snapshot-enabled packages (no login needed), and sushi always get those?</p>",
+        "id": 241159076,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1622645108
+    },
+    {
+        "content": "<p>Or we could include an extension in the IG dependsOn to indicate forcing the snapshots.<br>\nSo that IG-publisher / sushi is in control of which package to download</p>",
+        "id": 241159260,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1622645172
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"218656\">@Robin Bosman</span></p>",
+        "id": 241373994,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1622717217
+    },
+    {
+        "content": "<p>as i  am still needing a solution i'll probably going to implement a small java application, checking the dependencies in the sushi config yaml, downloading them and checking if snapshots are available and building snapshots for the ones that don't have them.</p>",
+        "id": 243800938,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1624547555
+    },
+    {
+        "content": "<p>to not overwrite the package cache i would like to add them to a folder sibling<code>packages-with-snapshots-added</code>folder of the package folder.</p>",
+        "id": 243801163,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1624547656
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> could sushi be configured to first look into the sibling folder for needed dependencies before doing the rest of the package loading?</p>",
+        "id": 243801469,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1624547774
+    },
+    {
+        "content": "<p>Thank you Patrick. It would be good if a proper solution is found for this (I'd use your patch if you make it available, but I just want to keep pointing to where it hurts)</p>",
+        "id": 243810802,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1624551914
+    },
+    {
+        "content": "<p>it won't be a patch, rather a pre-processor. Without sushi looking into the proposed folder i would have to overwrite packages in the cache</p>",
+        "id": 243814320,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1624553486
+    },
+    {
+        "content": "<p>If sushi would search in another folder first (or only, handled by the settings) we won't have to overwrite existing cached packages</p>",
+        "id": 243814483,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1624553546
+    },
+    {
+        "content": "<p>That's an interesting idea, <span class=\"user-mention\" data-user-id=\"191451\">@Patrick Werner</span>.  It sounds like a reasonable approach, but let me discuss it w/ the team before I commit to anything!  The one wrinkle that still exists is that these IGs would still fail in an autobuild environment since the autobuild won't have the special snapshot folder in the cache.</p>",
+        "id": 243814544,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1624553578
+    },
+    {
+        "content": "<p>then the autobuild would habe to pre-process the sushi file as well...?</p>",
+        "id": 243814614,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1624553615
+    },
+    {
+        "content": "<p>Right.  Which means we'd need to tie in Josh or someone else who knows how to work w/ the autobuild too.</p>",
+        "id": 243814738,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1624553668
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"203235\">@Ward Weistra</span> what do you think about including snapshots into packages with only stable dependeny trees? You wouldn't have to watch for the whole tree all the time, as everything has to be declared to a specific version</p>",
+        "id": 243814766,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1624553681
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191469\">Chris Moesel</span> <a href=\"#narrow/stream/215610-shorthand/topic/Dependencies/near/243814738\">said</a>:</p>\n<blockquote>\n<p>Right.  Which means we'd need to tie in Josh or someone else who knows how to work w/ the autobuild too.</p>\n</blockquote>\n<p>not necessarily right now, the autobuilder is already failing with non-snapshoted packages. So no change here.</p>",
+        "id": 243815874,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1624554187
+    },
+    {
+        "content": "<p>We can do something in the scripts.<br>\nWe could also do it on the github workflows, but I think this should be deeper in the tools (i.e. inside sushi which is where the complaints show, or inside the autobuild that the github workflows rely on). <br>\nI did <a href=\"https://github.com/HL7/fhir-ig-publisher/issues/282\">ask for a solution in the publisher</a> itself</p>",
+        "id": 243847824,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1624569295
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191451\">@Patrick Werner</span> <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> <span class=\"user-mention\" data-user-id=\"191832\">@Jose Costa Teixeira</span>  I'll admit I went back and forth on this, but think we should start including them, even on the ranged dependencies. Talking to <span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span> I learned snapshots were always meant from the FHIR spec as a convenience cache so not every tool would need to understand the snapshot generation logic.<br>\nDownstream tools (incl sushi) should keep in mind that snapshots are basically a cache, however, which they are allowed to recreate when they have reason to suspect the cache to be outdated (e.g. on ranged dependencies or changes to snapshot generation logic in a toolstack).</p>\n<p>Our backlog is long however, so I don't have a time estimation of when we get around to this exactly. Something to balance with other customer needs.<br>\nI also expect only to start adding snapshots for newly created package versions (cause we cannot change existing package versions), and will not necessarily check incoming packages via the package feeds for this. So packages without snapshots won't be history any time soon and it would be good to give users a way to use them. Even if only explaining the procedure how to generate or download from Simplifier with snapshots and use those.</p>",
+        "id": 243901282,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1624619212
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"203235\">@Ward Weistra</span> -- That's great!  I think that will help everything go more smoothly in the future (at least for us!).  Thanks for thinking through all the implications for this. Currently the download from Simplifier requires a log-in.  I don't suppose it's any quicker/easier to expose that as a more standard API, is it?  If so, it might be worth considering as well, since that would take care of both past and future packages.</p>",
+        "id": 243911170,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1624625601
+    },
+    {
+        "content": "<p>Kind of related to this, how does fsh get the packages / where does it get it from when the IG depends on them? <br>\nI have an IG and I want to do dependsOn, where I indicate the package id and url.  Does that url / package id need to be in the registry? (which registry?)</p>",
+        "id": 245552285,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1625925976
+    },
+    {
+        "content": "<p>Use scenario - I have a \"core\" ig and I want to dependOn it for my purpose-specific IGs. the IG is published, with packages and redirects accessible, but Sushi doesn't get the package</p>",
+        "id": 245552325,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1625926065
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 245725313,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1626113626
+    },
+    {
+        "content": "<p>There are a few places we load packages from:</p>\n<ul>\n<li>First, we try to find it in the local FHIR cache by id and version.  If it's there, that is what we use.</li>\n<li>If the package version is <code>current</code>, we grab the <a href=\"http://build.fhir.org/ig\">qas.json file</a> from <code>build.fhir.org</code> and use that to try to find the last build.</li>\n<li>Otherwise, we try to find it on <a href=\"http://packages.fhir.org\">packages.fhir.org</a> via <code>http://packages.fhir.org/${packageId}/${version}</code>.</li>\n<li>If it's not there and the package is R4B or R5, we try <a href=\"http://packages2.fhir.org\">packages2.fhir.org</a> via <code>http://packages2.fhir.org/packages/${packageId}/${version}</code></li>\n</ul>",
+        "id": 245725946,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1626113983
+    },
+    {
+        "content": "<p>I noticed that if the dependency is set to 'current' but it has only been built locally then it won't find it. You have to set it to 'dev'</p>",
+        "id": 245728189,
+        "sender_full_name": "David Hay",
+        "timestamp": 1626115001
+    },
+    {
+        "content": "<p>Yeah, <code>current</code> specifically means the current build from the CI server.  <code>dev</code> means the latest local build.  If there is no <code>dev</code> locally, it will fall back to <code>current</code>.  But not the other way around.</p>",
+        "id": 245747744,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1626123540
+    },
+    {
+        "content": "<p>Is this documented somewhere? (sorry if i missed it). If not, should it?</p>",
+        "id": 245757237,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1626128092
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> To make the 'related questions' chain even longer: How do you resolve dependencies from packages? Just downloading every package, opening up the package.json, reading the dependencies and dowload those all the way down?</p>",
+        "id": 246226159,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1626443946
+    },
+    {
+        "content": "<p>Also, on the packages with snapshots front: Our first approach to providing everyone with a solution is to implement a 'generate snapshots for these packages/my dependencies/my entire package cache' as a (free) feature in Firely Terminal. Snapshotting individual resources was already there and the size increase and processing burden are taken up by the consumer' machine. Testing the first release with this internally now.</p>",
+        "id": 246226821,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1626444215
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"203235\">@Ward Weistra</span>, unless I'm misunderstanding, you're asking how we handle dependencies of dependencies? So for example if package <code>A</code> is an explicit dependency, but then package <code>A</code> depends on package <code>B</code>. In SUSHI we don't actually need package <code>B</code>, since if the definitions in <code>A</code> have their snapshot (which we require), that is all of the information that SUSHI needs. So SUSHI only resolves explicitly listed dependencies.</p>",
+        "id": 246456463,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1626702305
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"239822\">@Nick Freiter</span> Thanks! That explains. <span class=\"user-mention\" data-user-id=\"191335\">@Martijn Harthoorn</span> wondered, since it apparently isn't trivial <span aria-label=\"wink\" class=\"emoji emoji-1f609\" role=\"img\" title=\"wink\">:wink:</span></p>",
+        "id": 246478464,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1626712376
+    },
+    {
+        "content": "<p>Yeah, we don't do that at all.  I think there may be a few cases that perhaps it could cause an issue (in rare cases where we need to walk the full inheritance tree and a parent is from a transitive dependency) -- but those cases are very rare and have not yet come up in practice.  In that case, we'd probably just suggest explicitly listing the transitive dependency -- at least for now.  It may be something we need to reconsider in the future though.</p>",
+        "id": 246616914,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1626799202
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191469\">Chris Moesel</span> <a href=\"#narrow/stream/215610-shorthand/topic/Dependencies/near/245725946\">said</a>:</p>\n<blockquote>\n<p>There are a few places we load packages from:</p>\n<ul>\n<li>First, we try to find it in the local FHIR cache by id and version.  If it's there, that is what we use.</li>\n<li>If the package version is <code>current</code>, we grab the <a href=\"http://build.fhir.org/ig\">qas.json file</a> from <code>build.fhir.org</code> and use that to try to find the last build.</li>\n<li>Otherwise, we try to find it on <a href=\"http://packages.fhir.org\">packages.fhir.org</a> via <code>http://packages.fhir.org/${packageId}/${version}</code>.</li>\n<li>If it's not there and the package is R4B or R5, we try <a href=\"http://packages2.fhir.org\">packages2.fhir.org</a> via <code>http://packages2.fhir.org/packages/${packageId}/${version}</code></li>\n</ul>\n</blockquote>\n<p>Can someone clarify how <code>qas.json</code> is used? What <em>branches</em> of a given dependency are counted toward matching the \"current\"? Is this limited to main/master, or is there external logic? Otherwise there's a risk taht updates to some random branch on a project might be counted as \"the most current\" version of a dependency.</p>",
+        "id": 248396516,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1628105203
+    },
+    {
+        "content": "<p>(Reading this in light of recent challenges from <a class=\"stream\" data-stream-id=\"179252\" href=\"/#narrow/stream/179252-IG-creation\">#IG creation</a> -- I totally didn't realize that qas.json was being used as a source of truth for anything.)</p>",
+        "id": 248396712,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1628105284
+    },
+    {
+        "content": "<p>For SUSHI, the <code>qas.json</code> file is used to find all packages that match the <code>package-id</code> of the desired package. Those packages are then sorted by <code>date</code>, and the newest package is selected. There is no checking based on branch, which does definitely seem like an issue as you pointed out. For my understanding, does the autobuild only publish packages based on the <code>master</code> or <code>main</code> branch of a repo? Or is that something that could vary?</p>",
+        "id": 248406990,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1628110121
+    },
+    {
+        "content": "<p>Here is the pseudocode from the IG Publisher that we used to implement our package resolution in SUSHI: <a href=\"#narrow/stream/215610-shorthand/topic/dev.20dependencies/near/195252120\">https://chat.fhir.org/#narrow/stream/215610-shorthand/topic/dev.20dependencies/near/195252120</a>. Our goal is to match the IG Pub behavior.</p>",
+        "id": 248407068,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1628110170
+    },
+    {
+        "content": "<p>Thanks Nick! Yeah, we'll need to figure out how to pin these down. Discussion continuing on that thread on <a class=\"stream\" data-stream-id=\"179252\" href=\"/#narrow/stream/179252-IG-creation\">#IG creation</a> .</p>",
+        "id": 248418876,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1628117504
+    },
+    {
+        "content": "<p>I tried to build a sushi project that has dependencies on some IHE published IGs. they could not be found. I used the same coordinates that I see <span class=\"user-mention\" data-user-id=\"191478\">@Oliver Egger</span> was able to use in a classic xml based IG. In sushi-config.yaml</p>\n<div class=\"codehilite\"><pre><span></span><code>dependencies:\n  ihe.mhd.fhir:\n    id: ihemhdfhir\n    uri: http://profiles.ihe.net/ITI/MHD/ImplementationGuide/ihe.mhd.fhir\n    version: 4.0.3\n  IHE.ITI.PDQm:\n    id: ihepdqm\n    uri: http://profiles.ihe.net/ITI/PDQm/ImplementationGuide/IHE.ITI.PDQm\n    version: 2.3.1\n</code></pre></div>\n<p>sushi error about these is <code>could not be loaded locally or from the FHIR package registry.</code></p>\n<p>These are registered in the old and new systems.</p>",
+        "id": 265194851,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1639677871
+    },
+    {
+        "content": "<p>never mind... chair-to-keyboard interface problem.. Need to use formal release numbers, not current CI build. duh</p>",
+        "id": 265196883,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1639678594
+    },
+    {
+        "content": "<p>I still have a problem. After changing my dependency in the sushi-config.yaml to this: </p>\n<div class=\"codehilite\"><pre><span></span><code>dependencies:\n    hl7.fhir.no.basis: 2.1.1\n</code></pre></div>\n<p>I finally get to load the package into the sushi/ig-publisher workflow. However soon after it complains:</p>\n<div class=\"codehilite\"><pre><span></span><code>Publishing Content Failed: The package &#39;hl7.fhir.no.basis&#39; has no entry on the current build server\n</code></pre></div>\n<p>Looks like it only tries to resolve on <a href=\"http://build.fhir.org\">build.fhir.org</a>. Any ideas? The package is built and published using SIMPLIFIER. <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span></p>",
+        "id": 267984139,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1642148945
+    },
+    {
+        "content": "<p>I think that error message comes from the IG Publisher (not SUSHI), so I'm not sure what it means.  I have not seen it before.  <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> - what does <code>Publishing Content Failed: The package 'hl7.fhir.no.basis' has no entry on the current build server</code> mean, and how can Thomas fix it?</p>",
+        "id": 268021400,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1642170963
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191469\">Chris Moesel</span> <a href=\"#narrow/stream/215610-shorthand/topic/Dependencies/near/268021400\">said</a>:</p>\n<blockquote>\n<p>I think that error message comes from the IG Publisher (not SUSHI), so I'm not sure what it means.  I have not seen it before.  <span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> - what does <code>Publishing Content Failed: The package 'hl7.fhir.no.basis' has no entry on the current build server</code> mean, and how can Thomas fix it?</p>\n</blockquote>\n<p>I think you are right <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> . My mistake.</p>\n<p>The problem, I think, is that I use the hl7 provided docker build image in my Github action script (this works fine for building things that are not dependent on other packages): </p>\n<div class=\"codehilite\"><pre><span></span><code>- name: 🏃‍♂️ Run IG Publisher\n        uses: docker://hl7fhir/ig-publisher-base:latest\n        with:\n          args: java -jar publisher.jar publisher -ig ${{ env.IG }}/ig.ini -publish https://hl7norway.github.io/no-domain-vitalsigns/\n</code></pre></div>\n<p>And I suppose that is the same thing running on the  <a href=\"http://build.fhir.org\">build.fhir.org</a>. The problem is that this image only recognizes packages that are built and distributed using that workflow. This is my current interpretation of the error.</p>\n<p>So how to solve it. I suppose I can do two tings.</p>\n<ol>\n<li>Build another version of my docker build image, that contains the no-basis package and see if that works.</li>\n<li>Import all dependencies in the Github action and run the IG publisher there (not using docker image), in that case I can probably import the dependencies the normal way using an npm install command. The flip side would be that I use a lot of Github runtime just setting up my IG publisher build environment on the virtual ubuntu node running the script.</li>\n</ol>",
+        "id": 268036563,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1642177399
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> - do you have any insight/guidance here?</p>",
+        "id": 268037535,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1642177816
+    },
+    {
+        "content": "<p>I don't know why this is happening. hl7.fhir.no.basis#2.1.1 is found on <a href=\"http://packages.fhir.org\">packages.fhir.org</a>, so it should just automatically resolve</p>",
+        "id": 268047144,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1642182101
+    },
+    {
+        "content": "<p>do you get any messages in the output related to hl7.fhir.no.basis ?</p>",
+        "id": 268047175,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1642182116
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/215610-shorthand/topic/Dependencies/near/268047175\">said</a>:</p>\n<blockquote>\n<p>do you get any messages in the output related to hl7.fhir.no.basis ?</p>\n</blockquote>\n<p>Actually yes. Sushi says it downloads the package OK:</p>\n<div class=\"codehilite\"><pre><span></span><code>Sushi: info  Running SUSHI v2.2.6 (implements FHIR Shorthand specification v1.2.0) (00:00.0527)\nSushi: info  Arguments:                                                          (00:00.0528)\nSushi: info    --out /github/workspace/VitalSigns                                (00:00.0530)\nSushi: info    /github/workspace/VitalSigns                                      (00:00.0531)\nSushi: info  Using configuration file: /github/workspace/VitalSigns/sushi-config.yaml (00:00.0534)\nSushi: info  Importing FSH text...                                               (00:00.0545)\nSushi: info  Preprocessed 91 documents with 25 aliases.                          (00:00.0900)\nSushi: info  Imported 76 definitions and 14 instances.                           (00:00.0963)\nSushi: info  Checking local cache for hl7.fhir.no.basis#2.1.1...                 (00:00.0966)\nSushi: info  Did not find hl7.fhir.no.basis#2.1.1 in local cache.                (00:00.0967)\nSushi: info  Downloading hl7.fhir.no.basis#2.1.1...                              (00:00.0969)\nSushi: info  Checking local cache for hl7.fhir.r4.core#4.0.1...                  (00:00.0985)\nSushi: info  Did not find hl7.fhir.r4.core#4.0.1 in local cache.                 (00:00.0988)\nSushi: info  Downloading hl7.fhir.r4.core#4.0.1...                               (00:00.0990)\nSushi: info  Downloaded hl7.fhir.no.basis#2.1.1                                  (00:01.0662)\nSushi: info  Loaded package hl7.fhir.no.basis#2.1.1                              (00:01.0697)\nSushi: info  Downloaded hl7.fhir.r4.core#4.0.1                                   (00:04.0113)\nSushi: info  Loaded package hl7.fhir.r4.core#4.0.1                               (00:05.0833)\nSushi: info  Converting FSH to FHIR resources...                                 (00:05.0948)\nSushi: info  Converted 51 FHIR StructureDefinitions.                             (00:13.0352)\n</code></pre></div>",
+        "id": 268055617,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1642186097
+    },
+    {
+        "content": "<p>But the IG-publisher build process still can't find it.<br>\nThe complete log is here:</p>\n<div class=\"codehilite\"><pre><span></span><code>https://github.com/HL7Norway/no-domain/runs/4815170074?check_suite_focus=true\n</code></pre></div>",
+        "id": 268055875,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1642186230
+    },
+    {
+        "content": "<p>I'm not sure why you don't use the normal structure for an IG, so that it runs using the usual infrastructure</p>",
+        "id": 268057526,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1642186973
+    },
+    {
+        "content": "<p>anyway that means I can't investigate and don't know how to reproduce</p>",
+        "id": 268058327,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1642187337
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> -- I was able to reproduce this with just the standard publisher.  Here are the steps:</p>\n<ol>\n<li><code>git clone git@github.com:HL7Norway/no-domain.git</code> or <code>git clone https://github.com/HL7Norway/no-domain.git</code></li>\n<li><code>cd no-domain</code></li>\n<li><code>git checkout feature/dipsfsh2-workflow</code></li>\n<li><code>cd VitalSigns</code></li>\n<li><code>sh _genonce.sh</code> or <code>_genonce.bat</code></li>\n</ol>\n<p>Things to note:</p>\n<ul>\n<li>Repo is <a href=\"https://github.com/HL7Norway/no-domain\">https://github.com/HL7Norway/no-domain</a></li>\n<li>Must use feature/dipsfsh2-workflow branch (master branch is not setup for publisher)</li>\n<li>Must change directory to VitalSigns (root dir is not right directory format)</li>\n</ul>",
+        "id": 268063018,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1642189776
+    },
+    {
+        "content": "<p>It happens after <code>Load Package hl7.terminology.r4#3.0.0</code>.</p>\n<div class=\"spoiler-block\"><div class=\"spoiler-header\">\n<p>Stack Dump (for debugging)</p>\n</div><div class=\"spoiler-content\" aria-hidden=\"true\">\n<p>org.hl7.fhir.exceptions.FHIRException: The package 'hl7.fhir.no.basis' has no entry on the current build server ({hl7.org.fhir.uv.cdisc-lab=https://build.fhir.org/ig/HL7/cdisc-lab, ihe.fhir.pharm.vac=https://build.fhir.org/ig/IHE/pharm-vaccination, hl7.be.fhir.vitalink.ig=https://build.fhir.org/ig/hl7-be/vitalink-ig, ch.ahdis.ig.cda-fhir-maps=https://build.fhir.org/ig/ahdis/cda-fhir-maps, hl7.fhir.bser=https://build.fhir.org/ig/holmesie/bser, au.csiro.fhir.au-primarycare=https://build.fhir.org/ig/aehrc/primary-care-data-technical, hl7.fhir.ca.core=https://build.fhir.org/ig/scratch-fhir-profiles/CA-Core, ch.fhir.ig.ch-epr-term=https://build.fhir.org/ig/hl7ch/ch-epr-term, openhie.fhir.hiv=https://build.fhir.org/ig/openhie/hiv-ig, ihe.fhir.template=https://build.fhir.org/ig/IHE/ihe-ig-template, hl7.fhir.us.bser=https://build.fhir.org/ig/HL7/bser, ihe.mhd.fhir=https://build.fhir.org/ig/IHE/ITI.MHD, openhie.fhir.template=https://build.fhir.org/ig/openhie/openhie-ig-template, hl7.fhir.us.davinci-hrex=https://build.fhir.org/ig/HL7/davinci-ehrx, hl7.fhir.us.carin-rtpbc=https://build.fhir.org/ig/HL7/carin-rtpbc, hl7.fhir.us.icsr-ae-reporting=https://build.fhir.org/ig/HL7/fhir-icsr-ae-reporting, hl7.fhir.us.sdoh-clinicalcare=https://build.fhir.org/ig/HL7/fhir-sdoh-clinicalcare, ch.fhir.ig.atc=https://build.fhir.org/ig/ahdis/ch-atc, hl7.dk.fhir.template=https://build.fhir.org/ig/hl7dk/dk-ig-template, hl7.fhir.us.carin-bb=https://build.fhir.org/ig/HL7/carin-bb, hl7.fhir.uv.sdc=https://build.fhir.org/ig/HL7/sdc, </p>\n<p>&lt;snip&gt;Snipping out a long listing of what looks to be other projects&lt;/snip&gt;</p>\n<p>hl7.fhir.us.ccda=https://build.fhir.org/ig/HL7/ccda-on-fhir, ch.hcisolutions.ig.analyzer=https://build.fhir.org/ig/ahdis/hci-analyzer, hl7.fhir.us.specialty-rx=https://build.fhir.org/ig/HL7/fhir-specialty-rx, hl7.fhir.be.riziv=https://build.fhir.org/ig/hl7-be/riziv-inami, hl7.org.nz.fhir.ig.medtech=https://build.fhir.org/ig/HL7NZ/medtech})<br>\n    at org.hl7.fhir.utilities.npm.FilesystemPackageCacheManager.loadFromCIBuild(FilesystemPackageCacheManager.java:541)<br>\n    at org.hl7.fhir.utilities.npm.FilesystemPackageCacheManager.loadPackage(FilesystemPackageCacheManager.java:503)<br>\n    at org.hl7.fhir.igtools.publisher.Publisher.resolveDependency(Publisher.java:3187)<br>\n    at org.hl7.fhir.igtools.publisher.Publisher.loadIg(Publisher.java:3027)<br>\n    at org.hl7.fhir.igtools.publisher.Publisher.initializeFromIg(Publisher.java:2102)<br>\n    at org.hl7.fhir.igtools.publisher.Publisher.initialize(Publisher.java:1643)<br>\n    at org.hl7.fhir.igtools.publisher.Publisher.execute(Publisher.java:792)<br>\n    at org.hl7.fhir.igtools.publisher.Publisher.main(Publisher.java:9033)</p>\n</div></div>",
+        "id": 268063594,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1642190063
+    },
+    {
+        "content": "<p>thanks. I don't have time to investigate this stuff</p>",
+        "id": 268063608,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1642190072
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> and <span class=\"user-mention\" data-user-id=\"192856\">@Thomas Tveit Rosenlund</span> - FOUND IT.  Thomas, your <code>ig.ini</code> does not point to the ImplemenationGuide JSON that SUSHI creates. It points to a different one.  So SUSHI and the IG Publisher are using two different configs.  While the SUSHI config points to <code>hl7.fhir.no.basis#2.1.1</code>, the IG resource that <code>ig.ini</code> points to specifies <code>hl7.fhir.no.basis#dev</code> (<a href=\"https://github.com/HL7Norway/no-domain/blob/feature/dipsfsh2-workflow/VitalSigns/input/ImplementationGuide-dips.fhir.r4.observations.ig.json\">link</a>).  When the publisher can't find a local dev copy of a dependency, it falls back to looking for it on the build server.  So it all makes sense and is working as expected.</p>\n<p>You need to either edit your ImplementationGuide JSON so the dependency is correct or you need to have <code>ig.ini</code> point to the ImplementationGuide JSON that SUSHI generates.</p>",
+        "id": 268064533,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1642190521
+    },
+    {
+        "content": "<p>good work. that would be why I recommend a standard set up</p>",
+        "id": 268064904,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1642190646
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192856\">@Thomas Tveit Rosenlund</span> - I'd recommend either removing your custom ImplementationGuide JSON and just using the SUSHI-generated one, OR removing sushi-config.yaml so that SUSHI uses the ImplementationGuide JSON you've provided.  Either way, you end up with a single config, which is good.</p>",
+        "id": 268065730,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1642191032
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191469\">Chris Moesel</span> <a href=\"#narrow/stream/215610-shorthand/topic/Dependencies/near/268065730\">said</a>:</p>\n<blockquote>\n<p><span class=\"user-mention silent\" data-user-id=\"192856\">Thomas Tveit Rosenlund</span> - I'd recommend either removing your custom ImplementationGuide JSON and just using the SUSHI-generated one, OR removing sushi-config.yaml so that SUSHI uses the ImplementationGuide JSON you've provided.  Either way, you end up with a single config, which is good.</p>\n</blockquote>\n<p>Excactly. Thanks for the help <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> you just saved me hours of work, don't know if I would have figured that one out. </p>\n<p>The problem is that I don't normaly use a separate ImplementationGuide resource, but the project responsible for these profiles did, and when I tried to put this one into the automated build process we are testing for the HL7 Norway base and domain profiles, it would not work out of the box.  The error messages did not make much sense to me as SUSHI clearly downloaded the package in question.  I will simply remove the IG-resource and make my configuration in the sushi-yaml file the way I use to. </p>\n<p>Thanks again!</p>",
+        "id": 268113176,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1642233862
+    },
+    {
+        "content": "<p>And just like that, it works beautiflully. Have to fix the sushi-yaml to incorporate the rest of the documentation pages though.</p>\n<div class=\"codehilite\"><pre><span></span><code>https://github.com/HL7Norway/no-domain/runs/4825786507?check_suite_focus=true\n</code></pre></div>",
+        "id": 268114020,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1642235253
+    },
+    {
+        "content": "<p>Yes, you'll need to move at least the page listing and any <code>parameters</code> values over to sushi-config.yaml.  The full sushi-config.yaml is documented <a href=\"https://fshschool.org/docs/sushi/configuration/#full-configuration\">here</a>.</p>",
+        "id": 268394345,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1642514474
+    }
+]

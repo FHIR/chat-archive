@@ -1,0 +1,218 @@
+[
+    {
+        "content": "<p>I've narrow down the available reference types in my Communication profile. While the profile states it, it does not seem to be the case that the validator takes such restriction into account. I've invoked the validator as follows:<br>\n<code>java -jar org.hl7.fhir.validator.jar comm.xml -version 3.0.2 -ig https://docs.ehealth.sundhed.dk/latest/ig</code> - <br>\nwhere comm.xml looks like the following:</p>\n<div class=\"codehilite\"><pre><span></span> &lt;Communication xmlns=&quot;http://hl7.org/fhir&quot;&gt;\n                &lt;id value=&quot;2002&quot;/&gt;\n                &lt;meta&gt;\n                    &lt;versionId value=&quot;1&quot;/&gt;\n                    &lt;lastUpdated value=&quot;2019-12-05T14:53:13.251+00:00&quot;/&gt;\n                    &lt;profile value=&quot;http://ehealth.sundhed.dk/fhir/StructureDefinition/ehealth-message&quot; &gt;&lt;/profile&gt;\n                &lt;/meta&gt;\n                &lt;extension url=&quot;http://ehealth.sundhed.dk/fhir/StructureDefinition/ehealth-communication-senderCareTeam&quot;&gt;\n                    &lt;valueReference&gt;\n                        &lt;reference value=&quot;http://organization.inttest.ehealth.sundhed.dk/fhir/CareTeam/143520&quot;/&gt;\n                    &lt;/valueReference&gt;\n                &lt;/extension&gt;\n                &lt;extension url=&quot;http://ehealth.sundhed.dk/fhir/StructureDefinition/ehealth-thread-id&quot;&gt;\n                    &lt;valueString value=&quot;9cace983-d0b0-4f40-a1fb-b8fefac5525f&quot;/&gt;\n                &lt;/extension&gt;\n                &lt;extension url=&quot;http://ehealth.sundhed.dk/fhir/StructureDefinition/ehealth-title&quot;&gt;\n                    &lt;valueString value=&quot;Message to Patient from CareTeam CGI&quot;/&gt;\n                &lt;/extension&gt;\n                &lt;extension url=&quot;http://ehealth.sundhed.dk/fhir/StructureDefinition/ehealth-priority&quot;&gt;\n                    &lt;valueCode value=&quot;routine&quot;/&gt;\n                &lt;/extension&gt;\n                &lt;status value=&quot;completed&quot;/&gt;\n                &lt;category&gt;\n                    &lt;coding&gt;\n                        &lt;system value=&quot;http://ehealth.sundhed.dk/cs/message-category&quot;/&gt;\n                        &lt;code value=&quot;message&quot;/&gt;\n                    &lt;/coding&gt;\n                    &lt;text value=&quot;Besked&quot;/&gt;\n                &lt;/category&gt;\n                &lt;recipient&gt;\n                    &lt;reference value=&quot;CodeSystem/96&quot;/&gt;\n                &lt;/recipient&gt;\n                &lt;sent value=&quot;2019-11-25T13:30:10+01:00&quot;/&gt;\n                &lt;payload&gt;\n                    &lt;contentString value=&quot;This is a 8. test message from CareTeam to Patient from CGI&quot;/&gt;\n                &lt;/payload&gt;\n            &lt;/Communication&gt;\n</pre></div>\n\n\n<ul>\n<li>I would have it expected to fail as the profile (<a href=\"https://docs.ehealth.sundhed.dk/latest/ig/StructureDefinition-ehealth-message.html\" target=\"_blank\" title=\"https://docs.ehealth.sundhed.dk/latest/ig/StructureDefinition-ehealth-message.html\">https://docs.ehealth.sundhed.dk/latest/ig/StructureDefinition-ehealth-message.html</a>) states that the allowed recipient reference types are Patient and Practitioner. In the example above I've used a CodeSystem reference. Why does the validator (v4.1.44-SNAPSHOT (Git# 5332a8ad603d)) not fail that - aint that a bug? (The HAPI JPA server also seems to ignore this kind of restriction when validating) <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>. <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> It seems that it requires that I am required to do an extension on my class extending Communication in order to get this picked up by  BaseHapiFhirDao.validateChildReferences. Is that correctly understood?</li>\n</ul>",
+        "id": 185649064,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1579041514
+    },
+    {
+        "content": "<p>I seem to remember that we had a discussion around this before but I can't remember what the result was</p>",
+        "id": 185676845,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1579075918
+    },
+    {
+        "content": "<p>the outcome is that the validator jar can't determine what the type of the target resource is, so can't validate it</p>",
+        "id": 185690132,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1579088780
+    },
+    {
+        "content": "<p>and that is because that basically it isn't spec'ed that eg. a REST call to CodeSystem/1 is allowed to return other resources than CodeSystems ... right?</p>",
+        "id": 185695262,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1579093562
+    },
+    {
+        "content": "<p>Can the validator (or more precisely ,HAPI JPA) be instrumented to a sort of 'expected referencetype' behaviour? Meaning that it would fail the example above given that CodeSystem is not a proper reference type according to the profile?</p>",
+        "id": 185696181,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1579094297
+    },
+    {
+        "content": "<p>I also guess a rough way to enforce is to add FhirPath invariants to it as I know the context of where the services run -&gt; in a setup where all the services behave as expected, being that the endpoint CodeSystem/96 returns CodeSystems and nothing else</p>",
+        "id": 185697262,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1579095217
+    },
+    {
+        "content": "<p>I've tweaked the instance validator to do it now (with a big thanks to Anders Havn). It actually 'only' required to remove code from the instance validator.</p>",
+        "id": 185809002,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1579176905
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> expect a PR ;)</p>",
+        "id": 185815329,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1579182235
+    },
+    {
+        "content": "<p>I'm about to commit a very big change to the InstanceValidator...</p>",
+        "id": 185867602,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1579212864
+    },
+    {
+        "content": "<p>maybe you should describe the change here?</p>",
+        "id": 185867617,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1579212874
+    },
+    {
+        "content": "<p>discussion ended up here: <a href=\"#narrow/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI\" title=\"#narrow/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI\">https://chat.fhir.org/#narrow/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI</a></p>",
+        "id": 186286500,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1579700110
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191427\">@Jens Villadsen</span> from the next release of the validator, you'll be able to use <code>-assumeValidRestReferences</code> to get the validator to infer the type from the reference</p>",
+        "id": 187026945,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1580415898
+    },
+    {
+        "content": "<p>Awesome</p>",
+        "id": 187030018,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1580418032
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>  I guess I'll have to make a new PR to HAPI then, extending the wrapper classes</p>",
+        "id": 187036306,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1580421841
+    },
+    {
+        "content": "<p>yes.</p>",
+        "id": 187036362,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1580421862
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span>// if we == null, we inferred ft from the reference. if we are told to treat this as gospel\n</pre></div>\n\n\n<p>lol ;)</p>",
+        "id": 187036549,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1580422008
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> - I've added the feature in the PR to the wrapper now</p>",
+        "id": 187041572,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1580425973
+    },
+    {
+        "content": "<p>Question nr 1) does FhirPath <code>ofType</code>  work on references?<br>\nQuestion nr 2) if the answer to question nr 1 is yes, does FhirPath and <code>assumeValidRestReferences</code> then work in combination with ofType?</p>",
+        "id": 191251809,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1584715539
+    },
+    {
+        "content": "<p>The reason for the question is that the syntax on my invariant is a bit clumsy when writing eg. <code>recipient.reference.contains('Practitioner/')</code></p>",
+        "id": 191252042,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1584715669
+    },
+    {
+        "content": "<p>it would be easier to read eg <code>recipient.ofType('Practitioner').exists()</code></p>",
+        "id": 191252205,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1584715739
+    },
+    {
+        "content": "<p>I'm in STU3-land</p>",
+        "id": 191252226,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1584715750
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span></p>",
+        "id": 191252238,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1584715756
+    },
+    {
+        "content": "<p>no it cannot make that assumption</p>",
+        "id": 191288399,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1584731068
+    },
+    {
+        "content": "<p>and recipient is of type Reference, not practitioner.</p>",
+        "id": 191288425,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1584731083
+    },
+    {
+        "content": "<p>yet the reference (given the assumeValidRestReferences) would be typed</p>",
+        "id": 191288511,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1584731133
+    },
+    {
+        "content": "<p>you can do </p>\n<p><code>recipient.resolve().ofType('Practitioner').exists()</code></p>",
+        "id": 191288597,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1584731166
+    },
+    {
+        "content": "<p>but that means that the resource is not valid if the reference cannot be resolved (including the validator not having access)</p>",
+        "id": 191288655,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1584731193
+    },
+    {
+        "content": "<p>but what would resolve do here? Invoke the server hosting the resource?</p>",
+        "id": 191288686,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1584731204
+    },
+    {
+        "content": "<p>in the case of the validator, call the interface that resolves resources</p>",
+        "id": 191288740,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1584731233
+    },
+    {
+        "content": "<p>hmmmm ....</p>",
+        "id": 191288773,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1584731249
+    },
+    {
+        "content": "<p>that is actually an interesting aspect</p>",
+        "id": 191288797,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1584731260
+    },
+    {
+        "content": "<p>as I do that anyway at another point in time</p>",
+        "id": 191288816,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1584731273
+    },
+    {
+        "content": "<p>If I can share the cache between those components it would actually work</p>",
+        "id": 191288898,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1584731310
+    },
+    {
+        "content": "<p>and this would also work in STU3 right?</p>",
+        "id": 191288929,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1584731327
+    },
+    {
+        "content": "<p>yes</p>",
+        "id": 191289136,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1584731438
+    },
+    {
+        "content": "<p>I'll guess I'll need to have a look at the HAPI 5.0.0 branch a bit sooner than I thought then</p>",
+        "id": 191289271,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1584731522
+    }
+]

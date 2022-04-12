@@ -1,0 +1,79 @@
+---
+layout: page
+title: "FHIR Chat  · sushi: problem with external profiles containing profiles · shorthand"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/index.html">shorthand</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/sushi.3A.20problem.20with.20external.20profiles.20containing.20profiles.html">sushi: problem with external profiles containing profiles</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="233347828"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/sushi%3A%20problem%20with%20external%20profiles%20containing%20profiles/near/233347828" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/sushi.3A.20problem.20with.20external.20profiles.20containing.20profiles.html#233347828">(Apr 06 2021 at 16:14)</a>:</h4>
+<p>I stumbled over a weird issue. If i have:</p>
+<ul>
+<li>a profile on Identifier</li>
+<li>a profile2 using this IdentifierProfile</li>
+<li>creating an Instance of this profile2<br>
+everything works just fine: <a href="https://fshschool.org/FSHOnline/#/share/3uofq3N">https://fshschool.org/FSHOnline/#/share/3uofq3N</a></li>
+</ul>
+
+
+
+<a name="233347980"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/sushi%3A%20problem%20with%20external%20profiles%20containing%20profiles/near/233347980" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/sushi.3A.20problem.20with.20external.20profiles.20containing.20profiles.html#233347980">(Apr 06 2021 at 16:15)</a>:</h4>
+<p>if i remove the Identifier Profile from the fsh file, replacing it with an external Extension, contained in /resources<br>
+everything still works fine.</p>
+
+
+
+<a name="233348120"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/sushi%3A%20problem%20with%20external%20profiles%20containing%20profiles/near/233348120" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/sushi.3A.20problem.20with.20external.20profiles.20containing.20profiles.html#233348120">(Apr 06 2021 at 16:16)</a>:</h4>
+<p>If i only build the instance, refering to an external profile, which references the Identifier Profile i get: <code>error The element or path you referenced does not exist: performer.actor.identifier.value</code></p>
+
+
+
+<a name="233348959"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/sushi%3A%20problem%20with%20external%20profiles%20containing%20profiles/near/233348959" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/sushi.3A.20problem.20with.20external.20profiles.20containing.20profiles.html#233348959">(Apr 06 2021 at 16:22)</a>:</h4>
+<p>I created a minimal test set:<br>
+<a href="https://github.com/patrick-werner/reproduce-fsh-issue">https://github.com/patrick-werner/reproduce-fsh-issue</a><br>
+(please ignore the extension error, i didn't include these to have a minimal test-case)</p>
+
+
+
+<a name="233368380"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/sushi%3A%20problem%20with%20external%20profiles%20containing%20profiles/near/233368380" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/sushi.3A.20problem.20with.20external.20profiles.20containing.20profiles.html#233368380">(Apr 06 2021 at 18:41)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="191451">@Patrick Werner</span>.  This is an interesting issue.  I believe I've found what the problem is, but I'm not sure exactly what the right solution is... I think the problem is that in <code>TestProfile2</code>, <code>performer.actor.identifier.value</code> is defined as being a choice of two profiles:</p>
+<div class="codehilite"><pre><span></span><code>&quot;type&quot;: [
+  {
+    &quot;code&quot;: &quot;Identifier&quot;,
+    &quot;profile&quot;: [
+      &quot;http://fhir.de/StructureDefinition/identifier-iknr&quot;,
+      &quot;http://fhir.abda.de/eRezeptAbgabedaten/StructureDefinition/DAV-PR-ERP-DAVHerstellerSchluessel&quot;
+    ]
+  }
+],
+</code></pre></div>
+<p>When you try to use that path in an instance, SUSHI doesn't know which profile to use as the definition for the <code>Identifier</code> type that the instance should be built against.  For example, if each profile fixed the <code>Identifier.system</code> to a different value, SUSHI wouldn't know which to apply.  So in this case, it seems like SUSHI is just giving up and not using either (and instead returning a confusing error message).  I noticed that if I removed the second profile (so there was only one profile in the array) then the error went away. You didn't see this w/ your FSH-defined profile because in that one you restrict the <code>Identifier</code> to a single profile (not two profiles).</p>
+<p>I don't think what SUSHI is doing now is the best approach.  At a minimum, we should return a better error message.  I think the best short-term solution is for SUSHI to use the base resource type (<code>Identifier</code>) and issue a <em>warning</em> message that since there were two profiles, SUSHI used only the base definition.  Long term, I think it would be nice for the author to be able to target the profile they want using a path syntax like <code>performer.actor.identifier[http://fhir.de/StructureDefinition/identifier-iknr].value</code> (but I don't know if that's exactly the right syntax  since it could be confused for slice syntax).  What do you think?</p>
+
+
+
+<a name="233448011"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/sushi%3A%20problem%20with%20external%20profiles%20containing%20profiles/near/233448011" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/sushi.3A.20problem.20with.20external.20profiles.20containing.20profiles.html#233448011">(Apr 07 2021 at 08:01)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="191469">@Chris Moesel</span> <br>
+using the base resource type in this case sounds like a good short term solution. Long term i could see sushi just trying the profiles until the first fits for the element. Or leave it at the base resource definition. Errors will be catched by the IG publisher downstream</p>
+
+
+
+<a name="233642880"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/sushi%3A%20problem%20with%20external%20profiles%20containing%20profiles/near/233642880" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/sushi.3A.20problem.20with.20external.20profiles.20containing.20profiles.html#233642880">(Apr 08 2021 at 12:22)</a>:</h4>
+<p><a href="https://github.com/FHIR/sushi/issues/794">SUSHI #794</a></p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

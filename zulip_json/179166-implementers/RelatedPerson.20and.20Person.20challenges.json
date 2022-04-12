@@ -1,0 +1,116 @@
+[
+    {
+        "content": "<p>In Mental Care there is a concept of system therapy, where for example parents may be in therapy with (some of) their children. A concrete example we have is where 2 kids are treated by a therapist, and the mother is involved as a related person for each kid. At one point in time, the mother also starts receiving therapy sessions, so becomes a patient.</p>\n<p>While normally the fact that each related person is linked to a single patient is no problem, we start having complexities in mapping the datamodel used in our applications properly to FHIR. </p>\n<p>In the above example, we would end up having the mother represented and exposed in 3 different ways as FHIR resources:<br>\n- As a RelatedPerson for kid x<br>\n- As a RelatedPerson for kid z<br>\n- As a Patient</p>\n<p>This is very cumbersome, as we all like to avoid that the core features of a single entity in the real world have to be duplicated (or in this case triplicated :) </p>\n<p>I understand that we can bring Person in the mix, and that way establish for the outside world the the mother in the above case is one and the same as the other 3 resources that we expose. So now we have 4 resources  that carry the same name, address, and contact information, etc. that can easily become duplicated in external systems.</p>\n<p>It would already be a major improvement if we had references from Patient and RelatedPerson to Person, so you can tell that they are the same person in the real world. I would say that the current linking from person to other resources is a very weak part of the current Person resource, because now conceptually you consider the Person resource as being changed when he/she becomes involved in another role - which obviously is incorrect. Also, from a privacy point of view it is not acceptable there is forward linking from Person to these other resources.</p>\n<p>While this isn't fixed in the specification, we will define and use an extension to model these relations from Patient and RelatedPerson to Person, and possibly no longer populate the fields in Patient and RelatedPerson that are present in Person.</p>\n<p>I am curious to how others have run into similar and how they have solved them.</p>",
+        "id": 153908711,
+        "sender_full_name": "Theo Stolker",
+        "timestamp": 1505465245
+    },
+    {
+        "content": "<p>Hi Theo,</p>\n<p>I'm new to FHIR, and have a similar problem. I'm working on a system where a patient (with one login account) can interact with their own patient record, but also with 0 to many other patient records if they have been invited as a carer for those patients.</p>\n<p>So in some contexts (e.g. if they are invited to a patient's appointment) then they would be a RelatedPerson, but when the data is about themselves they are a Patient. I had hoped to use the same logical ID for both entities as a bit of a sneaky shortcut, but that doesn't work because RelatedPerson is for exactly one patient in FHIR, so I need one ID per-relationship, not 1 per person.</p>\n<p>Right now my best idea is also to use Person to link backwards to the Patient/RelatedPerson entities when it matters. Rather than introducing a forward link I was considering allowing callers to add a _revinclude on Person if they need this info as part of their query, but I'm not yet sure if this will work for all my use cases. Would be interested in the details of your extension if you go down this route. I think there is a registry of common extensions somewhere (?) maybe someone has already documented one?</p>\n<p>I hadn't thought of simply omitting the common fields (e.g. name, address) in non-Person resources to reduce duplication - but that's not a bad idea.</p>\n<p>Tom</p>",
+        "id": 153908714,
+        "sender_full_name": "Tom Pick",
+        "timestamp": 1505472823
+    },
+    {
+        "content": "<p>hi Tom, thanks for your quick reply. That sounds like a very similar issue. The _revinclude sounds like a good idea with the current model, but the backward link still leaves the life cycle issue for RelatedPerson and privacy issues unaddressed. I'll let you know once we have defined the extension.</p>",
+        "id": 153908715,
+        "sender_full_name": "Theo Stolker",
+        "timestamp": 1505475709
+    },
+    {
+        "content": "<p>Hi Theo, re. privacy - I think this is one example of a more general problem I too have to solve for other resources. Essentially - I am lucky enough to know from system context which subset of a resource's attributes I can return to the caller (e.g. which of the Person targets they are permitted to see). What I'm not sure about is how to do that in a FHIR compliant way. I could simply omit the data they are not allowed to see, but then I haven't faithfully returned the resource that they requested. I could set the implicitRules tag, but that seems unnecessarily restrictive since there are no semantic problems with the data.</p>\n<p>At the moment all I can think of doing is omitting the prohibited subset, and then setting a warning in a custom meta element (tag? security label?) to indicate that only a portion of the resource has been returned.</p>\n<p>Would also welcome any feedback or suggestions on best practice here.</p>\n<p>Tom</p>",
+        "id": 153908716,
+        "sender_full_name": "Tom Pick",
+        "timestamp": 1505477846
+    },
+    {
+        "content": "<p>Update: Looks like there is e.g. REDACTED already available - <a href=\"https://www.hl7.org/fhir/valueset-security-labels.html\" target=\"_blank\" title=\"https://www.hl7.org/fhir/valueset-security-labels.html\">https://www.hl7.org/fhir/valueset-security-labels.html</a> - so simply omitting the sensitive part and marking as REDACTED might be one option (for some use cases).</p>",
+        "id": 153908719,
+        "sender_full_name": "Tom Pick",
+        "timestamp": 1505484167
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span> What's Patient Administration's current set of thinking here?</p>",
+        "id": 153908724,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1505486009
+    },
+    {
+        "content": "<p>Looking back to the original statement with the mother and 2 children, no matter how you put this it is at least 5 resources (the 3 patient resources, and the 2 linkage resources - describing the relationships)<br>\nSo the fact that those relationship linkges has the complete details of the names doesn't reduce the number of resources.<br>\nin fact if it didn't then we would always have additional resources is the patient didn't exist.<br>\nAlso, the Mother's Patient.link property can reference the 2 RelatedPerson resources (with a see-also type).<br>\nThere is an example of this in the spec at <a href=\"http://hl7.org/fhir/patient.html#maternity\" target=\"_blank\" title=\"http://hl7.org/fhir/patient.html#maternity\">http://hl7.org/fhir/patient.html#maternity</a></p>",
+        "id": 153908757,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1505500913
+    },
+    {
+        "content": "<p>This approach doesn't require the use of the Person resource.</p>",
+        "id": 153908758,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1505500959
+    },
+    {
+        "content": "<p>One way to indicate that the mother's two RelatedPerson resources and her Patient resource describe the same person, is to share a value for <code>identifier</code>, no links needed.</p>",
+        "id": 153908855,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1505699073
+    },
+    {
+        "content": "<p>Really helpful comments, thank you Brian, Richard.</p>",
+        "id": 153908878,
+        "sender_full_name": "Tom Pick",
+        "timestamp": 1505738430
+    },
+    {
+        "content": "<blockquote>\n<p>One way to indicate that the mother's two RelatedPerson resources and her Patient resource describe the same person, is to share a value for <code>identifier</code>, no links needed.</p>\n</blockquote>\n<p>Hi Richard, our system doesn't allow reuse of the same identifier for multiple instances of the same resource type so that won't work for us.</p>",
+        "id": 153908886,
+        "sender_full_name": "Theo Stolker",
+        "timestamp": 1505739934
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span>, your response doesn't address the issue that I voiced, nor does it consider the proposed solution at it's core.</p>\n<p>A number of reasons why what you propose is not a good idea:<br>\n1) The example <a href=\"http://hl7.org/fhir/patient.html#maternity\" target=\"_blank\" title=\"http://hl7.org/fhir/patient.html#maternity\">http://hl7.org/fhir/patient.html#maternity</a> doesn't address the issue of having with multiple children.<br>\n2) The specification of Patient.link does allow linking to RelatedPerson, but \"see also\" is quite weak. This should definitely be addressed before it makes sense to use that.<br>\n2) The problem is not the number of resources as you seem to think, but the duplication of core data for the same person.<br>\n    To me the use of Person is in fact a great solution to that.</p>\n<p>It appears to me the relations between administrative resources is an area that isn't very mature yet. Is there any work planned to address that?<br>\nPlease consider my input as part of that!</p>\n<p>Thanks,</p>\n<p>Theo.</p>",
+        "id": 153908889,
+        "sender_full_name": "Theo Stolker",
+        "timestamp": 1505740512
+    },
+    {
+        "content": "<p>One thing that tripped me up Theo is that the logical id of a resource is not the same as the optional identifier element some resources have. See here: <a href=\"https://www.hl7.org/fhir/resource.html#identifiers\" target=\"_blank\" title=\"https://www.hl7.org/fhir/resource.html#identifiers\">https://www.hl7.org/fhir/resource.html#identifiers</a>. I think Richard might have been referring to the embedded identifer, which perhaps can be set the same across resources in your system, even if the logical id cannot? (Just a thought, sorry if I've misunderstood, or if you already know this).</p>",
+        "id": 153908898,
+        "sender_full_name": "Tom Pick",
+        "timestamp": 1505741401
+    },
+    {
+        "content": "<p>This is a usecase handled by Consent. Regardless of the other relationship, you would tend to need a privacy authorization to enable a non-clinician (not Practitioner) to view a Patient data that is not their own. This is done with Consent. In current build  there would be some Conent policy that is used to indicate it is a consent that authorizes access by non-practitioner would then be indicated in a Consent.provision.actor element. with that provision.type being permit.</p>",
+        "id": 153908903,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1505744485
+    },
+    {
+        "content": "<p>I say this is a use-case for Consent, because there are many cases where there is a RelatedPerson relationship, but where the Patient has forbidden access.</p>",
+        "id": 153908904,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1505744546
+    },
+    {
+        "content": "<p>I would like to point you at the example in Consent <a href=\"http://build.fhir.org/consent-example-grantor.html\" target=\"_blank\" title=\"http://build.fhir.org/consent-example-grantor.html\">http://build.fhir.org/consent-example-grantor.html</a>     It seems much like your use-case, but the current example is messed up. I am working with the committee to get the examples updated....     <span class=\"user-mention\" data-user-id=\"192851\">@Tom Pick</span> <span class=\"user-mention\" data-user-id=\"192814\">@Theo Stolker</span> <span class=\"user-mention\" data-user-id=\"191682\">@Richard Townley-O'Neill</span> <span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span></p>",
+        "id": 153908906,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1505745006
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192814\">@Theo Stolker</span> <br>\nI think that the design of <code>Patient</code> and <code>RelatedPerson</code> has used a tree design pattern, rather than a table one. The patient is primary and related persons are appendages. <br>\nI do not know if your suggestion of making <code>RelatedPerson</code> a shell with the content in <code>Person</code> has been debated.</p>\n<p>On identifiers, logical identifiers are recorded in <code>id</code> and business identifiers in <code>identifier</code>. See @TomPick's post above.</p>",
+        "id": 153908950,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1505777346
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span> i was only referring to the data linkages, nothing to do with consent in my notes.</p>",
+        "id": 153909198,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1505893530
+    },
+    {
+        "content": "<p>I brought to your RelatedPerson thread the topic of Consent when the narrative text of the use-case included concepts of authorization, and access of the data by the related person. I brought it up as not all relationships give authorization to access the data. So, I recognize I brought consent to your party... No negative intended, just trying to bring to light that we have that use-case in Consent. What I don't want is for RelatedPerson to start adding authorization-to-access elements.</p>",
+        "id": 153909352,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1505922453
+    }
+]

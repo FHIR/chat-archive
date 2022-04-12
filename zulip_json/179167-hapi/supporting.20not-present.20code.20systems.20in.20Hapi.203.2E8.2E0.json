@@ -1,0 +1,146 @@
+[
+    {
+        "content": "<p>We have a CodeSystem which refers to a huge external code system which is not practical to implement as a resource in Hapi. Before upgrading to 3.8.0 we could work around it by marking the codesystem as \"not-present\".<br>\nWith the new release we are facing problems as Hapi validator reports errors about invalid code sets:<br>\n\"None of the codes provided are in the value set <a href=\"http://phr.kanta.fi/ValueSet/fiphr-vs-vnrcode\" target=\"_blank\" title=\"http://phr.kanta.fi/ValueSet/fiphr-vs-vnrcode\">http://phr.kanta.fi/ValueSet/fiphr-vs-vnrcode</a> (<a href=\"http://phr.kanta.fi/ValueSet/fiphr-vs-vnrcode\" target=\"_blank\" title=\"http://phr.kanta.fi/ValueSet/fiphr-vs-vnrcode\">http://phr.kanta.fi/ValueSet/fiphr-vs-vnrcode</a>, and a code from this value set is required) (codes = urn:oid:1.2.246.537.6.55#168120)\"</p>\n<p>I had a look at the validator internals and there seems to be a possibility to support a ValueSetChecker which looks like it was meant to be used in these cases but I don't see a way to provide such an implementation so that Hapi would use it to validate my CodeableConcept.</p>\n<p>How can I provide Hapi with an implementation which makes the validator accept any code and just check the system?<br>\nThis is an example of how the codeable concept looks like as a resource. The binding strength is REQUIRED as the values must be from the code system bound to the CodeableConcept.<br>\n    \"medicationCodeableConcept\":{<br>\n                \"coding\":[{<br>\n                        \"system\": \"urn:oid:1.2.246.537.6.55\",<br>\n                        \"display\":\"Amoxicillin (substance)\",<br>\n                        \"code\": \"168120\"<br>\n                    }],<br>\n                \"text\": \"SOMAC CONTROL\"<br>\n                },</p>",
+        "id": 167842675,
+        "sender_full_name": "Matti Uusitalo",
+        "timestamp": 1560254174
+    },
+    {
+        "content": "<p>if the infrastructure doesn't know the code system at all, it will just create a hint saying it doesn't know it and can't validate it. Why not leave it like that?</p>",
+        "id": 167857773,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1560264894
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197084\">@Matti Uusitalo</span> edit: re-read your question.</p>",
+        "id": 167858102,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1560265130
+    },
+    {
+        "content": "<p>i agree it would be good to at least check if the system was specified correct. You could alter your profile and remove the VS binding and add a fixed value for the system, but i assume this is not what you want.</p>",
+        "id": 167858418,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1560265307
+    },
+    {
+        "content": "<p>We have a similar use case with CodeSystems to big to include it into hapi, eventually we will delegate this part of the validation to an external Terminology Server. <br>\nFor the meantime it would be important to at least check the system value. Just ignore everything seems not the way to go</p>",
+        "id": 167858602,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1560265412
+    },
+    {
+        "content": "<p>you can't check the system value - so it's there, wrong? how do you know it's wrong?</p>",
+        "id": 167861325,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1560267208
+    },
+    {
+        "content": "<blockquote>\n<p>if the infrastructure doesn't know the code system at all, it will just create a hint saying it doesn't know it and can't validate it. Why not leave it like that?</p>\n</blockquote>\n<p>We get error level issues from the validator. This wasn't the case with Hapi 3.6.0.</p>",
+        "id": 167916900,
+        "sender_full_name": "Matti Uusitalo",
+        "timestamp": 1560317547
+    },
+    {
+        "content": "<blockquote>\n<p>i agree it would be good to at least check if the system was specified correct. You could alter your profile and remove the VS binding and add a fixed value for the system, but i assume this is not what you want.</p>\n</blockquote>\n<p>Thanks for the suggestion, that's definitely worth checking out.</p>",
+        "id": 167917283,
+        "sender_full_name": "Matti Uusitalo",
+        "timestamp": 1560318171
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> If I use noTerminologyChecks flag this seems to work. Is that what you meant?</p>\n<p>I have to check against our whole test suite before I can be sure, but at least my initial tests are promising.</p>",
+        "id": 167919573,
+        "sender_full_name": "Matti Uusitalo",
+        "timestamp": 1560321225
+    },
+    {
+        "content": "<p>unfortunately we can't configure noTerminologyChecks to be true as it does not validate againts hl7 codesystems then</p>",
+        "id": 167924315,
+        "sender_full_name": "Matti Uusitalo",
+        "timestamp": 1560326694
+    },
+    {
+        "content": "<blockquote>\n<p>you can't check the system value - so it's there, wrong? how do you know it's wrong?</p>\n</blockquote>\n<p>i don't know if it is right, but i know if it is wrong (wrong system) . But if the profile has an required VS binding and the system doesn't match we could thrown a error. If the system is matching, but the CS is emtpy or missing it could be a warning.</p>",
+        "id": 167925100,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1560327579
+    },
+    {
+        "content": "<p>This actually used to work like that with the \"not-present\" value set to the codesystem resource (<a href=\"https://www.hl7.org/fhir/valueset-codesystem-content-mode.html\" target=\"_blank\" title=\"https://www.hl7.org/fhir/valueset-codesystem-content-mode.html\">https://www.hl7.org/fhir/valueset-codesystem-content-mode.html</a>). This is useful in cases when there are two codesystems that can be validated and then there are values from a third one that can't: <a href=\"https://simplifier.net/finnishphr/fiphr-vs-activitycode\" target=\"_blank\" title=\"https://simplifier.net/finnishphr/fiphr-vs-activitycode\">https://simplifier.net/finnishphr/fiphr-vs-activitycode</a> .</p>",
+        "id": 167925927,
+        "sender_full_name": "Eeva Turkka",
+        "timestamp": 1560328435
+    },
+    {
+        "content": "<p>I Did not mean the noTerminologyChecks Flag. By default, if you use a code system that the validator doesn’t know, it will simply note that and move in. Is that not the right outcome?</p>",
+        "id": 167951695,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1560349436
+    },
+    {
+        "content": "<blockquote>\n<p>I Did not mean the noTerminologyChecks Flag. By default, if you use a code system that the validator doesn’t know, it will simply note that and move in. Is that not the right outcome?</p>\n</blockquote>\n<p>That would be good. Unfortunately it is not what happens. Here's the reason, so far as I understand:<br>\nHere's the loop which checks if the code is ok<br>\n<a href=\"https://github.com/jamesagnew/hapi-fhir/blob/master/hapi-fhir-structures-dstu3/src/main/java/org/hl7/fhir/dstu3/hapi/ctx/HapiWorkerContext.java#L246\" target=\"_blank\" title=\"https://github.com/jamesagnew/hapi-fhir/blob/master/hapi-fhir-structures-dstu3/src/main/java/org/hl7/fhir/dstu3/hapi/ctx/HapiWorkerContext.java#L246\">https://github.com/jamesagnew/hapi-fhir/blob/master/hapi-fhir-structures-dstu3/src/main/java/org/hl7/fhir/dstu3/hapi/ctx/HapiWorkerContext.java#L246</a></p>\n<p>Here's the part where the information aobut not present code system is returned<br>\n<a href=\"https://github.com/jamesagnew/hapi-fhir/blob/master/hapi-fhir-structures-dstu3/src/main/java/org/hl7/fhir/dstu3/hapi/ctx/HapiWorkerContext.java#L298\" target=\"_blank\" title=\"https://github.com/jamesagnew/hapi-fhir/blob/master/hapi-fhir-structures-dstu3/src/main/java/org/hl7/fhir/dstu3/hapi/ctx/HapiWorkerContext.java#L298\">https://github.com/jamesagnew/hapi-fhir/blob/master/hapi-fhir-structures-dstu3/src/main/java/org/hl7/fhir/dstu3/hapi/ctx/HapiWorkerContext.java#L298</a></p>\n<p>Unfortunately a ValidationResult without a ConceptDefinitionComponent returns false from isOk(). The upper loop then ends up returning a validation error.</p>",
+        "id": 168015853,
+        "sender_full_name": "Matti Uusitalo",
+        "timestamp": 1560403957
+    },
+    {
+        "content": "<p>oh. you are using a very very old version of the validator. You should be using the latest R5 validator</p>",
+        "id": 168037634,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1560427022
+    },
+    {
+        "content": "<p>in hapi-core</p>",
+        "id": 168037651,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1560427040
+    },
+    {
+        "content": "<p>HAPI FHIR 3.8.0 uses the latest R4 validator (not the R5 one, we're going to make that switch during the current development cycle) but it's not hugely out of date either.</p>\n<p>\"Not present\" doesn't mean \"can't validate\" to HAPI though. If you load LOINC/SCT/etc into the JPA server for example, you get a not-present CodeSystem because the content is loaded into non-FHIR tables in the JPA server.</p>\n<p>You should probably be defining an IValidationSupport implementation that always accepts codes in your code system if you want them to be ignored.</p>",
+        "id": 168059957,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1560442484
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> Does having the R4 validator in HAPI 3.8 mean that when validating STU3 resources, one has to first transform the STU3 StructureDefs into R4 format? (this was my, possibly faulty, understanding of an earlier thread that I unfortunately cannot find now). If so, are there available examples for that?</p>",
+        "id": 168112105,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1560495965
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span> this is done by hapi automatically for you.</p>",
+        "id": 168112472,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1560496434
+    },
+    {
+        "content": "<p>Thanks, <span class=\"user-mention\" data-user-id=\"191451\">@Patrick Werner</span> !</p>",
+        "id": 168113039,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1560497030
+    },
+    {
+        "content": "<blockquote>\n<p>HAPI FHIR 3.8.0 uses the latest R4 validator (not the R5 one, we're going to make that switch during the current development cycle) but it's not hugely out of date either.</p>\n<p>\"Not present\" doesn't mean \"can't validate\" to HAPI though. If you load LOINC/SCT/etc into the JPA server for example, you get a not-present CodeSystem because the content is loaded into non-FHIR tables in the JPA server.</p>\n<p>You should probably be defining an IValidationSupport implementation that always accepts codes in your code system if you want them to be ignored.</p>\n</blockquote>\n<p>I don't fully understand how IValidationSupport can affect it, as HapiWorkerContext doesn't delegate checking codes to IValidationSupport. As far as I can tell it is the same in the R4 version. This is our current workaround to the problem in R3 HapiWorkerContext:</p>\n<p><a href=\"https://github.com/jamesagnew/hapi-fhir/commit/1e53855efce5c06237dc4f42d82e0f44088e99ed#diff-54dbe8151297e1b5b53601cfa22f7601R303\" target=\"_blank\" title=\"https://github.com/jamesagnew/hapi-fhir/commit/1e53855efce5c06237dc4f42d82e0f44088e99ed#diff-54dbe8151297e1b5b53601cfa22f7601R303\">https://github.com/jamesagnew/hapi-fhir/commit/1e53855efce5c06237dc4f42d82e0f44088e99ed#diff-54dbe8151297e1b5b53601cfa22f7601R303</a></p>",
+        "id": 168124495,
+        "sender_full_name": "Matti Uusitalo",
+        "timestamp": 1560508776
+    },
+    {
+        "content": "<p>I studied it further. We tried to implement a IValidationSupport which returns ok on the validate method. This does not help as Hapi actually validates the code in two places. I debugged the system and took two stacktraces where validateCode is called. Have  a look at this diff from the stacktraces:</p>\n<p>&lt; HapiWorkerContext.validateCode(String, String, String, ValueSet) line: 297<br>\n&lt; FhirInstanceValidator$WorkerContextWrapper.validateCode(String, ValueSet) line: 780<br>\n&lt; InstanceValidator.checkPrimitiveBinding(List&lt;ValidationMessage&gt;, String, String, ElementDefinition, Element, StructureDefinition) line: 1681<br>\n&lt; InstanceValidator.checkPrimitive(Object, List&lt;ValidationMessage&gt;, String, String, ElementDefinition, Element, StructureDefinition) line: 1599<br>\n&lt; InstanceValidator.validateElement(ValidatorHostContext, List&lt;ValidationMessage&gt;, StructureDefinition, ElementDefinition, StructureDefinition, ElementDefinition, Element, Element, String, NodeStack, boolean) line: 3751</p>\n<hr>\n<blockquote>\n<p>PhrValidationSupport.validateCode(FhirContext, String, String, String) line: 179<br>\nValidationSupportChain.validateCode(FhirContext, String, String, String) line: 158<br>\nHapiWorkerContext.validateCode(String, String, String) line: 267<br>\nFhirInstanceValidator$WorkerContextWrapper.validateCode(String, String, String) line: 748<br>\nInstanceValidator.checkCode(List&lt;ValidationMessage&gt;, Element, String, String, String, String) line: 810<br>\nInstanceValidator.checkCoding(List&lt;ValidationMessage&gt;, String, Element, StructureDefinition, ElementDefinition, boolean) line: 1051<br>\nInstanceValidator.validateElement(ValidatorHostContext, List&lt;ValidationMessage&gt;, StructureDefinition, ElementDefinition, StructureDefinition, ElementDefinition, Element, Element, String, NodeStack, boolean) line: 3758<br>\nInstanceValidator.validateElement(ValidatorHostContext, List&lt;ValidationMessage&gt;, StructureDefinition, ElementDefinition, StructureDefinition, ElementDefinition, Element, Element, String, NodeStack, boolean) line: 3843</p>\n</blockquote>\n<p>The first validation is done before our code gets called. Even thoug our IValidationSupport returns a 'ok' result it doesn't matter as the earlier validation rejects the code as non ok.</p>",
+        "id": 168573624,
+        "sender_full_name": "Matti Uusitalo",
+        "timestamp": 1561016752
+    },
+    {
+        "content": "<p>are you able to create a test case for this?</p>",
+        "id": 168573694,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1561016806
+    },
+    {
+        "content": "<blockquote>\n<p>are you able to create a test case for this?</p>\n</blockquote>\n<p>Certainly<br>\n<a href=\"https://github.com/mattiuus/hapi-fhir/commit/456a849447f865dd5e72fc5977835df6ff63e63e\" target=\"_blank\" title=\"https://github.com/mattiuus/hapi-fhir/commit/456a849447f865dd5e72fc5977835df6ff63e63e\">https://github.com/mattiuus/hapi-fhir/commit/456a849447f865dd5e72fc5977835df6ff63e63e</a></p>\n<p>I added tests where the other one simulates our old IValidationSupport implementation and the other one the current.</p>",
+        "id": 168585140,
+        "sender_full_name": "Matti Uusitalo",
+        "timestamp": 1561027938
+    }
+]

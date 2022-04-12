@@ -1,0 +1,391 @@
+---
+layout: page
+title: "FHIR Chat  · Host Validator in HAPI · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html">Host Validator in HAPI</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="185875545"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/185875545" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#185875545">(Jan 17 2020 at 00:05)</a>:</h4>
+<p>The new Validator I'm just releasing raises a couple of issues for those people hosting it in HAPI</p>
+
+
+
+<a name="185875752"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/185875752" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#185875752">(Jan 17 2020 at 00:08)</a>:</h4>
+<p>firstly, the validator will now consistently hunt down and validate resources that are referred to. if you implement IValidatorResourceFetcher, be aware that this will just keep hunting references and crawl through your resource web much more consistently than before, until you return false for resolveURL, or until it runs out of references to follow. </p>
+<p>I'm considering putting some depth limit on the engine as a configurable setting, but I don't know if I need to. Is this going to be a problem for anyone (note that the issue isn't new, but due to a number of bugs, the validator was inconsistent in following the references, so it may not have been as much of a problem)</p>
+
+
+
+<a name="185875811"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/185875811" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#185875811">(Jan 17 2020 at 00:09)</a>:</h4>
+<p>secondly, the validator now caches the results returned from IValidatorResourceFetcher. Quite aggressively. If this turns into a resource hog, we can look at whether it should be quite so aggresive - but there's several obscure but real bugs that can occur if the responses to IValidatorResourceFetcher aren't consistent</p>
+
+
+
+<a name="185875894"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/185875894" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#185875894">(Jan 17 2020 at 00:10)</a>:</h4>
+<p>there's also a new api IValidationProfileUsageTracker that allows you to track the usage of structure definitions down inside the validator if you want to do stuff like that</p>
+
+
+
+<a name="185899037"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/185899037" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#185899037">(Jan 17 2020 at 09:16)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> <br>
+Question 1) Is type check of References using targetProfile's base type still not included? (if not, I will raise a PR that does it)<br>
+Question 2) Could depth be an argument to <code>Element fetch(Object appContext, String url)</code> or where do you intend to put it<br>
+Question 3 - this is more of a consideration) I my setup we rely on validation split into to phases. First phase is to run the validator using regular handles in HAPI in an interceptor (this is where I want type checking). Only if this step passes, we go on to resolve all external references. I imagine this split has a small performance penalty, but the design is simple and easy to understand. I do hope you provide some feature toggles that allow us to continue the way we do it now, before we should consider to merge the two validation phases into one, using only the new Validator and our custom implementation of IValidatorResourceFetcher.</p>
+
+
+
+<a name="185904035"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/185904035" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#185904035">(Jan 17 2020 at 10:37)</a>:</h4>
+<p>1) - I'm not sure - be specific. What gets checked depends on what you return in validationPolicy (nothing, type, exist, everything)</p>
+<p>2). maybe. I'll about how I'd track that</p>
+<p>3) I'm not sure how you have that set up, but I'm not changing the API around this, so it shouldn't stop you from doing that. I'm just alerting people that the behaviour is going to change across the API</p>
+
+
+
+<a name="186012412"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186012412" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186012412">(Jan 18 2020 at 21:24)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> - Please have a look at <a href="https://github.com/jvitrifork/fhirReferenceCheck" target="_blank" title="https://github.com/jvitrifork/fhirReferenceCheck">https://github.com/jvitrifork/fhirReferenceCheck</a>. It illustrates both problems and solutions ;)</p>
+
+
+
+<a name="186012622"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186012622" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186012622">(Jan 18 2020 at 21:31)</a>:</h4>
+<p>I don't see why removing checking the type is a good way forward. Please explain your logic</p>
+
+
+
+<a name="186012672"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186012672" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186012672">(Jan 18 2020 at 21:32)</a>:</h4>
+<p>and if you have tests to submit, why not submit them to fhir-test-cases?</p>
+
+
+
+<a name="186012807"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186012807" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186012807">(Jan 18 2020 at 21:37)</a>:</h4>
+<p>if you debug it, you'll see that the type of the reference is always null</p>
+
+
+
+<a name="186012868"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186012868" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186012868">(Jan 18 2020 at 21:39)</a>:</h4>
+<p>you're referring to the test on 1923?</p>
+
+
+
+<a name="186012871"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186012871" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186012871">(Jan 18 2020 at 21:39)</a>:</h4>
+<p>yep</p>
+
+
+
+<a name="186012915"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186012915" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186012915">(Jan 18 2020 at 21:40)</a>:</h4>
+<p>so because you're not setting reference.type, you don't think anyone else should?</p>
+
+
+
+<a name="186012977"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186012977" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186012977">(Jan 18 2020 at 21:42)</a>:</h4>
+<p>I interact with the validator indirectly - through the use of the HAPI classes. If type should be set, I would expect it to happen through those classes then</p>
+
+
+
+<a name="186012991"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186012991" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186012991">(Jan 18 2020 at 21:43)</a>:</h4>
+<p>Could you tell me how  to set the type through the use of the HAPI classes then?</p>
+
+
+
+<a name="186012998"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186012998" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186012998">(Jan 18 2020 at 21:43)</a>:</h4>
+<p>only using the handles provided in the unit test</p>
+
+
+
+<a name="186013046"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186013046" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186013046">(Jan 18 2020 at 21:44)</a>:</h4>
+<blockquote>
+<p>so because you're not setting reference.type, you don't think anyone else should?</p>
+</blockquote>
+<p>If im not mistaken - my use represents an ordinary use of the validator using HAPI, so its actually not just me - I suspect this is way all HAPI users use it</p>
+
+
+
+<a name="186013122"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186013122" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186013122">(Jan 18 2020 at 21:47)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> but of course I could be wrong. Please correct me in any false assumptions here</p>
+
+
+
+<a name="186013141"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186013141" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186013141">(Jan 18 2020 at 21:48)</a>:</h4>
+<p>reference.type is <a href="http://hl7.org/fhir/references-definitions.html#Reference.type" target="_blank" title="http://hl7.org/fhir/references-definitions.html#Reference.type">http://hl7.org/fhir/references-definitions.html#Reference.type</a> - so you would set that by your normal use of the HAPI model classes, or in json or xml etc. I'm not sure what you're saying here</p>
+
+
+
+<a name="186013479"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186013479" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186013479">(Jan 18 2020 at 21:58)</a>:</h4>
+<p>I can't see how I can set the type using <a href="https://hapifhir.io/hapi-fhir/apidocs/hapi-fhir-structures-dstu3/org/hl7/fhir/dstu3/model/Reference.html" target="_blank" title="https://hapifhir.io/hapi-fhir/apidocs/hapi-fhir-structures-dstu3/org/hl7/fhir/dstu3/model/Reference.html">https://hapifhir.io/hapi-fhir/apidocs/hapi-fhir-structures-dstu3/org/hl7/fhir/dstu3/model/Reference.html</a></p>
+
+
+
+<a name="186013481"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186013481" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186013481">(Jan 18 2020 at 21:58)</a>:</h4>
+<p>it was only introduced in R4</p>
+
+
+
+<a name="186013490"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186013490" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186013490">(Jan 18 2020 at 21:59)</a>:</h4>
+<p>so my tests are running on dstu3</p>
+
+
+
+<a name="186013493"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186013493" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186013493">(Jan 18 2020 at 21:59)</a>:</h4>
+<p>so?</p>
+
+
+
+<a name="186013553"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186013553" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186013553">(Jan 18 2020 at 22:00)</a>:</h4>
+<p>so don't run the type check the same way in dstu3 as in R4 or newer</p>
+
+
+
+<a name="186013564"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186013564" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186013564">(Jan 18 2020 at 22:01)</a>:</h4>
+<p>so in DSTU3, type will always be null, so it will never run.</p>
+
+
+
+<a name="186013888"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186013888" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186013888">(Jan 18 2020 at 22:11)</a>:</h4>
+<p>the lines 1923 to 1942 were removed because I could see they were never used ... that part makes sense now</p>
+
+
+
+<a name="186013958"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186013958" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186013958">(Jan 18 2020 at 22:12)</a>:</h4>
+<p>now, for test case validateReferenceAggregationMode_ContainedOrReferenced_withReferenced:</p>
+
+
+
+<a name="186013980"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186013980" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186013980">(Jan 18 2020 at 22:14)</a>:</h4>
+<p>Element <code>we</code> gets assigned the value of null</p>
+
+
+
+<a name="186014020"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186014020" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186014020">(Jan 18 2020 at 22:14)</a>:</h4>
+<p>line 1892</p>
+
+
+
+<a name="186014044"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186014044" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186014044">(Jan 18 2020 at 22:15)</a>:</h4>
+<p>ok?</p>
+
+
+
+<a name="186014045"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186014045" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186014045">(Jan 18 2020 at 22:15)</a>:</h4>
+<p>so the entire block from 1945 by default ends up not being run</p>
+
+
+
+<a name="186014090"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186014090" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186014090">(Jan 18 2020 at 22:16)</a>:</h4>
+<p>that block actually does the validation part as wanted</p>
+
+
+
+<a name="186014094"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186014094" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186014094">(Jan 18 2020 at 22:16)</a>:</h4>
+<p>(I have little idea about what <code>we</code>is)</p>
+
+
+
+<a name="186014111"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186014111" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186014111">(Jan 18 2020 at 22:17)</a>:</h4>
+<p>the same null check (which is redundant on <code>we</code>) comes again in 1964</p>
+
+
+
+<a name="186014212"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186014212" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186014212">(Jan 18 2020 at 22:20)</a>:</h4>
+<p>The policy (<code>pol</code>) seems to be controllable by the <code>fetcher</code>- I just haven't found a nice way to assign the fetcher using the briding code from HAPI</p>
+
+
+
+<a name="186014226"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186014226" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186014226">(Jan 18 2020 at 22:21)</a>:</h4>
+<p>so since <code>we</code> is null and I cannot control the policy (by using the fetcher) I need to disable line 1944</p>
+
+
+
+<a name="186014231"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186014231" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186014231">(Jan 18 2020 at 22:21)</a>:</h4>
+<p>same goes for 1964</p>
+
+
+
+<a name="186014374"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186014374" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186014374">(Jan 18 2020 at 22:27)</a>:</h4>
+<p>and if <code>we</code>is null, then I hit the case from line 2019 and to 2035 - ending in getting an error that says "Bundled or contained reference not found within the bundle/resource "</p>
+
+
+
+<a name="186014380"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186014380" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186014380">(Jan 18 2020 at 22:27)</a>:</h4>
+<p>which makes little sense to me</p>
+
+
+
+<a name="186014488"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186014488" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186014488">(Jan 18 2020 at 22:30)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> so ... am I on to something?</p>
+
+
+
+<a name="186014551"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186014551" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186014551">(Jan 18 2020 at 22:33)</a>:</h4>
+<p>(<a href="https://github.com/FHIR/fhir-test-cases" target="_blank" title="https://github.com/FHIR/fhir-test-cases">https://github.com/FHIR/fhir-test-cases</a> explicitly mentions "no java code here")  - I would have a harder time presenting this finding not using unit tests code and class shadowing</p>
+
+
+
+<a name="186015661"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186015661" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186015661">(Jan 18 2020 at 23:07)</a>:</h4>
+<p>I’m on the road so I’ll look later but you have to be able to set the fetcher - it’s critical. So that’s a HAPI issue</p>
+
+
+
+<a name="186015709"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186015709" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186015709">(Jan 18 2020 at 23:08)</a>:</h4>
+<p>As for tests... sounds like you have a problem with how the validator is hosted in HAPI, not with the actual validation itself.  I won’t make fixes the validator unless the problem is related to the actual spec, with test cases</p>
+
+
+
+<a name="186015715"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186015715" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186015715">(Jan 18 2020 at 23:08)</a>:</h4>
+<p>There are test cases around the hosting in HAPI...</p>
+
+
+
+<a name="186015786"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186015786" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186015786">(Jan 18 2020 at 23:10)</a>:</h4>
+<p>the <code>we</code>being null and the block removed in 2019-2035 is not related to HAPI -</p>
+
+
+
+<a name="186015795"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186015795" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186015795">(Jan 18 2020 at 23:10)</a>:</h4>
+<p>the double null check on <code>we</code>is not related to HAPI</p>
+
+
+
+<a name="186015932"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186015932" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186015932">(Jan 18 2020 at 23:15)</a>:</h4>
+<p>and if the fetcher is actually accessible and letting me set the policy, then I'm eager to know what is going to happen here: <span aria-label="slight smile" class="emoji emoji-1f642" role="img" title="slight smile">:slight_smile:</span></p>
+<div class="codehilite"><pre><span></span>if (pol == ReferenceValidationPolicy.CHECK_VALID) {
+      // todo....
+    }
+</pre></div>
+
+
+
+<a name="186026877"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186026877" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186026877">(Jan 19 2020 at 05:44)</a>:</h4>
+<p>so am I</p>
+
+
+
+<a name="186026879"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186026879" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186026879">(Jan 19 2020 at 05:44)</a>:</h4>
+<p>I'm not sure what your point is on the other things</p>
+
+
+
+<a name="186028013"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186028013" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186028013">(Jan 19 2020 at 06:26)</a>:</h4>
+<blockquote>
+<p>I won’t make fixes the validator unless the problem is related to the actual spec, with test cases</p>
+</blockquote>
+<p>those other points AFAIK are related to pure code, not spec</p>
+
+
+
+<a name="186029548"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186029548" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186029548">(Jan 19 2020 at 07:20)</a>:</h4>
+<p>I'm still not sure what your issue is other than not having access to fetch</p>
+
+
+
+<a name="186036334"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186036334" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186036334">(Jan 19 2020 at 11:13)</a>:</h4>
+<p>we != Null is checked twice</p>
+
+
+
+<a name="186051283"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186051283" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186051283">(Jan 19 2020 at 19:04)</a>:</h4>
+<p>this is a logic problem?</p>
+
+
+
+<a name="186052476"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186052476" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186052476">(Jan 19 2020 at 19:42)</a>:</h4>
+<p>no</p>
+
+
+
+<a name="186052489"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186052489" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186052489">(Jan 19 2020 at 19:43)</a>:</h4>
+<p>I believe you are correct in your observation regarding the access to assigning the fetcher</p>
+
+
+
+<a name="186286878"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186286878" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186286878">(Jan 22 2020 at 13:40)</a>:</h4>
+<p>Now I know at least one of the reasons why you ended up adding type to Reference ;) awesome</p>
+
+
+
+<a name="186287331"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186287331" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186287331">(Jan 22 2020 at 13:46)</a>:</h4>
+<p>(I was just about to make a distinct FHIRpath expression selecting on type on reference in STU3 - which is sort of not possible )</p>
+
+
+
+<a name="186287431"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186287431" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186287431">(Jan 22 2020 at 13:47)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> will you be talking to James about access to the fetcher through the current bridging classes or will it be up one self?</p>
+
+
+
+<a name="186319984"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186319984" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186319984">(Jan 22 2020 at 19:13)</a>:</h4>
+<p>You, I think</p>
+
+
+
+<a name="186963645"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Host%20Validator%20in%20HAPI/near/186963645" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Host.20Validator.20in.20HAPI.html#186963645">(Jan 30 2020 at 08:32)</a>:</h4>
+<p>for future reference and so others can follow: <a href="https://github.com/jamesagnew/hapi-fhir/pull/1691" target="_blank" title="https://github.com/jamesagnew/hapi-fhir/pull/1691">https://github.com/jamesagnew/hapi-fhir/pull/1691</a></p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,152 @@
+[
+    {
+        "content": "<p>I currently try to model a OperationDefinition for CQL like the existing $graphql one (<a href=\"https://www.hl7.org/fhir/graphql.html\" target=\"_blank\" title=\"https://www.hl7.org/fhir/graphql.html\">https://www.hl7.org/fhir/graphql.html</a>).</p>\n<p>The operation should allow arbitrary CQL queries either system wide <code>[base]/$cql</code> or at instance level of a single Patient <code>[base]/Patient/[id]/$cql</code>. The system wide queries would require to use the Unspecified context, while the Patient instance level queries would use the Patient context.</p>\n<p>I struggle a bit with the output parameter(s). I could use Binary like $graphql is doing. But then CQL is lacking specification how to represent results (or I miss this). On the other hand, I don't see how I can use Bundle like in searches, because CQL can return non-resources as results and it returns more like a dictionary of ExpressionDef names to results rather than a single list of results.</p>\n<p>So how could a generic $cql operation look like?</p>",
+        "id": 168325315,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1560788826
+    },
+    {
+        "content": "<p>This would be a very cool capability to have, but as you've pointed out, not without its own challenges.  For one, as you noted, CQL doesn't define a \"result format\" of any kind, although I think one could make some assumptions to arrive at a reasonable JSON format:</p>\n<ul>\n<li>top-level keys are expression names</li>\n<li>lists are arrays, tuples are objects</li>\n<li>datetime / date / time use CQL-defined toString representation</li>\n<li>interval, code, concept are objects w/ keys matching terms used in spec to define their components</li>\n</ul>\n<p>One open question would be if the responses contain FHIR resource instances, should the JSON format be valid FHIR JSON?  I think so, but that means it is <em>not</em> a strict tuple representation of the FHIR modelinfo used by CQL (which represents primitives as complex types).</p>",
+        "id": 168335005,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1560796227
+    },
+    {
+        "content": "<p>The other challenge is, of course, what FHIR resource type to actually use to return this data.  I think maybe the most flexible approach is to simply represent the JSON-formatted result object as a FHIR <code>Attachment</code> w/ <code>application/json</code> mimetype.  If you don't want to return an <code>Attachment</code> directly, but prefer an actual <code>Resource</code>, then <code>DocumentReference</code> might fit the bill.</p>",
+        "id": 168335204,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1560796378
+    },
+    {
+        "content": "<p>just use Binary and say it's application/json and where it contains actual resources, make this clear in the format of the json</p>",
+        "id": 168335352,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1560796478
+    },
+    {
+        "content": "<p>.. so like graphql</p>",
+        "id": 168335370,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1560796490
+    },
+    {
+        "content": "<p>I was also thinking <code>Parameters</code> might be an interesting choice.  It would allow each expression result to be its own parameter with a name -- and you could use <code>value[x]</code>or <code>resource</code> to hold the value (depending on the value type), and falling back to <code>valueAttachment</code>for non-typed tuples.</p>",
+        "id": 168335655,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1560796696
+    },
+    {
+        "content": "<p>Or you could just do what Grahame said, which sounds much easier. ;-)</p>",
+        "id": 168335673,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1560796712
+    },
+    {
+        "content": "<p>We have a $cql operation implemented in the <a href=\"https://github.com/DBCG/cqf-ruler/blob/connectathon-21-enableannotations/src/main/java/org/opencds/cqf/providers/CqlExecutionProvider.java#L208\" target=\"_blank\" title=\"https://github.com/DBCG/cqf-ruler/blob/connectathon-21-enableannotations/src/main/java/org/opencds/cqf/providers/CqlExecutionProvider.java#L208\">CQF Ruler</a>, we took a sort of hybrid approach that returns the results as a Parameters resource, but with the value of each result as a JSON string.</p>",
+        "id": 168340538,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1560800081
+    },
+    {
+        "content": "<p>Thanks for all your answers. I thought a bit more about our use case for which we like to use CQL. I found <a href=\"https://www.hl7.org/fhir/clinicalreasoning-quality-reporting.html\" target=\"_blank\" title=\"https://www.hl7.org/fhir/clinicalreasoning-quality-reporting.html\">Quality Reporting</a> and it seems to fit your use case very well. </p>\n<p>What are we trying to do?</p>\n<p>We like to count the number of Patients which qualify for a particular research project a researcher has in mind. So it's like finding Patients for a study. In the first iteration, we only need the counts and not the list of Patients. Both counts and the actual list seems to be possible with Quality Reporting.</p>\n<p>With Quality Reporting, there is already the <a href=\"https://www.hl7.org/fhir/measure.html\" target=\"_blank\" title=\"https://www.hl7.org/fhir/measure.html\">Measure</a> resource, the <a href=\"https://www.hl7.org/fhir/operation-measure-evaluate-measure.html\" target=\"_blank\" title=\"https://www.hl7.org/fhir/operation-measure-evaluate-measure.html\">$evaluate-measure</a> operation and the <a href=\"https://www.hl7.org/fhir/measurereport.html\" target=\"_blank\" title=\"https://www.hl7.org/fhir/measurereport.html\">MeasureReport</a>.</p>\n<p>In my opinion using such a domain specific way of doing things should be more suitable than providing a generic CQL operation. Especially because for a generic CQL operation, the response format is not specified.</p>",
+        "id": 168415317,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1560873709
+    },
+    {
+        "content": "<p>One additional consideration: Our Measures will be created ad-hoc by researchers and the results (MeasureReport) should be available in minutes. So I would create one Measure resource per ad-hoc query. It is also common that a Measure will be evaluated only once. You can see a first prototype of the search interface here: <a href=\"https://search.germanbiobanknode.de\" target=\"_blank\" title=\"https://search.germanbiobanknode.de\">https://search.germanbiobanknode.de</a></p>",
+        "id": 168421417,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1560877947
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"197470\">@Alexander Kiel</span> , yes, a <code>cohort</code> measure is a good fit for this. I just tried the prototype, that looks great!</p>",
+        "id": 168438839,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1560880588
+    },
+    {
+        "content": "<p>GTRI chiming in. We're consdering MeasureReport as well as a possible workflow for using CQL with FHIR. It's matches to the workflow we want, which is \"run this measure and tell me it's output\".</p>\n<p>This is all too confusing though when you consider we have the FHIR data provider library, where FHIR just acts as the retrieval source. <a href=\"https://github.com/DBCG/cql_engine/tree/master/cql-engine-fhir\" target=\"_blank\" title=\"https://github.com/DBCG/cql_engine/tree/master/cql-engine-fhir\">https://github.com/DBCG/cql_engine/tree/master/cql-engine-fhir</a></p>\n<p>It doesn't make a ton of sense to use a FHIR REST call to call a FHIR independent process and return FHIR-adjacent outputs.  At that point, why even use FHIR? We should consider making a different domain if that's the case, or we should ensure that we're using FHIR as a data provider when using CQL in this manner.</p>",
+        "id": 168539461,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1560973493
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194612\">@Michael Riley</span> We currently work on a FHIR Server with integrated CQL engine. It'll support the $evaluate-measure operation for simple use-cases soon. <a href=\"https://github.com/life-research/blaze\" target=\"_blank\" title=\"https://github.com/life-research/blaze\">https://github.com/life-research/blaze</a> Please tell me if it's an option to use our server and what do you need exactly from Measure.</p>",
+        "id": 168602784,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1561042466
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194612\">@Michael Riley</span> and <span class=\"user-mention\" data-user-id=\"197470\">@Alexander Kiel</span> , we've added a <a href=\"https://github.com/cqframework/clinical_quality_language/wiki/Community-Projects\" target=\"_blank\" title=\"https://github.com/cqframework/clinical_quality_language/wiki/Community-Projects\">Community Projects</a> page to the translator wiki. If you're willing, please feel free to add your project there, or let me know and I'm happy to add it.</p>",
+        "id": 168626740,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1561058977
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> Thanks for pointing me at that page. I added Blaze. Please feel free to move it into another category.</p>",
+        "id": 168666035,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1561107628
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197470\">@Alexander Kiel</span> Re: using measure, $evaluate-measure, and MeasureReport, we've been a little stuck as the CQL results don't really fit up with what a MeasureReport is giving back.</p>\n<p>Right now, we're just using the library resource to hold CQL as an attachment hosted on a seperate service. So we can code the existence of the CQL into our system as a measure referencing that library.</p>\n<p>I've been thinking about doing a little bit of CQL result-key hacking: MeasureReport primarily reports back populations, and stratum. I could match up result key names like \"Stratum.at-risk.score\" or \"Population.numerator.count\" to the various featuers in the MeasureReport.</p>\n<p>Also, it would be helpful if (during a patient context run) all resources retreived during the CQL run were attached as a bundle in the MeasureReport in the \"evaluatedResources\" field. It might be too much to ask for a population context, that bundle might have 1000s of resources and you'd have to hold them in the server somewhere for reference.</p>\n<p>At the very least, having the library exist within the fhir server means that we can maintain the CQL with fhir, even if we don't evaluate  against it.</p>",
+        "id": 168861331,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1561391352
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194612\">@Michael Riley</span>  Do you currently  use a server which supports $evaluate-measure? If yes, which one?</p>",
+        "id": 168861898,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1561391795
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197470\">@Alexander Kiel</span> no sorry, this is all just design we're doing right now.</p>\n<p>The server we use is our GT-FHIR implementation you can find here. Uses core java JPA persistence and we use a postgresql OMOP db backend. <a href=\"https://github.com/gt-health/GT-FHIR\" target=\"_blank\" title=\"https://github.com/gt-health/GT-FHIR\">https://github.com/gt-health/GT-FHIR</a></p>",
+        "id": 168862021,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1561391884
+    },
+    {
+        "content": "<p>What di you mean with?</p>\n<blockquote>\n<p>[...] the CQL results don't really fit up with what a MeasureReport is giving back.</p>\n</blockquote>",
+        "id": 168862391,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1561392212
+    },
+    {
+        "content": "<p>When you run $evaluate-measure, the FHIR spec say that you must respond back with an out parameter of MeasureReport <a href=\"https://www.hl7.org/fhir/stu3/measurereport.html\" target=\"_blank\" title=\"https://www.hl7.org/fhir/stu3/measurereport.html\">https://www.hl7.org/fhir/stu3/measurereport.html</a> This measure report has a lot of limitations. It's expecting a list of populations, and a list of stratum as being the major data elements a measure is creating. A fine assumption for measures, but CQL can just create results from anything, and they don't all have to be population based.</p>",
+        "id": 168885311,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1561410518
+    },
+    {
+        "content": "<blockquote>\n<p>Also, it would be helpful if (during a patient context run) all resources retreived during the CQL run were attached as a bundle in the MeasureReport in the \"evaluatedResources\" field. It might be too much to ask for a population context, that bundle might have 1000s of resources and you'd have to hold them in the server somewhere for reference.</p>\n</blockquote>\n<p>This is the intent of the evaluatedResources element, it should be a reference to a Bundle containing any resources that were used in evaluating the CQL, but only for subject-level reports. The CQF Ruler implementation does this now by keeping a hashtable in the engine of resources that come back from the data access layer and surfacing that to the measure evaluation, which builds the bundle out of it.</p>",
+        "id": 168905533,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1561436483
+    },
+    {
+        "content": "<blockquote>\n<p>This measure report has a lot of limitations. It's expecting a list of populations, and a list of stratum as being the major data elements a measure is creating. A fine assumption for measures, but CQL can just create results from anything, and they don't all have to be population based.</p>\n</blockquote>\n<p>That is right, $evaluate-measure isn't a generic CQL evaluation operation. But also, Measure is already opinionated what to query. So MeasureReport is a perfect fit for that you can ask with Measure. In this thread, I started thinking about a generic $cql operation (like $graphql). Do you have use case for this?</p>",
+        "id": 168913153,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1561444355
+    },
+    {
+        "content": "<p>hello,<br>\nI have gone through the AHRQ project(<a href=\"https://cds.ahrq.gov/authoring/build\" target=\"_blank\" title=\"https://cds.ahrq.gov/authoring/build\">https://cds.ahrq.gov/authoring/build</a>) . I got some doubt , can we generate cql file for MeasureReport by using this tool or this tool has only generated cql for cds-hooks i.e. for PlanDefinition ??If yes then can we have any open-source tools that can generates measure-report related cql file.<br>\nThank you in Advance.</p>",
+        "id": 170721486,
+        "sender_full_name": "Surya",
+        "timestamp": 1562937975
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"197470\">@Alexander Kiel</span>  ,<br>\ni want to test cqf-ruler-0.1.13-SNAPSHOT.jar with hapi-fhir-3.8 , to test $evaluate-measure<br>\nbut it's not working with example given by hspc in there documentation<br>\nanybody know about where i will get example related to $evaluate-measure, $apply, cds-hooks etc...<br>\nThank you in advance.</p>",
+        "id": 178942460,
+        "sender_full_name": "Saoji Adhe",
+        "timestamp": 1571916642
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"196449\">@Saoji Adhe</span> Please see my other post.</p>",
+        "id": 178955027,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1571925990
+    }
+]

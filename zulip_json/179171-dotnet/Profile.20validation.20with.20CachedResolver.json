@@ -1,0 +1,50 @@
+[
+    {
+        "content": "<p>Hello<br>\nI’m using the code below to validate resources. It works. <br>\nThe IG is in a zip-file that is added to the solution. The R4 specification.zip is added to the solution via the Hl7.Fhir.Specification.R4 NuGet package.<br>\nBoth zip files are extracted by the MultiResolver/CachedResolver to a temp folder in this location: C:\\Users\\&lt;username&gt;\\AppData\\Local\\Temp\\FhirArtifactCache-2.0.3-Hl7.Fhir.R4.Specification</p>\n<p>However, sometimes the temp folders above are emptied. I’m not sure how or why since it happens irregularly. It might happen after having switched between branches, but not always. When folders are empty the profile validation fails with the error “Unable to resolve reference to profile”. Workaround is to remove folders or populating them manually. </p>\n<p>Any tips on how to fix this are appreciated.</p>\n<div class=\"codehilite\"><pre><span></span><code>        // Get the Full IG from zip file\n        string currentDir = System.IO.Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, &quot;..\\\\..\\\\..\\\\&quot;));\n        string fulligzip = Path.Combine(currentDir, &quot;ProfilesForTest\\\\ITB\\\\manual_full-ig.zip&quot;);\n\n        // Create a resolver for both Full IG and specification.zip\n        var specificationsource = ZipSource.CreateValidationSource();\n        var zipsource = new ZipSource(fulligzip);\n\n        MultiResolver = new CachedResolver(new MultiResolver(specificationsource, zipsource));\n\n        // Create provider from resolver\n        Provider = new StructureDefinitionSummaryProvider(MultiResolver);\n\n        // Create validator with settings and resolver\n        var settings = ValidationSettings.CreateDefault();\n        settings.ResourceResolver = MultiResolver;\n        Validator = new Validator(settings);\n\n    }\n\n    public string JsonProfileCheck(string json, string profileUrl)\n    {\n\n        // Validate the resouce\n        var mySourceNode = FhirJsonNode.Parse(json);\n        var myTypedElement = mySourceNode.ToTypedElement(Provider);\n        Hl7.Fhir.Model.OperationOutcome outcome = Validator.Validate(myTypedElement, profileUrl);\n\n        //Debug result\n        var result = outcome.ToJson(new FhirJsonSerializationSettings() { Pretty = true });\n        var outcomestring = result.ToString();\n\n        return outcomestring;\n    }\n</code></pre></div>",
+        "id": 256574128,
+        "sender_full_name": "Barbro Vessman",
+        "timestamp": 1633612148
+    },
+    {
+        "content": "<p>Yes this occurs occasionally, I think it may be occurring on occasion when disk space runs low and windows gets a little aggressive - but I can't be sure.<br>\nI haven't been able to work that out either.</p>",
+        "id": 256660103,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1633645896
+    },
+    {
+        "content": "<p>OK, thanks for your answer <span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span></p>",
+        "id": 256691948,
+        "sender_full_name": "Barbro Vessman",
+        "timestamp": 1633672157
+    },
+    {
+        "content": "<p>The repair step I do is delete the temp folder and retry.</p>",
+        "id": 256699973,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1633678361
+    },
+    {
+        "content": "<p>Yes it happens to me too now and then. It's happens so irregularly that I have never bothered to hunt it down - it won't happen in production anyway. I think it has something to do with switching  branches, yes, and then maybe two processes trying to unzip the directory at the same time.</p>\n<p>Since we're looking at switching to the NPM packages instead of the spec.zip, we hope this problem will disappear all by itself.</p>",
+        "id": 257024774,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1633937802
+    },
+    {
+        "content": "<p>I've done a Sqlite resolver too.</p>",
+        "id": 257119625,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1633988259
+    },
+    {
+        "content": "<p>Thanks both of you <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span> <br>\nNPM packages might be something to looking into also for us then</p>",
+        "id": 257665507,
+        "sender_full_name": "Barbro Vessman",
+        "timestamp": 1634287863
+    },
+    {
+        "content": "<p>This is a dirty hack that I've now put into the start of the app startup to try cleaning things up if there are problems.</p>\n<div class=\"codehilite\"><pre><span></span><code>        public static void VerifyTempSpecificationFolder()\n        {\n            try\n            {\n                // locate the temp folder\n                Assembly assembly = typeof(ZipSource).GetTypeInfo().Assembly;\n                var versionInfo = assembly.GetCustomAttribute&lt;AssemblyInformationalVersionAttribute&gt;();\n                var productInfo = assembly.GetCustomAttribute&lt;AssemblyProductAttribute&gt;();\n                string specificationArtifactKey = $&quot;FhirArtifactCache-{versionInfo.InformationalVersion}-{productInfo.Product}&quot;;\n                string cachePath = Path.Combine(Path.GetTempPath(), specificationArtifactKey);\n                if (Directory.Exists(cachePath))\n                {\n                    // ensure that the files are all in there from the zip file\n                    var artifacts = new DirectoryInfo(cachePath).EnumerateFiles(&quot;*.xml&quot;, SearchOption.AllDirectories);\n                    if (artifacts.Count() &lt; 11)\n                    {\n                        // Delete the folder (the next step will re-create it)\n                        Directory.Delete(cachePath, true);\n                    }\n                }\n            }\n            catch(Exception ex)\n            {\n                // the sorts of issue that MIGHT come up here are related to permissions/concurrency\n                //  - however this is OUR temp folder, so shouldn&#39;t happen anyway.\n                Console.Error.WriteLine(&quot;Unexpected Error resetting suspected corrupt Specification Artifact temp folder&quot;);\n            }\n        }\n</code></pre></div>\n<p>I'm aware that this is pretty crude, but so is quietly failing.<br>\nI'd love if there was a function on the ZipCacher to delete the folder that it creates too so that I don't have to have this gross code outside (this is the internals of the function that calculates the name, as thats private too)</p>",
+        "id": 271384966,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1644467271
+    }
+]

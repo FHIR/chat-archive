@@ -1,0 +1,116 @@
+[
+    {
+        "content": "<p>Most data classes in Inferno have a \"Every reference within &lt;ResourceName&gt; resources can be read\" test.  For example, USCAI-09, USCCT-09, etc.</p>\n<p>I'm thinking about submitting an Inferno issue on this, but wanted a little discussion first, since at first glance, this sort of validation seems reasonable.  However, here are some reasons why I think it isn't an obviously correct validation to do:</p>\n<p><strong>Dynamic scope selection</strong><br>\n With dynamic scope selection, patients might deselect a scope that covers a reference.  In that case, servers have two options: 1) dynamically hide references to resources that are not scoped or 2) return the references, but fail due to scope authorization checks when that reference is resolved.</p>\n<p><strong>Contextual support</strong><br>\nSome systems might support some resource types in some contexts (e.g. user/ or system/), but not in other contexts (e.g., patient/).  Similar to dynamic scoping, the server can either dynamically hide references that are not supported in a given context, or return those references, but fail when the client attempts to resolve them.</p>\n<p>For both of these cases there is a \"data leakage\" consideration.  Including a reference at all imparts knowledge of its existence to the client, even if the client can't retrieve the reference.  However, in many cases that knowledge is not really sensitive (a client inferring that a Patient resource exists because DiagnosticReport has a reference to Patient that doesn't resolve isn't really a major info leak).</p>\n<p>So folks have opinions about whether we should remove or reduce the reference resolution checks for Inferno Program sequences?</p>",
+        "id": 264172565,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1638977748
+    },
+    {
+        "content": "<p>Hiding references might make the resource invalid</p>",
+        "id": 264174067,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1638978284
+    },
+    {
+        "content": "<p>Inferno knows about which scope have been selected so it should not try to resolve references to resource types that have not been authorized</p>",
+        "id": 264174286,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1638978367
+    },
+    {
+        "content": "<p>I think these are largely non-issues because the reference resolution tests run in a specific context where Inferno must have received authorization to access all of the USCDI resources. If Inferno can't access everything that is in USCDI, then it can't say that a system meets the g10 criteria.</p>\n<p>The way the reference resolution tests work is that Inferno tries to read every reference in the resources it's received. If Inferno is unable to read a reference to a USCDI resource, the test will fail. The test will not fail if Inferno is unable to read a reference to a non-USCDI resource. If Inferno is failing a reference resolution test because it can't read a non-USCDI resource, that's a bug and you should let us know.</p>\n<p>There is a separate set of tests for a user dynamically denying specific scopes. Those tests are very basic and don't follow any references. You should not dynamically deny scopes for the main set of tests.</p>",
+        "id": 264188112,
+        "sender_full_name": "Stephen MacVicar",
+        "timestamp": 1638983852
+    },
+    {
+        "content": "<p>Do Inferno tests only try to read references to USCDI resources? How does it know if a reference is to a USCDI resource  vs. a non-USCDI resource)?  My understanding is that it is trying to read all references.  But even if it were trying to only read references for resources that are used for USCDI data classes, some resources (e.g. Observation) may be USCDI or not USCDI depending on what the actual Observation is.</p>",
+        "id": 264189366,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1638984368
+    },
+    {
+        "content": "<p>It tries to read them all, but if it fails on a reference which it can determine is a non-USCDI resource, then that failure is ignored. You created a github issue about this which we addressed: <a href=\"https://github.com/onc-healthit/inferno-program/issues/330\">https://github.com/onc-healthit/inferno-program/issues/330</a></p>",
+        "id": 264192986,
+        "sender_full_name": "Stephen MacVicar",
+        "timestamp": 1638985796
+    },
+    {
+        "content": "<p>Here is a list of resource that Inferno request for read permission: </p>\n<div class=\"codehilite\"><pre><span></span><code>Patient, AllergyIntolerance, CarePlan, CareTeam, Condition, Device, DiagnosticReport, DocumentReference,\nEncounter, Goal, Immunization, Location, Medication, MedicationRequest, Observation, Organization,\nPractitioner, PractitionerRole, Procedure, Provenance, RelatedPerson, Person\n</code></pre></div>\n<p>Most of them are USCDI related and the last two are SMART id token related.</p>\n<p>If server does not grant these permission, Inferno could not run certain tests which is bigger problem than reference check. For example, if server does not grant <code>patient/Condition.read</code>, then Inferno cannot run <code>USCC-01</code>. Similarly, if server does not grant <code>(patient|user)/Organization.read</code>, then Inferno cannot test <code>USCO-01</code>.  So the tester must set the request scope correctly to ensure the following tests could run.</p>\n<p>After server grants permission to all these resources, then server should allow reference read to these resource types.</p>\n<p>For reference to FHIR resource types other than the above listed, Inferno does not fail the test even if server reject reference read. For example, ServiceRequest is not in the list. So it is nice if server returns 200 but it is also ok if server returns 40x.</p>\n<p>When we say \"USCDI resources\", what we mean is \"FHIR resource types mapped to USCDI data elements in US Core section 2.1.1.1\"</p>\n<p>It doesn't matter if a specific Observation category is USCDI related or not since SMART grants permission on resource level at least in SMART v1.  If <code>patient/Observation.read</code> is granted, Inferno should be able to read any Observation for this patient, USCDI observation or not.</p>",
+        "id": 264216912,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1638995967
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191506\">Yunwei Wang</span> <a href=\"#narrow/stream/179309-inferno/topic/Reference.20resolution/near/264216912\">said</a>:</p>\n<blockquote>\n<p>It doesn't matter if a specific Observation category is USCDI related or not since SMART grants permission on resource level. If <code>patient/Observation.read</code> is granted, Inferno should be able to read any Observation for this patient, USCDI observation or not.</p>\n</blockquote>\n<p>I don't think this is necessarily true.  Inferno should be able to read any (most?) Observations that contains USCDI content, but if we have an Observation for eye-color, that isn't USCDI, so it seems like it should be fine for the server to prevent Inferno from reading that Observation.  This discussion is very much related to the fine-grained scope problem that SMARTv1 has.  Because SMARTv1 only has resource-level scopes, Epic had to implement a different tier of API scoping internally.  Basically, we let the patient select scopes based on our targeted scopes, then we \"dumb down\" those scopes to the SMARTv1 scopes when we send them over the wire.  We've spent a lot of time making sure this approach is compatible with SMARTv1 and g10 (i.e. we commented on the proposed rule to make sure this was allowed).</p>\n<p>I'm realizing that I probably didn't think hard enough when we were looking at <a href=\"https://github.com/onc-healthit/inferno-program/issues/330\">Issue 330</a>.  But I do think it is reasonable that a FHIR server may not allow you to have access to an specific Observation resource, even if you have a SMARTv1 scope for it.</p>\n<p>Another example is a sensitive data.  If a provider flags a data element as \"do not share with patient\" due to an individualized patient-harm assessment, then even though the patient approved the overall scope covering that resource, the server may very well block access to it.  And if exposing the fact that the reference exists isn't a data leak, then it seems fine to have a reference to a USCDI resource that is not resolvable.</p>",
+        "id": 264220628,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1638997723
+    },
+    {
+        "content": "<p>Right, SMART gives broad authority to servers to deny access using its own internal rules, and mappings to SMART scopes may be crude. Just because <code>patient/Observation.read</code> is granted it doesn't mean the system has to provide all observations tagged to the patient.</p>",
+        "id": 264225569,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639000090
+    },
+    {
+        "content": "<p>Hmm. Interesting. I didn't know that. Learn something new everyday. <span aria-label=\"grinning face with smiling eyes\" class=\"emoji emoji-1f601\" role=\"img\" title=\"grinning face with smiling eyes\">:grinning_face_with_smiling_eyes:</span></p>",
+        "id": 264226256,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1639000445
+    },
+    {
+        "content": "<p>Just in the name of completeness in your example, which US Core profiled-resource is referencing the eye color Observation?</p>",
+        "id": 264226416,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639000516
+    },
+    {
+        "content": "<p>Eye color is just the typical example I've heard for random Observation data.  It isn't something we actually work with.  More real-world set of examples would Observations for Lines/Drains/Airways/Wounds, or Obstetric Details like lactation status, etc.  Those don't currently have US Core profiles.</p>",
+        "id": 264229408,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1639001978
+    },
+    {
+        "content": "<p>So this may be extremely obvious, so I hesitate to ask, but exactly which US Core profiled Resource type (and reference element within that type) is referencing those Observation Lines/Drains/Airways/Wounds in those cases for you?</p>",
+        "id": 264308871,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639060165
+    },
+    {
+        "content": "<p>We view this as more of a failure to meet the pre-condition of the test (please test against patient records where the bearer token is given access to everything you are referencing), and not that you are doing anything invalid necessarily.  But we really should try to keep those types of pre-conditions to a minimum to make this as broadly useful as possible.  And make it more clear that is why the test is failing.</p>",
+        "id": 264311144,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639061125
+    },
+    {
+        "content": "<p>I know it is theoretically possible for this to come up (e.g. Procedure.partOf can point to an Observation), but at the time we figured it would be unlikely that real situations would come up, which is why we were thinking \"if it does come up, well, just test against different data, or authenticate with a user with very broad permissions\".  But the fact you are bringing this up makes me think we should back off on this further and downgrade it to a warning or informational (as long as it isn't a MUST SUPPORT element, maybe).</p>",
+        "id": 264311712,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639061391
+    },
+    {
+        "content": "<p>Yeah, the thing we are nervous about is the idea that there is a clear \"fence\" around USCDI content.  We have a lot of USCDI and non-USCDI content mixed together, and we think that is a <em>good</em> thing.  If we have to do work to segregate all the non-USCDI content, that would be a bunch of work on our part that we think would really only apply to contrived certification contexts.</p>\n<p>The interesting thing about references is that the more FHIR resources (and references between them) a system supports, the more likely those are to be populated (though with authorization and possibly contextual support).  So as the interoperability capabilities of a system increases, the ability to pass the Inferno reference checks can decrease <span aria-label=\"grinning\" class=\"emoji emoji-1f600\" role=\"img\" title=\"grinning\">:grinning:</span>.</p>\n<p>And I'm kinda dodging your question about LDAs for the moment.  We're currently reviewing the references we're failing, and I want to get that done so I can provide an accurate list of what is actually causing us problems.  I started this thread once we knew we were having issues, but I didn't come armed with fully fleshed out examples, so I've been providing theoretical examples rather than real-world examples.  We do have real world examples, I just don't have them yet.</p>",
+        "id": 264319503,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1639064724
+    },
+    {
+        "content": "<blockquote>\n<p>the thing we are nervous about is the idea that there is a clear \"fence\" around USCDI content. We have a lot of USCDI and non-USCDI content mixed together, and we think that is a good thing.</p>\n</blockquote>\n<p>I agree with this so strongly, <span class=\"user-mention\" data-user-id=\"191764\">@Cooper Thompson</span> .</p>",
+        "id": 264319823,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1639064860
+    },
+    {
+        "content": "<p>It's important that conformance testing be careful to avoid <em>slowing</em> or <em>impairing</em> open standards-based access to data (e.g., by unintentionally penalizing implementations for going beyond basic requirements).</p>",
+        "id": 264319950,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1639064903
+    },
+    {
+        "content": "<p>No disagreement here, the last thing I want is to have a negative impact on data sharing.  As always, I appreciate the feedback so we can address it in the tests, instead of modifying your system for the worse.</p>",
+        "id": 264332631,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639069687
+    }
+]

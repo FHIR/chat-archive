@@ -1,0 +1,86 @@
+[
+    {
+        "content": "<p>I am trying to figure out the FHIR resource to represent an Order Set Suggestion in the <a href=\"https://cds-hooks.org/specification/current/#action\" title=\"https://cds-hooks.org/specification/current/#action\">CDS Hooks response</a>.<br>\nOrder Sets are preconfigured sets of Orders that are commonly ordered together.</p>\n<p>While <a href=\"https://www.hl7.org/fhir/plandefinition.html\" title=\"https://www.hl7.org/fhir/plandefinition.html\">PlanDefinition</a> FHIR resource might be suitable for representing an Order Set/Protocol, it’s more dynamic in nature (and useful for on-the-fly Order Sets rather than pre-configured).<br>\nSo, a Health organization would configure an Order Set and a CDS Hooks web service vendor would have to somehow suggest that Order Set if patient meets certain conditions.</p>\n<p>Given the basic need of mapping a pre-configured record between two systems, I was thinking of using <a href=\"https://www.hl7.org/fhir/requestgroup.html\" title=\"https://www.hl7.org/fhir/requestgroup.html\">RequestGroup</a> FHIR resource to represent an Order Set.<br>\nThe ID attribute of the resource can be used as the “Key” to identify the particular Order Set at the Health Organization.<br>\nThis means “RequestGroup” is basically equivalent to “Order Set”, but we can consider using another attribute as “type” to identify that the resource is representing an Order Set.</p>",
+        "id": 192340080,
+        "sender_full_name": "Chandra Bala",
+        "timestamp": 1585621920
+    },
+    {
+        "content": "<p>To clarify, Order Set typically represents a definitional construct that is time-independent and patient-independent.  Are you looking for something that's specific to a particular patient at a specific time?  If so, CarePlan is most typically what you'd get back from a decision support system.  The CarePlan might point to the various relevant Requests.  RequestGroup is possible, but RequestGroup is only use when the individual orders don't have independent state.  I.e. It's not possible to suspend or cancel one of the orders without suspending or cancelling all of them.</p>",
+        "id": 192342259,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1585625356
+    },
+    {
+        "content": "<p>The suggestion is specific to a patient, but the order set that is being suggested is still pre-built and time- and patient-independent. A very basic use case is a service that says a patient is overdue for colon cancer screening, but rather than suggest a specific order, just wants to prompt the provider to open their locally-configured order set (which would include available varieties of colonoscopies and alternatives like cologuard). Does that still sound like CarePlan?</p>",
+        "id": 192527502,
+        "sender_full_name": "James Doyle",
+        "timestamp": 1585747962
+    },
+    {
+        "content": "<p>The time/patient independent order set would be represented using PlanDefinition (if expressed in FHIR - otherwise might be a PDF or web page) and the order to <em>use</em> the orders set would be a ServiceRequest pointing to the order set using 'instantiates'.  When you realize the order set for the Patient, you'd typically have a CarePlan.</p>",
+        "id": 192533220,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1585750133
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"191644\">@Raj M</span> , <span class=\"user-mention\" data-user-id=\"192613\">@Chuck Feltner</span> - have you modeled a suggestion containing an order set?</p>",
+        "id": 192665129,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1585834253
+    },
+    {
+        "content": "<p>Lloyd, to represent a pre-built order set, would it look like:<br>\nServiceRequest -&gt; PlanDefinition -&gt; ActivityDefinitions &lt;- ServiceRequests ?</p>",
+        "id": 192665516,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1585834426
+    },
+    {
+        "content": "<p>Order sets are common and useful. This feels a bit complicated for something so common. Is PC the right wg, here?</p>",
+        "id": 192665629,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1585834467
+    },
+    {
+        "content": "<p>It could look like a bunch of things :)  If you wanted to just order \"Order Set X\", a ServiceRequest with an instantiatesReference pointing to a PlanDefinition or an instantiatesUri pointing to a PDF/web-page would suffice.  In terms of what would flow after that, you could indeed have a bunch of generated orders that are 'basedOn' the original ServiceRequest (tracking the flow of authorization) and optionally with instantiates references either back to the PlanDefinition or referenced ActivityDefinitions.  That's not mandatory, but it would certainly help provide traceability about which orders are tied to which parts of the order set.  CDS is the work group that typically deals with order sets and their instantiation</p>",
+        "id": 192678778,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1585840071
+    },
+    {
+        "content": "<p>No we haven't modeled for order set. But for the scenarios above,  while above proposal is ideal, I am thinking ActivityDefinition (Colon Cancer Screening ) &lt;- ServiceRequest  or simply ServiceRequest with pointer to order set key are also options</p>",
+        "id": 192727512,
+        "sender_full_name": "Raj M",
+        "timestamp": 1585862141
+    },
+    {
+        "content": "<p>Order set is one of the supported use cases for a PlanDefinition, there is an example in the spec that's fairly well worked out:<br>\n<a href=\"http://hl7.org/fhir/plandefinition-example.html\" title=\"http://hl7.org/fhir/plandefinition-example.html\">http://hl7.org/fhir/plandefinition-example.html</a></p>",
+        "id": 192729261,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1585863005
+    },
+    {
+        "content": "<p>Basically each action represents an option in the Order Set, and you can group them hierarchically to support sections, and you can use conditional logic to establish applicability (dynamically select pieces based on patient characteristics). Order sets are one of the less-explored use cases, but that example was worked out as part of a pilot looking at representing VA order sets.</p>",
+        "id": 192729694,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1585863222
+    },
+    {
+        "content": "<p>No, in our EHR we haven't modeled a suggestion containing an order set yet.</p>",
+        "id": 193102690,
+        "sender_full_name": "Chuck Feltner",
+        "timestamp": 1586207600
+    },
+    {
+        "content": "<p>Based on the above feedback and some internal discussion, I'm planning to implement the OrderSet suggestion using a \"ServiceRequest\" (and \"ProcedureRequest\" in STU3). To identify that the resource is suggesting an OrderSet instead of any other order like a Procedure/NutritionOrder, I will expect a custom code system for OrderSets and simply use the \"code\" sent to find the OrderSet to suggest. The main reason to go this route is the need of suggesting a record that already exists in the EMR instead of an on-the-fly protocol order. So, the complex structure of the \"PlanDefinition\" is not really useful to implement a much simpler need.</p>",
+        "id": 195773896,
+        "sender_full_name": "Chandra Bala",
+        "timestamp": 1588196384
+    },
+    {
+        "content": "<p>When you use the word \"OrderSet\" are you referring to something that's patient-specific and time-specific or something patient-independent an time-independent?  ServiceRequest won't give you the latter.  Also, ServiceRequest won't give you a 'set'.  If you want something patient-specific that covers more than one action, you should look at CarePlan - or possibly RequestGroup.</p>",
+        "id": 195783480,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1588203363
+    }
+]

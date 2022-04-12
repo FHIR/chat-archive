@@ -1,0 +1,122 @@
+[
+    {
+        "content": "<p>I have a question about element renaming.</p>\n<p>FHIR states that if a profile constrains a polymorphic choice type element (e.g. \"value[x]\") to a single type, then the profile<br>\nSHOULD|SHALL rename the element by replacing the \"[x]\" suffix with the name of the selected datatype (e.g. \"valueString\").</p>\n<p>Questions:</p>\n<ul>\n<li>Is it mandatory for a profile that constrains a choice type element to perform the renaming (\"value[x]\" =&gt; \"valueString\")? i.e. SHALL, not SHOULD?</li>\n<li>Is it mandatory for a derived profile that further constrains an choice type constraint to specify the new element name (\"valueString\")?</li>\n</ul>\n<p>Note that if FHIR chooses to define element renaming as optional, then it becomes more difficult to match profile constraints to the base profile; if element renaming is not consistent throughout derived profiles, the snapshot generator logic may have to fall back to inspecting and comparing the actual element type constraints.</p>\n<p>Example of layered choice type element constraints with inconsistent element renaming:<br>\n0) FHIR Core resource: Observation.value[x]<br>\n1) User base profile: Observation.valueString, type.code = \"string\"<br>\n2) User derived profile: Observation.value[x], type.code = \"string\", max = 1</p>\n<p>From a tooling implementer perspective, I'd prefer if FHIR would define element renaming as mandatory, as this reduces implementation complexity. However considering we need to gracefully handle a large set of existing profiles that may not adhere to this rule, I guess tools will have to handle this anyway and my question is rather academic...?</p>",
+        "id": 153910975,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1506519179
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191351\">@Chris Grenz</span> <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> ?</p>",
+        "id": 153911024,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1506525044
+    },
+    {
+        "content": "<p>I would expect once a valueString always a valueString - that is the intent of the profile so any profile derived from it should strictly adhere to that.</p>",
+        "id": 153911028,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1506525420
+    },
+    {
+        "content": "<p>Yes, that's what I would expect. But is it guaranteed/mandatory?</p>",
+        "id": 153911029,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1506525467
+    },
+    {
+        "content": "<p>In earlier versions this was a bit ambiguous. Now (I think) we've clarified and there's no optionality:</p>\n<ul>\n<li>value[x] constrains <em>all</em> types using this choice.</li>\n<li>valueString is a type slice of value[x] and only constrains string instances of value[x]<br>\nIn terms of inheritance (profile to base), the paths <em>must</em> match.  So, in <span class=\"user-mention\" data-user-id=\"191336\">@Michel Rutten</span> 's example, 2) is a constraint of 0) and not 1).</li>\n</ul>",
+        "id": 153911044,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1506535409
+    },
+    {
+        "content": "<p>Some things to note:</p>\n<ul>\n<li>In Michel's example, 1) is effectively a no-op since valueString is by definition a type slice of value[x] for string types.</li>\n<li>2) would limit value[x] to <em>only</em> strings.  1) would <em>not</em> limit the available types</li>\n</ul>",
+        "id": 153911045,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1506535466
+    },
+    {
+        "content": "<p>See <a href=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=12259\" target=\"_blank\" title=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=12259\">GF#12259</a> for resolution on this topic.</p>",
+        "id": 153911046,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1506535649
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191351\">@Chris Grenz</span>, thank you for the clarification.</p>\n<p>Your proposal makes perfect sense. I seem to remember that we discussed this during a FHIR-I evening session and reached consensus that this is how<br>\nwe want to proceed towards R4.</p>\n<p>So I agree that Future R4 implementations should adhere to your description above. However I'm not sure if this already applies to STU3 implementations?</p>\n<p>For our FHIR tools, we're trying to strike a balance between backwards and forwards compatibility. The tools should maintain to support existing profiles that users have created, published to Simplifier and taken into production.<br>\nWe try to be forgiving when reading data (e.g. fix/auto-correct if possible) and strict when generating (i.e. conform to the spec). If I update the API snapshot generator to strictly follow your rules, then this could break some existing profiles with choice type element constraints.</p>\n<p>Specifically this comment of yours: \"2) would limit value[x] to only strings.\"</p>\n<p>I understand the subtle difference and agree on this for R4. However I don't think that we can expect any STU3 FHIR user to be aware of this rule, as this wasn't clearly defined yet during STU3 publication. Therefore I'm quite reluctant to introduce this (new) interpretation in existing STU3 logic...</p>",
+        "id": 153911196,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1506590068
+    },
+    {
+        "content": "<p>I'm not sure <em>what</em> STU3 users should/would expect in these situations.  <em>I</em> always interpreted the standard in the R4 way and was surprised that Grahame has a different approach.  In your example, by Grahame's logic, 1) limits the type to strings only and 2) would then be further constraining valueString to max=1.<br>\n<span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> - what do you think Forge should do?<br>\nWhat's probably best would be to check the STU3 validators and see how they operate.  And, look for STU3 official profiles and try to discern intent.</p>",
+        "id": 153911217,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1506602463
+    },
+    {
+        "content": "<p>we don't want needless variation. So it should be a SHALL - SHALL rename to valueString. and derived profiles SHALL use valueString. If they don't, the derivation is wrong.</p>",
+        "id": 153911964,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1506999466
+    },
+    {
+        "content": "<p>I don't know about R3, but the IG publisher is all R4, even when publishing old IGs, so we can just look ahead, I think</p>",
+        "id": 153911965,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1506999512
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>,</p>",
+        "id": 153912034,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1507026804
+    },
+    {
+        "content": "<p>To be crystal clear:<br>\na) <code>Extension.valueString</code> is <em>not</em> a valid id.<br>\nb) The presence of <code>Extension.value[x]:valueString</code> alone does NOT constrain valid types for value[x].</p>",
+        "id": 153912102,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1507058941
+    },
+    {
+        "content": "<p>If an element is defined with <code>path: \"Extension.valueString\"</code>, it SHALL be interpreted as id <code>Extension.value[x]:valueString</code> in R4. Personally I'd recommend this interpretation in R3 as well.</p>",
+        "id": 153912104,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1507059116
+    },
+    {
+        "content": "<p>Still a bit concerned about incompatible interpretation difference inbetween STU3 and R4.</p>\n<p>Ewout always assumed that a choice type element constraint with a renamed path (<code>valueString</code>) effectively restricts the allowed type choices to that single type. This interpretation does not affect the behavior of the .NET snapshot generator for STU3, as it will happily merge any constraints it encounters, regadless of wether they are actually valid or not; that is up to the validator to determine. However it definitely affects the implementation of the .NET validator.</p>\n<p>I think that the current STU3 .NET validator interprets a constraint on a renamed choice type element (<code>valueString</code>) to implicitly restrict the set of allowed type options to the specified single type.</p>\n<p>It appears that this behavior is now different from the behavior of the IG publisher with R4 interpretation...?</p>",
+        "id": 153912235,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1507109593
+    },
+    {
+        "content": "<p>umm, what's the difference?</p>",
+        "id": 153912238,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1507111988
+    },
+    {
+        "content": "<p>If I understand correctly:</p>\n<ul>\n<li>\n<p>STU3 (as currently implemented by .NET validator):<br>\nA constraint on renamed choice type element (e.g. <code>valueString</code>) is interpreted to limit the type choices. So the validator will reject all other types.</p>\n</li>\n<li>\n<p>R4 (as currently implemented by IG Publisher)<br>\nA constraint on renamed choice type element (e.g. <code>valueString</code>) is interpreted to further restrict that specific type. It does NOT limit the valid type options. So the validator will accept other types (introduced by the base profile).</p>\n</li>\n</ul>",
+        "id": 153912242,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1507115878
+    },
+    {
+        "content": "<p>I agree with your understanding <span class=\"user-mention\" data-user-id=\"191336\">@Michel Rutten</span> . The R3 validators selected one possible interpretation which is now at odds with R4.</p>",
+        "id": 153912617,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1507211534
+    },
+    {
+        "content": "<p>hmm. I'll add a test for this. note, though, that the main validator, we ask people to use the R4 validator now</p>",
+        "id": 153912679,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1507232440
+    },
+    {
+        "content": "<p>Thanks for the feedback. I'll discuss this with Ewout, as he is responsible for the implementation of the .NET validator.</p>",
+        "id": 153913050,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1507538703
+    }
+]

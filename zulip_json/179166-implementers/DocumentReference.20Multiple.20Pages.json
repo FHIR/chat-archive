@@ -1,0 +1,116 @@
+[
+    {
+        "content": "<p>I am attempting to implement a FHIR client-server interaction such that clients can store a variety of document and image files (PDFs, JPGs, DOCs, etc.) in the server using the DocumentReference resource, the purpose of which is to make those documents available in a central place for other clients.</p>\n<p>Currently, I have clients providing base64 file data in the DocumentReference.content.attachment.data element. This works for the majority of cases. However, I have a case where the client's documents have multiple pages, and each of those pages are stored in separate files. I would like to upload these files grouped as one DocumentReference.</p>\n<p>The option that currently looks best to me would be to send each page as a separate content element within a single DocumentReference, since the DocumentReference.content element has a cardinality of 0..*. However, the documentation for DocumentReference.content says \"There may be multiple content element repetitions, each with a different format,\" but providing different \"repetitions\" in different formats is not my use case, so my initial reaction is that my proposed usage would be an abuse of the spec. However, maybe I am misinterpreting the spec and that comment is only making clear the possibility that each content element might be in a different format, not mandating that different content elements represent the same underlying data and only differ in the format by which they present it.</p>\n<p>Does anyone have opinions about using multiple DocumentReference.content elements in the same DocumentReference to represent the multiple pages of a single document?</p>\n<p>Also, here are other options considered:<br>\n-Have the client combine the files into a single multi-page PDF or TIFF document before uploading. This option may seem ideal, but this client is actually a local repository that has clients of its own, and one of the goals is that this local repository does not keep storage of local copies of files that it has uploaded to the FHIR server. Also, this local repository must maintain the ability to provide the original, unmodified files back to its own clients, which it would not be able to do if it deleted its local copies and only a multi-page PDF existed in the FHIR server.</p>\n<p>-POST separate DocumentReference resources for each page of the document. Then, one option to logically group them to together would be to assign them a common DocumentReference.identifier, but that doesn't provide the page order information to other clients. One idea to solve that would be to have a DocumentReference.relatesTo of 'appends' that points to the DocumentReference of the previous page. However, I'm not sure that is the intended purpose of the 'appends' relationship, and in general it feels wrong to me to be using multiple DocumentReferences for one document. For instance, all of the other context elements would need to be duplicated and kept in sync between each of the resources.</p>\n<p>Have I missed any other options? Is one of the above options preferable?</p>",
+        "id": 153971043,
+        "sender_full_name": "Mark Riehm",
+        "timestamp": 1529634066
+    },
+    {
+        "content": "<p>DocumentReference is designed with the presumption that whatever document/artifact/whatever you're pointing to can be expressed with a single binary file.  It sounds like your source system is treating each page as an independent artifact, but you're wanting to consolidate them.  The cleanest way to do that, given your constraints, is to combine the files at query time and/or to maintain a local cached copy .  The other possibility would be to have a modifier extension that allows you to convey the additional cached pages.  Using the existing repeating element would not be adviseable because the expectation is that a receiving system would look for the first syntax they recognize or prefer and display that.  Some might keep looking and would error out at seeing multiple repetitions with the same mime type.  But others would happily just display the first page they encountered.  Neither behavior would be desirable in your environment.</p>",
+        "id": 153971107,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1529674387
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>, I came across a similar use-case and was delighted to find a ready-to-go answer <span aria-label=\"slight smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"slight smile\">:slight_smile:</span> However, I was wondering if you could say smt. about the problems with the last possible option suggested in the question, i.e. linking separate DocumentReference instances using <code>relatesTo = \"appends\"</code>. There is clearly the problem that a client reading a given instance would not be able to tell if there is more information (a further page) appended, but is that not always an issues when appending information to an existing document? Or are there special rules for what kind of information can be appended to a DocumentReferences using <code>relatesTo</code>, e.g. that it cannot change the interpretation of the target (appended-to) document in any clinically significant way?</p>",
+        "id": 173663087,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1566311504
+    },
+    {
+        "content": "<p>Any rules that exist would be by business convention.  Typically \"appends\" would add to, but not change.  If that weren't the case, then the correct action would be to replace the document, not append to it.  However, that's not the sort of thing that could be enforced by an instance validator - or even (in many cases) by an interface.  It's the sort of thing that needs to be enforced by convention/the community.</p>",
+        "id": 173676781,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1566321422
+    },
+    {
+        "content": "<p>OK, thanks Lloyd!</p>",
+        "id": 173771528,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1566373357
+    },
+    {
+        "content": "<p>Put in an issue to reflect the above more clearly in the spec: <a href=\"https://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=23732&amp;start=0\" target=\"_blank\" title=\"https://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=23732&amp;start=0\">GForge #23732</a></p>",
+        "id": 174222464,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1566908161
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span> I just saw the resolution to the GForge issue mentioned above  and have some questions about it for my understanding. - I'm sending them your way since the change commit was from you but feel free to forward!</p>\n<p>The new explanatory text for <code>DoukumentReference.content</code> now states:</p>\n<blockquote>\n<p>If there are multiple content element repetitions, these must all represent the same document in different format, or attachment metadata.</p>\n</blockquote>\n<p>which leaves me with these questions:</p>\n<ol>\n<li>What would be an example of attachment metadata, and would <code>content</code> it be allowed to include both metadata and the doc itself ?</li>\n<li>If I understood Lloyd correctly in the thread above, it seems that one of the problems with having multiple elements that do not represent the same thing (viz. the document itself) would be that systems could mistake one of these non-doc entries for the doc itself. That seems to still be a potential danger here unless there is a defined way of telling meta-data and doc apart - is there such a mechanism?</li>\n<li>Is there the implicit expectation that the different representations of a doc (in different formats) are equivalent for use in some sense? E.g. I could add a thumbnail of a scanned document (in a different format than the scan itself) which represents the same thing but which cannot possibly be read and hence can only be used instead of the full-sized image in a very limited set of cases.</li>\n</ol>",
+        "id": 178976559,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1571938389
+    },
+    {
+        "content": "<p>the expectation that I have is that any repetitions of DocumentReference.content all must be renderings of the blob defined in DocumentReference (i.e. metadata). That any repetitions of .attachment.url or .attachment.data must be effectively the same content with only encoding differences (e.g. CDA, vs FHIR, vs PDF, vs TIFF, vs TEXT, etc...). So there will be other elements in each instance of .content that will explain the difference (mimetype, formatCode); clearly different values of size and hash would result, etc...</p>",
+        "id": 178977876,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1571939171
+    },
+    {
+        "content": "<p>what we wanted to prevent is that someone thinks that they can render different pages of a larger document with each page in a different instance of the .content element. This was proposed, but rejected.</p>",
+        "id": 178977958,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1571939237
+    },
+    {
+        "content": "<p>Note that in IHE use of DocumentReference in the MHD profile; the .content element is restricted to (1..1)</p>",
+        "id": 178977980,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1571939271
+    },
+    {
+        "content": "<p>as IHE deals with multiple renderings with multiple DocumentReference, each pointing at each-other with a .relatesTo \"transforms\".</p>",
+        "id": 178978080,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1571939323
+    },
+    {
+        "content": "<p>Thanks for the clarification! Out of curiosity: does IHE have a way of dealing with a single document that is scattered across multiple files (as in the case of scanned pages of a multiple-page document)?</p>",
+        "id": 179086331,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1572035390
+    },
+    {
+        "content": "<p>There are document scanning services, most of the time they scan multiple pages into one document, but it is possible they do it all as independent files as you mention. In that case they would make multiple DocumentReference--&gt;Binary for each page. Have each successive page with a DocumetReference.relatesTo relationship to the predecessor DocumentReference page and indicate the relatesTo.code as 'appends'.</p>",
+        "id": 179229702,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1572268985
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span>, thanks for the reply! - somehow only noticed it today. I was considering that solution as well., My (possibly misguided) understanding, however, was that this would be problematic for clinical safety because a receiver holding only the DocumentReference for the first page would not be able to tell if there is a second page (given only this resource instance). Would the partners exchanging data then have a strictly enforced convention to e.g. always search for relatesTo link pointing to a given doc when retrieving it?</p>",
+        "id": 180211465,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1573202331
+    },
+    {
+        "content": "<p>good question. In XDS the pointers are both directions (OASIS eb-Registry standard), so if you have page 1 or page N you know if there are more before or after. In FHIR the tendency is to have single direction pointers, so you know if there was a previous page, and you can discover if there is a next page. So yes you need to be a bit more active to discover next page. It is knowable, just a bit more work.</p>",
+        "id": 180231935,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1573221866
+    },
+    {
+        "content": "<p>OK, interesting contrast  For this context, two-way pointers are certainly quite helpful <span aria-label=\"slight smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"slight smile\">:slight_smile:</span></p>",
+        "id": 180423605,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1573479256
+    },
+    {
+        "content": "<p>Two-way pointers tend not to work well in a RESTful space because they make creation and updates hard.</p>",
+        "id": 180426029,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1573481398
+    },
+    {
+        "content": "<p>Right, fair point - just meant to say it makes this particular case harder to handle.</p>",
+        "id": 180491321,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1573546067
+    },
+    {
+        "content": "<p>that might be a way to look at it... but another way to look at it is that this kind of pointer is the way of REST, so everything is done this way in REST.. Thus it may seem harder to you, but others would see bi-directional pointers as harder for them and in some cases impossible for them.,</p>",
+        "id": 180584827,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1573613026
+    }
+]

@@ -1,0 +1,110 @@
+[
+    {
+        "content": "<p>I'm trying to reason through the architecture that Josh proposed a few years ago for patient apps being able to access imaging data directly from a proposed PACS FHIR server re-using the EHR auth server. This <a href=\"https://docs.google.com/presentation/d/1CqRCrNB17XXzeff0guDo1inM-gdy2k0aBc16OcdZKHM/present?slide=id.g595633b9aa_18_6\" title=\"https://docs.google.com/presentation/d/1CqRCrNB17XXzeff0guDo1inM-gdy2k0aBc16OcdZKHM/present?slide=id.g595633b9aa_18_6\">slidedeck</a> defines three mechanisms:<br>\n<del>1. Don't have two FHIR servers, instead interface all the imaging data into the EHR</del><br>\n<del>2. Clinical FHIR server proxies API requests for imaging data -- kind of an API Manager-type approach and a fairly tight integration</del></p>\n<ol start=\"3\">\n<li>Shared authorization, but two distinct FHIR servers &amp; the PACS server is responsible for introspected the access token for each request.</li>\n</ol>",
+        "id": 193576182,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1586529885
+    },
+    {
+        "content": "<p>For #3, the use of introspect by the 2nd RS is a great start. For an MVP --</p>\n<p>As part of an EHR launch, the app gets an iss and an iss2, both /metadata point to the auth server. </p>\n<p>For both standalone and EHR launch, the AS would need to tell the app two patient FHIR identifiers as urls. How should the app know of the second RS?</p>",
+        "id": 193576200,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1586529902
+    },
+    {
+        "content": "<p>In our apps, the secondary FHIR endpoints the app might want to connect to (beyond the primary it was launched against ) are configuration settings for the app. I imagine these endpoints could also be disseminated via the FHIR server capabilities  statement, the SMART well-known endpoint, or even the OAUTH access token claims. Not sure which one would be ideal however.</p>",
+        "id": 193580182,
+        "sender_full_name": "Nikolai Schwertner",
+        "timestamp": 1586531873
+    },
+    {
+        "content": "<p>As for the patient identifiers across federated servers, it would be ideal if they are in sync (i.e. identical). May not be realistic though without a national or even global unique patient identifier.</p>",
+        "id": 193580575,
+        "sender_full_name": "Nikolai Schwertner",
+        "timestamp": 1586532070
+    },
+    {
+        "content": "<p>Thanks, Nikolai! In cases where the patient ids are not the same, does the app simply perform demographics queries on the second RS following the launch?</p>",
+        "id": 193584760,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1586534163
+    },
+    {
+        "content": "<p>That would be one approach, but it has two problems that come to mind: 1. The app would need to be granted user/system level read scope on the Patient resource to be able to query the demographics (which is bad from security perspective in the general case). 2. Demographics searches are not guaranteed to always produce a match even if one exists (with imperfect data) and there is always a possibility of getting multiple matches.</p>",
+        "id": 193586478,
+        "sender_full_name": "Nikolai Schwertner",
+        "timestamp": 1586535114
+    },
+    {
+        "content": "<p>Probably would be reasonable to expect that the mechanism that provides the secondary RS endpoint also provides a patient identifier for the secondary RS (if known)? In other words, ideally federation should involve some shared knowledge about patient identifier translations.</p>",
+        "id": 193587575,
+        "sender_full_name": "Nikolai Schwertner",
+        "timestamp": 1586535714
+    },
+    {
+        "content": "<p>yup, I think you're spot on, Nikolai. So, the patient identifier of the 2nd RS could be made available to the app either:</p>\n<ol>\n<li>as an additional business identifier on the Patient resource of the 1st RS</li>\n<li>as an additional <code>patient</code> launch parameter alongside the access token. </li>\n</ol>\n<p>The problem with #2 is, for <em>nth</em> RS, associating the right patient id with the right RS. For #1, the patient id could have a codesystem of the nth RS's FHIR base url, or something like that.</p>",
+        "id": 193589840,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1586536948
+    },
+    {
+        "content": "<p>For the architecture we built in Sync for Science,the idea was that an imaging server would 1) rely on an EHR's authorization server and 2) rely on an EHR's patient identifiers for mapping to data in its on FHIR API</p>\n<p>together this -- helps shield app developers from the complexity of mapping IDs.</p>",
+        "id": 193591621,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1586537946
+    },
+    {
+        "content": "<p>Are there circumstances where (1) would apply and (2) would not? How would access controls be enforced by these two servers without a common understanding of patient IDs?</p>",
+        "id": 193591795,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1586538027
+    },
+    {
+        "content": "<p>I guess the distinction is if the EHR needs to \"know\" the PACS patient ids, or if only the PACS needs to \"know\" the EHR's patient ids. (Obvious in hindsight, the PACS must understand the EHR patient ids to enact access control following the introspect call).</p>",
+        "id": 193592087,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1586538171
+    },
+    {
+        "content": "<p>The latter. Assumption is that PACS can look up patient ID at least for the patient associated with a specific access token / query.</p>",
+        "id": 193592182,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1586538236
+    },
+    {
+        "content": "<p>agreed, thank you Josh, Nikolai!</p>",
+        "id": 193592262,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1586538264
+    },
+    {
+        "content": "<p>And then building on that assumption: if the PACS FHIR server does \"GET /Patient/123\" from the EHR (or the EHR pre-supplies as part of the introspection response), there will be enough <code>Patient.identifier</code>s there, or other demographics, for the PACS to find a match to something it understands/tracks internally.</p>",
+        "id": 193592265,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1586538266
+    },
+    {
+        "content": "<p>(and patient identity, even within an enterprise is complicated)</p>",
+        "id": 193592368,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1586538331
+    },
+    {
+        "content": "<p><del>How does the PACS FHIR server get the FHIR Patient ID to GET?  Unless it is supplied via introspect, wouldn't it have to be supplied by the 3rd party app (and thus not be trustworthy)?  Unless I'm missing something, I'd think the mapping between patients would have to be handled via introspect.</del></p>",
+        "id": 193598326,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1586541429
+    },
+    {
+        "content": "<p>Nevermind.  If the PACS FHIR server is using the app-supplied access token when doing the GET to the EHR server, then the EHR server would reject requests for a patient that is not allowed by the access token.</p>",
+        "id": 193598653,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1586541587
+    },
+    {
+        "content": "<p>Yeah, that's exactly what our PoC implementation did.</p>",
+        "id": 193598862,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1586541702
+    }
+]

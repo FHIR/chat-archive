@@ -1,0 +1,75 @@
+---
+layout: page
+title: "FHIR Chat  · Question concerning different containers in FHIR · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Question.20concerning.20different.20containers.20in.20FHIR.html">Question concerning different containers in FHIR</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="154007286"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Question%20concerning%20different%20containers%20in%20FHIR/near/154007286" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ernst Bunders <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Question.20concerning.20different.20containers.20in.20FHIR.html#154007286">(Oct 10 2018 at 08:50)</a>:</h4>
+<p>Hi. We are currently developing a planning application that uses FHIR as it's main data protocol. One use case is where we have to send batches of new Slots to a remote system when they become available.<br>
+Those slots have a reference to Schedule, and Schedules are shared between slots.</p>
+<p>We are using HAPI to marshall and unmarshall our FHIR objects to json, which is the transport format of our choice.</p>
+<p>Some uncertainty arose during the implementation of this functionality, and therefore I would like to seek some 'common wisdom' on the subject.</p>
+<p>The first thing we don't really understand is the difference between Bundles and Lists. Both container types seem a good match but there are subtle differences that we find a little hard to understand. If I understand correctly a Bundle should be a better match, as the documentation states "it has no narrative", whereas a List is presented as a presentation of a collection in the context of time (i.e. a Patient's Allergies at a point in time)</p>
+<p>But if we create a Bundle with our data and marshall it with HAPI we run into the problem where the referenced Schedules are actually inserted into the Slot resources, and not referenced (as in ‘contained references’), creating many duplicates of the used Schedules. The is apparently caused by the fact that Bundle has no ancestor that defines 'contained'.</p>
+<p>But it confuses the matter a bit for us. So I guess my questions are:<br>
+- What would be the proper container type for our use case?<br>
+- How (if the answer would be 'Bundle') should we deal with the references inside a Bundle.</p>
+<p>Cheers, Ernst</p>
+
+
+
+<a name="154007289"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Question%20concerning%20different%20containers%20in%20FHIR/near/154007289" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Henket <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Question.20concerning.20different.20containers.20in.20FHIR.html#154007289">(Oct 10 2018 at 09:02)</a>:</h4>
+<p>Bundle is a more or less arbitrary collection of stuff. List is a maintained collection of specific stuff, e.g. a problem list that a certain doctor cares about.</p>
+<p>Bundle might be a wrapper that goes poof after processing the entries, e.g. a transaction Bundle. List cannot be omitted, unless you want to ditch the entire list because it has outlived its purpose.</p>
+<p>If you are sending batches to a remote system e.g. the patient portal, so it may serve up the right slots to patients logging on to the portal rather than have them connect to the planning system immediately, you are probably best off with a Bundle.</p>
+<p>Bundles are supposed to have all entries at top level. Entries in Bundles should not 'contain' resources. If HAPI does this anyway, then it might be that you don't call the right method yet. I'll let <span class="user-mention" data-user-id="191319">@James Agnew</span> respond to that or someone else in the know for HAPI. It could be that this question is better served in the <a href="#narrow/stream/23-conformance" title="#narrow/stream/23-conformance">https://chat.fhir.org/#narrow/stream/23-conformance</a> stream if it becomes tooling specific.</p>
+
+
+
+<a name="154007293"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Question%20concerning%20different%20containers%20in%20FHIR/near/154007293" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Reinhold <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Question.20concerning.20different.20containers.20in.20FHIR.html#154007293">(Oct 10 2018 at 10:16)</a>:</h4>
+<p><span class="user-mention" data-user-id="196921">@Ernst Bunders</span>  I'm not sure I understand exactly what you are trying to do but it sounds like you have Slot and Schedule resources and they reference each other. I am also not sure what type of bundle you are working with or what the bundle is destined for (are you using the FHIR restful api or just using the FHIR data model). However, when I need to reference one resource in the bundle from another resource in the bundle I use temporary ids and reference the temporary id. I would set the Slot.schedule to the temp id of the Schedule resource of interest. Of course this is for a transaction bundle (my only real experience) destined for a FHIR server which is going to rip that bundle into its concomitant parts.</p>
+
+
+
+<a name="154007371"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Question%20concerning%20different%20containers%20in%20FHIR/near/154007371" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Question.20concerning.20different.20containers.20in.20FHIR.html#154007371">(Oct 10 2018 at 13:46)</a>:</h4>
+<p>If HAPI is containing your resources, it's because you need to provide them an ID. If none it provided, HAPI assumes it's doing containment. This page might be useful: <a href="http://hapifhir.io/doc_resource_references.html" target="_blank" title="http://hapifhir.io/doc_resource_references.html">http://hapifhir.io/doc_resource_references.html</a></p>
+
+
+
+<a name="154007407"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Question%20concerning%20different%20containers%20in%20FHIR/near/154007407" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Question.20concerning.20different.20containers.20in.20FHIR.html#154007407">(Oct 10 2018 at 14:51)</a>:</h4>
+<p>Bundle wraps other resources and allows transport of them.  List does not.  List just contains pointers to resource.  A List has business meaning - a problem list, a discharge medication list, etc.  Bundles don't define any business semantics - they're just a transport mechanism for a group of resources.</p>
+
+
+
+<a name="154009086"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Question%20concerning%20different%20containers%20in%20FHIR/near/154009086" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ernst Bunders <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Question.20concerning.20different.20containers.20in.20FHIR.html#154009086">(Oct 15 2018 at 13:41)</a>:</h4>
+<p>hello Brian</p>
+<p>We are indeed using the HAPI rest interface as well. I think what you describe is pretty much what we are doing. About those temporary id's: do you create them yourself, or does HAPI take care of that, or do you not use HAPI, but take care of marshalling and transport yourself. <br>
+We sort of expect from HAPI that when we set a Schedule on a Slot as a reference, that HAPI will take that Schedule and add it as a separate resource in the bundle, and than link to that from the slot. That's how it works with Lists anyway.</p>
+
+
+
+<a name="154009088"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Question%20concerning%20different%20containers%20in%20FHIR/near/154009088" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ernst Bunders <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Question.20concerning.20different.20containers.20in.20FHIR.html#154009088">(Oct 15 2018 at 13:49)</a>:</h4>
+<blockquote>
+<p>If HAPI is containing your resources, it's because you need to provide them an ID. If none it provided, HAPI assumes it's doing containment. This page might be useful: <a href="http://hapifhir.io/doc_resource_references.html" target="_blank" title="http://hapifhir.io/doc_resource_references.html">http://hapifhir.io/doc_resource_references.html</a></p>
+</blockquote>
+<p>Thanks James. That link is very useful. I think  that should straighten us out.<br>
+Cheers, Ernst</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

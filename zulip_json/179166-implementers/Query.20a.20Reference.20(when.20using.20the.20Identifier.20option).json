@@ -1,0 +1,56 @@
+[
+    {
+        "content": "<p>We are seeing (for practical reasons) that we can't always reference resources - maybe the resources are not available, or on disperate servers that may not always be accessible. In these cases we use the \"identifier\" option of the Reference data type. For example, we can end up with resource instances like this<br>\n&lt;PractitionerRole xmlns=\"<a href=\"http://hl7.org/fhir\">http://hl7.org/fhir</a>\"&gt;<br>\n    &lt;practitioner&gt;<br>\n        &lt;identifier&gt;<br>\n        &lt;system value=\"https://fhir.nhs.uk/Id/user-id\"/&gt;<br>\n        &lt;value value=\"1234567890\"/&gt;     <br>\n    &lt;identifier&gt;<br>\n    &lt;/practitioner&gt;<br>\netc....<br>\n&lt;/PractitionerRole&gt;</p>\n<p>The issue we are having is how to query these resources. For example, to get all the PractitionerRole records for practitioner 1234567890. The query parameter PractitionerRole.practitioner is geared towards having a resource references, rather than an identifer. Would the following query string be acceptable (it fails on all the FHIR servers I've tried it on!)<br>\n<strong>[FHIRServer]/PractitionerRole?practitioner.identifier=https://fhir.nhs.uk/Id/user-id|1234567890</strong><br>\n<em>Note that in this example the FHIR server does not contain the Practitioner resource, so I can't chanin through to a Practitioner resource.</em></p>",
+        "id": 235482104,
+        "sender_full_name": "Dave Barnet",
+        "timestamp": 1618998483
+    },
+    {
+        "content": "<p>hi Dave</p>\n<p>Are these FHIR resources that are not accessible, or non-FHIR resources? Either way, a FHIR server is not going to be able to reach them.</p>\n<p>You can use reference.identifier to point to things that are not FHIR, but in that case a FHIR server would not be able to query for them, unless it had some special knowledge of how to resolve that identifier type, or how to cope with them not being accessible somehow (e.g. a cache).</p>\n<p>There has been discussion on here of searching within the FHIR server space by identifier (and I am not sure how possible that is currently), but that won't help you I don't think.</p>",
+        "id": 235485814,
+        "sender_full_name": "Rik Smithies",
+        "timestamp": 1619000486
+    },
+    {
+        "content": "<p>The FHIR resources are available but we don't specify which one to use. So for a NHSNumber of 9876543210 (display name = MR J SMITH, reference.identifier of  9876543210) - you could resolve by going to the national PDS server, local PAS or regional MPI. Corollary is you don't need to resolve the reference to get the NHS number (or patient name).</p>\n<p>Same would apply to other national identifiers such as GMC, GMP, ODS, etc codes for Practitioner and Organization. It is up to the client to decide where they go to resolve the identifier. <br>\nUsing GMC, GMP, ODS etc also matches existing HL7v2 and NHS Data Dictionary behaviour in the NHS</p>",
+        "id": 235487472,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1619001364
+    },
+    {
+        "content": "<p>So that is FHIR data but not FHIR REST data - because the server is not specified. </p>\n<p>It cannot be searched by FHIR RESTful search, without some special case server logic. </p>\n<p>Either an extension to the search code (but that may break existing functionality for identifiers) or by adding a custom operation perhaps.</p>",
+        "id": 235488976,
+        "sender_full_name": "Rik Smithies",
+        "timestamp": 1619002270
+    },
+    {
+        "content": "<p>I think from the point of view of a developer its consistent across API's.</p>\n<p>So for our main directory server, this is correct and would work (it has Practitioner, Organization and PractitionerRole - it's a FHIR Server)<br>\n[FHIRServer]/PractitionerRole?practitioner.identifier=https://fhir.nhs.uk/Id/user-id|1234567890</p>\n<p>Other servers which are more like (FHIR) micro services. (it wont have a Practitioner resource locally but understands the query)<br>\nHaving the same search parameters is easier for the developer and the way the API responds is very similar.</p>",
+        "id": 235491311,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1619003445
+    },
+    {
+        "content": "<p>Yes it is nice if that query can work, but it needs to do some NHS specific magic to resolve where those identifiers live. If they are on the same server maybe some servers can do it out of the box (there was discussion on here before e.g. <a href=\"#narrow/stream/179166-implementers/topic/How.20search.20on.20Reference.2Eidentifier.20in.20STU3\">https://chat.fhir.org/#narrow/stream/179166-implementers/topic/How.20search.20on.20Reference.2Eidentifier.20in.20STU3</a>), but otherwise not.</p>",
+        "id": 235504430,
+        "sender_full_name": "Rik Smithies",
+        "timestamp": 1619009837
+    },
+    {
+        "content": "<p>On the Vonk r3 server (<a href=\"https://server.fire.ly/r3/\">https://server.fire.ly/r3/</a>) I POSTed <br>\n&lt;PractitionerRole xmlns=http://hl7.org/fhir&gt;<br>\n    &lt;practitioner&gt;<br>\n        &lt;identifier&gt;<br>\n            &lt;system value=https://fhir.nhs.uk/Id/user-id/&gt;<br>\n            &lt;value value=\"QWERTY\"/&gt;     <br>\n        &lt;/identifier&gt;<br>\n    &lt;/practitioner&gt;<br>\n    &lt;code&gt;<br>\n        &lt;coding&gt;<br>\n            &lt;system value=https://fhir.hl7.org.uk/CodeSystem/UKCore-SDSJobRoleName /&gt;<br>\n            &lt;code value=\"R0260\" /&gt;<br>\n            &lt;display value=\"General Medical Practitioner\" /&gt;<br>\n        &lt;/coding&gt;<br>\n    &lt;/code&gt;<br>\n&lt;/PractitionerRole&gt;</p>\n<p>and then did a GET<br>\n<a href=\"https://server.fire.ly/r3/PractitionerRole?practitioner:identifier=https://fhir.nhs.uk/Id/user-id|QWERTY\">https://server.fire.ly/r3/PractitionerRole?practitioner:identifier=https://fhir.nhs.uk/Id/user-id|QWERTY</a><br>\n(note :identifier)<br>\nand the resource was returned. I repeated the same on a HAPI server &amp; nothing was returned. Given the discussion that Rik has pointed to, I think theintension is that <br>\nGET [base]/PractitionerRole?practitioner:identifier=[system]|[value]<br>\nis the intended way to retrieve resources where the Reference uses an identifier.</p>",
+        "id": 235523189,
+        "sender_full_name": "Dave Barnet",
+        "timestamp": 1619016664
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191651\">@Rik Smithies</span>  yep its a hot topic at the moment.</p>",
+        "id": 235525457,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1619017310
+    },
+    {
+        "content": "<p>practitioner:identifier is the way to search on Reference.identifier.</p>",
+        "id": 235542498,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1619023116
+    }
+]

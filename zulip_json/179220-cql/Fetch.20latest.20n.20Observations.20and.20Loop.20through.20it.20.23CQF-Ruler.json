@@ -1,0 +1,80 @@
+[
+    {
+        "content": "<p>Hi,</p>\n<p>I am working a POC using cqf-ruler to see if our rule based clinical decisions can be centralized. As part of this POC, I have stumbled upon one of the use case where we need to check if one of the latest 2 PTH observation results are &lt;= 400. I know we could use First() to get a latest observation. But here I need latest 2 observation.  Can someone help me with this?</p>\n<p>Something like this.....<br>\ndefine \"latestPTHObservation\"<br>\n  [Observation: code = 'FR_PTH-I'] O<br>\n    where O.effective &lt; Now() - 90 days<br>\n    sort by (effective as dateTime) desc <br>\n    count 2</p>",
+        "id": 259921426,
+        "sender_full_name": "Gautham Reddy Lingampally",
+        "timestamp": 1635800699
+    },
+    {
+        "content": "<p>There are probably more elegant ways to do this, but I think something like the following will meet your need.</p>\n<div class=\"codehilite\"><pre><span></span><code>define MostRecentTwoObservations:\n  ObservationsOrderedMostRecent[0]\n  union\n  ObservationsOrderedMostRecent[1]\n\ndefine ObservationsOrderedMostRecent:\n     [Observation:code = &#39;FR_PTH-I&#39;] o where O.effective &lt; Now() - 90 days sort by (effective as dateTime) desc\n</code></pre></div>",
+        "id": 260002198,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1635863093
+    },
+    {
+        "content": "<p>I don't think there's a slicing-type operator so you're stuck doing a union-of-elements like this.</p>",
+        "id": 260157349,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1635955835
+    },
+    {
+        "content": "<p>You can build a slice function with Intervals:</p>\n<div class=\"codehilite\" data-code-language=\"cql\"><pre><span></span><code>define function Slice(list List&lt;Any&gt;, range Interval&lt;Integer&gt;) returns List&lt;Any&gt;:\n  ((expand { range }) X return point from X) I\n    return list[I]\n\ndefine \"List Items\":\n  { 'One', 'Two', 'Three', 'Four', 'Five'}\n\ndefine \"Sliced List\":\n  Slice(\"List Items\", Interval[0, 1])\n</code></pre></div>",
+        "id": 260171870,
+        "sender_full_name": "JP",
+        "timestamp": 1635962014
+    },
+    {
+        "content": "<p>What is the type of \"I\" at this point? The \"expand\" operator is only vaguely touched on in the author's guide, would be good to have more elaboration on them.</p>",
+        "id": 260181721,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1635966164
+    },
+    {
+        "content": "<p>\"point from\" returns a single point from the interval, and the interval is of type Integer, so I is an integer.</p>",
+        "id": 260186872,
+        "sender_full_name": "JP",
+        "timestamp": 1635968550
+    },
+    {
+        "content": "<p>A first-class Slice function would be cool though.</p>",
+        "id": 260186934,
+        "sender_full_name": "JP",
+        "timestamp": 1635968585
+    },
+    {
+        "content": "<p>The name \"Slice\" is easily confused with the FHIR concept of slicing <a href=\"http://hl7.org/fhir/profiling.html#slicing\">http://hl7.org/fhir/profiling.html#slicing</a> so  I would avoid naming a CQL function \"Slice\" at least in the CQL spec.</p>",
+        "id": 260279302,
+        "sender_full_name": "Paul Denning",
+        "timestamp": 1636037078
+    },
+    {
+        "content": "<p>There is a <a href=\"https://cql.hl7.org/09-b-cqlreference.html#take\">Take</a> operator that will do exactly this, so it would be:<br>\n<code>Take(ObservationsOrderedMostRecent, 2)</code></p>",
+        "id": 260338519,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1636061923
+    },
+    {
+        "content": "<p>Thank you! Bryn. I also want to loop trough the list and check if the observation value is less than x. Is there a for loop kind of a thing in CQL?<br>\nCurrently, I am doing <code>ObservationsOrderedMostRecent[0].value.value &lt;= x or ObservationsOrderedMostRecent[1].value.value &lt;= x</code> but want have them in a loop if possible.</p>",
+        "id": 260435631,
+        "sender_full_name": "Gautham Reddy Lingampally",
+        "timestamp": 1636132411
+    },
+    {
+        "content": "<p>That would be just a where clause:</p>\n<div class=\"codehilite\"><pre><span></span><code>ObservationsOrderedMostRecent O\n  where O.value &lt;= x\n</code></pre></div>",
+        "id": 260530302,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1636225229
+    },
+    {
+        "content": "<p>Thank you! Bryn.</p>",
+        "id": 260657508,
+        "sender_full_name": "Gautham Reddy Lingampally",
+        "timestamp": 1636378852
+    },
+    {
+        "content": "<p>Hi Bryn,</p>\n<p>I have stumbled upon another scenario, to filter MedicationRequests based on the medication reference. I am trying to write a CQL which translates to below FHIR call.<br>\n<code>MedicationRequest?category=community&amp;status=active,completed&amp;medication.code:text=Tums</code><br>\nI came up with below  2 CQLs based on the another thread \"resolving reference\", but it doesn't seem to work on CQE-ruler (I am using dstu3). </p>\n<div class=\"codehilite\"><pre><span></span><code>exists (\n    [MedicationRequest: category = &quot;HomeMeds&quot;] MR\n    with [MR.medication -&gt; Medication] M\n      such that M.code = &quot;Tums&quot;\n        and (MR.status = &#39;active&#39; or MR.status = &#39;completed&#39;)\n        and M.ingredient[0].amount.numerator.value &lt; 1890\n        and MR.dosageInstruction[0].dose.value &lt; 6)\n</code></pre></div>\n<p>and </p>\n<div class=\"codehilite\"><pre><span></span><code>exists (\n     [MedicationRequest: category = &quot;HomeMeds&quot;] MR\n     with [Medication: &quot;Tums&quot;] M such that M.id in Last(Split(MR.medication.reference, &#39;/&#39;))   )\n</code></pre></div>\n<p>Can you please help me with this?</p>",
+        "id": 261024491,
+        "sender_full_name": "Gautham Reddy Lingampally",
+        "timestamp": 1636565511
+    }
+]

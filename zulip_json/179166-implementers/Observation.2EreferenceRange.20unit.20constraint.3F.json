@@ -1,0 +1,104 @@
+[
+    {
+        "content": "<p>Any best practices on ensuring that the units of referenceRange high/low match those of the valueQuantity, on Observation?</p>\n<p>To my surprise the base spec nor for example the vitalSigns profiles constrain anything on this...<br>\nOne approach is to constrain the referenceRange to only hold a value, without an explicit unit. (UnitlessQuantity).</p>\n<p><a href=\"https://www.hl7.org/fhir/observation-definitions.html#Observation.referenceRange.low\">https://www.hl7.org/fhir/observation-definitions.html#Observation.referenceRange.low</a><br>\n<a href=\"https://www.hl7.org/fhir/observation-definitions.html#Observation.referenceRange.high\">https://www.hl7.org/fhir/observation-definitions.html#Observation.referenceRange.high</a></p>\n<p>Example that should get flagged because of the <code>kg</code> vs <code>nmol/L</code> units</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;resourceType&quot;: &quot;Observation&quot;,\n  &quot;code&quot;: {\n    &quot;coding&quot;: [\n      {\n        &quot;system&quot;: &quot;http://loinc.org&quot;,\n        &quot;code&quot;: &quot;76485-2&quot;,\n      }\n    ]\n  },\n  &quot;valueQuantity&quot;: {\n    &quot;value&quot;: 45,\n    &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,\n    &quot;code&quot;: &quot;nnmol/L&quot;\n  },\n  &quot;referenceRange&quot;: [\n    {\n      &quot;low&quot;: {\n        &quot;value&quot;: 40,\n        &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,\n        &quot;code&quot;: &quot;kg&quot;\n      },\n      &quot;high&quot;: {\n        &quot;value&quot;: 140,\n        &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,\n        &quot;code&quot;: &quot;kg&quot;\n      },\n      &quot;text&quot;: &quot;40-140&quot;\n    }\n  ]\n  ...\n}\n</code></pre></div>",
+        "id": 257678018,
+        "sender_full_name": "David Simons",
+        "timestamp": 1634294734
+    },
+    {
+        "content": "<p>No expectation they'll match.  The reference ranges are just that - ranges assigned by the equipment manufacturer, lab procedures manual or something else.  If the reference range for body weight for a given age and gender is 5-7kg, that doesn't mean a clinician can't capture the weight in pounds or ounces.  Some organizations might have best practices that require this - or at least require a translation to the reference range units, but it's not something we can enforce across all types of measurements across all countries.</p>",
+        "id": 257696465,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1634304130
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179166-implementers/topic/Observation.2EreferenceRange.20unit.20constraint.3F/near/257696465\">said</a>:</p>\n<blockquote>\n<p>No expectation they'll match.  The reference ranges are just that - ranges assigned by the equipment manufacturer, lab procedures manual or something else.  If the reference range for body weight for a given age and gender is 5-7kg, that doesn't mean a clinician can't capture the weight in pounds or ounces.  Some organizations might have best practices that require this - or at least require a translation to the reference range units, but it's not something we can enforce across all types of measurements across all countries.</p>\n</blockquote>\n<p>Thanks, your example of an alternate unit that _is_ clinically relevant (lbs vs kg) indeed helps to understand that such constraints would be very context specific. Hence, we'll have to create solution-specific profiles with corresponding valueset bindings on the units for example, in the context of use.</p>",
+        "id": 257707998,
+        "sender_full_name": "David Simons",
+        "timestamp": 1634308641
+    },
+    {
+        "content": "<p>Trying to add a warning using FHIRPath expressions - crazy how tricky it is to debug/tweak these expressions to give the correct outcome:</p>\n<div class=\"codehilite\"><pre><span></span><code>&lt;element id=&quot;Observation.referenceRange&quot;&gt;\n      &lt;path value=&quot;Observation.referenceRange&quot; /&gt;\n      &lt;constraint&gt;\n        &lt;key value=&quot;Observation.referenceRange.low.code&quot; /&gt;\n        &lt;severity value=&quot;warning&quot; /&gt;\n        &lt;human value=&quot;SHOULD have a match in unit code between valueQuantity and referenceRange.low&quot; /&gt;\n        &lt;expression value=&quot;Observation.referenceRange.where( low.code.toString() != Observation.value.ofType(Quantity).code.toString() ).empty()&quot; /&gt;\n      &lt;/constraint&gt;\n      &lt;constraint&gt;\n        &lt;key value=&quot;Observation.referenceRange.high.code&quot; /&gt;\n        &lt;severity value=&quot;warning&quot; /&gt;\n        &lt;human value=&quot;SHOULD have a match in unit code between valueQuantity and referenceRange.high&quot; /&gt;\n        &lt;expression value=&quot;Observation.referenceRange.where( high.code.toString() != Observation.value.ofType(Quantity).code.toString() ).empty()&quot; /&gt;\n      &lt;/constraint&gt;\n      &lt;mustSupport value=&quot;true&quot; /&gt;\n      &lt;isModifier value=&quot;false&quot; /&gt;\n    &lt;/element&gt;\n</code></pre></div>\n<p>Unfortunately the where - to handle the <strong>multiple</strong> referenceRanges on the Observation - does not work as expected... Any tips?</p>",
+        "id": 259248596,
+        "sender_full_name": "David Simons",
+        "timestamp": 1635345316
+    },
+    {
+        "content": "<p>This works <code>$this.referenceRange.where(low.code.toString() != 'Cel').empty()</code>with hardcoded String,<br>\n , but I want to use the actual Observation.valueQuantity.code from the same Resource being validated.</p>",
+        "id": 259250340,
+        "sender_full_name": "David Simons",
+        "timestamp": 1635345932
+    },
+    {
+        "content": "<p>If your context is Observation.referenceRange, you can't refer to Observation.value unless you use %resource.  (It's not in scope.)</p>",
+        "id": 259250837,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1635346100
+    },
+    {
+        "content": "<p>Also, you want to check for a match, not a non- match.  (The expression asserts what is desired to be true)</p>",
+        "id": 259250958,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1635346143
+    },
+    {
+        "content": "<p>Finally, if you're already in Observation.referenceRange, you shouldn't be prefixing with Observation.referenceRange.</p>",
+        "id": 259251041,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1635346186
+    },
+    {
+        "content": "<p>I think what you want is:<br>\n<code>high.code.empty() or %resource.value.empty or (high.code=%resource.value.ofType(Quantity).code and high.system=%resource.value.ofType(Quantity).system)</code></p>",
+        "id": 259252541,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1635346757
+    },
+    {
+        "content": "<p>Thanks!</p>\n<p>The challenge is the multiplicity of referenceRange... or does the PATH iterate over all of those?</p>\n<p>So yeah, I had tried the root Observation context also, to have the valueQuantity in scope - good to know about <code>%resource</code>!</p>\n<div class=\"codehilite\"><pre><span></span><code>   &lt;element id=&quot;Observation&quot;&gt;\n      &lt;path value=&quot;Observation&quot; /&gt;\n      &lt;constraint&gt;\n        &lt;key value=&quot;Observation.referenceRange.low.code&quot; /&gt;\n        &lt;severity value=&quot;warning&quot; /&gt;\n        &lt;human value=&quot;SHOULD have a match in unit code between valueQuantity and referenceRange.low&quot; /&gt;\n        &lt;expression value=&quot;referenceRange.where( low.code.toString() != %resource.value.ofType(Quantity).code.toString() ).empty()&quot; /&gt;\n      &lt;/constraint&gt;\n      &lt;mustSupport value=&quot;true&quot; /&gt;\n      &lt;isModifier value=&quot;false&quot; /&gt;\n    &lt;/element&gt;\n</code></pre></div>\n<p>Note that I am searching for mismatches: the <code>!=</code> is used to ensure there are no (<code>empty()</code>) mismatches, across the multiple referenceRange.low attributes (via the <code>where</code>). </p>\n<p>Lastly, I used the toString(), to compare codes, I sensed that comparing codes directly did not work?</p>\n<p>Will try your suggestions</p>",
+        "id": 259253804,
+        "sender_full_name": "David Simons",
+        "timestamp": 1635347180
+    },
+    {
+        "content": "<p>Comparing codes directly should be fine.  The invariant will trigger on each element repetition at the element path the invariant is declared on.  You don't want to search for mismatches, you want to assert that all should be matches.  The warning will trigger if the specified expression evaluates to 'false'.</p>",
+        "id": 259257564,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1635348554
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179166-implementers/topic/Observation.2EreferenceRange.20unit.20constraint.3F/near/259257564\">said</a>:</p>\n<blockquote>\n<p>The invariant will trigger on each element repetition at the element path the invariant is declared on. </p>\n</blockquote>\n<p>Clear - thank you - if indeed the constraint is evaluated separately for each instance of the path, then I don't need the where and the negation approach, as you say, and can keep it a simple comparison.</p>\n<p>Really appreciate the help - this kind of detail is hard to find in the docs.</p>",
+        "id": 259261436,
+        "sender_full_name": "David Simons",
+        "timestamp": 1635350181
+    },
+    {
+        "content": "<p>If you want to propose enhanced wording in the spec, change requests are always welcome :)</p>",
+        "id": 259267762,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1635352672
+    },
+    {
+        "content": "<p>Yes, will try to . Helping to build a knowledge base here on Zulip also should help others.</p>\n<p>Particularly the following I could not find on &lt;<a href=\"https://hl7.org/fhirpath/\">https://hl7.org/fhirpath/</a>&gt;</p>\n<ul>\n<li>%resource</li>\n<li>the element repetition handling of constraint under a given  element path</li>\n</ul>\n<p>As an update, the following seems to work - but will also try to further simplify tomorrow.</p>\n<p>The <code>%resources</code> and the precondition of the code.exists() seemed to have helped me.</p>\n<div class=\"codehilite\"><pre><span></span><code>&lt;element id=&quot;Observation&quot;&gt;\n      &lt;path value=&quot;Observation&quot; /&gt;\n      &lt;constraint&gt;\n        &lt;key value=&quot;Observation.referenceRange.low.code&quot; /&gt;\n        &lt;severity value=&quot;warning&quot; /&gt;\n        &lt;human value=&quot;SHOULD have a match in unit code between valueQuantity and referenceRange.low&quot; /&gt;\n        &lt;expression value=&quot;referenceRange.where( low.code.exists() and (low.code != %resource.value.ofType(Quantity).code) ).empty()&quot; /&gt;\n      &lt;/constraint&gt;\n      &lt;constraint&gt;\n        &lt;key value=&quot;Observation.referenceRange.high.code&quot; /&gt;\n        &lt;severity value=&quot;warning&quot; /&gt;\n        &lt;human value=&quot;SHOULD have a match in unit code between valueQuantity and referenceRange.high&quot; /&gt;\n        &lt;expression value=&quot;referenceRange.where( high.code.exists() and (high.code != %resource.value.ofType(Quantity).code) ).empty()&quot; /&gt;\n      &lt;/constraint&gt;\n      &lt;mustSupport value=&quot;true&quot; /&gt;\n      &lt;isModifier value=&quot;false&quot; /&gt;\n    &lt;/element&gt;\n</code></pre></div>",
+        "id": 259275724,
+        "sender_full_name": "David Simons",
+        "timestamp": 1635355750
+    },
+    {
+        "content": "<p>You won't find anything about %resource in the base fhirpath spec because that's a FHIR-specific extension.  (It wouldn't make any sense for FHIRPath exercised against v2, for example.</p>",
+        "id": 259279660,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1635357380
+    },
+    {
+        "content": "<p><a href=\"http://hl7.org/fhir/fhirpath.html\">http://hl7.org/fhir/fhirpath.html</a></p>",
+        "id": 259311657,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1635371400
+    },
+    {
+        "content": "<p>Thank you both</p>\n<p>An for completeness, the following is more elegant indeed, also works, and gives the warnings more precisely on the line items of the referenceRange:</p>\n<div class=\"codehilite\"><pre><span></span><code>  &lt;element id=&quot;Observation.referenceRange&quot;&gt;\n      &lt;path value=&quot;Observation.referenceRange&quot; /&gt;\n      &lt;constraint&gt;\n        &lt;key value=&quot;Observation.referenceRange.low.code&quot; /&gt;\n        &lt;severity value=&quot;warning&quot; /&gt;\n        &lt;human value=&quot;SHOULD have a match in unit code between valueQuantity and all referenceRange.low&quot; /&gt;\n        &lt;expression value=&quot;(%resource.value.ofType(Quantity).code.exists() and low.code.exists()) implies (%resource.value.ofType(Quantity).code = low.code)&quot; /&gt;\n      &lt;/constraint&gt;\n      &lt;constraint&gt;\n        &lt;key value=&quot;Observation.referenceRange.high.code&quot; /&gt;\n        &lt;severity value=&quot;warning&quot; /&gt;\n        &lt;human value=&quot;SHOULD have a match in unit code between valueQuantity and all referenceRange.high&quot; /&gt;\n        &lt;expression value=&quot;(%resource.value.ofType(Quantity).code.exists() and high.code.exists()) implies (%resource.value.ofType(Quantity).code = high.code)&quot; /&gt;\n      &lt;/constraint&gt;\n      &lt;mustSupport value=&quot;true&quot; /&gt;\n      &lt;isModifier value=&quot;false&quot; /&gt;\n    &lt;/element&gt;\n</code></pre></div>",
+        "id": 259402627,
+        "sender_full_name": "David Simons",
+        "timestamp": 1635433536
+    }
+]

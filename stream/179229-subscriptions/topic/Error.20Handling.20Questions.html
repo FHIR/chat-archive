@@ -1,0 +1,75 @@
+---
+layout: page
+title: "FHIR Chat  · Error Handling Questions · subscriptions"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/index.html">subscriptions</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Error.20Handling.20Questions.html">Error Handling Questions</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="247271302"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Error%20Handling%20Questions/near/247271302" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> adam strickland <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Error.20Handling.20Questions.html#247271302">(Jul 26 2021 at 22:18)</a>:</h4>
+<p>Hi there, I've been reviewing the <a href="https://build.fhir.org/ig/HL7/fhir-subscription-backport-ig/errors.html">error handling</a> sections of the backport IG, and one question I have is how servers (publishers) are supposed to know to set the status of a subscription to <em>error</em>. </p>
+<p>In both docs we stress how error handling should be simple for the server, but right now we only have the plumbing in place for errors that <strong>both</strong> clients (subscribers) and servers could know about. In cases where the client has an issue internally that stops them from processing the notification, but otherwise correctly acknowledges the notification to the server, the server has no specified way of re-exposing that notification to the client. <a href="https://build.fhir.org/ig/HL7/fhir-subscription-backport-ig/OperationDefinition-backport-subscription-status.html">$status</a> for instance will only expose notifications that the server knows have failed.</p>
+<p>To better allow clients to recover from errors, we propose there should be a <code>$events</code> operation on a Subscription resource (similar to <code>$status</code>) where clients can retrieve ALL events since a given point. An <code>_eventsSinceSubscriptionStart</code> parameter could be used to limit the response to just the most recent events, based off the last <code>eventsSinceSubscriptionStart</code> value the client received. For instance, if a client has not received any notifications since event 150, they could query periodically to ensure they haven't missed 150+ like so:</p>
+<div class="codehilite"><pre><span></span><code>Subscription/[ID]/$events?_eventsSinceSubscriptionStart=150
+</code></pre></div>
+<p>This method has the added benefit of enabling efficient polling for clients that don't want to receive notifications. A client could sign up for a subscription without notifications, and just query periodically to see which resources have been updated.</p>
+<p>Any thoughts on this <code>$events</code> operation?</p>
+
+
+
+<a name="247273940"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Error%20Handling%20Questions/near/247273940" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Error.20Handling.20Questions.html#247273940">(Jul 26 2021 at 22:50)</a>:</h4>
+<p><span class="user-mention" data-user-id="222054">@Gino Canessa</span></p>
+
+
+
+<a name="247356531"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Error%20Handling%20Questions/near/247356531" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Error.20Handling.20Questions.html#247356531">(Jul 27 2021 at 16:25)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="372206">adam strickland</span> <a href="#narrow/stream/179229-subscriptions/topic/Error.20Handling.20Questions/near/247271302">said</a>:</p>
+<blockquote>
+<p>In both docs we stress how error handling should be simple for the server, but right now we only have the plumbing in place for errors that <strong>both</strong> clients (subscribers) and servers could know about. In cases where the client has an issue internally that stops them from processing the notification, but otherwise correctly acknowledges the notification to the server, the server has no specified way of re-exposing that notification to the client. <a href="https://build.fhir.org/ig/HL7/fhir-subscription-backport-ig/OperationDefinition-backport-subscription-status.html">$status</a> for instance will only expose notifications that the server knows have failed.</p>
+</blockquote>
+<p>Yes, that is beyond the scope of anything we have defined.  If a client acknowledges receipt of a notification, then it is the client's responsibility from there out.  This feels like a reasonable boundary.</p>
+<blockquote>
+<p>To better allow clients to recover from errors, we propose there should be a <code>$events</code> operation on a Subscription resource (similar to <code>$status</code>) where clients can retrieve ALL events since a given point. An <code>_eventsSinceSubscriptionStart</code> parameter could be used to limit the response to just the most recent events, based off the last <code>eventsSinceSubscriptionStart</code> value the client received. For instance, if a client has not received any notifications since event 150, they could query periodically to ensure they haven't missed 150+ like so:</p>
+<p><code>Subscription/[ID]/$events?_eventsSinceSubscriptionStart=150</code></p>
+<p>This method has the added benefit of enabling efficient polling for clients that don't want to receive notifications. A client could sign up for a subscription without notifications, and just query periodically to see which resources have been updated.</p>
+<p>Any thoughts on this <code>$events</code> operation?</p>
+</blockquote>
+<p>I'm good with <em>defining</em> a way to query events (missed or otherwise), with explicit acknowledgement that it is optional for servers to implement and given that it has plenty of leeway in those implementations.  While some servers will store events forever, others may want to cap based on number of events (e.g., the last 10), time (e.g., flushed weekly), some other parameters that are internal to the server (e.g., depending on the user/customer creating the subscription), or not want to store them at all.</p>
+<p>I am... uncomfortable? discussing the use case of a polling-only client in R4 right now.  I am hesitant to touch polling-based mechanisms since there is already a well-established way to poll a server (RESTful query).  I see plenty of design space where this could be useful (a mechanism for clients to create custom change-feeds), but we don't have experience with it and I don't think we can afford to delay the R4 IG publication to get that experience.</p>
+<p>Overall, I support the idea of getting an operation in now that has a shape and a low bar for implementation.  We can then use the time between R4B publication and R5 to gain more experience and see if there are changes to be made.</p>
+<p>If you could file a ticket against the backport IG, since that is a lower bar for additions than R4B, we can (hopefully =) get a vote at the next FHIR-I call and go from there.</p>
+<p>Thoughts (Adam or anyone else)?</p>
+
+
+
+<a name="247371954"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Error%20Handling%20Questions/near/247371954" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> adam strickland <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Error.20Handling.20Questions.html#247371954">(Jul 27 2021 at 18:28)</a>:</h4>
+<p>Thanks Gino, created a <a href="https://jira.hl7.org/browse/FHIR-33102">Jira ticket</a> with more details.</p>
+
+
+
+<a name="248262714"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Error%20Handling%20Questions/near/248262714" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> adam strickland <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Error.20Handling.20Questions.html#248262714">(Aug 03 2021 at 18:49)</a>:</h4>
+<p>Last week we left off on (among other things) the question of whether $events should be re-triggered (based on current data) or re-sent (based on table at initial notification time). I think this will be related to the adjacent topic on tagging batched/included resources.</p>
+<p>My pitch is that the resource/id content should be treated like a re-send <strong>(updated, did not mean trigger)</strong>, but that for brevity we could sort of coalesce all appearances of a resource into a single entry that inherits all of it's tags.</p>
+<p>For example, take 2 events separately sent with id-only payloads. Event 1 has PatientA as the focus, and Event 2 has patientA as an included reference.  If you call $events asking for events 1-2, we could return a single entry for PatientA that is tagged as the focus of Event 1 and included by Event 2.</p>
+<p>This is assuming we go forward with tags like this. Definitely interested to hear about AuditEvent and how that could encapsulate this.</p>
+
+
+
+<a name="248263983"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179229-subscriptions/topic/Error%20Handling%20Questions/near/248263983" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179229-subscriptions/topic/Error.20Handling.20Questions.html#248263983">(Aug 03 2021 at 18:59)</a>:</h4>
+<p>I think that makes sense.  I believe I left some additional notes there as I was processing last week, but I as I was working through it I figured it makes sense to also have a parameter on <code>$events</code> that allows a caller to change the payload type.  E.g., even though the subscription is normally <code>id-only</code>, when I'm doing a synchronous query, it is inefficient to have the server build out the graph of ids and know that the <em>next</em> request will be to resolve that query.  In that case, you can do something like <code>/Subscription/id/$events?...&amp;content=full-resource</code> to hint the server (if the server can/wants to) and return the resources.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

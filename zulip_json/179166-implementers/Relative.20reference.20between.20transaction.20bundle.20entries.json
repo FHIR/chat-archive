@@ -1,0 +1,62 @@
+[
+    {
+        "content": "<p>Is it recommended to use fullUrl instead of relative url for reference between transaction bundle entries ? The hl7 spec says:</p>\n<p>2.36.4 Resource URL &amp; Uniqueness rules in a bundle <br>\nExcept for transactions and batches, each entry in a Bundle must have a fullUrl which is the identity of the resource in the entry. Note that this is not a versioned reference to the resource, but its identity. Where a resource is not assigned a persistent identity that can be used in the Bundle, a UUID should be used (urn:uuid:...).</p>\n<p>For transactions and batches, entries MAY not have fullURLs when the entry.request.method = POST, and the resource has no identity. Note that even in this case, there may still be a fullURL in a transaction on a POST so that relationships between resources can be represented (see Transactions).</p>\n<p>And 2.36.4.1 Resolving references in Bundles</p>\n<ul>\n<li>If the reference is not an absolute reference, convert it to an absolute URL:<ul>\n<li>if the reference has the format [type]/[id], and</li>\n<li>if the fullUrl for the bundle entry containing the resource is a RESTful one (see the RESTful URL regex)<ul>\n<li>extract the [root] from the fullUrl, and append the reference (type/id) to it</li>\n<li>then try to resolve within the bundle as for a RESTful URL reference.</li>\n<li>If no resolution is possible, then the reference has no defined meaning within this specification</li>\n</ul>\n</li>\n<li>else no resolution is possible and the reference has no defined meaning within this specification</li>\n</ul>\n</li>\n<li>else<ul>\n<li>Look for an entry with a fullUrl that matches the URI in the reference</li>\n<li>if no match is found, and the URI is a URL that can be resolved (e.g. if an http: URL), try accessing it directly)</li>\n</ul>\n</li>\n</ul>\n<p>My interpretation is relative url is allowed for transaction and batch bundle. However when testing with Vonk FHIR endpint, the server is expecting fullUrl to represent relation between bundle entries. For example when posting the following  bundle:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;resourceType&quot;: &quot;Bundle&quot;,\n  &quot;id&quot;: &quot;e0a07c37-8df7-4d75-aa11-3085369e8d36&quot;,\n  &quot;type&quot;: &quot;transaction&quot;,\n  &quot;entry&quot;: [\n    {\n      &quot;resource&quot;: {\n        &quot;resourceType&quot;: &quot;List&quot;,\n        &quot;id&quot;: &quot;xyz&quot;,\n        &quot;status&quot;: &quot;current&quot;,\n        &quot;mode&quot;: &quot;snapshot&quot;,\n        &quot;date&quot;: &quot;2020-05-27T08:55:40-04:00&quot;,\n        &quot;entry&quot;: [\n          {\n            &quot;item&quot;: {\n              &quot;reference&quot;: &quot;Patient/abc&quot;,\n              &quot;display&quot;: &quot;Betsy Smith-Johnson&quot;\n            }\n          }\n        ]\n      },\n      &quot;request&quot;: {\n        &quot;method&quot;: &quot;POST&quot;,\n        &quot;url&quot;: &quot;List&quot;\n      }\n    },\n    {\n      &quot;resource&quot;: {\n        &quot;resourceType&quot;: &quot;Patient&quot;,\n        &quot;id&quot;: &quot;abc&quot;,\n        &quot;name&quot;: [\n          {\n            &quot;family&quot;: &quot;Smith-Johnson&quot;,\n            &quot;given&quot;: [\n              &quot;Betsy&quot;\n            ]\n          }\n        ]\n      },\n      &quot;request&quot;: {\n        &quot;method&quot;: &quot;POST&quot;,\n        &quot;url&quot;: &quot;Patient&quot;\n      }\n    }\n  ]\n}\n</code></pre></div>\n\n\n<p>The server won’t update list.entry[0].item.reference  \"Patient/abc” (because the server expects fullUrl here) when generates new local id for the Patient resource.</p>\n<p>Is it server's responsibility to support relative url reference for transaction/batch bundle? Or is it recommended for the client to use fullUrl for reference ?</p>\n<p>Thanks,<br>\nYan</p>",
+        "id": 198886697,
+        "sender_full_name": "Yan Wang",
+        "timestamp": 1590584476
+    },
+    {
+        "content": "<p>Relative URLs should be ok.  However, I don't see fullURLs being declared for your entries - those are mandatory in a transaction</p>",
+        "id": 198895536,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1590588548
+    },
+    {
+        "content": "<p>Maybe the confusion is here:</p>\n<blockquote>\n<p>For transactions and batches, entries MAY not have fullURLs when the entry.request.method = POST, and the resource has no identity. Note that even in this case, there may still be a fullURL in a transaction on a POST so that relationships between resources can be represented (see Transactions).</p>\n</blockquote>\n<p>I am not quite sure how to interpret that...</p>",
+        "id": 198908140,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1590593042
+    },
+    {
+        "content": "<p>My interpretation of that is that anything you're referencing and anything containing a 'local' reference must have a fullUrl.  Without those, the references cannot be resolved.  Agree we could be clearer.  <span class=\"user-mention\" data-user-id=\"192685\">@Vassil Peytchev</span> can you submit a change request?</p>",
+        "id": 198914504,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1590595803
+    },
+    {
+        "content": "<p>In the case of POST in a transaction, does that mean that the fullURLs must be UUIDs? And if there have to be fullUrls, do references within the transaction have to use the fulUrl?</p>",
+        "id": 198919101,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1590597957
+    },
+    {
+        "content": "<p>References can use relative URLs even if the baseUrl is a UUID.  The fullUrl could be the URL of the resource on the sending system or another system (if one exists).  Otherwise, yes it should be a UUID.</p>",
+        "id": 198920786,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1590598702
+    },
+    {
+        "content": "<p>Since you POST the Patient/abc, the id is ignored so I think there is no point in referencing Patient/abc.<br>\nIMHO the correct way to reference this Patient from the list is by adding a fullUrl to the entry and reference that from the List.entry.item.reference.</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;resourceType&quot;: &quot;Bundle&quot;,\n  &quot;id&quot;: &quot;e0a07c37-8df7-4d75-aa11-3085369e8d36&quot;,\n  &quot;type&quot;: &quot;transaction&quot;,\n  &quot;entry&quot;: [\n    {\n            &quot;fullUrl&quot;: &quot;urn:uuid:d2a13b37-6611-48a7-a00a-92670e24665f&quot;,\n      &quot;resource&quot;: {\n        &quot;resourceType&quot;: &quot;List&quot;,\n        &quot;id&quot;: &quot;xyz&quot;,\n        &quot;status&quot;: &quot;current&quot;,\n        &quot;mode&quot;: &quot;snapshot&quot;,\n        &quot;date&quot;: &quot;2020-05-27T08:55:40-04:00&quot;,\n        &quot;entry&quot;: [\n          {\n            &quot;item&quot;: {\n              &quot;reference&quot;: &quot;urn:uuid:f4534fe7-5e7a-4ebd-85aa-cc4efd187b13&quot;, //note that the fullUrl of the Patient entry is used.\n              &quot;display&quot;: &quot;Betsy Smith-Johnson&quot;\n            }\n          }\n        ]\n      },\n      &quot;request&quot;: {\n        &quot;method&quot;: &quot;POST&quot;,\n        &quot;url&quot;: &quot;List&quot;\n      }\n    },\n    {\n            &quot;fullUrl&quot;: &quot;urn:uuid:f4534fe7-5e7a-4ebd-85aa-cc4efd187b13&quot;,\n      &quot;resource&quot;: {\n        &quot;resourceType&quot;: &quot;Patient&quot;,\n        &quot;id&quot;: &quot;abc&quot;,\n        &quot;name&quot;: [\n          {\n            &quot;family&quot;: &quot;Smith-Johnson&quot;,\n            &quot;given&quot;: [\n              &quot;Betsy&quot;\n            ]\n          }\n        ]\n      },\n      &quot;request&quot;: {\n        &quot;method&quot;: &quot;POST&quot;,\n        &quot;url&quot;: &quot;Patient&quot;\n      }\n    }\n  ]\n}\n</code></pre></div>",
+        "id": 199002664,
+        "sender_full_name": "Christiaan Knaap",
+        "timestamp": 1590659924
+    },
+    {
+        "content": "<p><a href=\"http://jira.hl7.org/browse/FHIR-27742\">FHIR#27742</a> - note that the current language strongly supports <span class=\"user-mention\" data-user-id=\"191757\">@Christiaan Knaap</span>'s position.</p>",
+        "id": 199028616,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1590675785
+    },
+    {
+        "content": "<p>+1, that has been my interpretation as well</p>",
+        "id": 199028872,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1590675896
+    },
+    {
+        "content": "<p>Thank you all for the clarification</p>",
+        "id": 199552567,
+        "sender_full_name": "Yan Wang",
+        "timestamp": 1591131513
+    }
+]

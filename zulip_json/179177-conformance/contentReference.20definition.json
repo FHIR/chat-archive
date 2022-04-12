@@ -1,0 +1,38 @@
+[
+    {
+        "content": "<p>The definition of ElementDefinition.contentReference states:<br>\n\"Identifies the identity of an element defined elsewhere in the profile whose content rules should be applied to the current element.\"<br>\n<a href=\"http://hl7.org/fhir/elementdefinition-definitions.html#ElementDefinition.contentReference\" target=\"_blank\" title=\"http://hl7.org/fhir/elementdefinition-definitions.html#ElementDefinition.contentReference\">http://hl7.org/fhir/elementdefinition-definitions.html#ElementDefinition.contentReference</a></p>\n<p>Q: Shouldn't content references always be resolved from the <em>introducing</em> core resource, instead of within the referencing profile?</p>\n<p>The official definition implies that profile elements at deeper levels (e.g. PlanDefinition.action.action) would inherit constraints from the contentreference target element in the <em>same</em> profile (e.g. PlanDefinition.action). So e.g. if a PlanDefinition profile introduces an extension on .action, then all child actions at deeper nesting levels would automatically inherit this extension. I don't think that this is what profile authors expect or need.</p>\n<p>Intuitively it seems to make more sense to resolve the target of a contentReference from the original core resource that introduces the referenced element. This alternative behavior allows a (derived) profile author to define different constraints on different nesting levels independently. And as always, a profile inherits existing constraints from the immediate base profile.</p>\n<p>So I'm thinking about the following alternative logic for expanding content references:</p>\n<p>1. Try to find matching element in the immediate base profile snapshot (with same path/id)<br>\n   If match, then merge profile diff constraints onto matching base elements<br>\n   No need to resolve contentReference; already merged into base profile snapshot<br>\n2. Otherwise try to resolve the content reference in the core profile<br>\n   Then merge profile diff constraints onto matching core elements</p>\n<p>This would allow a derived profile to inherit constraints from the immediate base profile and also introduce separate constraints on each nesting level of a content reference.</p>\n<p>Does this make any sense?</p>",
+        "id": 153929103,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1516124367
+    },
+    {
+        "content": "<p>Hard!  </p>\n<p>On the one hand, you could say: when the contentReference was created by the author, he/she did not know which additional constraints derived profiles would make on the target - and they may not apply to the element where the contentReference was made from in that profile.  On the other hand, if both places where the constraints are used/reused are considered to be \"the same\" (and the author of the profile really does not want to make a difference) - you'd have to explicitly include the original node + apply exactly the same set of constraints in both places (or worse) to make that happen.</p>\n<p>In my mental picture, when a contentReference is specified, I consider the target of the reference a kind of \"local type definition\" - and logically both places (the source and the target of the contentReference) are simply re-using that type. In this worldview, a profile would actually be making constraints on that \"local type\" and thus the constraints would appear in both places.</p>",
+        "id": 153929608,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1516367110
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191351\">@Chris Grenz</span>, <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>, <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> ?</p>",
+        "id": 153930273,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1516705854
+    },
+    {
+        "content": "<p>The semantics of a recursive element I think lean towards sameness for sub-elements. Meaning that a profile constraint would apply to the original element and every recursive instance of it (as today I believe). However that leaves us with no way to constrain only the root element.  I don't think this can be resolved by choosing one of the options <span class=\"user-mention\" data-user-id=\"191336\">@Michel Rutten</span> presents. There's two different intents that each need their own syntax.</p>",
+        "id": 153930278,
+        "sender_full_name": "Chris Grenz",
+        "timestamp": 1516715682
+    },
+    {
+        "content": "<p>Consider a profile on a resource with a recursive contentReference, e.g. PlanDefinition.</p>\n<p>1. resolve contentReferences <em>within the same profile</em><br>\n=&gt; constraints defined on a certain .action[..].action level are automatically inherited by all nested .action[..].action elements at deeper levels; constraints on the root element are inherited by all deeper nested elements.<br>\n=&gt; author can not define individual constraints per nesting level</p>\n<p>2. resolve contentReferences <em>from the defining (core) profile</em><br>\n=&gt; author can/must explicitly define constraints per nesting level, separately<br>\n=&gt; author can not define \"global\" constraints that apply to all nesting levels</p>\n<p>Functionally, both alternatives could make sense, depending on the situation.</p>\n<p>Option (1) will introduce considerable implementation challenges in order to deal with complex recursive scenarios. In theory, constraints infinitely propagate and aggregate down the tree. Now imagine introducing derived profiles into the mix, such as deriving from the above PlanDefinition and further constraining nested actions. At this point, I'm not yet certain if it is even possible to implement approach (1) in a stable and reliable way...? Also I'm worried that the inheritance rules become too complex for end users to comprehend/control/predict.</p>\n<p>Option (2) is relatively straight forward to implement. Also the behavior is relatively predictable for end users. This approach does not allow defining global/common constraints on all levels. However that seems similar to not being able to define common constraints on backbone elements. Maybe we could address both concerns by introducing/allowing profiles on backbone elements, as Ewout recently proposed.</p>",
+        "id": 153930284,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1516718863
+    },
+    {
+        "content": "<p>So, I'd say that the \"type\" of the element is always the type as defined in the original resource.  That's what we're doing initially is declaring a type - the same as if we'd referenced a data type.  The fact it's a resolvable backbone element makes no difference.  In profiles, you can do inline constraints on a backbone element the same as anywhere else.  If you want to enforce that the same set of constraints apply multiple places, you either define a profile or you repeat the constraints multiple times.  For backbone elements, creating profiles currently isn't an option (whether that's on multiple slices or references).  I'd be in favor of supporting profiling on backbone elements.  (Which would mean we could collapse Composition.section back into the resource instead of pulling it out as a type.)</p>",
+        "id": 153930289,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1516719998
+    }
+]

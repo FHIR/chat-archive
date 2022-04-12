@@ -1,0 +1,116 @@
+[
+    {
+        "content": "<p>I tried upgrading our server to the latest draft of this IG and its mostly working.<br>\nOne thing I noticed is that the FHIRPath expressions for the <code>EOB-inst-careTeam-practitioner</code> and <code>EOB-inst-careTeam-organization</code> are rather broken.<br>\nIs there an existing tracker that covers this?</p>",
+        "id": 209690847,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1599763332
+    },
+    {
+        "content": "<p>from the latest draft they are:<br>\nEOB-inst-careTeam-practitioner: <code>( careTeam.role.coding.code in ('attending' or 'primary' or 'referring' or 'supervising')) implies careTeam.provider.reference.resolve().is(FHIR.Practitioner)</code><br>\nand<br>\nEOB-inst-careTeam-organization: <code>( careTeam.role.coding.code='performing') implies careTeam.provider.reference.resolve().is(FHIR.Organization)</code></p>",
+        "id": 209709545,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1599772168
+    },
+    {
+        "content": "<p>each of these is broken in various ways</p>",
+        "id": 209709559,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1599772176
+    },
+    {
+        "content": "<p>In either case, it ignores the cardinality of the elements.  For repeating fields, these simple paths return a collection and then these expressions are using those collections with operators that only work when the left-hand operand is a singleton</p>",
+        "id": 209709912,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1599772332
+    },
+    {
+        "content": "<p>Additionally, the invariants are declared on the <code>ExplanationOfBenefit.careTeam</code> element.  In our server at least, this is the context of the evaluation.  So they should not include <code>careTeam.</code> in the expressions...they should either be moved to become top-level constraints (on the ExplanationOfBenefit element) or the paths should omit the <code>careTeam</code> part.</p>",
+        "id": 209710251,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1599772516
+    },
+    {
+        "content": "<p>Finally, in the case of <code>EOB-inst-careTeam-practitioner</code>, the <code>in ('attending' or 'primary' or 'referring' or 'supervising')</code> is not right...I think that should be a union of literals rather than logical ors</p>",
+        "id": 209710329,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1599772562
+    },
+    {
+        "content": "<p>putting those things together, I tried my hand to \"fix\" these and came up with the following</p>",
+        "id": 209710387,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1599772584
+    },
+    {
+        "content": "<ol>\n<li>I added a lot of <code>.where(criteria).exists()</code> stuff</li>\n<li>I moved them to be top-level</li>\n<li>I used union instead of or</li>\n</ol>",
+        "id": 209710476,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1599772634
+    },
+    {
+        "content": "<p>EOB-inst-careTeam-practitioner: </p>\n<div class=\"codehilite\"><pre><span></span><code>careTeam.where(role.where(coding.where(code in (&#39;attending&#39; | &#39;primary&#39; | &#39;referring&#39; | &#39;supervising&#39;)).exists()).exists()).exists() implies\ncareTeam.where(role.where(coding.where(code in (&#39;attending&#39; | &#39;primary&#39; | &#39;referring&#39; | &#39;supervising&#39;)).exists()).exists()).provider.all(resolve() is Practitioner)\n</code></pre></div>",
+        "id": 209710622,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1599772715
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192132\">@Amol Vyas</span> <span class=\"user-mention\" data-user-id=\"215604\">@Saul Kravitz</span> FYI</p>",
+        "id": 209710696,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1599772761
+    },
+    {
+        "content": "<p>EOB-inst-careTeam-organization: </p>\n<div class=\"codehilite\"><pre><span></span><code>careTeam.where(role.where(coding.where(code=&#39;performing&#39;).exists()).exists()).exists() implies\ncareTeam.where(role.where(coding.where(code=&#39;performing&#39;).exists()).exists()).provider.all(resolve() is Organization)\n</code></pre></div>",
+        "id": 209710699,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1599772762
+    },
+    {
+        "content": "<p>THX!</p>",
+        "id": 209711505,
+        "sender_full_name": "Saul Kravitz",
+        "timestamp": 1599773113
+    },
+    {
+        "content": "<p>I opened <a href=\"http://jira.hl7.org/browse/FHIR-28530\">FHIR#28530</a> to track this issue</p>",
+        "id": 210021763,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1600097278
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191676\">@Lee Surprenant</span>  Doesn't this imply the need for similar rewrites of the other EOB careteam invariants?</p>",
+        "id": 210262541,
+        "sender_full_name": "Saul Kravitz",
+        "timestamp": 1600263624
+    },
+    {
+        "content": "<p>Certainly possible, have a link handy?</p>",
+        "id": 210271433,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1600267229
+    },
+    {
+        "content": "<p>I hit the above constraint issue because it was preventing us from validating some of the sample data.  I certainly didn't do an extensive review of all constraints in the spec.</p>",
+        "id": 210271791,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1600267330
+    },
+    {
+        "content": "<p>In <a href=\"https://github.com/saulakravitz/carin-bb/tree/v0.1.4/fsh\">https://github.com/saulakravitz/carin-bb/tree/v0.1.4/fsh</a>, I included your suggestions for the institutional careteam practitioner/organization, and I updated the facility profiles as you suggested so the invariant is on the profile, and not on the careteam field.   I've made no other changes.</p>",
+        "id": 210291288,
+        "sender_full_name": "Saul Kravitz",
+        "timestamp": 1600275935
+    },
+    {
+        "content": "<p>ok, is that version published somewhere?  if so, i'm happy to have a look.  i did have one other issue we hit that i've been meaning to write up...</p>",
+        "id": 210294449,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1600277390
+    },
+    {
+        "content": "<p>ok, i found it, starting a new thread for it</p>",
+        "id": 210295708,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1600278000
+    }
+]

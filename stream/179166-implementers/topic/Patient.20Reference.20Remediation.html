@@ -1,0 +1,136 @@
+---
+layout: page
+title: "FHIR Chat  · Patient Reference Remediation · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html">Patient Reference Remediation</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="222742447"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/222742447" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dale Brown <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#222742447">(Jan 14 2021 at 16:29)</a>:</h4>
+<p>Hello,</p>
+<p>I was wondering what the community at-large might be doing in order to resolve the potential issue wherein the subject.identifier.value or subject.reference element changes within a resource, such as the case where a master patient ID that was used as the logical ID for the referenced Patient resource was split or reassigned.</p>
+<p>An example would be if we had an Observation resource assigned to a Patient resource with the logical ID '1' that is made available via our FHIR interface that is then later pulled by a different, potentially external, application. Later, we update the Observation resource to point to a Patient resource with the logical ID '2' because the Observation was assigned to the wrong family member and the disclosure was reported.</p>
+<p>Is there any way within the existing FHIR standard where we could track and represent these changes such that the application would be aware that the Observation no longer belonged to the patient with the logical ID of '1'?</p>
+<p>I've seen some discussions regarding using Provenance resources, but those specific use-cases are not defined within the implementation guides associated with the CMS Interoperability Mandate. Likewise, I do not think that necessarily solves the requirement for feedback to the application because it would have to be aware of the Provenance resource's existence.</p>
+
+
+
+<a name="222757596"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/222757596" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jon Conley <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#222757596">(Jan 14 2021 at 18:06)</a>:</h4>
+<p><span class="user-mention" data-user-id="264105">@Dale Brown</span> in our FHIR Clinical Repo, we keep a history of the versions of all FHIR resources.  So it could at least be determined that for the Observation resource you mention for example that a previous version pointed to the "non-surviving Patient" (i.e. in the case of a Merge event).  That doesn't help to track "why" the event happened.. we usually have to dig back into the HL7 and other log statements.  I've never done anything with the Provenance resource though.</p>
+
+
+
+<a name="222760004"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/222760004" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dale Brown <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#222760004">(Jan 14 2021 at 18:23)</a>:</h4>
+<p><span class="user-mention" data-user-id="380205">@Jon Conley</span> I'm not so interested in displaying the "why" per say, but rather whether or not there's a way to tell a third-party application, for example, that they need to delete the data that was disassociated from Patient ID 1. I imagine that the application would pick it up for Patient ID 2 as part of the regular incremental update data pull (based off of meta.lastUpdated or otherwise).</p>
+<p>I'm not sure how this could be accomplished at the moment outside of a differential historical data pull.</p>
+<p>We have situations where both Patient IDs "survive" and are considered active, but some of the original patient's experience is moved from one ID to the other. So, basically, a partial merge.</p>
+
+
+
+<a name="222772667"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/222772667" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jon Conley <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#222772667">(Jan 14 2021 at 19:45)</a>:</h4>
+<p><span class="user-mention" data-user-id="264105">@Dale Brown</span> yeah I'm not sure of a way per the FHIR spec, and the main consumers of FHIR data that we are ingesting into our system are internal applications, so for that we are using Kafka to generate events.  The applications subscribe to those events and if they see something like a "Patient merge", it indicates which resource was merged and the application goes and re-fetches the resource(s) from the repo</p>
+
+
+
+<a name="222784557"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/222784557" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#222784557">(Jan 14 2021 at 21:10)</a>:</h4>
+<p>If a system queries data, it's pretty much impossible to tell them "please query again" unless they've set up a Subscription to monitor the resource in question.  If the data was pushed originally (via a message, create, update, etc.), then presumably you could push the change via the same mechanism.  In theory, you might have an audit log of all systems that had queried the record and, if you had a business relationship with the owners of those systems, you could communicate out-of-band that there was a change that needed to propagate, but no FHIR-based mechanism.</p>
+
+
+
+<a name="222786184"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/222786184" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jenni Syed <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#222786184">(Jan 14 2021 at 21:22)</a>:</h4>
+<p>I believe PA <span class="user-mention" data-user-id="191367">@Brian Postlethwaite</span>  has a guide around detecting merge and unmerge, which may help out here</p>
+
+
+
+<a name="222786377"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/222786377" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jenni Syed <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#222786377">(Jan 14 2021 at 21:24)</a>:</h4>
+<p>It may be more broad than this, but knowing how a "merge" is represented would allow someone to monitor/detect. Just detecting at each resource level is likely not enough</p>
+
+
+
+<a name="222789493"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/222789493" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#222789493">(Jan 14 2021 at 21:50)</a>:</h4>
+<p>Current documentation is here:<br>
+<a href="https://confluence.hl7.org/display/PA/Merge+Operation">https://confluence.hl7.org/display/PA/Merge+Operation</a></p>
+
+
+
+<a name="222818430"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/222818430" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dale Brown <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#222818430">(Jan 15 2021 at 04:15)</a>:</h4>
+<p><span class="user-mention" data-user-id="191367">@Brian Postlethwaite</span> <span class="user-mention" data-user-id="191356">@Jenni Syed</span>  That is helpful, thanks. Unfortunately, it doesn't appear that cases for splits or partial merges have been discussed there yet. I did find some posts on this board from last year discussing using the link mechanism for the Patient resource, which works for full merges wherein the Patient ID is sufficiently granular, but when there's a case where both IDs survive, that's not sufficient because it's only <em>some</em> of the attached resources that are being moved.</p>
+<p>So, if Patient ID 1 has Observations A, B, and C, and we split off a Patient ID 2 who is the true owner of Observation B, for example.</p>
+<p>The desired result would be Patient ID 1 with Observations A and C and Patient ID 2 with Observation B. Patient ID 2 may or may not already exist.</p>
+
+
+
+<a name="227999499"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/227999499" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Achoukian <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#227999499">(Feb 26 2021 at 21:45)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>  Our proprietary data structure feeding our FHIR server stores versions of patient profile data based on PCP changes, demographics changes, and plan changes.<br>
+The IG documentation suggests that we do not have to support versioning as part of FHIR API data, at least not yet. <br>
+Do we need to populate our FHIR repository with all the old versions of our patient data even though versioning isn't required?<br>
+We also have future eligibility data around renewal time. Hence, the latest eligibility period data may be in the future.</p>
+
+
+
+<a name="228002343"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/228002343" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#228002343">(Feb 26 2021 at 22:04)</a>:</h4>
+<p>There are roughly three levels of version support possible:</p>
+<ul>
+<li>full support (i.e. know when data has changed and can expose any desired version)</li>
+<li>version-aware, no history (know when something's changed, but can only show current version)</li>
+<li>none - have no idea when/if anything has changed (which makes avoiding update collisions challenging)</li>
+</ul>
+<p>In practice, you could have other situations (e.g. can retrieve versions for the last 6 months but nothing earlier, etc.</p>
+<p>In some cases, an IG may mandate a certain level of version support, but the base specification doesn't impose any particular expectations.</p>
+
+
+
+<a name="228852237"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/228852237" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Achoukian <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#228852237">(Mar 04 2021 at 21:19)</a>:</h4>
+<p>Thanks <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> Does the CARIN IG specify a level of version support or does it vary by resource profile?</p>
+
+
+
+<a name="228867603"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/228867603" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Achoukian <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#228867603">(Mar 04 2021 at 23:13)</a>:</h4>
+<p>Another Alliance member previously asked similar questions about history, but I did not see a response. Can we get a clarification on the following? <br>
+Payers have to make Patient account history available from Jan 1st 2016 for a members as long as they are continued to be covered by that payer, and after membership termination of coverage payer has to keep the data available for 5 more years. (Please Validate)<br>
+Can you please provide an approach or guidance for the following scenarios? Are we overthinking this?<br>
+1) What if a previously registered member disenrolled over a year ago, will the health plan still be required to support login?<br>
+2) What if a never registered member disenrolled over a year ago, will the health plan still be required to facilitate a registration and login?    <br>
+3) What if a member obtained coverage with the same payer before end of 5 years, they left and came back, (and Payer maintains same account internally), will both sets of data history (e.g. Coverage and EOB) be available to the member or only the most recent?  <br>
+4) What if patient, provider or organization demographics change during the course of a members coverage? Will the historical data pertaining to patient, provider or organization data be required to reflect claims or encounters at the time of the historical events?</p>
+
+
+
+<a name="228874819"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/228874819" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#228874819">(Mar 05 2021 at 00:18)</a>:</h4>
+<p>No specific level of version support is required by CARIN BB - no versioning at all is fine</p>
+
+
+
+<a name="228874927"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/228874927" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#228874927">(Mar 05 2021 at 00:19)</a>:</h4>
+<p>If / how to support data for previous members and such is not really a technical question and it is not related to FHIR versioning, it is policy.</p>
+
+
+
+<a name="228951907"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Patient%20Reference%20Remediation/near/228951907" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Daniel Venton <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Patient.20Reference.20Remediation.html#228951907">(Mar 05 2021 at 13:25)</a>:</h4>
+<p><span class="user-mention" data-user-id="325599">@John Achoukian</span> Your questions would probably be better directed towards CMS or the authors of the Patient Access API as they are the ones requiring member/patient access. The way I read them: All current AND former members shall have access to retrieve their data back to 2016-01-01. The way my company reads them: All current members.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

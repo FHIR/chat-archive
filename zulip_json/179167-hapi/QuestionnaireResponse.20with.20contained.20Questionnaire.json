@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194948\">@Raheel Sayeed</span> asked at <a href=\"#narrow/stream/179166-implementers/topic/Open.20FHIR.20Servers.20that.20support.20Contained.20Resource/near/255396789\">https://chat.fhir.org/#narrow/stream/179166-implementers/topic/Open.20FHIR.20Servers.20that.20support.20Contained.20Resource/near/255396789</a> about the behavior of some HAPI-based servers including the SMART and Logica sandboxes, where Questionnaires contained within QuestionnaireResponses are stripped at creation time. Is there a HAPI setting that might be responsible for this behavior?</p>",
+        "id": 255433259,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1632934257
+    },
+    {
+        "content": "<p>Last I knew there was a bug in HAPI. There are 3 categories of contained resources allowed. 1) Resources that are referenced by the wrapper resource 2) Resources that are referenced by a(nother) resource in the contained list 3) Resources that reference the wrapper resource.</p>\n<p>When I was dealing with this, if your contained resource is of category 3, then HAPI doesn't honor that when serializing the resource. It only honors categories 1 and 2. In my case I was trying to stash the Provenance resource into the .contained list. In order to get HAPI to work, I had to code the Provenance to reference itself.</p>",
+        "id": 255448297,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1632939669
+    },
+    {
+        "content": "<p>1, 2 did work .But this issue seems to specifically affect QuestionnaireResponse resource type when it contains and references its own Questionnaire.</p>",
+        "id": 255456090,
+        "sender_full_name": "Raheel Sayeed",
+        "timestamp": 1632942364
+    },
+    {
+        "content": "<p>Also noting--&gt;  UHN HAPI FHIR @ <a href=\"http://hapi.fhir.org/baseR4\">hapi.fhir.org/baseR4</a> did work. But not SMART and Logica sandboxes</p>",
+        "id": 255456268,
+        "sender_full_name": "Raheel Sayeed",
+        "timestamp": 1632942440
+    },
+    {
+        "content": "<p>I think contained resources of type 3 are explicitly not allowed - <a href=\"https://www.hl7.org/fhir/references.html#contained\">the spec says</a>:</p>\n<blockquote>\n<p>A contained resource SHALL only be included in a resource if something in that resource (potentially another contained resource) has a reference to it.</p>\n</blockquote>",
+        "id": 255522467,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1632981954
+    },
+    {
+        "content": "<p>Is the issue here perhaps that QuestionnaireResponses reference Questionnaires through canonical URLs and that HAPI does not recognize that as a valid link? That is, maybe it only checks the <code>id</code> element in the contained resource and expects that to occur in a reference inside the wrapper resource or in another contained resource. But in the Q/QR case, the relevant ID used for referencing is the canonical in the <code>url</code> element. I'm not sure if the spec says smt. about that case.</p>",
+        "id": 255523402,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1632982647
+    },
+    {
+        "content": "<p>Indeed, the spec does say smt. about that, viz. that references by canonical are allowed:</p>\n<blockquote>\n<p>Both Reference and canonical types may refer to contained resources</p>\n</blockquote>\n<p>So it could be that HAPI has not yet implemented handling of such references for contained resources.</p>",
+        "id": 255527888,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1632985710
+    },
+    {
+        "content": "<p>I assume so. Hapi checks for references to or from the contained resource. If none are found the contained resource won‘t be serialized.</p>",
+        "id": 255589113,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1633014024
+    },
+    {
+        "content": "<p>Shouldn't the canonical be referencing the contained resource? Which would make it a type 1 reference from your list? Otherwise you'd need an extension under the questionnaire canonical ref field in the QR</p>",
+        "id": 256377341,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1633509661
+    },
+    {
+        "content": "<p>I ran into an issue while working with \"contained\" resource using HAPI. Wondering if people have seen this issue?  Would appreciate any help to resolve the issue. We are using ca.uhn.hapi.fhir:hapi-fhir-base:5.3.0 and the same version of FHIR structure. The issue is that I can't get the \"contained\" resources when using the context jsonParser to convert the json string to IResource. I can see the Resource in the contained list but when trying to referencing it, got null. In the mean time, setContained() and addContained() don't work either if I manually create a QuestionnaireResponse and trying to set one Questionnaire in the contained list.  Here is the screen shot from my debugger: I can see the \"Id\" and \"meta\" but the Quesstionnaire is shown as null. <a href=\"/user_uploads/10155/IBref1chIliOCiafdpDpJi4Q/Screen-Shot-2021-10-06-at-10.38.27-AM.png\">Screen-Shot-2021-10-06-at-10.38.27-AM.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/IBref1chIliOCiafdpDpJi4Q/Screen-Shot-2021-10-06-at-10.38.27-AM.png\" title=\"Screen-Shot-2021-10-06-at-10.38.27-AM.png\"><img src=\"/user_uploads/10155/IBref1chIliOCiafdpDpJi4Q/Screen-Shot-2021-10-06-at-10.38.27-AM.png\"></a></div><p>I am using the cannonical reference: Here is the JSON payload:<br>\n{ <br>\n        \"resourceType\": \"QuestionnaireResponse\",<br>\n        \"meta\": {<br>\n          \"profile\": [<br>\n            \"<a href=\"http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaireresponse-adapt\">http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaireresponse-adapt</a>\"<br>\n          ]<br>\n        },<br>\n        \"contained\": [<br>\n          {<br>\n            \"resourceType\": \"Questionnaire\",<br>\n            \"id\": \"q\",<br>\n            \"meta\": {<br>\n              \"profile\": [<br>\n                \"<a href=\"http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-adapt\">http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-adapt</a>\"<br>\n              ]<br>\n            }<br>\n          }<br>\n        ], <br>\n        \"questionnaire\": \"#q\",<br>\n        \"status\": \"in-progress\"<br>\n      }</p>",
+        "id": 256422543,
+        "sender_full_name": "Yolanda",
+        "timestamp": 1633531303
+    },
+    {
+        "content": "<p>By casting IBaseResource to IDomainResource solved the parsing issue.</p>",
+        "id": 256474996,
+        "sender_full_name": "Yolanda",
+        "timestamp": 1633550480
+    },
+    {
+        "content": "<p>Here is the problem with another direction. I am setting the contained with setContained() or addContained(), then use ctx.newJsonParser().encodeResourceToString(Resource). The method encodeResourceToString takes IBaseResource, after that, I don't see the \"contained\" is retained anymore. Any thoughts?</p>",
+        "id": 256497386,
+        "sender_full_name": "Yolanda",
+        "timestamp": 1633561047
+    }
+]

@@ -1,0 +1,86 @@
+[
+    {
+        "content": "<p>I'm having some trouble with creating some examples where I either get a validation error or a \"cannot fix string value\" error from SUSHI.</p>\n<p>Questionnaire.item.answerOption is the element that I'm trying to set.</p>\n<p>If I do:<br>\n<code>item[RadioGroup].answerOption[0].valueString = \"1\"</code><br>\nI get:<br>\n<code>Element Questionnaire.item.answerOption.value[x] has minimum cardinality 1 but occurs 0 time(s)</code></p>\n<p>If I do:<br>\n<code>item[RadioGroup].answerOption[0].value[x] = \"1\"</code><br>\nI get:<br>\n<code>Cannot fix string value on this element since this element does not have a single type</code></p>\n<p>I'm reading the language reference and I can't see how to get out of this dilemma.</p>",
+        "id": 215911651,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1604701624
+    },
+    {
+        "content": "<p>Are you profiling or creating an instance? For an instance, shouldn't that be:</p>\n<div class=\"codehilite\"><pre><span></span><code> item[1234].answerOption[0].valueString = &quot;1&quot;\n</code></pre></div>",
+        "id": 215913011,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1604702452
+    },
+    {
+        "content": "<p>duouh!  mixing my profiling and my instancing :)</p>",
+        "id": 215927244,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1604716410
+    },
+    {
+        "content": "<p>Actually, if there is a slice called \"RadioGroup\", then I think you <em>should</em> be able to say:</p>\n<div class=\"codehilite\"><pre><span></span><code>item[RadioGroup].answerOption[0].valueString = &quot;1&quot;\n</code></pre></div>\n<p>IIRC, that would create an instance of <code>item</code> w/ the <code>RadioGroup</code> constraints.  That said, I don't remember how that works if the <code>RadioGroup</code> slice has upper card &gt; 1 (i.e., how you specify the second item in the <code>RadioGroup</code> slice).</p>\n<p>So, <span class=\"user-mention\" data-user-id=\"192166\">@Jean Duteau</span> -- this may be a real bug.  If you can provide more detail to help us reproduce it, we can take a look.</p>",
+        "id": 216085010,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1604929528
+    },
+    {
+        "content": "<p>I think this is a bug. Ended up with something similar: <code>error Element Questionnaire.item.item:currentValue.answerOption.value[x] has minimum cardinality 1 but occurs 0 time(s).</code></p>",
+        "id": 273079588,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1645703990
+    },
+    {
+        "content": "<p>answerOption.value[x] is populated:</p>\n<div class=\"codehilite\"><pre><span></span><code>* item[=].item[=].answerOption[+].valueCoding = exampleUserDefinedAnswer#answer-a\n* item[=].item[=].answerOption[+].valueCoding = exampleUserDefinedAnswer#answer-b &quot;Antwort B&quot;\n</code></pre></div>",
+        "id": 273079778,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1645704082
+    },
+    {
+        "content": "<p>It seems, that sushi doesn't accept valueConcept as value[x] in the cardinality check.</p>",
+        "id": 273080007,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1645704222
+    },
+    {
+        "content": "<p>The generated Profiles/Instances are valid. I checked them with the java validator.</p>",
+        "id": 273080068,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1645704247
+    },
+    {
+        "content": "<p>Example: <a href=\"https://fshschool.org/FSHOnline/#/share/3C0Uxkl\">https://fshschool.org/FSHOnline/#/share/3C0Uxkl</a></p>",
+        "id": 273080087,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1645704265
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191451\">@Patrick Werner</span>.  Thank you for the FSH Online link to reproduce this.  That is extremely helpful!</p>\n<p>It seems there are a few things going on with SUSHI here, and that's confusing matters.  In general, if you're trying to assign things to slices, SUSHI does better if you name the slices in your path, rather than using indices.  This is because SUSHI is not a full-on validator/conformance engine, so it can't determine what elements are in what slices unless you tell it.  E.g., don't say</p>\n<div class=\"codehilite\"><pre><span></span><code>* item[=].item[+].linkId = &quot;a_current_value&quot;\n</code></pre></div>\n<p>but instead say </p>\n<div class=\"codehilite\"><pre><span></span><code>* item[=].item[currentValue].linkId = &quot;a_current_value&quot;\n</code></pre></div>\n<p>That said, the error above is curious, because it is complaining about the <code>answerOption.value[x]</code> in the <code>currentValue</code> slice.  But... looking at your example, your <code>currentValue</code> slice does not <em>have</em> an <code>answerOption</code> at all.  And your profile doesn't require one.  So SUSHI is definitely confused here.</p>\n<p>I changed your example to call out all slices by name like this and it worked:</p>\n<div class=\"codehilite\"><pre><span></span><code>* item[=].item[question].linkId = &quot;a_question&quot;\n* item[=].item[question].type = #choice\n* item[=].item[question].readOnly = false\n* item[=].item[question].text = &quot;This is the Question&quot;\n* item[=].item[question].answerOption[+].valueCoding = exampleUserDefinedAnswer#answer-a\n* item[=].item[question].answerOption[+].valueCoding = exampleUserDefinedAnswer#answer-b &quot;Antwort B&quot;\n* item[=].item[currentValue].linkId = &quot;a_current_value&quot;\n* item[=].item[currentValue].type = #string\n* item[=].item[currentValue].readOnly = true\n* item[=].item[currentValue].text = &quot;Current Value&quot;\n* item[=].item[answerSuggestion].linkId = &quot;a_answer_suggestion&quot;\n* item[=].item[answerSuggestion].type = #choice\n* item[=].item[answerSuggestion].readOnly = true\n* item[=].item[answerSuggestion].text = &quot;Answer Suggestion&quot;\n* item[=].item[answerSuggestion].answerOption[+].valueCoding = exampleUserDefinedAnswer#answer-a &quot;Antwort A&quot;\n* item[=].item[answerSuggestion].answerOption[+].valueCoding = exampleUserDefinedAnswer#answer-b &quot;Antwort B&quot;\n</code></pre></div>\n<p>(FSH Online: <a href=\"https://fshschool.org/FSHOnline/#/share/3Hljd7Y\">https://fshschool.org/FSHOnline/#/share/3Hljd7Y</a>)</p>\n<p>The downside, however, is that it outputs the items in a different order: <code>currentValue</code>, <code>answerSuggestion</code>, <code>question</code>.  This is neither the order you specified in the instance, nor the order you declared the slices in your profile, so I'm not sure where this ordering is coming from.  But, order is important in <code>Questionnaire.item</code>, so... this is not a good thing.</p>\n<p>We'll have to look into this some more.</p>",
+        "id": 273095975,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1645712988
+    },
+    {
+        "content": "<p>thanks for diggin into it.</p>",
+        "id": 273097119,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1645713480
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 273103745,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1645716404
+    },
+    {
+        "content": "<p>Oh.  Shoot. I think I kind of know what's happening here.  Since those are <em>required</em> slices, SUSHI tries to be \"helpful\" and auto-populates them into the instance <em>before</em> processing your rules.  Which means that the <code>currentValue</code> is already at index 0, <code>answerSuggestion</code> is at index 1, and <code>question</code> is at index 2.  Then your rules w/ soft-indexing are applied, your first item gets merged into the <code>currentValue</code> already at index 0, the next item gets merged into the <code>answerSuggestion</code> already at index 1, and the last item gets merged into the <code>question</code> already at index 2.  (sigh).</p>",
+        "id": 273104265,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1645716625
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191451\">@Patrick Werner</span> - your use case resulted in the following two issues: <a href=\"https://github.com/FHIR/sushi/issues/1028\">SUSHI-1028</a> and <a href=\"https://github.com/FHIR/sushi/issues/1029\">SUSHI-1029</a>.</p>",
+        "id": 273116694,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1645721539
+    }
+]

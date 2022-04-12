@@ -1,0 +1,122 @@
+[
+    {
+        "content": "<p>I've opened a PR on the cds-hooks repo for a proposed order-search. This would be the first hook to fire when a clinician browses an order catalogue, allowing a decision service to make recommendations. This would happen before order-select and order-sign.</p>\n<p><a href=\"https://github.com/cds-hooks/docs/pull/532\">https://github.com/cds-hooks/docs/pull/532</a></p>\n<p>There's a challenge in that an EHR needs to convey enough context to the decision service to avoid having services that are not relevant to the current clinical context fire. The order-select hook is able to avoid this because the selected order that is passed has a specific type, meaning decision services that apply to MedicationRequest selections need not fire if a bundle contains ServiceRequests. The proposal suggests adding an orderType parameter to provide that same functionality.</p>",
+        "id": 204860245,
+        "sender_full_name": "JP",
+        "timestamp": 1595542976
+    },
+    {
+        "content": "<p>Can you give some examples of what sort of decision support you'd expect to be provided when the only knowledge is that a clinician is ordering a MedicationRequest?  Or worse a ServiceRequest (which encompasses referrals, labs, imaging orders and more)?</p>",
+        "id": 204870053,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595552363
+    },
+    {
+        "content": "<p>The intent isn't that you'd be able to give appropriate guidance with only that parameter and nothing else. For a specific decision support service implementation I'd expect it to query (or prefetch) whatever additional data it might need. It could definitely be argued that the ability to do that makes the orderType parameter redundant. I think it remains relevant because it allows a first-pass filter on the types of services that run. The type of data included in the order-select hook allows similar functionality.</p>\n<p>I did consider using something like useContext to provide this functionality. That would allow much more granularity in the filter. However, the initial feedback I had was that that would be very difficult to implement on the EHR side.</p>\n<p>I also considered creating hooks specifically for device-search, medication-search, etc. but that seemed to run counter to current efforts to represent orders generally.</p>\n<p>Trying to cover the breadth of possibilities for orders and clinical contexts when browsing a catalog is pretty challenging. I'd welcome other suggestions. The \"all-in\" approach of extensively using useContext (or similar) to scope the services seems onerous for EHR implementors, while the \"run all the services\" approach seems extremely inefficient when many \"order\" hooks have no chance of being relevant.</p>",
+        "id": 204880687,
+        "sender_full_name": "JP",
+        "timestamp": 1595568019
+    },
+    {
+        "content": "<p>My question stands.  Can you give a concrete example of what a CDS system could provide (with whatever querying you might imagine it would do) when triggered with just a patient id and a code saying 'MedicationRequest' or 'ServiceRequest'?</p>",
+        "id": 204881620,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595569402
+    },
+    {
+        "content": "<p>A clinician wants to prescribe a medication for diabetes management. Choosing the appropriate medication involves gathering information, both from the patient’s record, as well as the clinician providing input to the process. The order select hook is too late, the clinician has already chosen a medication. This hook enables a service to provide guidance about whst medication to choose.</p>",
+        "id": 204881832,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1595569742
+    },
+    {
+        "content": "<p>To use Bryn's example, the \"MedicationRequest\" orderType covers the clinician needing to prescribe a medication while the \"for diabetes management\" and \"clinician providing input\" components could be handled by a SMART app designed for medication recommendations. The CDS service itself would just provide a link to the SMART app.</p>\n<p>Given the complexity of orders, the ability to launch a secondary SMART app focused on recommendations to gather additional input, and the explanation that it's not the intent that the CDS service itself necessarily do anything I'm not quite sure how to answer your question. Does \"launch a SMART app\" fit the bill?</p>\n<p>I'm definitely open to other suggestions on how to approach this. I think there's value in a hook that fires when browsing an order catalog specifically for things like recommendation applications. My real question is how to best align this with current thinking in the cds-hooks space.</p>",
+        "id": 204883002,
+        "sender_full_name": "JP",
+        "timestamp": 1595571657
+    },
+    {
+        "content": "<p>But nothing in the proposed hook tells you that they're about to prescribe for \"diabetes management\" - and there's no query that would tell you that.  All you know is that they're about to prescribe 'something'.</p>",
+        "id": 204905536,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595590590
+    },
+    {
+        "content": "<p>With ServiceRequest, it's even worse - all you know is \"they're about to order 'something'\".  I don't understand how you can provide context-meaningful CDS with such limited information.</p>",
+        "id": 204905621,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595590675
+    },
+    {
+        "content": "<p>I guess if the intention is to replace the EHR's medication order mechanism with a SMART app, it could work, but with ServiceRequest, it wouldn't even be clear whether to launch the imaging, lab or referral app.  And it's hard to imagine EHRs jumping up and down to support a hook whose sole purpose is to bypass a key functionality...</p>",
+        "id": 204905774,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595590771
+    },
+    {
+        "content": "<p>An indirectly related aspect of this ---- with the order-select hook as the first time a CDS Hook and SMART app can interact with the user (clinician) it could cause many back-and-forth cycles of canceling the order as the SMART app recommends alternatives to the chosen order by the clinician and the clinician might need to incrementally refine (or cancel) their order to match the recommendation of the CDS Hook/SMART app.  This is the kind of workflow that can cause clinician dissatisfaction and distrust and eventual non-use of the CDS recommendations.   Having more of the pre-conditions known and conveyed up front for the order (medication and specific serviceRequest) can help (maybe) reduce these iterations?</p>",
+        "id": 204910384,
+        "sender_full_name": "John Silva",
+        "timestamp": 1595594706
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179159-cds-hooks/topic/Proposal.20for.20order-search.20hook/near/204905536\">said</a>:</p>\n<blockquote>\n<p>But nothing in the proposed hook tells you that they're about to prescribe for \"diabetes management\" - and there's no query that would tell you that.  All you know is that they're about to prescribe 'something'.</p>\n</blockquote>\n<p>Lloyd, I completely agree with this. I'm not sure where I'm miscommunicating but this proposal as-is intentionally only provides a minimal amount of filtering of decision services</p>\n<p>My initial proposal, prior to raising the hook on this chat, was to include a useContext in the hook context for exactly the reasons you list. The initial feedback I had was that it would prove to be difficult from an EHR implementation perspective since they'd have to provide appropriate context when invoking the hook. That may not actually be the case, but that's the feedback I'm working from. If there's a better way to specify and track that context from an EHR's perspective I'd like to know and incorporate that into the hook definition.</p>\n<p>Let's consider an alternate proposal for a \"medication-search\" hook that has a useContext parameter. That would provide sufficient granularity to only invoke the hook specifically for the \"medication prescription for diabetes\" scenario. The \"medication-search\" aspect runs counter to the consolidation of the order-* hooks (medication-prescribe is being retired), and the additional useContext has the same supposed difficulties for EHR implementation.</p>",
+        "id": 204960563,
+        "sender_full_name": "JP",
+        "timestamp": 1595621119
+    },
+    {
+        "content": "<p>More generally, given the need for order recommendations and given the wide variety of orders and clinical contexts involved, what approach would be most aligned with the current direction of cds-hooks and easiest to implement from an EHR's perspective?</p>",
+        "id": 204960920,
+        "sender_full_name": "JP",
+        "timestamp": 1595621348
+    },
+    {
+        "content": "<p>I understand the challenge of having a useContext.  I would expect that in many (most?) EHRs, the EHR would have no clue what the clinician was trying to prescribe until they'd started typing the name of the drug and gotten far enough to select one from the drop-down.  And at that point, you're good to go with your first firing of the \"order-select\" hook.  If dealing with ServiceRequest, the EHR might be able to tell whether the clinician is about to order a lab vs. imaging vs. make a referral, but I doubt they'd know more than that until, again, the user had started to fill out the form (and order-select would be viable).  My question was for a concrete example of a couple of useful cards you would expect a service to provide back with the current design for the hook.  It may be there would be useful things you could say that would need to be said before you'd started filling out the order form/selecting from a care plan/bunch of order sets.  I just can't visualize what they would be.</p>",
+        "id": 204969741,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1595626771
+    },
+    {
+        "content": "<p>I agree with <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> The EHR generally has no clue what or even what type of order a clinician is trying to place until it is selected. </p>\n<p>A <code>medication-search</code> is likely not feasible, because afaik it's not feasible to distinguish between searching for a med and searching for a procedure.</p>\n<p>And the EHR generally doesn't know the type of service request even if somehow it could be told that it is a service request and not a med request. </p>\n<p>So the OrderType parameter does not seem very practicable for an EHR to furnish (except maybe in extremely limited contexts?).</p>",
+        "id": 209540862,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1599671902
+    },
+    {
+        "content": "<p>Additionally the likelihood of noise on this hook, and the response delay introduced in the clinician's workflow make me wary of this hook proposal.</p>",
+        "id": 209540994,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1599671969
+    },
+    {
+        "content": "<p>These assessments are context dependent. Some systems provide an electronic prescribing interface that is specific to medications.</p>",
+        "id": 209548133,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1599675345
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191315\">Josh Mandel</span> <a href=\"#narrow/stream/179159-cds-hooks/topic/Proposal.20for.20order-search.20hook/near/209548133\">said</a>:</p>\n<blockquote>\n<p>These assessments are context dependent. Some systems provide an electronic prescribing interface that is specific to medications.</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>: Agreed. Added qualifiers to my previous response..</p>",
+        "id": 209548404,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1599675489
+    },
+    {
+        "content": "<p>I'd still love examples from <span class=\"user-mention\" data-user-id=\"194178\">@Jonathan Percival</span> of what sorts of card content he envisions a service being able to provide back for this hook.</p>",
+        "id": 209548965,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1599675840
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> - There's some internal discussion going on with the client I'm working with on how to proceed.</p>",
+        "id": 209570723,
+        "sender_full_name": "JP",
+        "timestamp": 1599686686
+    },
+    {
+        "content": "<p>I've been on a 'departmental CIS system\" where it had a taxonomy of order types the clinician could order so it 'knew' the order type and provided the clinician with a nice list of orders based on the top-level order type chosen.</p>",
+        "id": 209695736,
+        "sender_full_name": "John Silva",
+        "timestamp": 1599765492
+    }
+]

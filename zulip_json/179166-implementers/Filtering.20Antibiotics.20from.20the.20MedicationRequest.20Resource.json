@@ -1,0 +1,110 @@
+[
+    {
+        "content": "<p>Hello everyone,</p>\n<p>I was wondering if anyone has any suggestions on an efficient method to extract only the antibiotics from the MedicationResource? I'm new to FHIR, sorry if I missed something obvious!</p>\n<p>I'm creating a SMART on FHIR application that needs to display only the antibiotics from a patient's MedicationRequest resource. So far I've been using an ML model (via a third party service) to achieve this task but it's far from ideal in terms of cost and processing time.</p>\n<p>What I have are either the RxNorm codes or propriety Cerner codes and I what I do is run the text through the model and parse out the medication name from the prescription. I then run another ML model to obtain the appropriate RxNorm code. I would then call the RXNorm API and use the ATC (check if the code starts with \"J01\") and MeSH codes (via UMLS API) to check the \"pharmacological action\" attribute to help me classify if the drug is an antibiotic or not.</p>\n<p>The problem I have is that the RxNorm codes associated with the entire prescription don't seem to have associated ATC or MeSH codes when I query the RxNorm API. For example, the RxNorm code (309114) for \"Cephalexin  500 MG Oral Capsule\" doesn't have any associated ATC or MeSH (at least I don't receive any when querying with the RxNorm API), but the RxNorm code (2231) for \"Cephalexin\" does have ATC and MeSH codes associated with it.</p>\n<p>If anyone has any suggestions, I would really appreciate it! Thanks and I hope everyone has a happy (and safe) holiday season!</p>\n<p>Warm regards,<br>\nAamir</p>",
+        "id": 220830930,
+        "sender_full_name": "Aamir S",
+        "timestamp": 1608760596
+    },
+    {
+        "content": "<p>There are two options - if the server supports it and there's a relationship between the ordered codes and a higher level term, you can search by code:below to find all codes that specialize the high level concept.  Alternatively, you could search code:in and specify a value set that contains all of the relevant codes.  However, you'd need the server to support that too.</p>\n<p><span class=\"user-mention\" data-user-id=\"191356\">@Jenni Syed</span> do you know if Cerner's API supports either option?  If not, can you propose alternatives?</p>",
+        "id": 220834760,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1608764437
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179166-implementers/topic/Filtering.20Antibiotics.20from.20the.20MedicationRequest.20Resource/near/220834760\">said</a>:</p>\n<blockquote>\n<p>There are two options - if the server supports it and there's a relationship between the ordered codes and a higher level term, you can search by code:below to find all codes that specialize the high level concept.  Alternatively, you could search code:in and specify a value set that contains all of the relevant codes.  However, you'd need the server to support that too.</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> Thank you for the suggestion! I had no idea that functionality existed (EHRs and FHIR are a new area for us), it is something we will need to seriously consider. We are currently developing a solution for a Cerner EHR customer, but the project will be made open source with goal of letting other healthcare organizations take advantage of it with their own FHIR (v. R4) compliant EHRs (with minimal modifications - fingers crossed).</p>",
+        "id": 220881400,
+        "sender_full_name": "Aamir S",
+        "timestamp": 1608830398
+    },
+    {
+        "content": "<p>Cerner MedicationRequest are not searchable by code: <a href=\"https://fhir.cerner.com/millennium/r4/medications/medication-request/#parameters\">https://fhir.cerner.com/millennium/r4/medications/medication-request/#parameters</a></p>",
+        "id": 220882917,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1608832595
+    },
+    {
+        "content": "<p>Not an expert, but I think you have first to navigate the taxonomy up: Cephalexin 500 MG Oral Capsule -&gt; Cephalexin 500 MG -&gt; Cephalexin</p>",
+        "id": 220883137,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1608832875
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191912\">Michele Mottini</span> <a href=\"#narrow/stream/179166-implementers/topic/Filtering.20Antibiotics.20from.20the.20MedicationRequest.20Resource/near/220883137\">said</a>:</p>\n<blockquote>\n<p>9:56 AM<br>\nCerner MedicationRequest are not searchable by code: <a href=\"https://fhir.cerner.com/millennium/r4/medications/medication-request/#parameters\">https://fhir.cerner.com/millennium/r4/medications/medication-request/#parameters</a></p>\n<p>Not an expert, but I think you have first to navigate the taxonomy up: Cephalexin 500 MG Oral Capsule -&gt; Cephalexin 500 MG -&gt; Cephalexin</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> Good find! I think you are right about the taxonomy part. I think I found another method that doesn't require traversing the heiarchy:  (example for \"Cephalexin 500 MG Oral Capsule\" in a Node.js app):</p>\n<div class=\"codehilite\"><pre><span></span><code> let endpoint = `https://rxnav.nlm.nih.gov/REST/rxcui/309114/property.json?propName=SNOMEDCT`;\n let rxNormResponse = await axios.get(endpoint);\n// for simplicity, assume only one SNOMED code was retrieved for this example\nsnomedCode = rxNormResponse.data.propConceptGroup.propConcept[0].propValue;\n\n\n let umlsAPI = `https://uts-ws.nlm.nih.gov/rest/content/current/source/SNOMEDCT_US/${snomedCode}/relations?includeAdditionalRelationLabels=plays_role&amp;ticket=${authToken}`;\n let results = await axios.get( umlsAPI);\n console.log(&quot;results: &quot;,  results);\n</code></pre></div>\n<p>This gets me the \"plays_role\" attribute which has a value (\"relatedIdName\") of \"Antibacterial therapeutic role\".</p>\n<p>If I don't find a Snomed code, I will probably need to traverse up the hierarchy as you've mentioned.</p>\n<p><a href=\"/user_uploads/10155/4qCab0JDccmh5E-CzvSayjz3/UMLS_SNOWMED.png\">UMLS_SNOWMED.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/4qCab0JDccmh5E-CzvSayjz3/UMLS_SNOWMED.png\" title=\"UMLS_SNOWMED.png\"><img src=\"/user_uploads/10155/4qCab0JDccmh5E-CzvSayjz3/UMLS_SNOWMED.png\"></a></div>",
+        "id": 220885458,
+        "sender_full_name": "Aamir S",
+        "timestamp": 1608835987
+    },
+    {
+        "content": "<p>This requires some clinical input from the likes of <span class=\"user-mention\" data-user-id=\"191487\">@Russell Leftwich</span> . TTBOMK, 'Antibiotic' is a drug /ingredient class (or function?) and, as such, there isn't a property in the Medication Resource that supports that concept. The appropriate FHIR Module is probably Medication Definition in R5 and Ingredient.function might be the appropriate element  - but this needs to be confirmed by a SME.</p>",
+        "id": 220891297,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1608845197
+    },
+    {
+        "content": "<p>Antibiotic is a function of the medicinal product as a whole rather than of the ingredient(s) themselves - though obviously the capability does derive from the ingredients. You can use MedicinalProductDefinition.classification for this.</p>",
+        "id": 220896897,
+        "sender_full_name": "Rik Smithies",
+        "timestamp": 1608854242
+    },
+    {
+        "content": "<p>Classification is an attribute of MedicationKowledge. I'd use that one, we don't need to go to the regulatory resources for that.</p>",
+        "id": 220962100,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1608985566
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191832\">@Jose Costa Teixeira</span> .  MedicationKnowledge.medicineClassification.classification looks a good fit...\"Specific category assigned to the medication (e.g. anti-infective, anti-hypertensive, antibiotic, etc.).\" Is an example terminology binding required for this element?</p>",
+        "id": 220976042,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1609011072
+    },
+    {
+        "content": "<p>There is a category on MedicationRequest that we've heard might be used to categorize the medicationrequest by medication type.   <a href=\"http://build.fhir.org/medicationrequest-definitions.html#MedicationRequest.category\">http://build.fhir.org/medicationrequest-definitions.html#MedicationRequest.category</a></p>",
+        "id": 220981580,
+        "sender_full_name": "Melva Peters",
+        "timestamp": 1609021316
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"373468\">@Aamir</span> You might be interested in the NLM RxClass API, which will traverse the hierarchy for you. <a href=\"https://rxnav.nlm.nih.gov/RxClassAPIs.html\">https://rxnav.nlm.nih.gov/RxClassAPIs.html</a></p>",
+        "id": 221010145,
+        "sender_full_name": "Patrick McLaughlin (NLM)",
+        "timestamp": 1609078398
+    },
+    {
+        "content": "<p><a href=\"https://rxnav.nlm.nih.gov/REST/rxclass/class/byRxcui.json?rxcui=309114&amp;relaSource=MESH\">https://rxnav.nlm.nih.gov/REST/rxclass/class/byRxcui.json?rxcui=309114&amp;relaSource=MESH</a></p>",
+        "id": 221010260,
+        "sender_full_name": "Patrick McLaughlin (NLM)",
+        "timestamp": 1609078655
+    },
+    {
+        "content": "<p>Perhaps SNOMED CT concept's \"parents\" info could help ....... You can try that at their online browser tool. Take ceftriaxone for example. <a href=\"https://browser.ihtsdotools.org/?perspective=full&amp;conceptId1=372670001&amp;edition=MAIN/2020-07-31&amp;release=&amp;languages=en\">https://browser.ihtsdotools.org/?perspective=full&amp;conceptId1=372670001&amp;edition=MAIN/2020-07-31&amp;release=&amp;languages=en</a></p>",
+        "id": 221065314,
+        "sender_full_name": "Lin Yu Ju",
+        "timestamp": 1609166815
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"194260\">Patrick McLaughlin (NLM)</span> <a href=\"#narrow/stream/179166-implementers/topic/Filtering.20Antibiotics.20from.20the.20MedicationRequest.20Resource/near/221010145\">said</a>:</p>\n<blockquote>\n<p>You might be interested in the NLM RxClass API, which will traverse the hierarchy for you. <a href=\"https://rxnav.nlm.nih.gov/RxClassAPIs.html\">https://rxnav.nlm.nih.gov/RxClassAPIs.html</a></p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"194260\">@Patrick McLaughlin (NLM)</span> Nice find, thank you! That will definitely simplify traversing the hierarchy compared to what I had in mind.</p>",
+        "id": 221232898,
+        "sender_full_name": "Aamir S",
+        "timestamp": 1609351723
+    },
+    {
+        "content": "<p>Thanks for the recommendations everyone! At present, only a small subset of FHIR resources (depending on the EHR vendor) are usually available for third party SMART on FHIR applications which is where I have been turning to third party APIs. </p>\n<p>Going forward, I'm optimistic that FHIR resources such as MedicationKnowledge will be implemented by EHR vendors and available for use by third party SMART on FHIR applications. When they do become available, it will definitely help streamline the creation of more application specific use cases (in this case, an app to aid in prescribing a safe antibiotic for the patient).</p>",
+        "id": 221233728,
+        "sender_full_name": "Aamir S",
+        "timestamp": 1609352410
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191364\">@Peter Jordan</span> I would agree this concept needs to be captured.  I would also point out that \"antibiotic\" has become such a superclass (compared to several decades ago when the term was introduced) that sub-classes based on mechanism of action and chemical identity should be captured.  It would seem that this concept might be MedicationClassification in the MedicationKnowledge Resource</p>",
+        "id": 221566655,
+        "sender_full_name": "Russell Leftwich",
+        "timestamp": 1609787455
+    },
+    {
+        "content": "<p>Or indeed the  classification in the MedicinalProductDefinition resource - if that is available to you. I  assume people would be looking at existing data sources where this may be recorded. In the EU all centrally authorised products will eventually have a FHIR MedicinalProductDefinition resource available, hosted by EMA. Other countries such as Norway are using the same concept. Equally you may have access to a local data set in MedicationKnowledge.</p>",
+        "id": 221568963,
+        "sender_full_name": "Rik Smithies",
+        "timestamp": 1609788581
+    }
+]

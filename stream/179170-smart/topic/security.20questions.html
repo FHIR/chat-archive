@@ -1,0 +1,221 @@
+---
+layout: page
+title: "FHIR Chat  · security questions · smart"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179170-smart/index.html">smart</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html">security questions</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="252532988"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252532988" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vlad Ganshin <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252532988">(Sep 08 2021 at 21:06)</a>:</h4>
+<p>Hi all! Could you help me to understand some use cases of Smart on FHIR (v1)?</p>
+<p>I have a FHIR Server on <code>[base-url]</code> and an Authorization Server on <code>[auth-server]</code>. And a user has an access to couple of Patients resources and their clinical data (pt-1 &amp; pt-2).</p>
+<p>1) Let's suppose that the user provided a grant to 3rd party app within next scope 'patient/Patient.read patient/Observation.read patient/Observation.write' and patient=pt-1 in context. As a 3rd party, what responses should I expect?</p>
+<div class="codehilite"><pre><span></span><code>GET [base-url]/Patient/pt-1
+GET [base-url]/Observation?subject=pt-1
+GET [base-url]/Patient/pt-1/Observation
+
+GET [base-url]/Patient
+GET [base-url]/Patient/pt-2
+GET [base-url]/Observation?subject=pt-2
+GET [base-url]/Observation?subject=pt-3
+GET [base-url]/Observation
+
+POST [base-url]/Observation
+
+subject:
+  reference: Patient/pt-2
+</code></pre></div>
+<p>I believe that the first three requests should return 200 OK + data, and the rest of them 403 Unauthorized. Right? Or it depends on something?</p>
+<p>2) Let's say we have not Observation, but CommunicationRequest resource. Which are search parameters available for 3rd party app within patient/CommunicationRequest.read scope? subject, sender, recipient, requester?</p>
+<p>3) I'm thinking of building a tenant-based FHIR API which uses user-id as url prefix for every request.</p>
+<div class="codehilite"><pre><span></span><code>[base-url]/user/&lt;user-id&gt;/Patient/pt-1 =&gt; 200 OK
+[base-url]/user/&lt;user-id&gt;/Patient/pt-2 =&gt; 200 OK
+[base-url]/user/&lt;user-id&gt;/Patient/pt-3 =&gt; 404 Not Found
+</code></pre></div>
+<p>I would say I have a lot of logical FHIR Servers on top of physical one. In case of EHR launch I could provide different iss parameters depending on the user who launched the app, so it could help me simplify access control module.</p>
+<p>But I can't find an answer if it's possible to make something similar in case of Standalone launch. It seems like 3rd party app should know the only base-url and use it for every user? Is it possible to subsistute [base-url] somehow while launching?</p>
+
+
+
+<a name="252546479"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252546479" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252546479">(Sep 08 2021 at 22:56)</a>:</h4>
+<p>For (1): in our server they are all 200 OK, they just return only the data of pt-2, so GET [base-url]/Observation?subject=pt-2 returns an empty bundle</p>
+
+
+
+<a name="252546531"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252546531" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252546531">(Sep 08 2021 at 22:57)</a>:</h4>
+<p>(2) Which search parameter are available is unrelated to the scopes</p>
+
+
+
+<a name="252546661"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252546661" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252546661">(Sep 08 2021 at 22:58)</a>:</h4>
+<p>(3) Don't think that would work, clients expect a fixed URL to connect to</p>
+
+
+
+<a name="252581532"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252581532" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vlad Ganshin <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252581532">(Sep 09 2021 at 07:18)</a>:</h4>
+<p>(1.1) We have the same solution for now, but I'm not sure if it's correct using Authorization header as an implicit parameter for business logic. Will my server be conformant with FHIR Specification (which is RESTful) if it provides different responses on the same url depending on Authorization header? I believe, that according to REST, the role of Access Conrol is only accept/reject requests, but not influence on the result. So, I would say that in this case our FHIR Servers are not conformant with FHIR Specification. Is it correct, or I miss something?</p>
+<p>(1.2) And what about saving resources (POST/PUT/PATCH)? Should my FHIR Server set reference to the patient implicitly or validate and require correct reference value in the body?</p>
+<p>(2) From the smart app developer point of view, how should I understand which endpoints (or/and search parameters) are available within a specific scope I got from user? Does specification have this answer, or I have to adopt my application to every specific FHIR Server?</p>
+<p>(3) I feel that the specification tries to connect Smart App Developer and FHIR Server Developer and it provides a concrete authentication flow. But as a Smart App dev, once I have a token, I don't see my capability within my scopes. And as FHIR Server dev I don't see a standard way to provide such capabilities.</p>
+<p>So, once FHIR Server provided 'patient/Patient.read patient/Observation.*' scope, does it obligated to accept requests to <code>[base-url]/Patient/&lt;pt-id&gt;, [base-url]/Observation</code>, etc?</p>
+<p>Will my server be conformant with FHIR if I just say in documentation, that within <code>patient/...</code> scopes smart app should use another base-url. e.g. <code>[base-url]/patient/&lt;pt-id&gt;</code> (<code>[base-url]/patient/«pt-id&gt;/Patient/&lt;pt-id&gt;, [base-url]/patient/&lt;pt-id&gt;/Observation</code>).</p>
+
+
+
+<a name="252614965"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252614965" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252614965">(Sep 09 2021 at 12:17)</a>:</h4>
+<p><a href="http://hl7.org/fhir/security.html#AccessDenied">http://hl7.org/fhir/security.html#AccessDenied</a></p>
+
+
+
+<a name="252615051"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252615051" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252615051">(Sep 09 2021 at 12:18)</a>:</h4>
+<p>policies are important. principles of REST do not override policies.</p>
+
+
+
+<a name="252620046"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252620046" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252620046">(Sep 09 2021 at 12:55)</a>:</h4>
+<p>In general with smart, it is okay for a server to reject a query prospectively/statically because of scopes. It is also okay for a server too simply redact results because of scopes. We don't have prescriptive behavior on this. The only thing it's not okay to do is return data beyond what the scopes allow.</p>
+
+
+
+<a name="252620214"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252620214" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252620214">(Sep 09 2021 at 12:56)</a>:</h4>
+<p>The question of what endpoints are available is somewhat orthogonal to your scopes. For example, a server might advertise in its documentation or in its capability statement that it supports a "batch" endpoint; if it does, clients can call this end point with requests that are consistent with the available scopes. If it does not, clients can't.</p>
+
+
+
+<a name="252628576"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252628576" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252628576">(Sep 09 2021 at 13:48)</a>:</h4>
+<p>I wonder SMART on FHIR based on baseUrl convention instead of more flexible HATEOAS. Why server after auth could not just return explicit baseUrl for the client with access_token ?</p>
+<div class="codehilite"><pre><span></span><code>{
+  access_token: ....
+  fhirBaseUrl: ....
+}
+</code></pre></div>
+
+
+
+<a name="252629124"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252629124" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252629124">(Sep 09 2021 at 13:52)</a>:</h4>
+<p>Compartments like  /Patient/&lt;id&gt;/{metadata,Observation,Encounter} look like good fit  for SMART  Clients and Servers.</p>
+
+
+
+<a name="252629151"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252629151" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vlad Ganshin <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252629151">(Sep 09 2021 at 13:52)</a>:</h4>
+<p>Thank you! I do missed that part in Access Denied Response Handling chapter.</p>
+<p>Just to clarify, if I have a FHIR Server which is rich on capability, it is ok to restrict some access depending on client type, not only scopes provided to that client, isn't it?</p>
+
+
+
+<a name="252629725"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252629725" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252629725">(Sep 09 2021 at 13:56)</a>:</h4>
+<p>That would work for areas like the patient compartment where fhir explicitly defines some context, but the mapping breaks down pretty quickly too. For example even with "patient" compartments, a smart app authorized to access data about a given patient might be able to see certain data outside of a compartment, such as data directly linked from or needed to interpret the data in the compartment. So passing the patient id (or fhirContext[] as array of references as proposed in SMARTv2) has been a flexible choice.</p>
+
+
+
+<a name="252629802"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252629802" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252629802">(Sep 09 2021 at 13:56)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191912">Michele Mottini</span> <a href="#narrow/stream/179170-smart/topic/security.20questions/near/252546479">said</a>:</p>
+<blockquote>
+<p>For (1): in our server they are all 200 OK, they just return only the data of pt-2, so GET [base-url]/Observation?subject=pt-2 returns an empty bundle</p>
+</blockquote>
+<p>Should not server respond with 403 for (1)?</p>
+
+
+
+<a name="252630113"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252630113" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252630113">(Sep 09 2021 at 13:58)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191315">Josh Mandel</span> <a href="#narrow/stream/179170-smart/topic/security.20questions/near/252629725">said</a>:</p>
+<blockquote>
+<p>That would work for areas like the patient compartment where fhir explicitly defines some context, but the mapping breaks down pretty quickly too. For example even with "patient" compartments, a smart app authorized to access data about a given patient might be able to see certain data outside of a compartment, such as data directly linked from or needed to interpret the data in the compartment. So passing the patient id (or fhirContext[] as array of references as proposed in SMARTv2) has been a flexible choice.</p>
+</blockquote>
+<p>What is fhirContext?</p>
+
+
+
+<a name="252630490"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252630490" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252630490">(Sep 09 2021 at 14:00)</a>:</h4>
+<p>We are thinking about "poko yoko" for Smart on FHIR  apps - i.e. implicitly inject patient id into all search and even CRUD operations.</p>
+
+
+
+<a name="252630746"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252630746" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252630746">(Sep 09 2021 at 14:01)</a>:</h4>
+<p><span class="user-mention" data-user-id="191315">@Josh Mandel</span> what is your opinion about such an implicit server behavior?</p>
+
+
+
+<a name="252638021"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252638021" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252638021">(Sep 09 2021 at 14:44)</a>:</h4>
+<blockquote>
+<p>nicola (RIO/SS): Michele Mottini said:</p>
+<blockquote>
+<p>For (1): in our server they are all 200 OK, they just return only the data of pt-2, so GET [base-url]/Observation?subject=pt-2 returns an empty bundle<br>
+Should not server respond with 403 for (1)?</p>
+</blockquote>
+</blockquote>
+<p>From the SMART spec perspective, both of these are OK behaviors.</p>
+
+
+
+<a name="252638108"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252638108" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252638108">(Sep 09 2021 at 14:45)</a>:</h4>
+<blockquote>
+<p>What is fhirContext?</p>
+</blockquote>
+<p>See <a href="http://jira.hl7.org/browse/FHIR-32253">FHIR-32253</a>; this is being added to resolve SMARTv2 ballot feedback</p>
+
+
+
+<a name="252638509"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252638509" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252638509">(Sep 09 2021 at 14:47)</a>:</h4>
+<blockquote>
+<p>nicola (RIO/SS): We are thinking about "poko yoko" for Smart on FHIR apps - i.e. implicitly inject patient id into all search and even CRUD operations.</p>
+</blockquote>
+<p>I like this, but there are edge cases where it'll prevent access that a client <em>should</em> have (e.g., with <code>patient/*.cruds</code> access, you might still be allowed to issue a query like <code>GET /Observation/123</code> where the subject of the observation is something other than the patient (say, a patient's device or location).</p>
+
+
+
+<a name="252748717"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252748717" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252748717">(Sep 10 2021 at 08:10)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191912">Michele Mottini</span> <a href="#narrow/stream/179170-smart/topic/security.20questions/near/252546479">said</a>:</p>
+<blockquote>
+<p>For (1): in our server they are all 200 OK, they just return only the data of pt-2, so GET [base-url]/Observation?subject=pt-2 returns an empty bundle</p>
+</blockquote>
+<p>I think for (1) - 403 is more honest - otherwise, the client may be confused and interpret  the empty  response as a lack of data</p>
+
+
+
+<a name="252788781"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252788781" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252788781">(Sep 10 2021 at 13:43)</a>:</h4>
+<p>I think no error is better. Using 403 is actually _leaking_ the information that there is data that the client cannot see</p>
+
+
+
+<a name="252789163"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252789163" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> David Pyke <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252789163">(Sep 10 2021 at 13:46)</a>:</h4>
+<p>Yep, if they're fishing for information, a 200 tells them nothing, a 403 says there's data which is a problem from a privacy point of view</p>
+
+
+
+<a name="252789756"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179170-smart/topic/security%20questions/near/252789756" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179170-smart/topic/security.20questions.html#252789756">(Sep 10 2021 at 13:51)</a>:</h4>
+<p>AND this is why the actual value returned should be driven by POLICY.  <a href="http://hl7.org/fhir/security.html#AccessDenied">http://hl7.org/fhir/security.html#AccessDenied</a></p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

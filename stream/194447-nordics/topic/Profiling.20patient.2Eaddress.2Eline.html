@@ -1,0 +1,85 @@
+---
+layout: page
+title: "FHIR Chat  · Profiling patient.address.line · nordics"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/194447-nordics/index.html">nordics</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/194447-nordics/topic/Profiling.20patient.2Eaddress.2Eline.html">Profiling patient.address.line</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="164266300"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/194447-nordics/topic/Profiling%20patient.address.line/near/164266300" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Martin Grundberg <a href="https://fhir.github.io/chat-archive/stream/194447-nordics/topic/Profiling.20patient.2Eaddress.2Eline.html#164266300">(Apr 26 2019 at 14:27)</a>:</h4>
+<p>Hi Nordic friends!<br>
+Today we had a long session looking at how to profile address and specifically the <strong>line</strong> element. </p>
+<p>As you probably know, a Patient can have 0..* <strong>address</strong>. Each address has these attributes to define the actual address:</p>
+<ul>
+<li><strong>text</strong> 0..1 Text representation of the address</li>
+<li><strong>line</strong> 0..* Street name, number, direction &amp; P.O. Box etc. This repeating element order: The order in which lines should appear in an address label</li>
+<li><strong>city</strong> 0..1 Name of city, town etc.</li>
+<li><strong>district</strong> 0..1 District name (aka county</li>
+<li><strong>state</strong> 0..1 Sub-unit of country (abbreviations ok)</li>
+<li><strong>postalCode </strong>0..1 Postal code for area</li>
+<li><strong> country</strong> 0..1 Country (e.g. can be ISO 3166 2 or 3 letter code)</li>
+</ul>
+<p>The requirements we have in Sweden, and that should be very similar to requirements in other countries, is that we want to clearly be able to distinguish between the different parts of an address that here would be captured in <strong>line</strong>. These are the obvious ones for a standard Swedish address:</p>
+<ul>
+<li><strong>care of</strong> 0..1 - This as you probably know is when the address belongs to someone else than the recipient, so this would often be a name, e.g. "c/o Andersson"</li>
+<li><strong>full street address (inlcuding number)</strong> 0..* - This is a combination of street name, house number and any pre/suffixes, e.g. "Sweden street 7A"</li>
+<li><strong>unit id</strong> 0..1 - This is the number of an apartment in an apartment building, it uniquely identifiers the apartment within a building. e.g. "1302"</li>
+</ul>
+<p>We have looked into how we potentially could support the requirement to be able to explicitly support these address parts. These are the options we have found:</p>
+<p><strong>Option 1 - Use slicing on line element</strong></p>
+<p>Line (0..*)<br>
+careOf (slice)  (0..1)<br>
+streetAddress (slice)  (0..*)<br>
+unitId (slice) (0..1)</p>
+<p>This was ruled out directly as slices require a discriminator (like a code system), and that is not available as Line is a String. <strong>Not ok</strong></p>
+<p><strong>Option 2 - Leave Line as is</strong></p>
+<p>Line (0..*)<br>
+This is not good enough as in a Swedish context we need to distinguish care of, street address and unit Id. And by doing it this way, we cannot do that. <strong>Not ok</strong></p>
+<p><strong>Option 3 - Use standard exentions on Line for careOf, streeetAddressLine, unitId</strong></p>
+<p>There are the following standard extensions. </p>
+<p><a href="http://hl7.org/fhir/StructureDefinition/iso21090-ADXP-careOf" target="_blank" title="http://hl7.org/fhir/StructureDefinition/iso21090-ADXP-careOf">http://hl7.org/fhir/StructureDefinition/iso21090-ADXP-careOf</a> (0..1)<br>
+<a href="http://hl7.org/fhir/StructureDefinition/iso21090-ADXP-streetAddressLine" target="_blank" title="http://hl7.org/fhir/StructureDefinition/iso21090-ADXP-streetAddressLine">http://hl7.org/fhir/StructureDefinition/iso21090-ADXP-streetAddressLine</a> (0..*)<br>
+<a href="http://hl7.org/fhir/StructureDefinition/iso21090-ADXP-unitID" target="_blank" title="http://hl7.org/fhir/StructureDefinition/iso21090-ADXP-unitID">http://hl7.org/fhir/StructureDefinition/iso21090-ADXP-unitID</a> (0..1)</p>
+<p>It might seem like a good idea to use these, and that is also how e.g. the Dutch address is done. But there are problems with this, the main one is that these extend Line and not address as a whole. This means that each Line can have a careOf, streetAddressLine and UnitID, this just feels incorrect. CareOf, streetAddressLine and UnitID are in fact lines themselves. <strong>Not ok</strong></p>
+<p><strong>Option 4 - Use address part qualifier with an extension on each line</strong><br>
+There is a standard value set for address part qualifier that meets our requirements (<a href="https://www.hl7.org/fhir/v3/AddressPartType/vs.html" target="_blank" title="https://www.hl7.org/fhir/v3/AddressPartType/vs.html">https://www.hl7.org/fhir/v3/AddressPartType/vs.html</a>). They contain the codes for the above address parts (CAR, SAL and UNID) as well as other address parts that may be required by other countries or use cases (like AL+BNN for address line and building number for those who want to break those out from the street address). By creating an extension "addressLine-qualifier" with context address.line and a value set binding to this value set we can meet our requirements in what we believe is the best way. </p>
+<p>This is also the same approach that we have for given name which has similar requirements to specify which of the given name strings is the "preferred name" (swe: tilltalsnamn"). There we use standard extension <a href="http://hl7.org/fhir/extension-iso21090-en-qualifier.html" target="_blank" title="http://hl7.org/fhir/extension-iso21090-en-qualifier.html">http://hl7.org/fhir/extension-iso21090-en-qualifier.html</a> to identify name parts and specifically "CL" for our use case. </p>
+<p><strong>Question</strong><br>
+What type of requirements do you have on address line? And how have you solved them? As I see it, others must have very similar requirements as ours, and the solutions vary a lot between the profiles I have checked. </p>
+<p>We have also added a CR to add a standard extension for this in the same way there is a standard extension for the name part qualifier (#20990)</p>
+<p>Profiling patient.address.line</p>
+
+
+
+<a name="164294601"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/194447-nordics/topic/Profiling%20patient.address.line/near/164294601" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/194447-nordics/topic/Profiling.20patient.2Eaddress.2Eline.html#164294601">(Apr 26 2019 at 20:17)</a>:</h4>
+<blockquote>
+<p>This means that each Line can have a careOf, streetAddressLine and UnitID, this just feels incorrect. CareOf, streetAddressLine and UnitID are in fact lines themselves</p>
+</blockquote>
+<p>That is not always the case. You might have 2 lines that contain those 3 bits. The intent is that you'd only have one unitID or careOf but it would be on which line was appropriate. Though you might have more precisely defined rules than other countries do</p>
+
+
+
+<a name="164571976"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/194447-nordics/topic/Profiling%20patient.address.line/near/164571976" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/194447-nordics/topic/Profiling.20patient.2Eaddress.2Eline.html#164571976">(Apr 30 2019 at 20:06)</a>:</h4>
+<p>We have the same requirements in DK - it is however not solved yet</p>
+
+
+
+<a name="164777802"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/194447-nordics/topic/Profiling%20patient.address.line/near/164777802" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Thomas Tveit Rosenlund <a href="https://fhir.github.io/chat-archive/stream/194447-nordics/topic/Profiling.20patient.2Eaddress.2Eline.html#164777802">(May 03 2019 at 08:49)</a>:</h4>
+<p>We went with option number 3 like the Dutch <span class="user-mention" data-user-id="197234">@Martin Grundberg</span> <br>
+<a href="https://simplifier.net/grunndata/gd-address-international" target="_blank" title="https://simplifier.net/grunndata/gd-address-international">https://simplifier.net/grunndata/gd-address-international</a></p>
+<p>I don't feel the possibility of adding several extensions to one line is a problem, unless you have a requirement to be able to validate the fact that there is only one extension in each line. </p>
+<p>I guess if you want to validate only one extension on each line you have to use sliceing as described in option 1. This can work even without a cumputable discriminator because it is not mandatory to define computable discrimintators for slices, you could just put in a description.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

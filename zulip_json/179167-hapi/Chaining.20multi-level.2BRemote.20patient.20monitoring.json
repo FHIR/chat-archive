@@ -1,0 +1,284 @@
+[
+    {
+        "content": "<p><strong>TL;DR</strong> </p>\n<p><strong>Is there a query that can directly return me the practitioners and the careteam, given device ID</strong>? </p>\n<hr>\n<p>I've been working on a small learning goal, so that I can better accustom myself with FHIR. </p>\n<p>The idea is, there's a bunch of devices that are with a patient, and the <code>device</code> is associated with a patient. Now, when a certain patient-limit is exceeded for a patient reading, I need to send notifications to practitioners in the patient's <code>careteam</code>. </p>\n<p>What I did is, when I get a message from a device through a webhook callback, I lookup the FHIR device that has the device identifier, grab the patient ID, and then get the <code>careteam</code> and <code>practitioner</code>s in there. Once I have that, I am able to run some code that handles notifications (I fetch the practitioners, from the careteam too, since I store the notification IDs in the <code>Practitioner.identifier</code>). </p>\n<p>Now, for some of the questions I have. </p>\n<ul>\n<li>Is there a query that can directly return me the practitioners and the careteam, given device ID? I'm currently making 3 hops (<code>device</code> -&gt; <code>careteam</code> (using <code>device.patientid</code>) -&gt; <code>practitioner</code>s). I plan to use a bundle so that I can get this all in a single API call, but wanted to know if there was a better way</li>\n<li>I am storing the patent's limits in the device assigned to them as extensions, is that okay? </li>\n<li>I also need to update the code to facilitate preferences for <code>careteam</code> notifications, in the sense that when a measurement is out of bounds, I must send notif to only those practitioners in this <code>careteam</code> that have <code>yes</code>  stored somewhere. Where do I store this preference? I was thinking perhaps as a <code>base64</code> string  under the <code>careteam</code> as an extension, so that I need only fetch the <code>practitioner</code>s that have yes stored here.</li>\n</ul>",
+        "id": 220667213,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608624818
+    },
+    {
+        "content": "<p>Im having some same problem but with different use-case. I used the _include &amp; _revinclude to solve them</p>",
+        "id": 220674413,
+        "sender_full_name": "Vibin_chander",
+        "timestamp": 1608631072
+    },
+    {
+        "content": "<p>Can you also try using _include or _revinclude search param?</p>",
+        "id": 220674462,
+        "sender_full_name": "Vibin_chander",
+        "timestamp": 1608631090
+    },
+    {
+        "content": "<p>But using these param too im unable to fetch more than 2 resources at a time. I dont see any straight forward solution for this use case ..\" List of all resources for a selected patient\"</p>",
+        "id": 220674514,
+        "sender_full_name": "Vibin_chander",
+        "timestamp": 1608631151
+    },
+    {
+        "content": "<p>Yeah <code>_include</code>! I'll give that a go thanks!</p>",
+        "id": 220675169,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608631732
+    },
+    {
+        "content": "<p>Hmm so given a device ID, I can get both the device and the patient using <code>_include</code>, but what I really need are the practitioners. So I'm looking for a query that'll list <code>practitioner</code>s given a device ID, by possibly traversing <code>deviceID -&gt; patient -&gt; careteam -&gt; practitioners</code></p>",
+        "id": 220675969,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608632504
+    },
+    {
+        "content": "<p>I'm trying <code>_has</code>, this works to get patients that have a deviceID <code>[base]/Patient?_has:Device:patient:_id=1722695</code></p>",
+        "id": 220676053,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608632584
+    },
+    {
+        "content": "<p>Okay made some progress, given a patientID, to get practitioners that are in the careteam, can use this</p>\n<p><code>http://hapi.fhir.org/baseR4/Practitioner?_has:CareTeam:participant:subject={patientId}</code></p>\n<p>Now,  just need a way to just pass in the device ID and am good</p>",
+        "id": 220681535,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608637734
+    },
+    {
+        "content": "<p>In general, I'm not sure I completely understand what the 3 parts of the <code>_has</code> are. From the docs, I think it has to be <br>\n<code>[base]/Resource?_has:Something:Reference(s):query</code> such that <code>Something</code> references <code>Resource</code> (be it a single or multiple). Is that correct?</p>",
+        "id": 220681741,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608637939
+    },
+    {
+        "content": "<p>Example <a href=\"https://www.hl7.org/fhir/search.html#has\">here</a> seems to traverse 2 references: <code>patient</code>s have an<code>Observation</code> where it has an <code>audit event</code> from a specific user</p>\n<p>Query is: <code>GET [base]/Patient?_has:Observation:patient:_has:AuditEvent:entity:user=MyUserId</code></p>\n<p>On the same lines, practitioners that have careteams where it has a patient with a specific ID</p>\n<p>I tried <code>GET [base]/Practitioner?_has:CareTeam:participant:_has:Device:patient:_id=deviceId</code>, but returns 0 resources. </p>\n<p>Here's the resources I'm testing with. <br>\nPatient id: 1714653<br>\nDevice id: 1722695<br>\nCareTeam: 1714654</p>",
+        "id": 220682653,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608638768
+    },
+    {
+        "content": "<p>I'm starting to think this isn't possible, or is it</p>",
+        "id": 220689140,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608644091
+    },
+    {
+        "content": "<p>Nested _has statements may not be supported by the server. Please look at the 'self' link in the response bundle to verify which parts of your search URL are supported by the server.</p>",
+        "id": 220691637,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1608645722
+    },
+    {
+        "content": "<p>I'm using the public HAPI server (<a href=\"http://hapi.fhir.org/baseR4\">http://hapi.fhir.org/baseR4</a>), I think it does support nesting</p>",
+        "id": 220760894,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608698577
+    },
+    {
+        "content": "<p>Hmm Not sure if <code>hapi.fhir.org/baseR4</code> supports it, since the example for <code>Reverse Chaining</code> on the docs gives this error<br>\n<code>Unknown parameter name: AuditEvent:user</code></p>",
+        "id": 220761682,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608699943
+    },
+    {
+        "content": "<p>I can't seem to use <code>Bundle</code> either, to get resources together. I assumed <code>fullurl</code> would be used. </p>\n<div class=\"codehilite\"><pre><span></span><code>{\n    &quot;resourceType&quot;: &quot;Bundle&quot;,\n    &quot;entry&quot;: [\n        {\n            &quot;fullUrl&quot;: &quot;urn:uuid:b8dea8f5-ef2a-45e4-8f4f-48b71a45e932&quot;,\n            &quot;resource&quot;: {\n                &quot;resourceType&quot;: &quot;Device&quot;\n            },\n            &quot;request&quot;: {\n                &quot;method&quot;: &quot;GET&quot;,\n                &quot;url&quot;: &quot;Device?_id=1722695&quot;\n            }\n        },\n        {\n            &quot;resource&quot;: {\n                &quot;resourceType&quot;: &quot;Patient&quot;\n            },\n            &quot;request&quot;: {\n                &quot;method&quot;: &quot;GET&quot;,\n                &quot;url&quot;: &quot;Patient?_has:Device:patient:_id=urn:uuid:b8dea8f5-ef2a-45e4-8f4f-48b71a45e932&quot;\n            }\n        }\n    ]\n}\n</code></pre></div>\n<p>What I'm trying to do is, get the patient that the device refers to.  I could just use <code>_include</code>, but something like this is to see if I can reference the next resource to <code>GET</code> in the bundle based on the identity of the previous <code>GET</code> in the bundle. Is that possible?</p>",
+        "id": 220762549,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608701442
+    },
+    {
+        "content": "<p>If that works, it'll be possible to create a request that <strong>returns me a careteam given a device ID associated with a patient</strong></p>",
+        "id": 220763847,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608703786
+    },
+    {
+        "content": "<p>When I try this, I get this error </p>\n<div class=\"codehilite\"><pre><span></span><code>{\n    &quot;resourceType&quot;: &quot;Bundle&quot;,\n    &quot;type&quot;: &quot;batch&quot;,\n    &quot;entry&quot;: [\n        {\n            &quot;fullUrl&quot;: &quot;urn:uuid:8f2675f5-0961-4d11-bb81-398ffeae4d32&quot;,\n            &quot;resource&quot;: {\n                &quot;resourceType&quot;: &quot;Device&quot;,\n                &quot;id&quot;: &quot;urn:uuid:8f2675f5-0961-4d11-bb81-398ffeae4d32&quot;\n            },\n            &quot;request&quot;: {\n                &quot;method&quot;: &quot;GET&quot;,\n                &quot;url&quot;: &quot;Device?_id=1722695&quot;\n            }\n        },\n        {\n            &quot;resource&quot;: {\n                &quot;resourceType&quot;: &quot;Patient&quot;\n            },\n            &quot;request&quot;: {\n                &quot;method&quot;: &quot;GET&quot;,\n                &quot;url&quot;: &quot;Patient?_has:Device:patient:_id=urn:uuid:8f2675f5-0961-4d11-bb81-398ffeae4d32&quot;\n            }\n        }\n    ]\n}\n</code></pre></div>\n<p>First part  gives error <code>Invalid placeholder ID found: urn:uuid:8f2675f5-0961-4d11-bb81-398ffeae4d32 - Must be of the form 'urn:uuid:[uuid]' or 'urn:oid:[oid]'</code></p>",
+        "id": 220764289,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608704566
+    },
+    {
+        "content": "<p>In a Bundle, the use of a urn:uuid: fullURL mostly indicates that the resource isn't actually available at a URL. The id would be just the UUID, without the urn:uuid: part. See Bundle for an explanation of this usage. <br>\nHow about: Patient?_has=Device:patient:_id=xxxx&amp;_revinclude=CareTeam:patient&amp;_include:iterate=CareTeam:participant:Practitioner ?</p>",
+        "id": 220768014,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1608710322
+    },
+    {
+        "content": "<p>Wow that's amazing! This works! <code>Patient?_has:Device:patient:_id=xxxx&amp;_revinclude=CareTeam:patient&amp;_include:iterate=CareTeam:participant:Practitioner</code></p>\n<p>Removing the <code>urn:uuid</code> didn't work though... Did you mean something like this? But either way, is there a way I can reference a next <code>GET</code> based on the previous <code>GET</code>,  so that I can query the latter resource based on the results of the first one?</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n    &quot;resourceType&quot;: &quot;Bundle&quot;,\n    &quot;type&quot;: &quot;batch&quot;,\n    &quot;entry&quot;: [\n        {\n            &quot;fullUrl&quot;: &quot;urn:uuid:8f2675f5-0961-4d11-bb81-398ffeae4d32&quot;,\n            &quot;resource&quot;: {\n                &quot;resourceType&quot;: &quot;Device&quot;,\n                &quot;id&quot;: &quot;8f2675f5-0961-4d11-bb81-398ffeae4d32&quot;\n            },\n            &quot;request&quot;: {\n                &quot;method&quot;: &quot;GET&quot;,\n                &quot;url&quot;: &quot;Device?_id=1722695&quot;\n            }\n        },\n        {\n            &quot;resource&quot;: {\n                &quot;resourceType&quot;: &quot;Patient&quot;\n            },\n            &quot;request&quot;: {\n                &quot;method&quot;: &quot;GET&quot;,\n                &quot;url&quot;: &quot;Patient?_has:Device:patient:_id=urn:uuid:8f2675f5-0961-4d11-bb81-398ffeae4d32&quot;\n            }\n        }\n    ]\n}\n</code></pre></div>",
+        "id": 220773705,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608716170
+    },
+    {
+        "content": "<p>Not in one go, as e.g. a Batch. That's two separate GETs one would have to do as a client.</p>",
+        "id": 220774228,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1608716668
+    },
+    {
+        "content": "<p>Ahh okay, because that would be an excellent feature!</p>\n<p>I'm now trying this. given a device ID, is it possible, in one request, to get the careteam? (devce -&gt; patient -&gt; careteam). I'm trying something like this, but I think that's not how <code>_has</code> works. <br>\n<code>/CareTeam?subject:_has:Device:patient:_id=deviceId</code> returns nothing, but curiously, <br>\n<code>/CareTeam?subject:_has:Device:patient:_id=patientId</code> returns the careteam with subject as <code>patientId</code></p>",
+        "id": 220774736,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608717130
+    },
+    {
+        "content": "<p>That's a chained _has, which you tried and is not supported by your server. _revincludes are a good alternative, but it means your response bundle will have to be filtered by the client to select (only) the CareTeam resources.</p>",
+        "id": 220774909,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1608717355
+    },
+    {
+        "content": "<p>Actually, it's one forward reference and one reverse reference (my bad).</p>",
+        "id": 220775104,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1608717526
+    },
+    {
+        "content": "<p>Yeah one forward and one back, so I thought I could select on the subject and slap a <code>_has</code> there. But yes, if <code>_has</code> support isn't there, your approach is the way to go, thank you very much!</p>\n<blockquote>\n<p>not supported by your server</p>\n</blockquote>\n<p>HAPI doesn't have support for chained <code>_has</code>? How do I check this? I got the <code>CapabilityStatement</code>, can't find anything there on feature support. Is that the right place to look for?</p>",
+        "id": 220775343,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608717730
+    },
+    {
+        "content": "<p>The CapStatement should list support for _has, but AFAIK there's no way to express the 'max chaining depth'. Search has many complex options that aren't fully expressed in the CapStatement.</p>",
+        "id": 220775481,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1608717886
+    },
+    {
+        "content": "<p>I can't seem to find it here <code>http://hapi.fhir.org/baseR4/CapabilityStatement</code>, nothing about <code>_has</code>, or <code>chain</code>. What am I missing?</p>",
+        "id": 220775919,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608718286
+    },
+    {
+        "content": "<p><a href=\"http://rest.resource.searchParam.name\">rest.resource.searchParam.name</a> can be \"_has\" for a particular resource type</p>",
+        "id": 220784573,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1608726604
+    },
+    {
+        "content": "<p>I see, okay. So I guess <code>http://hapi.fhir.org/baseR4/</code> does not have it, since I can't find \"_has\" anywhere.<br>\nYour query workaround was brilliant! <br>\nThanks for the help!</p>",
+        "id": 220848637,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608785186
+    },
+    {
+        "content": "<p>So for each patient, I want to setup limits per patient, in the sense that I am interested in knowing when a particular reading for a patient goes beyond the safe ranges for them. So, I'm thinking of storing these limits as extensions in the <code>Device</code> resource (since it's assigned to them, and no one else). Is that the right way to go about it?</p>",
+        "id": 220848821,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608785587
+    },
+    {
+        "content": "<p>Well, if the device produces Observations, then we'd be talking about a reference range, which is part of Observation. If we're talking about device setting (e.g. an implantable device, e.g. pacemaker), then these would be device parameters. In the latter case I suggest you put your question on the #devices stream.</p>",
+        "id": 220854162,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1608794741
+    },
+    {
+        "content": "<p>It's not an implantable device (for now I guess), but things like BP machines etc. For the reference range, I'll need to what the ranges are to populate them in the <code>Observation</code>, correct? Where would I store these numbers? I thought I'd just store the ranges as a base64 string in the device info as an extension (doesn't feel right though), so that when I get an JSON payload from the device (just has values and an <code>identifier</code>), I can query the FHIR <code>Device</code> (based on <code>jsonPayload.identifier</code>), get the limits (from <code>Device.Extension</code>), check for limits, and if out of range, send notifications to practitioners (thanks to the query you've kindly formulated!)</p>",
+        "id": 220854283,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608794961
+    },
+    {
+        "content": "<p>Assuming there is some clinical process, with a responsible clinician, for determining the reference ranges for a specific patient, you'd need to capture more than just a reference range, because you'd also need to capture who defined the reference range for a patient, and when they did so. So that makes it sound like you'd attach an Observation with as subject the Patient, Observation.device the reference to the device (or perhaps Observation.focus, given that the device is not used to observe its own reference range, which is implied by using Observation.device),  and with the value of the observation using the valueRange data type.</p>",
+        "id": 220854635,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1608795579
+    },
+    {
+        "content": "<p>My bad I should've mentioned this is remote patient monitoring.</p>\n<p>Devices are assigned to a patient either by the 'admins', or <code>Practitioner</code>s from the patient's <code>CareTeam</code>.  Where do I store this info? Device doesn't seem to have an attribute for this (who assigned this device). </p>\n<p>During assignment, they also add in the the ideal ranges for that patient-device pair. What do I do in this case? I'm capturing other parameters as you described (<code>valueRange</code> or <code>component</code>, <code>Device</code>,  <code>effectiveInstant</code>, so I got that right I guess :) )</p>",
+        "id": 220858330,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608801187
+    },
+    {
+        "content": "<p>Well, this is getting beyond my area of expertise, so like you I'll await comments by those more in the know.</p>",
+        "id": 220861494,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1608805737
+    },
+    {
+        "content": "<p>No issues, thank you for helping me out so far!</p>",
+        "id": 220862038,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608806505
+    },
+    {
+        "content": "<p>In C#, should I use the <code>decimal</code> or <code>double</code> for medical values? Looking the FhirDecimal, I think I must use <code>decimal</code></p>",
+        "id": 220866071,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608811977
+    },
+    {
+        "content": "<p>Also, for some cases, a device gives multiple measurements. Such as systolic, diastolic and pulse. In this case, do I create a single <code>Observation</code> or multiple? From the example in the docs, I see that <code>Systolic</code> and <code>Diastolic</code> are grouped together in <code>component</code>, should pulse be included in that too?</p>",
+        "id": 220866358,
+        "sender_full_name": "Dexter",
+        "timestamp": 1608812364
+    },
+    {
+        "content": "<blockquote>\n<p><a href=\"https://hapi.fhir.org/baseR4/Patient?_has:Device:patient:identifier=device_id&amp;_include:iterate=CareTeam:participant:Practitioner&amp;_revinclude=CareTeam:patient&amp;_include=Device\">https://hapi.fhir.org/baseR4/Patient?_has:Device:patient:identifier=device_id&amp;_include:iterate=CareTeam:participant:Practitioner&amp;_revinclude=CareTeam:patient&amp;_include=Device</a></p>\n</blockquote>\n<p>I noticed just now that this returns all devices under that patient, how do I narrow this to just the specific device I want?</p>",
+        "id": 222062473,
+        "sender_full_name": "Dexter",
+        "timestamp": 1610105858
+    },
+    {
+        "content": "<p>I hope it's okay to tag you <span class=\"user-mention\" data-user-id=\"191372\">@René Spronk</span>. When possible, could you kindly help me out narrowing the above query down? Thank you very much!</p>",
+        "id": 222705894,
+        "sender_full_name": "Dexter",
+        "timestamp": 1610623814
+    },
+    {
+        "content": "<p>_include and _revinclude don't allow one to specify conditions. If you want a subset of Devices, then you would have to use Device as your focal resource. But that would mean rewriting the entire query URL..</p>",
+        "id": 222708094,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1610625676
+    },
+    {
+        "content": "<p>Yikes, thought so. Maybe there's a way I can use Bundle type request to get what I want? But I think there's no way to have a GET in a bundle that's dependent on what the previous GET had generated in the bundle</p>",
+        "id": 222708210,
+        "sender_full_name": "Dexter",
+        "timestamp": 1610625773
+    },
+    {
+        "content": "<p>correct. But you could use 2 GETs that both use the very same device_id as one of their parameters.</p>",
+        "id": 222708678,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1610626112
+    },
+    {
+        "content": "<p>Hmm that makes sense, maybe 2/3 GET based on your pattern to get the patient, careteam and the devices. I think I can just remove the _include from the query you kindly took the time to give me, and then a single query to get the device</p>",
+        "id": 222708931,
+        "sender_full_name": "Dexter",
+        "timestamp": 1610626357
+    },
+    {
+        "content": "<p>Yep this works, </p>\n<div class=\"codehilite\"><pre><span></span><code>{\n    &quot;resourceType&quot;: &quot;Bundle&quot;,\n    &quot;entry&quot;: [\n        {\n            &quot;request&quot;: {\n                &quot;method&quot;: &quot;GET&quot;,\n                &quot;url&quot;: &quot;/Device?identifier=DEVICE_IDENTIFIER&quot;\n            }\n        },\n        {\n            &quot;request&quot;: {\n                &quot;method&quot;: &quot;GET&quot;,\n                &quot;url&quot;: &quot;/Patient?_has:Device:patient:identifier=DEVICE_IDENTIFIER&amp;_include:iterate=CareTeam:participant:Practitioner&amp;_revinclude=CareTeam:patient&quot;\n            }\n        }\n    ]\n}\n</code></pre></div>",
+        "id": 222712900,
+        "sender_full_name": "Dexter",
+        "timestamp": 1610629120
+    },
+    {
+        "content": "<p>Interesting<span aria-label=\"fire\" class=\"emoji emoji-1f525\" role=\"img\" title=\"fire\">:fire:</span></p>",
+        "id": 222804877,
+        "sender_full_name": "Lin Zhang",
+        "timestamp": 1610670667
+    },
+    {
+        "content": "<p>I'm trying this now, given a patient, I want to get the <code>CareTeam</code>, <code>Practitioner</code>, and <code>PractitionerRole</code>, and I have this so far</p>\n<div class=\"codehilite\"><pre><span></span><code>https://hapi.fhir.org/baseR4/CareTeam\n?subject=1852580\n&amp;_include=CareTeam:subject\n&amp;_include=CareTeam:participant\n&amp;_revinclude=PractitionerRole:Practitioner\n</code></pre></div>\n<p>The last bit, retrieving the <code>PractitionerRole</code> doesn't work. I think the server supports revinclude since I recall a request where I could revinclude other resources. Specifically, this works <code>https://hapi.fhir.org/baseR4/Patient?_id=1852580&amp;_revinclude=CareTeam:subject</code>, and similar for getting a <code>PractitionerRole</code> that refers to a <code>Practitioner</code></p>",
+        "id": 226514905,
+        "sender_full_name": "Dexter",
+        "timestamp": 1613483598
+    },
+    {
+        "content": "<p>Alright, you could skip my reply in another thread.</p>",
+        "id": 230033843,
+        "sender_full_name": "Lin Zhang",
+        "timestamp": 1615558145
+    }
+]

@@ -1,0 +1,176 @@
+[
+    {
+        "content": "<p>I'm evaluating the CRD IG for implementation and I've been stumbling on a variety of issues. </p>\n<ul>\n<li>Filling out prior authorization documentation is at present a support staff workflow. CRD/DTR makes this a provider workflow thereby risking moving the burden onto the provider.</li>\n<li>At the time of order-select / order-sign, enough information may not be on the order to be able to make a determination on whether coverage is required. I ran into this, and another EHR independently ran into this: <a href=\"#narrow/stream/180803-Da-Vinci.20CRD/topic/CDS.20Hooks.20for.20CRD\">https://chat.fhir.org/#narrow/stream/180803-Da-Vinci.20CRD/topic/CDS.20Hooks.20for.20CRD</a></li>\n<li>CRD IG premises that the CRD service is always able to make a determination on whether piror authorization is required or not. There is no provision for \"indeterminate\" / \"don't have enough information\". In CDS Hooks, the SMART App is meant to serve this purpose, whereas the CRD service has a designated use-case for the SMART App of doing DTR, which doesn't align with the CDS Hooks intent of the SMART App.</li>\n<li>\n<p>CDS Hooks is designed for clinical end users. If the prior authorization service returns guideance that is clinical in nature, such as \"MRI is not the best order to diagnose this, use a CT Scan instead\" etc., support staff are not qualified to act on such guidance. <br>\nHowever, there isn't much guardrails in the IG. </p>\n</li>\n<li>\n<p>The DTR App is not always likely to be filled out in one sitting. Support staff may have to collect documentaion. It is also concievable that support staff may pass the baton among multiple users to fill out all the required documentation. This means, the EHR needs to semantically recognize the DTR app in the CDS Hooks response, record the app details, and be able to launch the App multiple times. The SMART App link in CDS Hooks is not really designed with such an intention.</p>\n</li>\n</ul>",
+        "id": 253426840,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631717386
+    },
+    {
+        "content": "<p>All of these has made me sit down and think through various things about the CRD Implementation Guide. Here are some of my thoughts around this:</p>",
+        "id": 253426887,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631717401
+    },
+    {
+        "content": "<ol>\n<li>CRD IG needs to survey \"what kind of information\" goes into the rules that determine whether prior authorization is required, as these rules exist in the industry today. I did some level of surveying this. The inputs I found include whether service is being performed in network or not (this includes location, provider, and provider specialty of the performing end), which is information not avaialble at the time of ordering. So this raises questions on the viability of the existing hooks being used. There may be other such inputs which might prove challenging in other sequences proposed in the IG? This information about the baseline requirements of the business logic that will be encapsulated in the CRD service is important in making an informed Implementation Guide?</li>\n</ol>",
+        "id": 253427018,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631717436
+    },
+    {
+        "content": "<ol start=\"2\">\n<li>Similarly, CRD IG needs to survey existing workflows in the industry around prior authorization, before proposing new workflows around it. Such an evaluation will avoid risks such as moving the back office staff workflow of collecting and submitting documentation onto the provider, thereby increasing rather than reducing the burden on the provider. It will also identify such requirements as that the DTR App needs to be discretely recorded in the EHR, in order to be launched multiple times, and likely even by different users.</li>\n</ol>",
+        "id": 253427104,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631717466
+    },
+    {
+        "content": "<ol start=\"3\">\n<li>CRD IG needs to provide a mechanism for the CRD Service to say \"indeterminate\" / \"don't have enough information to determine whether prior authorization is required\". The SMART on FHIR App is the CDS Hooks mechanism for this, but that is being diverted for a different use. (And even if multiple SMART Apps are returned, the information in an \"additional info\" SMART App may not align with what gets later filled in the EHR making the determination of the app incorrect etc.)</li>\n</ol>",
+        "id": 253427178,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631717494
+    },
+    {
+        "content": "<ol start=\"4\">\n<li>The CRD Response needs to be able to discretely mark/distinguish the SMART on FHIR App for DTR from other SMART Apps, so the EHR can semantically understand which SMART on FHIR App is the DTR App. This is required because the EHR needs to record this SMART App and be able to launch it multiple times later on. (Unfortunately, this doesn't really align well with CDS Hooks).</li>\n</ol>",
+        "id": 253427248,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631717520
+    },
+    {
+        "content": "<ol start=\"5\">\n<li>Are order-select / order-sign the right points in the workflow to make the CRD determination? As pointed out previously, not all information required to determine whether prior authorization is required is available at these points. Alternatively, would it make more sense to make a CRD Specific hook? If we do that, the EHR has the ability to call the CRD service at the right point where all required information is present, and on behalf of the right user who will do the DTR documentation? We can also document that the end user for this hook is non-clinical support staff, thereby mitigating the possibility of clinical guidance shown to them.</li>\n</ol>",
+        "id": 253427372,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631717558
+    },
+    {
+        "content": "<ol start=\"6\">\n<li>Going one more step over #5, is CDS Hooks the right mechanism to build CRD on top of? A few of the thorny issues here are (1) end user may not be a clinical end user which doesn't align with CDS Hooks (2) SMART App for DTR needs to be distinguished as pointed out in #4 (3) The way the IG is written confutes how CDS Hooks allows for an \"indeterminate\" response, leaving CRD with no real option for this as pointed out in #3 (4) CRD services realistically will not return any decision support - rather it will only return a DTR App (5) CRD IG suggests an optional way to immediately do the prior authorization and return the Prior Authorization number. This needs to be discretely captured in the EHR for subsequent submission in the claim, but the IG doesn't have a clean way to do this using CDS Hooks. There is talk of using a note on the order, which an end user will have to later transcribe etc. which are suboptimal.</li>\n</ol>\n<p>On the other hand, there is an existing model for the FHIR CoverageEligibilityRequest / CoverageEligibilityResponse resources, that might better fit with CRD Requirements? What we need is perhaps a PriorAuthorizationRequirementRequest / PriorAuthorizationRequirementResponse that can be invoked by the EHR through a FHIR operation, and that can discretely capture such things as the DTR SMART App, a prior authorization number if auto-authorized etc.? This will also have the additional flexibility of the EHR being able to invoke the FHIR operation at the right time(s) when the required information is available / changes?</p>",
+        "id": 253427541,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631717630
+    },
+    {
+        "content": "<ol start=\"7\">\n<li>Prior Authorization workflows have \"Turnaround Time\" and \"Notification\" requirements mandated by law. </li>\n</ol>\n<p>Can we clarify in the IG at what points which kinds of turnaround time requirement clocks start ticking / which ones stop ticking etc.? Otherwise this might risk being a point of contention with Electronic prior authorization. </p>\n<p>Similarly, now that we are doing electronic prior authorization, can we also make sure to include electronic notifications in the scope of the IG? Would a PAS response going back to the provider organization constitute notifying the provider that the prior authorization was approved? What other steps in the IGs constitute / do not meet notification requirements?</p>",
+        "id": 253427674,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631717670
+    },
+    {
+        "content": "<p>At this point I am thinking I should write these up as JIRA issues. But figured I can post these here first, for the community to pick apart any obvious flaws in what I have written?</p>",
+        "id": 253427785,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631717716
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"193265\">@Matt Varghese</span> Thanks for the detailed comments.<br>\nFirst, the objective of CRD is, first and foremost, a reduction of burden on <em>patients</em>.  When a clinician makes a decision on therapy - what drug to prescribe, what test to order, who to address a referral to, those clinical decisions have a significant impact on whether coverage will exist at all or whether prior authorization will be needed.  By making clinicians aware of the impacts of their decisions (e.g. \"test A isn't covered because diagnosis B isn't present\", or \"imaging approach A isn't covered but B is\"), the clinician can make better decisions about what they're ordering.  Also, if any of the prior authorization information requires data that involves clinician input (performing additional examinations, ordering extra tests, etc.), the objective is to ensure that happens right away - while the patient is still in the room, rather than have admin staff discover that needed steps were missed and thus needing to call the patient back for another appointment.  The same thing goes for the gathering of additional documentation a payer requires be kept on file - it's quite often not documentation that can be invented by admin staff and may require interaction with the patient.</p>\n<p>It may well be that the design of DTR needs to be refactored a bit so that the notion of \"launch this app  to gather prior authorization information\" becomes \"launch app A to gather clinician or patient-sourced information\" and \"launch app B to gather back-end information that admin staff can manage\".  Sometimes there might be only a need for one of those, sometimes a need for both.  That's a change we could look at if there was a desire (and a change request).</p>\n<p>CRD <em>absolutely</em> supports returning a card that says something like \"Prior authorization required if filled out of network.  Click <em>here</em> to see a list of network providers\".  That's a simple \"Instructions\" card.  However, I agree it would be useful to call that out as an explicit example.  Can you submit a change request?</p>\n<p>There is no expectation that a complete determination on whether prior authorization is required or not will always be possible based on the information provided or accessible to a CDS Hook invocation.  Even if it only happens 50% of the time, that's a significant benefit.  If not, and a simple conditional statement of prior auth requirement isn't sufficient, DTR fills the requirement.  One of the things that launching DTR can do (whether done immediately by the ordering provider or later by an admin person) is gather the information to confirm whether prior authorization is necessary.  The hook point doesn't need to be able to make that determination 100% of the time to be useful.  Simply knowing that \"prior authorization might be required\", \"prior authorization definitely not required\", or \"not covered, no matter what\" is useful information even if DTR is never launched.  We <em>absolutely</em> want that information in front of the clinical staff.</p>\n<p>The need to be able to launch an app later (or act on <em>any</em> card later) isn't CRD-specific.  A clinician may well want to launch and play around with a risk analysis app or a prescribing guideline app or read through a drug monograph later (or get their assistant to do it).  I don't think that distinguishing the specific app type is necessary for the \"do this later\" or \"get someone else to do this\" workflows.  Furthermore, every EHR will know in advance what each SMART app does (or can have that configured) because every provider-launched SMART app must be pre-authorized as part of EHR configuration.  So if there's a desire to capture the fact that a particular SMART app should be deferable/delagatable, that's an EHR configuration issue, not a CDS Hooks issue unless we decide that the decision support provider should be able to indicate on a card whether or not an action is 'deferable'/'delegatable'.  (My personal leaning is that that's often not a decision best made by the CDS service.)</p>\n<p>Keep in mind as well, that CRD isn't limited <em>only</em> to providing information about \"is prior auth required\" or \"is this service covered\".  It's intended to support providing <em>any</em> information the payer has that may be useful to the process underway.  For example, It might provide information about alternative therapies that are cheaper, required first line therapies, information about duplicate therapies (e.g. that same X-ray was already paid for 2 days ago by XYZ clinic - so maybe get a copy from them rather than ordering a new one?), etc.  Most/all of those cards need to be in front of the clinical decision maker at the time decisions are made to be useful.</p>\n<p>We could easily capture the ClaimResponse indicating that a prior authorization had been pre-emptively granted, or a draft Claim filling in basic information to start a prior authorization request <em>if</em> those resources were supported by EHR FHIR interfaces and thus executable as a CDS Hook action or FHIR API request.  The notion of putting a note on the ServiceRequest/MedicationRequest/whatever was about the lowest impact mechanism of capturing the information with the capabilities that exist today.  If there's broad support amongst EHRs to support these financial resources in their endpoints, a change request to update CRD and/or DTR to take advantage of those capabilities would be great.</p>\n<p>CRD does <em>not</em> request prior authorization.  Nor does DTR.  Payers <em>may</em>, based on information gathered upon invocation of either of these processes make a determination that authorization is not only necessary, but that the conditions for such authorization have been met, and thus pre-emptively provide such authorization.  If you feel a declarative statement that (based on our understanding, given that we're not the regulator), that prior authorization timelines only come into play for PAS, you could submit a change request asking for that.</p>",
+        "id": 253678013,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1631843939
+    },
+    {
+        "content": "<p>The patient is not a direct actor in the CRD specification. So the only way we can have any chance of reducing burden on the patient is by reducing burden on the proxy who is executing their interest, viz. the provider?<br>\nUnfortunately, as I explained earlier, the provider risks being burdened more and not less by the IG as written.</p>",
+        "id": 253752294,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631889573
+    },
+    {
+        "content": "<blockquote>\n<p>It may well be that the design of DTR needs to be refactored a bit so that the notion of \"launch this app to gather prior authorization information\" becomes \"launch app A to gather clinician or patient-sourced information\" and \"launch app B to gather back-end information that admin staff can manage\". </p>\n</blockquote>\n<p>Most providers hate it when the form that a nurse or staff sees is different from what they see. So when you say \"launch App A for one person, App B for another\" that would be seriously unpleasant to providers. </p>\n<p>What is the benefit of these different apps, when they are all showing the same questionnaire? It's just following up on filling certain pieces of information on a documentation entry form. That is not the best use of provider time, when it can be done by someone with a lower level of licensure on the same App.</p>",
+        "id": 253752484,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631889634
+    },
+    {
+        "content": "<p>Returning a card saying \"prior authorization MAYBE required - pick from this list\" will be a significant throwback from existing capabilities. </p>\n<p>EHRs have spend tremendous amounts of time in creating capabilities for identifying the best performing providers, referral destination etc. for a <strong>patient</strong>. A pick list will be rather suboptimal when compared to all that assistive intelligence that patients rely upon and find extremely useful?</p>\n<p>So, I still feel that CRD does not have a good way to return a response of \"don't have enough information to make an appropriate determination\"</p>",
+        "id": 253752625,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631889682
+    },
+    {
+        "content": "<blockquote>\n<p>There is no expectation that a complete determination on whether prior authorization is required or not will always be possible based on the information provided or accessible to a CDS Hook invocation.</p>\n</blockquote>\n<p>I think that is my point. This is the case, yet the IG has no good way to capture this case of \"unable to make the determination\" in a fashion semantically understandable to the EHR.</p>",
+        "id": 253752716,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631889712
+    },
+    {
+        "content": "<blockquote>\n<p>Even if it only happens 50% of the time, that's a significant benefit.</p>\n</blockquote>\n<p>This is actually not true. Existing capabilities in EHRs can make a determination that is much better than 50% without even having to consult an external entity. So 50% would be a significant throwback?</p>",
+        "id": 253752987,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631889801
+    },
+    {
+        "content": "<blockquote>\n<p>One of the things that launching DTR can do (whether done immediately by the ordering provider or later by an admin person) is gather the information to confirm whether prior authorization is necessary.</p>\n</blockquote>\n<p>As I understand the IGs, DTR comes after the determination that prior authorization is required has been made?</p>",
+        "id": 253753079,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631889839
+    },
+    {
+        "content": "<blockquote>\n<p>The need to be able to launch an app later (or act on any card later) isn't CRD-specific.</p>\n</blockquote>\n<p>I think this is also my point. Relying on CDS Hooks, and CDS Hooks returning a card has required the IG to throw away part of CDS Hooks response, and substitute that with a DTR App which the spec does not clarify the discovery of, etc. </p>\n<p>In fact, the number of things for which we have had to consider extensions, and other modifications / overwriting to the CDS Hooks spec looks like \"<strong>smoke signals</strong>\" to me.</p>",
+        "id": 253753284,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631889906
+    },
+    {
+        "content": "<blockquote>\n<p>Keep in mind as well, that CRD isn't limited only to providing information about \"is prior auth required\" or \"is this service covered\". It's intended to support providing any information the payer has that may be useful to the process underway.</p>\n</blockquote>\n<p>Encumbering unrelated things has always been a bad idea. If the payer has the ability to provide decision support, aren't they better served by making a decision support service? Then, the decision support would happen upstream where it is more appropriate, and prior authorization determination would happen once appropriate information to make that determination is available, which is much downstream of the decision support we are talking about?</p>",
+        "id": 253753525,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631889983
+    },
+    {
+        "content": "<blockquote>\n<p>We could easily capture the ClaimResponse indicating that a prior authorization had been pre-emptively granted</p>\n</blockquote>\n<p>I don't think this is accurate. The ClaimResponse is a response to a Claim. There is a required <em>request</em> property in the ClaimResponse resource which is a reference to the original Claim, that would not exist in this case.</p>",
+        "id": 253753641,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1631890023
+    },
+    {
+        "content": "<p>Patient burden is reduced by ensuring that clinical decisions are guided by coverage availability and prior auth requirements and that anything that needs to be done related to prior authorization is done as part of the initial visit.  That <em>does</em> mean involving the provider more in the prior auth process than may have been done in the past - and that's deliberate and intentional.  It may mean some additional time during that visit, but it will mean less time later being bothered by back-end staff and fewer repeat visits, and thus a time savings overall.</p>\n<p>I'm not arguing for multiple apps, but if the desire is to ensure that clinicians are faced with the bare minimum of questions, then the only solution is to have separate launches - one for the questions the clinician must answer, and one with the questions that can be answered by admin staff.  It might well be the same app, but there'd be two different questionnaires.  If the preference is to have a single questionnaire and just fill out what the clinician feels they need to and save it and punt the rest to admin staff, that's simpler (and to my mind, better), but it will require support for saving and assigning the completion to someone else after the clinician does the first pass.</p>\n<p>How is saying \"prior authorization may be required\" a throwback?  If the payer doesn't support DTR, it's the best they can provide, and certainly not a throwback given that right now, the clinician gets nothing at all - ever.  There's no intention of it being a \"pick from a list\" solution, it's a \"if you want to see who's in network, here's a way to do that\" - and that was just my suggestion of what a useful card might look like in a situation where the payer doesn't have enough information to make a final determination and DTR isn't on the table.</p>\n<p>CRD has two mechanisms to return \"Don't have enough information\" - payer can return an information card (if they don't support DTR) or they can provide a DTR link.</p>\n<p>50% is a number out of the air.  The specific percentage of prior authorization requirement determinations that can be made by the order alone will likely vary by payer, type of order and a host of other factors.  If you feel your EHR can do a better job of predicting what will need a prior authorization based on the information filled in at time of order entry than the payer themselves can, then I guess there's no need to turn on the CRD service for those payers...</p>\n<p>A link to a DTR app is provided at any time that a payer determines that additional information is needed - whether related to prior authorization or not.  It could be:</p>\n<ul>\n<li>there's additional data that the provider must capture and store in order to adhere to payer rules (independent of any considerations about authorization</li>\n<li>there's additional information needed to determine whether authorization is necessary</li>\n<li>authorization <em>is</em> necessary and additional information needs to be collected in order to ensure a successful prior authorization evaluation without a back-and-forth solicitation for more data.</li>\n</ul>\n<p>The extensions that have been proposed to the CDS Hooks specification are all features that are not in any way CRD-specific.  They all have utility for other types of decision support and other types of cards.  I have no idea what you mean y \"throw away part of the CDS Hooks response\".  A DTR card is a simple \"launch smart app\" card, like any other \"launch smart app\" card.  It doesn't identify itself other than with an app link because there's no need.  Every EHR will <em>always</em> know all apps that come back as candidate links, because all SMART apps must already be pre-registered with the EHR.  (If an EHR receives a card suggesting the launch of a SMART app that's not registered, I presume it suppresses/throws it away, given there's no way for the user to be able to launch it?)</p>\n<p>Claim is used for prior authorization requests.  ClaimResponse is used for prior authorization responses.  And yes, the modeling of ClaimResponse is broken because it requires a request.  FM wrongly presumed that authorization could never be given without being requested.  For now, there'll be no choice but to stick a DAR in that link.</p>",
+        "id": 253836354,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1631937670
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>, one of the biggest struggles with decision support is Alert Fatigue. There are so many entities that want to give \"alerts\" about this and that in a clinician's workflow that the clinician becomes <strong>immensely overloaded</strong>, and <strong>just plain ignores alerts</strong>. Prior Authorization MAYBE required? Why  would I as a clinician even bother to look at such an alert? It is one I would rather dismiss and have my back end staff deal with, when there are more important things directly impactful to the patient's treatment that I should attend to? Reducing Alert Fatigue is a particularly strong incentive in the industry today, whereas the CRD IG as written will add to alert fatigue.</p>",
+        "id": 253948795,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1632061676
+    },
+    {
+        "content": "<p>What you are saying of \"prior authorization may be required\" is something we already can recognize in an EHR without having to contact a payer. In fact, I would expect a reasonable EHR to do so already. That is why I said 50% is a throwback compared to what EHRs can already do today, and why I said CRD spec should do a survey of what really exists out in the industry first before making such recommendations.</p>",
+        "id": 253948839,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1632061691
+    },
+    {
+        "content": "<blockquote>\n<p>The specific percentage of prior authorization requirement determinations that can be made by the order alone will likely vary by payer, type of order and a host of other factors.</p>\n</blockquote>\n<p>This is one where I really think CRD IG needs to include a survey of what kinds of situations usually require prior authorizations? What inputs go into the prior authorization determination requirement. Then we would have somewhat better numbers than ones pulled from thin air?  As well as a more realistic idea of how this should work?</p>",
+        "id": 253948888,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1632061757
+    },
+    {
+        "content": "<blockquote>\n<p>A link to a DTR app is provided at any time that a payer determines that additional information is needed - whether related to prior authorization or not.</p>\n</blockquote>\n<p>As the IG is written, is this true? The payer does not see the DTR submission answers until PAS submission happens (especially it can be an independent DTR App). DTR Responses are saved to the EHR FHIR server and not the payer FHIR server. So does the payer have an opportunity to come back and say prior authorization is required/not required inside the DTR App? As far as I understand how the IGs are written, the payer only sees DTR responses upon receiving them bundled inside the PAS submission.</p>",
+        "id": 253948899,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1632061768
+    },
+    {
+        "content": "<p>I never proposed a message of \"prior authorization may be required\" - the example message was \"Prior authorization required if out of network\" - and that is concrete and actionable.  And that message would only be needed if DTR wasn't supported.  As I said, if the EHR feels they can better predict when prior authorization will be needed based on the information at the time the order is entered than the payer can, they don't need to turn on the service.  (Given the continuous evolution of rules, the introduction of new products, the introduction of new types of coverage, etc., this assertion being true would certainly be surprising though.)</p>\n<p>The initial version of DTR doesn't involve any communication with the payer, however if the algorithm can determine that prior authorization is not required (or that there is no chance of coverage period) , it can communicate that directly in the QuestionnaireResponse.  In the next release of DTR, we'll be introducing adaptive forms, which would actually allow the payer to proactively provide a prior authorization number if, based on the information gathered by the SMART app, a decision can be made instantaniously.  Obviously PAS will still be needed in those cases where a human on the payer side needs to review images or reports orthere are aspects of the decision process that are non-algorithmic.  However, even in this case, the process should eliminate almost all of the back-and-forth that's traditionally been required because all relevant information would be transmitted to the payer in the initial package.</p>",
+        "id": 253953782,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1632067051
+    },
+    {
+        "content": "<blockquote>\n<p>As I said, if the EHR feels they can better predict when prior authorization will be needed based on the information at the time the order is entered than the payer can, they don't need to turn on the service.</p>\n</blockquote>\n<p>I feel like this is the ultimate cop-out <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> <span aria-label=\"unamused\" class=\"emoji emoji-1f612\" role=\"img\" title=\"unamused\">:unamused:</span> . Especially when something stands the risk of being regulated (CDR/DTR/PAS was!), that thing MUST be an improvement over what already exists!</p>",
+        "id": 253954703,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1632067987
+    },
+    {
+        "content": "<p>The project proponents believe it <em>is</em> a significant improvement over what exists.  The prior auth. experience by most patients is pretty horrible.  It can take days or longer got get one in place, therapies are ordered with little knowledge of whether coverage will or won't be provided, patients are called back for follow-up appointments to gather information which should, ideally, have been gathered on the first visit.</p>",
+        "id": 253968395,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1632081856
+    },
+    {
+        "content": "<p>I have created JIRA issues for the concerns I have raised, and included what I learned from the discussion here as well. </p>\n<ol>\n<li><a href=\"https://jira.hl7.org/browse/FHIR-33958\">https://jira.hl7.org/browse/FHIR-33958</a>: CRD IG needs to survey what situations require and do not require prior authorization</li>\n<li><a href=\"https://jira.hl7.org/browse/FHIR-33959\">https://jira.hl7.org/browse/FHIR-33959</a>: CRD IG needs to include a survey of workflows as they exist in EHRs today before proposing changes</li>\n<li><a href=\"https://jira.hl7.org/browse/FHIR-33960\">https://jira.hl7.org/browse/FHIR-33960</a>: CRD IG doesn't have a semantically differentiable way to say \"indeterminate\"</li>\n<li><a href=\"https://jira.hl7.org/browse/FHIR-33961\">https://jira.hl7.org/browse/FHIR-33961</a>: CRD IG does not capture sufficient discrete data</li>\n<li><a href=\"https://jira.hl7.org/browse/FHIR-33962\">https://jira.hl7.org/browse/FHIR-33962</a>: CRD Hooks don't seem to have the right information required for prior authorization determinations</li>\n<li><a href=\"https://jira.hl7.org/browse/FHIR-33963\">https://jira.hl7.org/browse/FHIR-33963</a>: Is CDS Hooks the right vehicle for CRD?</li>\n<li><a href=\"https://jira.hl7.org/browse/FHIR-33964\">https://jira.hl7.org/browse/FHIR-33964</a>: Can we discuss implication for turn around time reporting and notification requirements?</li>\n</ol>",
+        "id": 254271191,
+        "sender_full_name": "Matt Varghese",
+        "timestamp": 1632255414
+    }
+]

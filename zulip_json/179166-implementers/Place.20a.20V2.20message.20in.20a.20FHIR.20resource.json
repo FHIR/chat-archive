@@ -1,0 +1,92 @@
+[
+    {
+        "content": "<p>I would like to use a FHIR resource to upload an HL7 V2 message (PCD-01 in this case). There are numerous possibilities but so far all the options I have looked at seem to bend the intentions a little too much.  Perhaps the composition resource really meant for CDAs...? The PCD-01 message is nothing but a human readable string (to the extent one can read V2 messages). There would be several reasons for doing this ...</p>",
+        "id": 202626492,
+        "sender_full_name": "Brian Reinhold",
+        "timestamp": 1593639075
+    },
+    {
+        "content": "<p>\"Upload\" can mean many different things, is there a more specific use case?</p>",
+        "id": 202627461,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1593639687
+    },
+    {
+        "content": "<p>Yes. PCD-01 is much more efficient in terms of bandwidth to upload from a remote location (a gateway reading a medical device). It would be nice to use the same infrastructure to upload PCD-01 messages (to be later rendered) one uses to upload FHIR. One could always use the valueString in the Observation - it would work but I don't know how well that would be received.</p>",
+        "id": 202628938,
+        "sender_full_name": "Brian Reinhold",
+        "timestamp": 1593640718
+    },
+    {
+        "content": "<p>Would DocumentReference do?</p>",
+        "id": 202655014,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1593672351
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191682\">@Richard Townley-O'Neill</span>  It looked like a good idea - as did the Binary - but both of them require base64 encoding which makes them bigger by quite a bit. Either would be great if one had the option NOT to use base64 encoding. I suppose one could zip the V2 message and encode that in base64 and one wouldn't lose too much in the way of efficiency.</p>",
+        "id": 202664577,
+        "sender_full_name": "Brian Reinhold",
+        "timestamp": 1593680464
+    },
+    {
+        "content": "<p>I understand you want to continue to use HL7 v2 on the transport for the compactness... and are just looking for a deterministic way to convert that information into FHIR? If so, then that is typical <a class=\"stream\" data-stream-id=\"179188\" href=\"/#narrow/stream/179188-v2-to-FHIR\">#v2 to FHIR</a> stream discussion</p>",
+        "id": 202678252,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1593691317
+    },
+    {
+        "content": "<p>The idea of tunneling HL7 v2 in FHIR is different. And would require some escaping, hence why Binary and Attachment tends to just base64 encode as it is original content agnostic.   There are some discussions on if this base64 is really necessary as the String escaping might be sufficient ( you also indicate).  Thus there is efforts to evaluate use of String where base64 is used... but that is not useful until that happens.</p>",
+        "id": 202678766,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1593691681
+    },
+    {
+        "content": "<p>So using Observation valueString  seems is where you get your question of \"how well that would be received\". It is a string, so it is legitimate. However it is not a string from the perspective of typical strings are displayable to a human.  Would be nice if we had a valueBlob that was datatype String with simply String escaping, but then one would need to know things like the metadata found in the Attachment datatype (contentType, language, etc)... so this is already valueAttachment except for the above mentioned base64 encoding.</p>",
+        "id": 202678995,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1593691826
+    },
+    {
+        "content": "<p>so, use valueString or valueAttachment for now, and recognize that your use is \"Trial Use\"  with this known technical-debt.</p>",
+        "id": 202679042,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1593691881
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span>  I think you have picked the best option for us. We already use the Observation in PHD uploads. The problem with PCD-01 uploads in PCHA is that the only non-deprecated option is to use web services with SAML authentication. This option is far more complicated and cumbersome than oAuth. The SAML token alone is bigger than most PCD-01 messages. Using the Observation valueString and the right set of codes we could even split the PCD-01 into the device representation part and reference that observation from those uploading only measurement OBXes. Using this approach we reuse existing software for FHIR uploads and its a relatively efficient way to upload a sequence of streamed measurements in one Observation resource instead of 100s using FHIR alone. An OBX segment is far smaller than an Observation resource!</p>",
+        "id": 202681169,
+        "sender_full_name": "Brian Reinhold",
+        "timestamp": 1593693260
+    },
+    {
+        "content": "<p>There are others in the camp of liking everything about http REST; but not a fan of verbosity of JSON or XML.    Some solutions are to just put stream compressing on each end of a long-standing stream (Examplar: http/2). With that solution the ends of the communication are off-the-shelf JSON, while they benefit from transport compression. And given that the transport is what has the bandwidth problem, it is useful to have transport solve the problem.</p>",
+        "id": 202682134,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1593693840
+    },
+    {
+        "content": "<p>Thus your specification would just be a normal FHIR implementation guide. You would NOT tunnel HL7 v2 inside a FHIR Observation string. Because you have faith in the transport to do the right compression... sometimes it is useful to have faith in foundational standards and not look to re-invent a solution they have already solved.</p>",
+        "id": 202682372,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1593693956
+    },
+    {
+        "content": "<p>I am not sure what you mean by using \"the same infrastructure ... one uses to upload FHIR\" - there is no single infrastructure \"to upload FHIR\". </p>\n<p>Since in the case of PCD-01, the core of the message is an observation, creating an Observation resource using the <a href=\"http://build.fhir.org/http.html#create\">FHIR RESTful <code>create</code> interaction</a> can achieve the same effect as the PCD-01 transaction, provided that the source of the observation can properly reference the Patient, Device and probably Encounter resources as known by the recipient.</p>\n<p>If you are thinking about HTTP in general as the infrastructure, then there is <code>HL7 Over HTTP</code>, which describes how to send <a href=\"http://v3ballot.hl7.org/v3ballotarchive/v3ballot2014sep/html/infrastructure/its_hoh/its_hoh.html\">HL7 version 2 messages over HTTPS</a>.</p>",
+        "id": 202683371,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1593694477
+    },
+    {
+        "content": "<p>Agree with <span class=\"user-mention\" data-user-id=\"192685\">@Vassil Peytchev</span> answer. I would go for HL7v2 over Http.</p>",
+        "id": 202686402,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1593695939
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192685\">@Vassil Peytchev</span> All I mean is that existing software can be used to do the job. PCHA has a standard for uploading V2 PCD-01 messages but it used SAML authenticated web services. They DID have a standard which was almost identical to v2 over https it just added oAuth. But they deprecated it because of lack of adoption. That is the most efficient solution (without transport compression).</p>\n<p>However, using FHIR means one can use all the server applications that already exist and HAPI FHIR and PCHA FHIR upload protocols which are in place and implemented. In other words, the least amount of additional work...</p>",
+        "id": 202701405,
+        "sender_full_name": "Brian Reinhold",
+        "timestamp": 1593702681
+    }
+]

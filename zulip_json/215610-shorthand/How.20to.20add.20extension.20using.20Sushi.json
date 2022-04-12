@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p>Hi,</p>\n<p>I want to add a stand alone extension <a href=\"https://build.fhir.org/ig/HL7-Canada/ca-baseline/StructureDefinition-ext-aboriginalidentitygroup.html\">https://build.fhir.org/ig/HL7-Canada/ca-baseline/StructureDefinition-ext-aboriginalidentitygroup.html</a> to  the Base (R4) Patient resource</p>\n<p>I use the following line in the .fsh file:  extension [http://hl7.org/fhir/ca/baseline/StructureDefinition/ext-aboriginalidentitygroup] </p>\n<p>The error I am receiving is: error no viable alternative at input '* extension [http://hl7.org/fhir/ca/baseline/StructureDefinition/ext-aboriginalidentitygroup]'</p>\n<p>Can anyone point me in the right direction? How do I resolve this? Thanks in advance.</p>\n<p><span class=\"user-mention\" data-user-id=\"192545\">@Alex Goel</span></p>",
+        "id": 226142287,
+        "sender_full_name": "Joel Francis",
+        "timestamp": 1613139792
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"193795\">@Joel Francis</span> -- I think there are a few things going on here.  The most immediate issue is that you should not have a space between <code>extension</code> and <code>[</code>.  So the path representing the extension should be <code>extension[http://hl7.org/fhir/ca/baseline/StructureDefinition/ext-aboriginalidentitygroup]</code>.</p>",
+        "id": 226152114,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1613144073
+    },
+    {
+        "content": "<p>That said, there is an <a href=\"https://github.com/FHIR/sushi/issues/674\">open bug</a> for SUSHI's handling of extension URLs in paths like this.  We actually have a fix for this under review, but for now, the way around it is to use an alias for the extension URL.  Here is an example (w/ full context for clarity):</p>\n<div class=\"codehilite\"><pre><span></span><code>Alias: EX_ABIDGRP = http://hl7.org/fhir/ca/baseline/StructureDefinition/ext-aboriginalidentitygroup\nAlias: CS_ABIDTYPE = https://fhir.infoway-inforoute.ca/CodeSystem/aboriginalidentitytype\n\nInstance: MyPatient\nInstanceOf: Patient\n* extension[EX_ABIDGRP].valueCoding = CS_ABIDTYPE#firstnations &quot;First Nations&quot;\n</code></pre></div>",
+        "id": 226152495,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1613144220
+    },
+    {
+        "content": "<p>Since you reference an extension from another IG, you need to specify that IG in your <code>sushi-config.yaml</code> dependencies.  It looks like the IG this comes from only has a <code>current</code> build, so that dependency would look like this:</p>\n<div class=\"codehilite\" data-code-language=\"YAML\"><pre><span></span><code><span class=\"nt\">dependencies</span><span class=\"p\">:</span>\n  <span class=\"nt\">hl7.fhir.ca.baseline</span><span class=\"p\">:</span> <span class=\"l l-Scalar l-Scalar-Plain\">current</span>\n</code></pre></div>",
+        "id": 226152809,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1613144352
+    },
+    {
+        "content": "<p>Now, as it turns out, this <em>still</em> doesn't work in SUSHI.  When I run it, I get a few errors, starting with this:</p>\n<blockquote>\n<p>error Cannot read property 'slicing' of undefined</p>\n</blockquote>\n<p>I looked into it and found that the <code>StructureDefinition</code> for the <a href=\"https://build.fhir.org/ig/HL7-Canada/ca-baseline/StructureDefinition-ext-aboriginalidentitygroup.html\">Aboriginal Identity Group extension</a> has an <em>incomplete</em> snapshot.  It does not have an element for <code>Extension.value[x]</code> (which is where the <code>slicing</code> would usually go).  Instead it jumps to <code>Extension.value[x]:valueCoding</code> without ever defining the <code>Extension.value[x]</code> element it is sliced from.  I think this is invalid, but perhaps someone like <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> can confirm.  Lloyd, is it valid to have an Extension snapshot without an element for <code>Extension.value[x]</code>? (<a href=\"https://build.fhir.org/ig/HL7-Canada/ca-baseline/StructureDefinition-ext-aboriginalidentitygroup.xml\">StructureDefinition XML here</a>).</p>",
+        "id": 226153763,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1613144762
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> is that how it would be defined in a Profile too?</p>",
+        "id": 226153803,
+        "sender_full_name": "Alex Goel",
+        "timestamp": 1613144766
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192545\">@Alex Goel</span> -- In a profile, you specify an extension using the <code>contains</code> keyword.  So to say that a patient profile can contain that extension, assuming the same alias as defined above, your FSH would look like this:</p>\n<div class=\"codehilite\"><pre><span></span><code>Profile: PatientProfile\nParent: Patient\n* extension contains EX_ABIDGRP named ext-aboriginalidentitygroup 0..1\n</code></pre></div>\n<p>Then to use it in an instance of the profile, you can now use the local slicename it specified for that extension:</p>\n<div class=\"codehilite\"><pre><span></span><code>Instance: MyPatient\nInstanceOf: Patient\n* extension[ext-aboriginalidentitygroup].valueCoding = CS_ABIDTYPE#firstnations &quot;First Nations&quot;\n</code></pre></div>\n<p>This still breaks in SUSHI, however, due to the incomplete snapshot in that extension's StructureDefinition, as I noted above.</p>",
+        "id": 226154488,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1613145111
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191469\">Chris Moesel</span> <a href=\"#narrow/stream/215610-shorthand/topic/How.20to.20add.20extension.20using.20Sushi/near/226153763\">said</a>:</p>\n<blockquote>\n<p>Now, as it turns out, this <em>still</em> doesn't work in SUSHI.  When I run it, I get a few errors, starting with this:</p>\n<blockquote>\n<p>error Cannot read property 'slicing' of undefined</p>\n</blockquote>\n<p>I looked into it and found that the <code>StructureDefinition</code> for the <a href=\"https://build.fhir.org/ig/HL7-Canada/ca-baseline/StructureDefinition-ext-aboriginalidentitygroup.html\">Aboriginal Identity Group extension</a> has an <em>incomplete</em> snapshot.  It does not have an element for <code>Extension.value[x]</code> (which is where the <code>slicing</code> would usually go).  Instead it jumps to <code>Extension.value[x]:valueCoding</code> without ever defining the <code>Extension.value[x]</code> element it is sliced from.  I think this is invalid, but perhaps someone like <span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> can confirm.  Lloyd, is it valid to have an Extension snapshot without an element for <code>Extension.value[x]</code>? (<a href=\"https://build.fhir.org/ig/HL7-Canada/ca-baseline/StructureDefinition-ext-aboriginalidentitygroup.xml\">StructureDefinition XML here</a>).</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"248932\">@Michael Savage</span> FYI</p>",
+        "id": 226155020,
+        "sender_full_name": "Alex Goel",
+        "timestamp": 1613145320
+    },
+    {
+        "content": "<p>If instead of using the predefined extension, I define a similar one in FSH, it all works well:</p>\n<div class=\"codehilite\"><pre><span></span><code>Alias: VS_ABIDGRP = https://fhir.infoway-inforoute.ca/ValueSet/aboriginalidentitygroup\nAlias: CS_ABIDTYPE = https://fhir.infoway-inforoute.ca/CodeSystem/aboriginalidentitytype\n\nExtension: ExtensionAboriginalIdentityGroup\nId: ext-aboriginalidentitygroup\n* value[x] only Coding\n* valueCoding 1..1\n* valueCoding from VS_ABIDGRP (preferred)\n\nProfile: PatientProfile\nParent: Patient\nId: profile-patient\n* extension contains ExtensionAboriginalIdentityGroup named ext-aboriginalidentitygroup 0..1\n\nInstance: MyPatient\nInstanceOf: Patient\n* extension[ext-aboriginalidentitygroup].valueCoding = CS_ABIDTYPE#firstnations &quot;First Nations&quot;\n</code></pre></div>\n<p>I know you want to use the one from the IG, but I just wanted to show that in general it works if the Extension is defined correctly (or at least w/ a complete snapshot).</p>",
+        "id": 226156057,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1613145702
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191469\">Chris Moesel</span> <a href=\"#narrow/stream/215610-shorthand/topic/How.20to.20add.20extension.20using.20Sushi/near/226156057\">said</a>:</p>\n<blockquote>\n<p>If instead of using the predefined extension, I define a similar one in FSH, it all works well:</p>\n<div class=\"codehilite\"><pre><span></span><code>Alias: VS_ABIDGRP = https://fhir.infoway-inforoute.ca/ValueSet/aboriginalidentitygroup\nAlias: CS_ABIDTYPE = https://fhir.infoway-inforoute.ca/CodeSystem/aboriginalidentitytype\n\nExtension: ExtensionAboriginalIdentityGroup\nId: ext-aboriginalidentitygroup\n* value[x] only Coding\n* valueCoding 1..1\n* valueCoding from VS_ABIDGRP (preferred)\n\nProfile: PatientProfile\nParent: Patient\nId: profile-patient\n* extension contains ExtensionAboriginalIdentityGroup named ext-aboriginalidentitygroup 0..1\n\nInstance: MyPatient\nInstanceOf: Patient\n* extension[ext-aboriginalidentitygroup].valueCoding = CS_ABIDTYPE#firstnations &quot;First Nations&quot;\n</code></pre></div>\n<p>I know you want to use the one from the IG, but I just wanted to show that in general it works if the Extension is defined correctly (or at least w/ a complete snapshot).</p>\n</blockquote>\n<p>Thaks <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span></p>",
+        "id": 226156220,
+        "sender_full_name": "Joel Francis",
+        "timestamp": 1613145761
+    },
+    {
+        "content": "<p>I don't think it's legal anymore.  The tooling used to be looser, but we now try hard to be consistent.</p>",
+        "id": 226162888,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1613148607
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"248932\">@Michael Savage</span> need a new StructureDefinition for AboriginalIdentityGroup?</p>",
+        "id": 226163320,
+        "sender_full_name": "Alex Goel",
+        "timestamp": 1613148778
+    }
+]

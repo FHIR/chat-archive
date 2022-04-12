@@ -1,0 +1,62 @@
+[
+    {
+        "content": "<p>I'm trying to get use the validator running (outside a HAPI server) for validation STU3 resources using <code>org.hl7.fhir.r5.validation.NativeHostServices</code>. The JDoc in this class says that the setup includes the following step:</p>\n<blockquote>\n<ul>\n<li>call init(path) where path refers to one of the definitions files from the main build (e.g. definitions.xml.zip) - required, do only once, do before anything else</li>\n</ul>\n</blockquote>\n<p>However, calling <code>init()</code> on a NativeHostServices instances and passing the path to a <em>definitions.json.zip</em> file does not seem to work - it  fails with the error \"Unable to find/resolve/read -ig [path passed]\"</p>\n<p>Following the call stack, we have</p>\n<p><code>init(src)</code> --&gt;  <code>new ValidationEngine(src)</code>  --&gt; <code>loadDefinitions(src, false)</code> --&gt; <code>loadIgSource(src, false, true)</code></p>\n<p>In <code>loadIgSource(src,...)</code>, a comment says</p>\n<blockquote>\n<p>// src can be one of the following:<br>\n    // - a canonical url for an ig - this will be converted to a package id and loaded into the cache<br>\n    // - a package id for an ig - this will be loaded into the cache<br>\n    // - a direct reference to a package (\"package.tgz\") - this will be extracted by the cache manager, but not put in the cache</p>\n</blockquote>\n<p>Passing the path to <em>definitions.json.zip</em>  does not seem to fit here and indeed, it does not match any of the conditions inside the method - it only recognizes files ending with \".tgz\", \"igpack.zip\", or \".pack\".</p>\n<p>Do I need the base resource defs in another format to get this working?</p>",
+        "id": 183639960,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1576582606
+    },
+    {
+        "content": "<p>oh I need to add a test case for this. I'll do that later today. You need to pass in package Ids now</p>",
+        "id": 183679816,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1576609552
+    },
+    {
+        "content": "<p>have you looked at NativeHostServiceTester ?</p>",
+        "id": 183679921,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1576609605
+    },
+    {
+        "content": "<p>Right, looked into it now. Loading via an ID means loading with HTTP, right? My code might be running in an environment where internet access cannot be assumed so I'd need to be able to access the profiles locally. BTW renaming \"definition.json.zip\" to \"definitions.json.igpack.zip\" seems to make the load complete since it now matches one of the pattern, but I still need to check that  validation runs correctly.</p>",
+        "id": 183735695,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1576663490
+    },
+    {
+        "content": "<p>well, if the packages are installed in the local cache, then there's no need for internet access</p>",
+        "id": 183736264,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1576663968
+    },
+    {
+        "content": "<p>I think I may be thinking about this all wrong (Java is not my native home...). When would I load the packages into the local cache?</p>",
+        "id": 183740377,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1576667328
+    },
+    {
+        "content": "<p>it happens once. The NativeHostValidator will fetch it from the web and store it in local cache. But you can put it in there too, or get the java code to do it as a once off</p>",
+        "id": 183741063,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1576667948
+    },
+    {
+        "content": "<p>OK, thanks - I'll dive in a bit deeper.</p>",
+        "id": 183746104,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1576672748
+    },
+    {
+        "content": "<p>I tried getting NativeHostServicesTester to run. However, the current code in that class tries to load <code>hl7.fhir.core#4.0.0 </code>, but it fails saying \"Unable to resolve version 4.0.0 for package hl7.fhir.core\" (and similar for 4.0.1). When changing the version in the <code>init()</code> method call to  \"hl7.fhir.core#3.0.2\", it starts loading the resources but fails because of a duplicate resource:</p>\n<div class=\"codehilite\"><pre><span></span>starting...\nCreating Package manager?\n+  .. load IG from hl7.fhir.r3.examples#3.0.2\n+  .. load IG from hl7.fhir.r3.expansions#3.0.2\n+  .. load IG from hl7.fhir.r3.elements#3.0.2\nError loading ImplementationGuide-fhir.json: Duplicate Resource http://hl7.org/fhir/ImplementationGuide/fhir\nException in thread &quot;main&quot; org.hl7.fhir.exceptions.FHIRException: Error loading ImplementationGuide-fhir.json: Duplicate Resource http://hl7.org/fhir/ImplementationGuide/fhir\n    at org.hl7.fhir.r5.context.SimpleWorkerContext.fromDefinitions(SimpleWorkerContext.java:207)\n    at org.hl7.fhir.r5.validation.ValidationEngine.loadDefinitions(ValidationEngine.java:406)\n    at org.hl7.fhir.r5.validation.ValidationEngine.&lt;init&gt;(ValidationEngine.java:390)\n    at org.hl7.fhir.r5.validation.NativeHostServices.init(NativeHostServices.java:157)\n    at org.hl7.fhir.validation.tests.NativeHostServiceTester.main(NativeHostServiceTester.java:14)\nCaused by: org.hl7.fhir.exceptions.DefinitionException: Duplicate Resource http://hl7.org/fhir/ImplementationGuide/fhir\n    at org.hl7.fhir.r5.context.BaseWorkerContext.cacheResource(BaseWorkerContext.java:225)\n    at org.hl7.fhir.r5.context.SimpleWorkerContext.loadFromFileJson(SimpleWorkerContext.java:282)\n    at org.hl7.fhir.r5.context.SimpleWorkerContext.loadDefinitionItem(SimpleWorkerContext.java:216)\n    at org.hl7.fhir.r5.context.SimpleWorkerContext.fromDefinitions(SimpleWorkerContext.java:204)\n    ... 4 more\n\nProcess finished with exit code 1\n</pre></div>\n\n\n<p>Is that an issue with the code or the package being loaded?</p>",
+        "id": 183839838,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1576757961
+    },
+    {
+        "content": "<p>Looking at the cached file \"/packages/hl7.fhir.r3.examples#3.0.2/package/.index.json\", the URL <em>\"http://hl7.org/fhir/ImplementationGuide/fhir\"</em> does indeed occur twice,:</p>\n<div class=\"codehilite\"><pre><span></span><span class=\"p\">{</span>\n      <span class=\"nt\">&quot;filename&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;ig-r4.json&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;resourceType&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;ImplementationGuide&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;id&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;fhir&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;url&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;http://hl7.org/fhir/ImplementationGuide/fhir&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;version&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;3.0.2&quot;</span>\n    <span class=\"p\">}</span><span class=\"err\">,</span>\n<span class=\"err\">...</span>\n <span class=\"p\">{</span>\n      <span class=\"nt\">&quot;filename&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;ImplementationGuide-fhir.json&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;resourceType&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;ImplementationGuide&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;id&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;fhir&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;url&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;http://hl7.org/fhir/ImplementationGuide/fhir&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;version&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;3.0.2&quot;</span>\n    <span class=\"p\">}</span><span class=\"err\">,</span>\n</pre></div>\n\n\n<p>Might that be the issue?</p>",
+        "id": 183841099,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1576759104
+    }
+]

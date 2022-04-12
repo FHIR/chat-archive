@@ -1,0 +1,250 @@
+---
+layout: page
+title: "FHIR Chat  · Dotnet APi · dotnet"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/index.html">dotnet</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Dotnet.20APi.html">Dotnet APi</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="177641549"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Dotnet%20APi/near/177641549" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Francisco Nolla <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Dotnet.20APi.html#177641549">(Oct 08 2019 at 18:00)</a>:</h4>
+<p>Hi,<br>
+I am getting this error in dotnet core 2.2. I know that the issue is that it doesn't know how to handle the input of when the controller maps to that resource. I have tried adding an input formatter but haven't been able to get it to work. I am wondering if anyone can help with this issue.</p>
+<div class="codehilite"><pre><span></span>public IActionResult Post([FromBody] PractitionerRole pr)
+        {
+           // some code
+        }
+</pre></div>
+
+
+<p>Could not create an instance of type Hl7.Fhir.Model.Element. Type is an interface or abstract class and cannot be instantiated</p>
+
+
+
+<a name="177667985"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Dotnet%20APi/near/177667985" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Dotnet.20APi.html#177667985">(Oct 08 2019 at 23:09)</a>:</h4>
+<p>You can take a peek at how its done in the fhir-net-web-api project<br>
+<a href="https://github.com/brianpos/fhir-net-web-api" target="_blank" title="https://github.com/brianpos/fhir-net-web-api">https://github.com/brianpos/fhir-net-web-api</a><br>
+If you want to use it, there is a demo that uses the file system to simulate storage.</p>
+
+
+
+<a name="177678030"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Dotnet%20APi/near/177678030" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Francisco Nolla <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Dotnet.20APi.html#177678030">(Oct 09 2019 at 02:54)</a>:</h4>
+<p>Yeah, im not trying to implement a fhir api. I'm trying to take fhir objects in my api and use them for other purposes so a route like the one I posted has this difficulty. I implemented the formatter for input and output so that it parses fhir correctly. the only problem now that I have is nesting of types.</p>
+<p>Say I have a route that has this class below as the [FromBody] parameter in the function above. My formatters are not working because that type is not fhir. the nested type however is. So i'm having a hard time understanding how to get the formatter to understand nested properties.</p>
+<p><code>public class SomeParentInput
+    {
+        [Required]
+        public string PractitionerReference { get; set; }
+        [Required]
+        public Hl7.Fhir.Model.PractitionerRole PractitionerRole { get; set; }
+    }</code></p>
+<p>Here are my formatters. They work when the payload is just a PractitionerRole or any fhir type. But when it is nested this will fail because the canreadtype is false because it is not of type resource.<br>
+```using System;<br>
+using System.Buffers;<br>
+using System.Collections.Generic;<br>
+using System.IO;<br>
+using System.Linq;<br>
+using System.Text;<br>
+using System.Threading.Tasks;<br>
+using Hl7.Fhir.Model;<br>
+using Hl7.Fhir.Rest;<br>
+using Hl7.Fhir.Serialization;<br>
+using Hl7.Fhir.Utility;<br>
+using Microsoft.AspNetCore.Http;<br>
+using Microsoft.AspNetCore.Mvc.Formatters;<br>
+using Microsoft.AspNetCore.Mvc.Formatters.Json.Internal;<br>
+using Microsoft.Net.Http.Headers;<br>
+using Newtonsoft.Json;<br>
+using Task = System.Threading.Tasks.Task;</p>
+<p>namespace Configurations.Formatters<br>
+{<br>
+    public class CiscoFormatter : TextInputFormatter<br>
+    {<br>
+        public CiscoFormatter()<br>
+        {<br>
+            foreach (var mediaType in ContentType.JSON_CONTENT_HEADERS)<br>
+                SupportedMediaTypes.Add(new MediaTypeHeaderValue(mediaType));<br>
+            SupportedEncodings.Add(Encoding.Default);<br>
+            SupportedEncodings.Add(Encoding.UTF8);<br>
+            SupportedEncodings.Add(UTF8EncodingWithoutBOM);<br>
+        }<br>
+        protected override bool CanReadType(Type type)<br>
+        {<br>
+            bool can = typeof(Resource).IsAssignableFrom(type);<br>
+            return can;<br>
+        }</p>
+<div class="codehilite"><pre><span></span>    public override async Task&lt;InputFormatterResult&gt; ReadRequestBodyAsync(InputFormatterContext context, Encoding encoding)
+    {
+        if (context == null)
+        {
+            throw new ArgumentNullException(nameof(context));
+        }
+
+        var request = context.HttpContext.Request;
+        using (var reader = new StreamReader(request.Body, encoding))
+        using (var jsonReader = new JsonTextReader(reader))
+        {
+            var parser = new FhirJsonParser()
+            {
+                Settings = { AcceptUnknownMembers = true,  }
+            };
+            var resource = parser.Parse&lt;Resource&gt;(jsonReader);
+            return await InputFormatterResult.SuccessAsync(resource);
+        }
+    }
+}
+
+public class CiscoOutputFormatter : TextOutputFormatter
+{
+    public CiscoOutputFormatter()
+    {
+        foreach (var mediaType in ContentType.JSON_CONTENT_HEADERS)
+            SupportedMediaTypes.Add(new MediaTypeHeaderValue(mediaType));
+        SupportedEncodings.Add(Encoding.Default);
+        SupportedEncodings.Add(Encoding.UTF8);
+    }
+    protected override bool CanWriteType(Type type)
+    {
+        if (typeof(Resource).IsAssignableFrom(type) 
+            || typeof(IEnumerable&lt;Resource&gt;).IsAssignableFrom(type))
+        {
+            return base.CanWriteType(type);
+        }
+        return false;
+    }
+    public override Task WriteResponseBodyAsync(OutputFormatterWriteContext context, Encoding selectedEncoding)
+    {
+        var response = context.HttpContext.Response;
+        var serializer = new FhirJsonSerializer()
+        {
+            Settings = { Pretty = true }
+        };
+        using (StreamWriter writer = new StreamWriter(context.HttpContext.Response.Body))
+        {
+            JsonTextWriter jsonwriter = (JsonTextWriter)SerializationUtil.CreateJsonTextWriter(writer); // This will use the BetterJsonWriter which handles precision correctly
+            using (jsonwriter)
+            {
+                jsonwriter.ArrayPool = new JsonArrayPool&lt;char&gt;(ArrayPool&lt;char&gt;.Shared);
+                jsonwriter.Formatting = Formatting.Indented; // lets make it pretty
+
+                SummaryType st = SummaryType.False;
+                if (context.ObjectType == typeof(OperationOutcome))
+                {
+                    // We will only honor the summary type during serialization of the outcome
+                    // if the resource wasn&#39;t a stored OpOutcome we are returning
+                    OperationOutcome resource = (OperationOutcome)context.Object;
+                    if (string.IsNullOrEmpty(resource.Id) &amp;&amp; resource.HasAnnotation&lt;SummaryType&gt;())
+                        st = resource.Annotation&lt;SummaryType&gt;();
+                    serializer.Serialize(resource, jsonwriter, st);
+                }
+                else if (typeof(Resource).IsAssignableFrom(context.ObjectType))
+                {
+                    if (context.Object != null)
+                    {
+                        Resource r = context.Object as Resource;
+                        if (r.HasAnnotation&lt;SummaryType&gt;())
+                            st = r.Annotation&lt;SummaryType&gt;();
+                        serializer.Serialize(r, jsonwriter, st);
+                    }
+                }
+                return writer.FlushAsync();
+            }
+        }
+    }
+}
+</pre></div>
+
+
+<p>}```</p>
+
+
+
+<a name="183565343"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Dotnet%20APi/near/183565343" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> George Kustas <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Dotnet.20APi.html#183565343">(Dec 16 2019 at 16:28)</a>:</h4>
+<p>I'm looking to accept R4 FHIR data in my .Net Core Web Service. Is this project still useful for me, or are there newer examples or other means of deserializing FHIR Resources in .Net Core? </p>
+<p>I'm using the latest Hl7.Fhir POCO. Up to now, I've just been defining the FHIR Resources as simple .Net "object" types, and parsing them after the fact.  I would ultimately like to define the resource as Hl7.Fhir.Model.Resource, and have .Net MVC deserialize it for me (via annotations or custom deserializer if necessary).<br>
+Current model:</p>
+<div class="codehilite"><pre><span></span>    public sealed class Notification
+    {
+        [JsonProperty(PropertyName = &quot;timestamp&quot;)]
+        public DateTime Timestamp { get; set; }
+
+        [JsonProperty(PropertyName = &quot;id&quot;)]
+        public string Id { get; set; }
+
+        [JsonProperty(PropertyName = &quot;event&quot;)]
+        public NotificationEvent Event { get; set; }
+    }
+
+    public sealed class NotificationEvent : ModelBase
+    {
+        [JsonProperty(PropertyName = &quot;hub.topic&quot;)]
+        public string Topic { get; set; }
+
+        [JsonProperty(PropertyName = &quot;hub.event&quot;)]
+        public string HubEvent { get; set; }
+
+        [JsonProperty(PropertyName = &quot;context&quot;)]
+        public List&lt;Context&gt; Contexts { get; set; }
+    }
+
+    public sealed class Context
+    {
+        [JsonProperty(PropertyName = &quot;key&quot;)]
+        public string Key { get; set; }
+
+        [JsonProperty(PropertyName = &quot;resource&quot;)]
+        public object Resource { get; set; }    //&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;  FHIR resource
+    }
+}
+</pre></div>
+
+
+<p>The data my server receives is FHIRCast (<a href="http://fhircast.org/" target="_blank" title="http://fhircast.org/">http://fhircast.org/</a>) notification messages which <em>contain</em> FHIR Resources (DiagnosticReport, ImagingStudy, Patient, etc.).  Example notification:</p>
+<div class="codehilite"><pre><span></span>{
+    &quot;timestamp&quot;: &quot;2019-09-10T14:58:45.988Z&quot;,
+    &quot;id&quot;: &quot;0d4c9998&quot;,
+    &quot;event&quot;: {
+        &quot;hub.topic&quot;: &quot;joe&quot;,
+        &quot;hub.event&quot;: &quot;DiagnosticReport-open&quot;,
+        &quot;context&quot;: [
+            {
+                &quot;key&quot;: &quot;Report&quot;,
+                &quot;resource&quot;: {
+                    &quot;resourceType&quot;: &quot;DiagnosticReport&quot;,
+                    &quot;id&quot;: &quot;40012366&quot;,
+                    &quot;status&quot;: &quot;unknown&quot;
+                }
+            }
+        ]
+    }
+}
+</pre></div>
+
+
+<p>Here is the Notify Rest method:</p>
+<div class="codehilite"><pre><span></span>        [HttpPost(&quot;{topic}&quot;)]
+        [Authorize]
+        public async Task&lt;IActionResult&gt; Notify(string topic, [FromBody] Notification notification)
+</pre></div>
+
+
+<p>I would appreciate any advice at all. Thanks!</p>
+
+
+
+<a name="183674489"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/Dotnet%20APi/near/183674489" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/Dotnet.20APi.html#183674489">(Dec 17 2019 at 18:10)</a>:</h4>
+<p>I haven't done this specific interface usage, but imagine that you could leverage inspiration from the project.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

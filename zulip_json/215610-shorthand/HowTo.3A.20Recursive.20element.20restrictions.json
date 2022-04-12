@@ -1,0 +1,98 @@
+[
+    {
+        "content": "<p>I'm profiling Composition.section and it contains itself in the resource.  I'm trying to figure out how to apply my profile restrictions to the recursive elements without restating them.  Since I will essentially support unlimited recursion like the resource itself, I can't just restate them.  I can't see in the FSH specification how to support this.</p>",
+        "id": 277918670,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1649181346
+    },
+    {
+        "content": "<p>When I gofsh'd a resource that had a recursive (Consent), it gave me:</p>\n<div class=\"codehilite\"><pre><span></span><code>* provision.provision ^contentReference = &quot;#Consent.provision&quot;\n</code></pre></div>",
+        "id": 277919868,
+        "sender_full_name": "David Pyke",
+        "timestamp": 1649181819
+    },
+    {
+        "content": "<p>moving to logical model mapping</p>",
+        "id": 277922554,
+        "sender_full_name": "Al Pivonka",
+        "timestamp": 1649182980
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"193364\">Al Pivonka</span> has marked this topic as resolved.</p>",
+        "id": 277923618,
+        "sender_full_name": "Notification Bot",
+        "timestamp": 1649183351
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"192166\">Jean Duteau</span> has marked this topic as unresolved.</p>",
+        "id": 277923679,
+        "sender_full_name": "Notification Bot",
+        "timestamp": 1649183375
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"192587\">David Pyke</span> <a href=\"#narrow/stream/215610-shorthand/topic/HowTo.3A.20Recursive.20element.20restrictions/near/277919868\">said</a>:</p>\n<blockquote>\n<p>When I gofsh'd a resource that had a recursive (Consent), it gave me:</p>\n<p><div class=\"codehilite\"><pre><span></span><code>* provision.provision ^contentReference = &quot;#Consent.provision&quot;\n</code></pre></div><br>\n</p>\n</blockquote>\n<p>I've done that for logical models, but I'm not sure how to do that for profiles.</p>\n<p>I did  <code>* section ^contentReference = \"#Composition.section.section\"</code> and that \"works\" in that it does do the reference.  But it's not a reference to my constraints.  I then tried     <code>* section ^contentReference = \"#ProductSubmissionDocument.section.section\"</code> and that doesn't work.</p>",
+        "id": 277926484,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1649184358
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"192166\">@Jean Duteau</span>.  Getting constraints to apply recursively w/ contentRefs is a little tricky - and not very intuitive.  There is a <a href=\"#narrow/stream/179252-IG-creation/topic/Clarification.20on.20contentReference/near/187852423\">previous zulip conversation</a> where Grahame suggests that the <a href=\"http://hl7.org/fhir/R4/extension-elementdefinition-profile-element.html\">elementdefinition-profile-element extension</a> should be used for this.  Based on that conversation, we built in support to ensure that SUSHI handles this correctly.  It's described in the <a href=\"https://github.com/FHIR/sushi/releases/tag/v2.0.0\">SUSHI 2.0.0 Release Notes</a>:</p>\n<blockquote>\n<p><strong>Extension for Profiling BackboneElements</strong></p>\n<p>The <code>profile-element</code> extension can be used to profile a BackboneElement by pointing at another BackboneElement defined elsewhere. This is typically used to indicate that constraints on the target of a contentReference should be applied to all the references as well. For example, the following snippet indicates the all recursive references to <code>Questionnaire.item</code> (e.g., <code>Questionnaire.item.item</code>) should conform to the same constraints as the original <code>Questionnaire.item</code> in this profile:</p>\n<p><code>Profile: MyQuestionnaire</code><br>\n<code>Parent: Questionnaire</code><br>\n<code>* Questionnaire.item ^type.profile = http://example.org/StructureDefinition/MyQuestionnaire</code><br>\n<code>* Questionnaire.item ^type.profile.extension.url = http://hl7.org/fhir/StructureDefinition/elementdefinition-profile-element</code><br>\n<code>* Questionnaire.item ^type.profile.extension.valueString = \"Questionnaire.item\"</code><br>\n<code>// ...</code></p>\n</blockquote>",
+        "id": 278019194,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1649249894
+    },
+    {
+        "content": "<p>I tried this yesterday because a little bird whispered in my ear about this, but I wasn't sure how to generalize what was in the Release Notes to what I wanted to do...</p>\n<div class=\"codehilite\"><pre><span></span><code>Profile: ProductSubmissionDocument\nParent: Composition\nDescription: &quot;A profile that represents a document that is required for Product Submission to the FDA.&quot;\n\n* extension contains VersionNumber named versionNumber 1..1 MS\n* type MS\n* type from SPLDocumentCodes (required)\n* title MS\n* identifier 1..1 MS\n* author 1..1 MS\n* author only Reference(IdentifiedLabeler)\n* section 1..* MS\n  * extension contains SectionIdentifier named sectionID 0..1 MS and SectionEffectiveTime named sectionTime 0..1 MS\n  * code 1..1 MS\n  * code from SPLSectionCodes (required)\n  * title MS\n  * text MS\n  * entry MS\n  * section MS\n* Composition.section ^type.profile = http://hl7.org/fhir/us/spl/StructureDefinition/ProductSubmissionDocument\n* Composition.section ^type.profile.extension.url = http://hl7.org/fhir/StructureDefinition/elementdefinition-profile-element\n* Composition.section ^type.profile.extension.valueString = &quot;Composition.section&quot;\n</code></pre></div>\n<div class=\"codehilite\"><pre><span></span><code>error No element found at path Composition.section for CaretValueRule in ProductSubmissionDocument, skipping rule\n  File: /Users/jeanduteau/Documents/DDIWork/Samvit/SPL/fhir-spl/input/fsh/ProductSubmission.fsh\n  Line: 38\nerror No element found at path Composition.section for CaretValueRule in ProductSubmissionDocument, skipping rule\n  File: /Users/jeanduteau/Documents/DDIWork/Samvit/SPL/fhir-spl/input/fsh/ProductSubmission.fsh\n  Line: 39\nerror No element found at path Composition.section for CaretValueRule in ProductSubmissionDocument, skipping rule\n  File: /Users/jeanduteau/Documents/DDIWork/Samvit/SPL/fhir-spl/input/fsh/ProductSubmission.fsh\n  Line: 40\n</code></pre></div>",
+        "id": 278038632,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1649257959
+    },
+    {
+        "content": "<p>And my next question is whether I can make a different set of constraints on Composition.section.section and have those constraints apply recursively.</p>",
+        "id": 278038800,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1649258021
+    },
+    {
+        "content": "<p>Well, that's embarrassing.  The release notes had invalid paths.  This is FSH, so you <em>don't</em> prefix the resource name to the path.  So for those last three rules, it should be <code>* section ...</code> not <code>* Composition.section ...</code>.  I've updated the release notes and the comment above so no one else trips up on this.</p>",
+        "id": 278042103,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1649259254
+    },
+    {
+        "content": "<p>As for your next question, I'm not 100% sure, but <em>maybe</em> this?</p>\n<div class=\"codehilite\"><pre><span></span><code>* section.section ^type.profile = http://hl7.org/fhir/us/spl/StructureDefinition/ProductSubmissionDocument\n* section.section ^type.profile.extension.url = http://hl7.org/fhir/StructureDefinition/elementdefinition-profile-element\n* section.section ^type.profile.extension.valueString = &quot;Composition.section.section&quot;\n</code></pre></div>\n<p>TBH, this was always a little bit of black magic to me, so I can't guarantee that this would work (for recursing constraints in section.section).</p>",
+        "id": 278042505,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1649259403
+    },
+    {
+        "content": "<p>When I do that (which I did try yesterday), I get IGPublisher errors:</p>\n<div class=\"codehilite\"><pre><span></span><code>* section 0..* MS\n  * extension contains SectionIdentifier named sectionID 0..1 MS and SectionEffectiveTime named sectionTime 0..1 MS\n  * code 1..1 MS\n  * code from SPLSectionCodes (required)\n  * title MS\n  * text MS\n  * entry MS\n* section ^type.profile = http://hl7.org/fhir/us/spl/StructureDefinition/ProductSubmissionDocument\n* section ^type.profile.extension.url = http://hl7.org/fhir/StructureDefinition/elementdefinition-profile-element\n* section ^type.profile.extension.valueString = &quot;Composition.section&quot;\n</code></pre></div>\n<div class=\"codehilite\"><pre><span></span><code>java.lang.Exception: Error generating snapshot for ProductSubmissionBundle(ProductSubmissionBundle): Unable to generate snapshot for http://hl7.org/fhir/us/spl/StructureDefinition/ProductSubmissionBundle in /Users/jeanduteau/Documents/DDIWork/Samvit/SPL/fhir-spl/fsh-generated/resources/structuredefinition-ProductSubmissionBundle\n    at org.hl7.fhir.igtools.publisher.Publisher.generateSnapshots(Publisher.java:5411)\n    at org.hl7.fhir.igtools.publisher.Publisher.loadConformance(Publisher.java:4668)\n    at org.hl7.fhir.igtools.publisher.Publisher.createIg(Publisher.java:1006)\n    at org.hl7.fhir.igtools.publisher.Publisher.execute(Publisher.java:857)\n    at org.hl7.fhir.igtools.publisher.Publisher.main(Publisher.java:10033)\nCaused by: org.hl7.fhir.exceptions.FHIRException: Unable to generate snapshot for http://hl7.org/fhir/us/spl/StructureDefinition/ProductSubmissionBundle in /Users/jeanduteau/Documents/DDIWork/Samvit/SPL/fhir-spl/fsh-generated/resources/structuredefinition-ProductSubmissionBundle\n    at org.hl7.fhir.igtools.publisher.Publisher.generateSnapshot(Publisher.java:5464)\n    at org.hl7.fhir.igtools.publisher.Publisher.generateSnapshots(Publisher.java:5409)\n    ... 4 more\nCaused by: org.hl7.fhir.exceptions.DefinitionException: Unable to find element Composition.section in http://hl7.org/fhir/us/spl/StructureDefinition/ProductSubmissionDocument\n    at org.hl7.fhir.r5.conformance.ProfileUtilities.processPaths(ProfileUtilities.java:1214)\n    at org.hl7.fhir.r5.conformance.ProfileUtilities.processPaths(ProfileUtilities.java:1485)\n    at org.hl7.fhir.r5.conformance.ProfileUtilities.processPaths(ProfileUtilities.java:1109)\n    at org.hl7.fhir.r5.conformance.ProfileUtilities.generateSnapshot(ProfileUtilities.java:669)\n    at org.hl7.fhir.r5.conformance.ProfileUtilities.processPaths(ProfileUtilities.java:1203)\n    at org.hl7.fhir.r5.conformance.ProfileUtilities.processPaths(ProfileUtilities.java:1548)\n</code></pre></div>",
+        "id": 278042952,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1649259575
+    },
+    {
+        "content": "<p>I see <code>ProductSubmissionBundle</code> and <code>ProductSubmissionDocument</code> in that stack trace.  I assume that <code>ProductSubmissionBundle</code> is profiled to have an entry slice with a resource conforming to <code>ProductSubmissionDocument</code>?  If you comment out that slice, does the IG Publisher choke on <code>ProductSubmissionDocument</code> when it processes it standalone?  Or only in the context of <code>ProductSubmissionBundle</code>?</p>\n<p>I actually have no idea what's going on here, but sometimes narrowing it down helps.  For example, if we know the IGP generates the <code>ProductSubmissionDocument</code> snapshot fine (which is the profile w/ the recursive magic in it), then it would appear the issue is related to <em>using</em> it in another context.  Either way, I think you've likely crossed the line into <a class=\"stream\" data-stream-id=\"179252\" href=\"/#narrow/stream/179252-IG-creation\">#IG creation</a> or <a class=\"stream\" data-stream-id=\"179177\" href=\"/#narrow/stream/179177-conformance\">#conformance</a> at that point, as I think you're doing things as Grahame specified in that original thread.</p>",
+        "id": 278057525,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1649265813
+    },
+    {
+        "content": "<p>ah, I hadn't noticed the two profiles.  let me go try that...</p>",
+        "id": 278057838,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1649265962
+    },
+    {
+        "content": "<p>no beans.  when I comment out the slice in the bundle, the error just shifts to the document:</p>\n<div class=\"codehilite\"><pre><span></span><code>java.lang.Exception: Error generating snapshot for ProductSubmissionDocument(ProductSubmissionDocument): Unable to generate snapshot for http://hl7.org/fhir/us/spl/StructureDefinition/ProductSubmissionDocument in /Users/jeanduteau/Documents/DDIWork/Samvit/SPL/fhir-spl/fsh-generated/resources/structuredefinition-ProductSubmissionDocument\n    at org.hl7.fhir.igtools.publisher.Publisher.generateSnapshots(Publisher.java:5411)\n    at org.hl7.fhir.igtools.publisher.Publisher.loadConformance(Publisher.java:4668)\n    at org.hl7.fhir.igtools.publisher.Publisher.createIg(Publisher.java:1006)\n    at org.hl7.fhir.igtools.publisher.Publisher.execute(Publisher.java:857)\n    at org.hl7.fhir.igtools.publisher.Publisher.main(Publisher.java:10033)\nCaused by: org.hl7.fhir.exceptions.FHIRException: Unable to generate snapshot for http://hl7.org/fhir/us/spl/StructureDefinition/ProductSubmissionDocument in /Users/jeanduteau/Documents/DDIWork/Samvit/SPL/fhir-spl/fsh-generated/resources/structuredefinition-ProductSubmissionDocument\n    at org.hl7.fhir.igtools.publisher.Publisher.generateSnapshot(Publisher.java:5464)\n    at org.hl7.fhir.igtools.publisher.Publisher.generateSnapshots(Publisher.java:5409)\n    ... 4 more\nCaused by: org.hl7.fhir.exceptions.DefinitionException: Unable to find element Composition.section in http://hl7.org/fhir/us/spl/StructureDefinition/ProductSubmissionDocument\n    at org.hl7.fhir.r5.conformance.ProfileUtilities.processPaths(ProfileUtilities.java:1214)\n    at org.hl7.fhir.r5.conformance.ProfileUtilities.processPaths(ProfileUtilities.java:1485)\n    at org.hl7.fhir.r5.conformance.ProfileUtilities.generateSnapshot(ProfileUtilities.java:669)\n    at org.hl7.fhir.igtools.publisher.Publisher.generateSnapshot(Publisher.java:5459)\n    ... 5 more\n</code></pre></div>",
+        "id": 278058146,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1649266103
+    },
+    {
+        "content": "<p>I'll raise this on <a class=\"stream\" data-stream-id=\"179252\" href=\"/#narrow/stream/179252-IG-creation\">#IG creation</a></p>",
+        "id": 278058211,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1649266130
+    }
+]

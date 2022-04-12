@@ -1,0 +1,170 @@
+[
+    {
+        "content": "<p>I've had FHIR Validation plugged into our server for a while. <br>\nAlso linked in SNOMED validation using IValidationSupport interface.<br>\nI'm not sure if this is the best way of doing this as it often fails (such as trying to expand large ValueSets - the Onto server says the query is too expensive). Is implementing the interface the best way of connecting to a terminology server?</p>",
+        "id": 179514623,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1572514817
+    },
+    {
+        "content": "<p>you should not be doing expand when validating. The validator will call $validate-code</p>",
+        "id": 179518981,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1572518264
+    },
+    {
+        "content": "<p>I think that's what I just realised. </p>\n<p>That implies the ValueSet should be on the terminology server - is that correct?</p>",
+        "id": 179519243,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1572518486
+    },
+    {
+        "content": "<p>you can post it to the server when asking for $validate-code</p>",
+        "id": 179519261,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1572518512
+    },
+    {
+        "content": "<p>We have a HAPI server configured to sent all terminology operations to an external Ontoserver instance (Read, Search, Create, etc) as well as hooking in to validation through IValidationSupport.  It works quite well.</p>",
+        "id": 179770188,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1572827368
+    },
+    {
+        "content": "<p>Still getting stuck with expensive ecl statements expansions (which onto won't return)</p>\n<p>Codes get validated against this function</p>\n<p>@Override<br>\n    public CodeValidationResult validateCode(FhirContext theContext, String theCodeSystem, String<br>\n            theCode, String theDisplay)</p>\n<p>but the instanceValidator always asks for the ValueSet to be expanded by </p>\n<p>@Override<br>\n    public CodeValidationResult validateCode(FhirContext theContext, String theCodeSystem, String<br>\n            theCode, String theDisplay)</p>",
+        "id": 179836099,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1572876580
+    },
+    {
+        "content": "<p>The default too costly threshold for ontoserver is 50000 results. If you need more, the server can be configured to allow more. Are you expecting that many?</p>",
+        "id": 179885337,
+        "sender_full_name": "Jim Steel",
+        "timestamp": 1572907592
+    },
+    {
+        "content": "<p>And yes, that expand call from the Hapi validation stuff is a real pain.</p>",
+        "id": 179886677,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1572908836
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> I don't know why it calls expand here. It shouldn't</p>",
+        "id": 179899452,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1572925642
+    },
+    {
+        "content": "<p>This logic has been tweaked as of the current master, due out in 13 days. There are 3 cases for code validation:</p>\n<p>1- We're validating a code with no valueset binding (as in the case of calling <code>$validate-code</code>)<br>\n2- We're validating a code with a VS binding where the VS has a URL (i.e. most validations of FHIR resources with coded fields)<br>\n3- We're validating a code with a VS binding where the VS has no URL (say, a contained VS within a Questionnaire definition- I've found this to be surprisingly common)</p>\n<p>We never expanded for 1 since there was nothing to expand, but the expansion was there to satisfy 3. I always figured that we cached the results of the validation, so the expansion was a one-time pain. But yeah, I realize now that this is still a pain when you have big expansions.</p>\n<p>The new logic only expands on 3, but instead delegates the validation to the term svc for 2. You can see this here: <a href=\"https://github.com/jamesagnew/hapi-fhir/blob/master/hapi-fhir-structures-r4/src/main/java/org/hl7/fhir/r4/hapi/ctx/HapiWorkerContext.java#L247\" target=\"_blank\" title=\"https://github.com/jamesagnew/hapi-fhir/blob/master/hapi-fhir-structures-r4/src/main/java/org/hl7/fhir/r4/hapi/ctx/HapiWorkerContext.java#L247\">https://github.com/jamesagnew/hapi-fhir/blob/master/hapi-fhir-structures-r4/src/main/java/org/hl7/fhir/r4/hapi/ctx/HapiWorkerContext.java#L247</a></p>",
+        "id": 179920711,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1572951429
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> , there's bugs in there I can see straight off - first case in the method looks for the code explicitly mentioned in the <code>compose.include</code> for a quick win, but fails to account for possible <code>compose.exclude</code> cases.</p>",
+        "id": 179924947,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1572955437
+    },
+    {
+        "content": "<p>If you must use expansion logic to handle this (your case 3), then I would suggest crafting an on-the-fly VS that composes the code with an include of the VS under examination.  The resulting expansion will have either 0 or 1 members.</p>",
+        "id": 179925198,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1572955627
+    },
+    {
+        "content": "<p>Ah right, the block at the top. That will actually be gone by the 4.1.0 release, it's already removed in a working branch we have going because the valueset pre-expansion makes it obsolete. Agree that approach is too naive.</p>",
+        "id": 179926128,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1572956407
+    },
+    {
+        "content": "<p>good idea about the custom valueset to handle case 3</p>",
+        "id": 179926175,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1572956449
+    },
+    {
+        "content": "<p>I don’t understand why you need expansion in case #3 anyway</p>",
+        "id": 179960449,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1572978224
+    },
+    {
+        "content": "<p>How else would you test whether a code is in the VS?</p>",
+        "id": 180019501,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1573036824
+    },
+    {
+        "content": "<p>use $validate-code</p>",
+        "id": 180019838,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1573037151
+    },
+    {
+        "content": "<p>I don't understand... wouldn't that just validate that the code itself is valid while not actually checking whether it's in the valueset?</p>\n<p>The scenario here is things like Questionnaires with a contained VS pointed to by an <code>answerValueSet</code> reference.. So just knowing that the code exists isn't good enough</p>",
+        "id": 180020210,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1573037439
+    },
+    {
+        "content": "<p>Example call using $validate-code <a href=\"https://ontoserver.dataproducts.nhs.uk/fhir/ValueSet/$validate-code?system=http://snomed.info/sct&amp;code=122298005&amp;url=https://fhir.nhs.uk/STU3/ValueSet/DCH-FinalDeliveryType-1\" target=\"_blank\" title=\"https://ontoserver.dataproducts.nhs.uk/fhir/ValueSet/$validate-code?system=http://snomed.info/sct&amp;code=122298005&amp;url=https://fhir.nhs.uk/STU3/ValueSet/DCH-FinalDeliveryType-1\">https://ontoserver.dataproducts.nhs.uk/fhir/ValueSet/$validate-code?system=http://snomed.info/sct&amp;code=122298005&amp;url=https://fhir.nhs.uk/STU3/ValueSet/DCH-FinalDeliveryType-1</a></p>",
+        "id": 180023057,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1573040023
+    },
+    {
+        "content": "<p>The url specifies the ValueSet to use.</p>",
+        "id": 180023145,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1573040086
+    },
+    {
+        "content": "<p>you can pass the value set inline, rather than referring to it by url. So it doesn't matter that it's an inline anonymous value set.</p>",
+        "id": 180023635,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1573040601
+    },
+    {
+        "content": "<p>If you pass it inline to that operation, how would the term service test membership without expanding the valueset?</p>",
+        "id": 180026014,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1573042780
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> 4.1.0 is working like a charm.</p>",
+        "id": 180047017,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1573056260
+    },
+    {
+        "content": "<p>However it's now revealed quite a lot of new errors in UK Implementation Guide examples  :)</p>",
+        "id": 180047333,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1573056427
+    },
+    {
+        "content": "<p>You can POST a (Parameters containing a) ValueSet  to <a href=\"https://ontoserver.dataproducts.nhs.uk/fhir/ValueSet/$validate-code\" target=\"_blank\" title=\"https://ontoserver.dataproducts.nhs.uk/fhir/ValueSet/$validate-code\">https://ontoserver.dataproducts.nhs.uk/fhir/ValueSet/$validate-code</a> and we do the validate without \"expanding\" (equivalent of what I described above)</p>",
+        "id": 180081929,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1573078391
+    },
+    {
+        "content": "<p>it's up the terminology service. But my implementation I have a different path for validate-code that checks the definitions directly</p>",
+        "id": 180083875,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1573079970
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span> I'll try that out. What I've done is check the onto server for a UK CodeSystem or ValueSet, if missing add it.</p>\n<p>Are their any tools for visualising a SNOMED ValueSet. I can work out what the filters mean but most people won't (don't believe understanding of SNOMED is that high), they would expect to see an expansion but that's not practical in a number of cases.</p>",
+        "id": 180109541,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1573113047
+    },
+    {
+        "content": "<p>We have a new version of Shrimp coming soon that provides visualisation of ValueSets by generalising the existing CodeSystem UI to arbitrary ValueSets on the server</p>",
+        "id": 180110736,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1573114180
+    }
+]

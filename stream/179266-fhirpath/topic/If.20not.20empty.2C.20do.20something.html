@@ -1,0 +1,61 @@
+---
+layout: page
+title: "FHIR Chat  · If not empty, do something · fhirpath"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/index.html">fhirpath</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/If.20not.20empty.2C.20do.20something.html">If not empty, do something</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="270863254"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/If%20not%20empty%2C%20do%20something/near/270863254" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grey Faulkenberry <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/If.20not.20empty.2C.20do.20something.html#270863254">(Feb 06 2022 at 02:36)</a>:</h4>
+<p>I'm trying to decide how best to structure a complex path expression to do a calculation. Specifically, I'm using it in a Measure to create a MeasureReport. The input resource is a Bundle with multiple QuestionnaireResponses as entries, and some of my calculations require me to pull specific questions from each of the questionnaires. My issue is that sometimes the questions may be answered and other times they won't be. If they're not, then I need to not count them in my calculation. As an example, assume I'm working with 4 questions. They each can have values from 1-5, or you can choose not to answer (in this case, it is not associated with a numerical value). If either of the first two questions are 2-5, you get 3 points, if either of the 2nd questions are 3-5, you get 2 points. So my expression looks something like</p>
+<div class="codehilite"><pre><span></span><code>(entry.resource.ofType(QuestionnaireResponse).item.where(linkId.contains(&#39;/question1&#39;)).answer.valueCoding.extension.valueDecimal.select(iif($this &gt; 1, 1, 0)) + entry.resource.ofType(QuestionnaireResponse).item.where(linkId.contains(&#39;/question2&#39;)).answer.valueCoding.extension.valueDecimal.select(iif($this &gt; 1, 1, 0))).select(iif($this &gt; 0, 3, 0)) + (entry.resource.ofType(QuestionnaireResponse).item.where(linkId.contains(&#39;/question3&#39;)).answer.valueCoding.extension.valueDecimal.select(iif($this &gt; 2, 1, 0)) + entry.resource.ofType(QuestionnaireResponse).item.where(linkId.contains(&#39;/question4&#39;)).answer.valueCoding.extension.valueDecimal.select(iif($this &gt; 2, 1, 0))).select(iif($this &gt; 0, 2, 0))
+</code></pre></div>
+<p>It's verbose, but it does the job. Except when something is missing. If there is no answer for question 2 (or the answer is, "I select not to answer", which shows up as a valueString), then the value for the second item is [], which causes the entire expression to return []. I need to somehow check if it's an empty set, and if so, turn it into 0. Is there a suggested method for doing this? I thought about something like:</p>
+<div class="codehilite"><pre><span></span><code>entry.resource.ofType(QuestionnaireResponse).item.where(linkId.contains(&#39;/question2&#39;)).answer.valueCoding.extension.valueDecimal.select(iif($this &gt; 1, 1, 0))).select(iif($this &gt; 0, 3, 0)).select(iif($this.exists(), $this, 0))
+</code></pre></div>
+<p>But it didn't look like this was allowed in the FHIRPath spec. Does anyone have a suggestion on how this should be done?</p>
+
+
+
+<a name="270916276"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/If%20not%20empty%2C%20do%20something/near/270916276" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/If.20not.20empty.2C.20do.20something.html#270916276">(Feb 06 2022 at 22:47)</a>:</h4>
+<p>Are all those questions from the same questionnaire?</p>
+
+
+
+<a name="270916753"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/If%20not%20empty%2C%20do%20something/near/270916753" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/If.20not.20empty.2C.20do.20something.html#270916753">(Feb 06 2022 at 22:58)</a>:</h4>
+<p>For how you've described the clause, I'd be using count() or exists() along with a where clause instead of the iif right at the end.<br>
+Something more like this<br>
+iif(entry.resource.ofType(QuestionnaireResponse).item.where(linkId.contains('/question3')).answer.valueCoding.extension.where(valueDecimal &gt; 2).exists(), 1, 0)</p>
+
+
+
+<a name="270922739"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/If%20not%20empty%2C%20do%20something/near/270922739" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grey Faulkenberry <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/If.20not.20empty.2C.20do.20something.html#270922739">(Feb 07 2022 at 01:23)</a>:</h4>
+<p><span class="user-mention" data-user-id="191367">@Brian Postlethwaite</span> , no, they're not from the same Questionnaire. So if I'm trying to get the value from the question, I would be using something like</p>
+<div class="codehilite"><pre><span></span><code>iif(entry.resource.ofType(QuestionnaireResponse).item.where(linkId.contains(&#39;/question3&#39;)).answer.valueCoding.extension.where(valueDecimal &gt; 2).exists(), entry.resource.ofType(QuestionnaireResponse).item.where(linkId.contains(&#39;/question3&#39;)).answer.valueCoding.extension.valueDecimal, 0)
+</code></pre></div>
+
+
+
+<a name="270922885"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/If%20not%20empty%2C%20do%20something/near/270922885" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/If.20not.20empty.2C.20do.20something.html#270922885">(Feb 07 2022 at 01:27)</a>:</h4>
+<p>That should work.</p>
+
+
+
+<a name="270923205"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/If%20not%20empty%2C%20do%20something/near/270923205" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grey Faulkenberry <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/If.20not.20empty.2C.20do.20something.html#270923205">(Feb 07 2022 at 01:34)</a>:</h4>
+<p>Thanks!</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

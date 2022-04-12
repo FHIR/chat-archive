@@ -1,0 +1,530 @@
+[
+    {
+        "content": "<p>The <a href=\"http://hl7.org/fhir/R4/elementdefinition-definitions.html#ElementDefinition.pattern_x_\">spec says</a>:</p>\n<blockquote>\n<p>When pattern[x] is used to constrain an array, it means that each element provided in the pattern[x] array must (recursively) match at least one element from the instance array.</p>\n</blockquote>\n<p>That makes sense.  I just noticed a behavior of SUSHI that I'm not sure is right though.  If I constrain a 0..* element like this:</p>\n<div class=\"codehilite\"><pre><span></span><code>// inside a Condition profile\n* meta.profile = &quot;http://foo.org/StructureDefinition/MyProfile&quot;\n</code></pre></div>\n<p>It generates an element like this:</p>\n<div class=\"codehilite\" data-code-language=\"JSON\"><pre><span></span><code><span class=\"p\">{</span>\n  <span class=\"nt\">\"id\"</span><span class=\"p\">:</span> <span class=\"s2\">\"Condition.meta.profile\"</span><span class=\"p\">,</span>\n  <span class=\"nt\">\"path\"</span><span class=\"p\">:</span> <span class=\"s2\">\"Condition.meta.profile\"</span><span class=\"p\">,</span>\n  <span class=\"nt\">\"patternCanonical\"</span><span class=\"p\">:</span> <span class=\"s2\">\"http://foo.org/StructureDefinition/MyProfile\"</span>\n<span class=\"p\">}</span>\n</code></pre></div>\n<p>Notice that although <code>meta.profile</code> is 0..*, the <code>patternCanonical</code> value is <em>not</em> an array.  Is that valid?  It's never been flagged as an issue, but I'm thinking maybe it needs to be an array, like <code>\"patternCanonical\": [\"http://foo.org/StructureDefinition/MyProfile\"]</code>.</p>",
+        "id": 264222809,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1638998818
+    },
+    {
+        "content": "<p>pattern[x] is, by definition, not a repeating element.  The way you have it is fine.  The <em>behavior</em> of it on validating is to check the array element and see if at least one element matches.</p>",
+        "id": 264230548,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1639002684
+    },
+    {
+        "content": "<p>Doh.  You're right.  Since <code>pattern[x]</code> is 0..1, then it can't be an array.  I think I got tripped up by the phrase \"each element in the pattern[x] array\" in the spec (see full context above).  Since pattern[x] can't be an array, I think that language is a bit misleading and should probably be changed.  Would you agree?</p>",
+        "id": 264231399,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1639003141
+    },
+    {
+        "content": "<p>I think that Lloyd is wrong on that, and there's a task to clarify that</p>",
+        "id": 264234001,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1639004685
+    },
+    {
+        "content": "<p>What bit am I wrong about?</p>",
+        "id": 264252602,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1639020789
+    },
+    {
+        "content": "<p>it's only inside complex types that one item in the array has to match. if you apply a pattern to a repeating element, all the elements have to meet the criteria. I'm pretty sure we have a FHIR task that clarified that</p>",
+        "id": 264263973,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1639033719
+    },
+    {
+        "content": "<p>If that's the case then the spec is pretty misleading on that account.  But I guess you'd use slicing if you wanted to call out that just one of the items must match. Still... I wonder how many other people have misunderstood it based on that language.</p>",
+        "id": 264302771,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1639057575
+    },
+    {
+        "content": "<p>What about this one?</p>\n<blockquote>\n<p>When pattern[x] is used to constrain a primitive, it means that the value provided in the pattern[x] must match the instance value exactly.</p>\n</blockquote>\n<p>Since primitives allow for <code>id</code> and <code>extension</code>, I always assumed that one reason to use <code>pattern[x]</code> on a primitive (instead of <code>fixed[x]</code>) was to allow for it to still match even if the primitive has an id or extension attached to it.  But the description above makes it sound like it wouldn't work that way (and acts exactly the same as <code>fixed[x]</code> for primitives).</p>",
+        "id": 264303124,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1639057755
+    },
+    {
+        "content": "<p>Maybe we should have a warning about pattern and fixed values asserted on repeating elements?</p>",
+        "id": 264321044,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1639065353
+    },
+    {
+        "content": "<p>Also required or extensible bindings</p>",
+        "id": 264321123,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1639065370
+    },
+    {
+        "content": "<p>we agreed to modify the language to remove confusion</p>",
+        "id": 264348931,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1639075962
+    },
+    {
+        "content": "<p>Would a warning not also make sense?</p>",
+        "id": 264357823,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1639079914
+    },
+    {
+        "content": "<p>I'm not exactly sure what you mean by warning</p>",
+        "id": 264358546,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1639080188
+    },
+    {
+        "content": "<p>If someone puts a fixed value, a pattern or a required or extensible binding on a repeating element, we'd spit out a warning saying something like \"Verify intent is that [x] be enforced on all repetitions of this element\".  If that <em>is</em> the intent, then the author can just suppress the warning.</p>",
+        "id": 264361730,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1639081810
+    },
+    {
+        "content": "<p>But 80% + of the time, it <em>won't</em> have been the intent and they can slice or something to get what they're actually wanting.</p>",
+        "id": 264361771,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1639081837
+    },
+    {
+        "content": "<p>I think the Jira is <a href=\"https://jira.hl7.org/browse/FHIR-33316\">FHIR-33316</a>.<br>\nIt proposes</p>\n<blockquote>\n<p>When pattern[x] is used to constrain an array, it means that each element provided in the pattern[x] <del>array</del> must (recursively) match at least one element from the instance array.</p>\n</blockquote>\n<p>I read that as saying that only 1 member of the array needs to match, not all of them.</p>",
+        "id": 264383797,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1639093458
+    },
+    {
+        "content": "<p>Guess I remember it wrong. <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> make a comment on the task</p>",
+        "id": 264391673,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1639099216
+    },
+    {
+        "content": "<p>I think this was forgotten.</p>\n<p><span class=\"user-mention silent\" data-user-id=\"191469\">Chris Moesel</span> <a href=\"#narrow/stream/179177-conformance/topic/pattern.5Bx.5D.20on.200.2E.2E*.20elements/near/264303124\">said</a>:</p>\n<blockquote>\n<p>What about this one?</p>\n<blockquote>\n<p>When pattern[x] is used to constrain a primitive, it means that the value provided in the pattern[x] must match the instance value exactly.</p>\n</blockquote>\n<p>Since primitives allow for <code>id</code> and <code>extension</code>, I always assumed that one reason to use <code>pattern[x]</code> on a primitive (instead of <code>fixed[x]</code>) was to allow for it to still match even if the primitive has an id or extension attached to it.  But the description above makes it sound like it wouldn't work that way (and acts exactly the same as <code>fixed[x]</code> for primitives).</p>\n</blockquote>",
+        "id": 264394357,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1639101501
+    },
+    {
+        "content": "<p>I'm pretty sure that pattern on a primitive still allows for id and extensions - that was indeed the whole point.</p>",
+        "id": 264406314,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1639115819
+    },
+    {
+        "content": "<p>What comment do you want me to make <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>?</p>",
+        "id": 264406415,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1639115903
+    },
+    {
+        "content": "<p>note about making a hint from the validator</p>",
+        "id": 264415411,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1639125026
+    },
+    {
+        "content": "<p>The note might not be needed if a pattern only impacts one repetition.  (Though I might want to submit a new tracker around fixed values and fixed &amp; extensible bindings.)</p>",
+        "id": 264452152,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1639145471
+    },
+    {
+        "content": "<p>OK.  Now I'm confused.  So we're back to saying that <code>pattern[x]</code> on a 0..* element only needs to match one element (not all elements)?  If this is true, then the common approach to fixing an Observation.category in a profile using slicing does <em>not</em> actually have to use slicing?<br>\n<a href=\"/user_uploads/10155/jtry3vywGv_V_g8XVG7sE0Hy/image.png\">image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/jtry3vywGv_V_g8XVG7sE0Hy/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/jtry3vywGv_V_g8XVG7sE0Hy/image.png\"></a></div>",
+        "id": 264453360,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1639146009
+    },
+    {
+        "content": "<p>The above could have just used the pattern[x] directly (without the slice)?</p>",
+        "id": 264453467,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1639146057
+    },
+    {
+        "content": "<p>that's why we need a note either way, <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>. I'm really surprised because I did think that we decided applying a pattern to a repeating element applied to all of them (at the root). And because deciding something else has known on consequences</p>",
+        "id": 264498995,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1639165829
+    },
+    {
+        "content": "<p>Do you want us to re-open?</p>",
+        "id": 264542620,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1639200023
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179177-conformance/topic/pattern.5Bx.5D.20on.200.2E.2E*.20elements/near/264498995\">said</a>:</p>\n<blockquote>\n<p>...  I'm really surprised because I did think that we decided applying a pattern to a repeating element applied to all of them (at the root). ...</p>\n</blockquote>\n<p>That makes more sense to me.</p>",
+        "id": 264655753,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1639360169
+    },
+    {
+        "content": "<p>I don't see how <a href=\"http://jira.hl7.org/browse/FHIR-33316\">FHIR-33316</a> can co-exist with this normative part of the spec.</p>\n<blockquote>\n<p>If a required[/extensible] binding is applied to an element with maximum cardinality &gt; 1, the binding applies to all the elements.</p>\n</blockquote>\n<p>I will state I'd prefer if to be the other way ( at  least one) but the die has been cast here.</p>",
+        "id": 264818032,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1639463857
+    },
+    {
+        "content": "<p>This prompted us in US Core to clarify when a slice with a binding is really an extensible binding.</p>",
+        "id": 264818662,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1639464562
+    },
+    {
+        "content": "<p>You can have a slice with an extensible binding, but not if you're slicing by that binding.</p>",
+        "id": 264880835,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1639498141
+    },
+    {
+        "content": "<p>I do think we should re-open this, yes. There's obviously confusion here for sure</p>",
+        "id": 265772358,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1640156942
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191506\">@Yunwei Wang</span> - can we add this to the agenda for our next call?</p>",
+        "id": 265815484,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1640186096
+    },
+    {
+        "content": "<p>This has come up again and I don't see any further clarification on <a href=\"http://jira.hl7.org/browse/FHIR-33316\">FHIR-33316</a>.  Was this discussed and decided upon?  If so, which is it:</p>\n<ul>\n<li>A <code>pattern[x]</code> on a repeating element must match <em>every</em> element in the instance array, OR</li>\n<li>A <code>pattern[x]</code> on a repeating element must match <em>at least one</em> element in the instance array?</li>\n</ul>",
+        "id": 277470333,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1648843072
+    },
+    {
+        "content": "<p>How could \"must match every element\" be useful at all?</p>",
+        "id": 277470424,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1648843114
+    },
+    {
+        "content": "<p>And, the IG publisher decorates these today with \"at least...\"</p>",
+        "id": 277470454,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1648843136
+    },
+    {
+        "content": "<p>Trying to sync from the sushi thread, so forgive my <span aria-label=\"train\" class=\"emoji emoji-1f682\" role=\"img\" title=\"train\">:train:</span> of <span aria-label=\"thought\" class=\"emoji emoji-1f4ad\" role=\"img\" title=\"thought\">:thought:</span>  (and, happy Friday =).</p>\n<p>Currently, I am working through <code>ElementDefinition.pattern[x]</code> in the context of <code>ElementDefinition.fixed[x]</code>, which is conceptually simpler and I <em>think</em> should be applied the same way (they are siblings with near identical definitions/purposes).</p>\n<p>If you defined an element that was <code>0..*</code> with a fixed value-string of <code>why?</code>, I think the expectation is that every element of that array would be a value string of <code>why?</code>.  It does not feel particularly useful to do so, but I also cannot think of how else the definition makes sense.</p>\n<p>Following that through, if you define a pattern for an array, I would assume that all elements in the array must follow the pattern (e.g., fixing a system but allowing for multiple codes from that system).</p>\n<p>If the desire is for a single value in an array to follow the rule (either a fixed value or a pattern), then it needs slicing.</p>\n<p>Thoughts?</p>",
+        "id": 277473435,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1648844731
+    },
+    {
+        "content": "<p>I'm not sure I agree with the approach of trying to make <code>fixed[x]</code> and <code>pattern[x]</code> work consistently for this.  The primary difference between <code>pattern[x]</code> and <code>fixed[x]</code> is that the whole idea of <code>pattern[x]</code> is to define minimal criteria for matching, while allowing for additional values.  IMO, I think it would be confusing to have <code>pattern[x]</code> work one way on the top-level array (\"all must match\") and another way on nested arrays (\"at least one must match\").</p>\n<p>If we agree that wanting to set a pattern on every instance of an array is the minority use case, then perhaps <em>it</em> is the use case that should require slicing (create a closed slicing discriminating on $this, with a single slice, applying the desired pattern on that slice).</p>",
+        "id": 277478296,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1648847563
+    },
+    {
+        "content": "<p>That said, I totally understand <span class=\"user-mention\" data-user-id=\"191401\">@Eric Haas</span>'s concern (above) about the inconsistent behavior between <code>pattern[x]</code> and required bindings on repeating elements.  But... I'm not sure the FHIR spec ever explicitly says that bindings use pattern semantics.  There is an \"at least one\" behavior when applying a binding to a CodeableConcept, but that is on the coding, not the CodeableConcept itself.</p>",
+        "id": 277478841,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1648847898
+    },
+    {
+        "content": "<p>BUT... if the decision was already made back in December, and just not documented here, I'm glad to take whatever verdict was reached!</p>",
+        "id": 277478930,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1648847953
+    },
+    {
+        "content": "<p>I don't <em>think</em> any decision was made on this - the ticket I saw was about correcting an extra-word typo in the comments.</p>\n<p>I can see that we are difference from different angles.  I am thinking of it for things like 'require this system, but allow any code', and I believe you are thinking 'one of the elements must behave this way'.</p>\n<p>I want to make sure I have a few things right in my head.  Based on the definition of pattern, I believe these two are not-contentious:</p>\n<ul>\n<li>If the pattern is on a scalar primitive element, it behaves the same as fixed (e.g., pattern of 1 string is essentially a fixed value).</li>\n<li>If the pattern is on a scalar complex element, it behaves as 'must have this element:value pair' (e.g., a fixed system on a coding)</li>\n</ul>\n<p>Assuming that is the case, we need to expand into arrays.  I believe you are advocating for:</p>\n<ul>\n<li>A pattern on an array-primitive means that <em>one</em> of the elements has the value.</li>\n<li>A pattern on an array-complex means that <em>one</em> of the elements 'must have this element:value pair'.</li>\n</ul>\n<p>While my understanding of pattern is (not sure if this is what I <em>want</em> it to be or not, just what I read the current definition to mean =):</p>\n<ul>\n<li>A pattern on an array-primitive means that <em>all</em> elements have the value (same as <code>fixed</code>)</li>\n<li>A pattern on an array-complex means that <em>all</em> elements 'must have this element:value pair` (e.g., all codings are from the same system)</li>\n</ul>\n<p>Getting to the end of the day here, so the rest of my thoughts are less organized than I would like...:</p>\n<ul>\n<li>\n<p>Since <code>pattern</code> is on the root of an element, I think it should be applied across all of it.  If you want something to apply to a <em>portion</em> of the definition, slicing is the mechanism we have for that.<br>\n** I think the hesitation around slicing is caused by complexity (I know some exists for me).. if we need more documentation/tooling/etc., that should be addressed - and yes, I know I am preaching to the SUSHI choir here =).</p>\n</li>\n<li>\n<p>Since slicing already does this, it anyone using this 'type' of thing needs to be careful with both (e.g., the snapshot/differential viewers probably need to create that 'implicit' slice, because I am not sure how to read something that has both).</p>\n</li>\n<li>Conversely, if we want to define an element like <code>oneOf</code> or some such, that is clear to me (though if we are adding that, I would suggest it be 0..*, so that you can express things like either SNOMED or LOINC).</li>\n</ul>",
+        "id": 277483279,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1648850347
+    },
+    {
+        "content": "<p>The trick with pattern is that it's defacto \"must look like this\" as opposed to \"must be this\".  We <em>certainly</em> know that if you have a patternCodeableConcept with a single coding defined in it that the expectation is that 'one of' the Codings within the instance needs to match, not all of them.  On the other hand, if you had a fixedCodeableConcept with a single coding, that would mean the instance needed to have exactly one coding.</p>\n<p>So it's not a stretch to say that the behavior for repetitions that is true for children is true at the top level too.  I'm not arguing that we must say that, just that there are grounds for treating things differently.</p>\n<p>Note: pattern on a scalar primitive does NOT behave the same as 'fixed' - you can always have 'id' or 'extension' elements that aren't part of the pattern, while with 'fixed', you can't.</p>",
+        "id": 277484651,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1648851160
+    },
+    {
+        "content": "<p>I had typed out a whole long response saying basically the same things that Lloyd just said.  But I'm glad you beat me to it, <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> -- because you said it much more clearly and succinctly than I was saying it! :-)</p>",
+        "id": 277484934,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1648851370
+    },
+    {
+        "content": "<p>Nice, thanks!  So the discussion is that if you have a patternCodeableConcept on an array: is the requirement that <em>one</em> of the top-level elements meets the pattern or that <em>all</em> of the top-level elements meet the pattern?</p>",
+        "id": 277485836,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1648852008
+    },
+    {
+        "content": "<p>Im glad you asked... because I didn't understand where this was going.</p>",
+        "id": 277486156,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1648852246
+    },
+    {
+        "content": "<p>I still can't quite figure out what the usefulness of having the meaning of patternCodeableConcept on an array meaning ALL. I just don't understand what use-case this is addressing.. THUS, I prefer this be \"at least...\" interpretation</p>",
+        "id": 277486375,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1648852436
+    },
+    {
+        "content": "<p>Conversely, I am struggling to see why you would define a pattern that doesn't apply to all elements in the top-level array - if you want to describe <em>one</em> element of the array, that is literally a slice  =).</p>",
+        "id": 277488691,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1648854177
+    },
+    {
+        "content": "<p>well, my use-case is that in a profile I want to demand that 'at-least' one code in a codeableConcept element be the code X. I have many of these. There are many of them in the IPS specification(where they have been forced to use slicing to get the at-least behavior). I know I can do it with slicing if I must. <br>\nI think the IG publisher is indicating that what I am doing is \"at-least\" meaning, so it is frustrating that it is not acting like that.</p>",
+        "id": 277490467,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1648855771
+    },
+    {
+        "content": "<p>I don't quite understand what use-case calls for mandating that all instances of a CodeableConcept be code X; if that is the need, then just set it to 1..1 and code X. What use is it to force all repetitions be code X?</p>",
+        "id": 277490548,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1648855840
+    },
+    {
+        "content": "<p>I see the pattern as the other way around - e.g., if you are profiling to say that every element of the array must have at least one value from the LOINC system.  Every element follows the pattern of having one concept from that system.</p>",
+        "id": 277490932,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1648856245
+    },
+    {
+        "content": "<p>And if I am reading your issue correctly John, you are saying that you know how to do what you want with slicing, but do not want to use slicing.  If that's correct, we should figure out what else we can do to make slicing more palatable.</p>",
+        "id": 277491078,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1648856361
+    },
+    {
+        "content": "<p>well, I just now learned that many profiles I have written will not work as I expected they will work. An expectation that was reinforced by the IG publisher telling me that was how it was going to work...  Now I learn that the IG publisher has been lying to me...  so alot of profiles now need to be changed to this clunky slicing method.   So, I don't think this is just me wanting to be lazy.. I think this is more about me exposing what are likely many other profile author expectations</p>",
+        "id": 277532773,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1648909947
+    },
+    {
+        "content": "<p>I had to rewrite many US Core profile too for the same reason - so now ugly slicing all over the place. </p>\n<blockquote>\n<p>figure out what else we can do to make slicing more palatable.</p>\n</blockquote>\n<p>That would be the at least one behavior for coded elements just like with bindings on the datatype.   The binding acts just like a pattern.  it says at least one of these has to be X.  Can we do the same for elements?  e.g., for repeatng element Y  at least one is LOINC and call it pattern binding?</p>",
+        "id": 277533185,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1648910449
+    },
+    {
+        "content": "<p>I don’t follow why it would be necessary to re-write a profile? Which other tooling except SUSHI interprets a pattern[x] not as a “at least one” match? We discussed this topic already for the .NET tooling internally at Firely. The main issue would be that you could not enforce the same rules across all FHIR versions.</p>",
+        "id": 277538129,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1648916290
+    },
+    {
+        "content": "<p>Additionally, the last change to ElementDefintion and Slicing, were the adjustments for type slicing in R4. That was incredibly painful.  Not sure if the change would be worth it just in order to harmonize it.</p>",
+        "id": 277538447,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1648916645
+    },
+    {
+        "content": "<p>I am also confused here. Always thought pattern[x] means at least one match on an array. Can‘t verify at the moment; but doesnt the .net and java validator are also validating this as „at least one match“?</p>",
+        "id": 277541566,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1648920769
+    },
+    {
+        "content": "<p>I have read element.pattern[x] as applying to every instance of a repeating element, just as element.type applies to every instance of a repeating element.</p>",
+        "id": 277678980,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1649044519
+    },
+    {
+        "content": "<p>Not so useful, but quite consistent.</p>",
+        "id": 277678988,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1649044536
+    },
+    {
+        "content": "<p>I'm sure we clarified this language somewhere</p>",
+        "id": 277718103,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1649072599
+    },
+    {
+        "content": "<p>in the task. I don't see how the agreed resolution doesn't resolve this question</p>",
+        "id": 277718260,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1649072681
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> -- that task was last updated in Nov 2021.  BUT then, on December 10 (in <em>this thread</em>) you said this:</p>\n<blockquote>\n<p>I'm really surprised because I did think that we decided applying a pattern to a repeating element applied to all of them (at the root).</p>\n</blockquote>\n<p>(Which is the opposite of what the task resolution says).</p>\n<p>And on December 22, you said the task should be re-opened because there was obviously a lot of confusion regarding it.  But then, after that, it was never mentioned again.</p>\n<p>So, given that you said you disagreed with that outcome and called for it to be re-opened, I wasn't sure I should trust that the task resolution is stable.  If you're saying the resolution will stand as-is (the pattern must match <em>at least one</em> in the array), then great.  We'll go forward with that.  Is that what you're saying?</p>",
+        "id": 277729995,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1649078650
+    },
+    {
+        "content": "<p>I was surprised, but I think I became resigned to it. Or something</p>",
+        "id": 277730074,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1649078693
+    },
+    {
+        "content": "<p>I don't remember whether it was dsicussed or not</p>",
+        "id": 277730151,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1649078737
+    },
+    {
+        "content": "<p>Maybe thinking of <a href=\"http://jira.hl7.org/browse/FHIR-18296\">FHIR-18296</a> for other discussion?  The only other ticket I have seen referenced in this thread is <a href=\"http://jira.hl7.org/browse/FHIR-33316\">FHIR-33316</a> , and as seconder I can pretty confidently say there was no discussion beyond the request in the ticket (remove the additional word from the text).</p>\n<p>If everyone has been using pattern as 'one from the array', <span aria-label=\"shrug\" class=\"emoji emoji-1f937\" role=\"img\" title=\"shrug\">:shrug:</span> - we can clarify it and move on.  But it still does not feel correct to me - to jump back to an earlier example from Lloyd:</p>\n<blockquote>\n<p>Note: pattern on a scalar primitive does NOT behave the same as 'fixed' - you can always have 'id' or 'extension' elements that aren't part of the pattern, while with 'fixed', you can't.</p>\n</blockquote>\n<p>So if I have a pattern on a scalar primitive saying it requires an <code>id</code>, great!  I can assume any valid content will have an <code>id</code>.  My understanding was that if a resource now has two of those elements, they should <em>both</em> have an <code>id</code>.  If the argument is that only one of those values actually needs an id.. that feels a bit odd.  For example, you can no longer use the pattern to validate individual elements, since they rule may or may not apply.  Yes, that is true for slicing, but it is explicit about it - e.g., ordered vs. unordered, how to find the match, etc.</p>\n<p>For a more concrete example, I am thinking of a pattern that requires names to have a <code>prefix</code> - I would expect every <code>name</code> to have to follow that pattern, instead of just one value out of the array.  If you want to say that <em>a</em> name must have a prefix, I always thought that was the realm of slicing.</p>",
+        "id": 277755701,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1649089075
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span> -- I understand what you're getting at, but I'm not sure your example is fully correct:</p>\n<blockquote>\n<p>So if I have a pattern on a scalar primitive saying it requires an id, great! I can assume any valid content will have an id.</p>\n</blockquote>\n<p>You can't use <code>pattern[x]</code> to assert that something should <em>exist</em>.  You use <code>pattern[x]</code> to assert specific values.  For pure existence, you would just change the <code>id</code>'s <code>min</code> cardinality to <code>1</code>.  So this does not really apply to the <code>pattern[x]</code> discussion.</p>\n<p>But let's say that you wanted to say that <code>Patient.address</code> should only allow <code>use</code>: <code>billing</code>.  So even if there are multiple addresses, every one should have <code>\"use\": \"billing\"</code>.  You could try defining a <code>patternAddress</code> on <code>Patient.address</code> with <code>{ \"use\": \"billing\" }</code>.  But then that would mean that only one address needs to fit that pattern (based on the \"at-least-one\" interpretation) -- and I think that's the point you're trying to make.  But I think that might be OK -- because you can just set a <code>patternCode</code> on <code>Patient.address.use</code> instead -- and that would give you <em>exactly</em> what you want.  So there is still an approach that works (without needing to slice in either case).</p>",
+        "id": 277771114,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1649095315
+    },
+    {
+        "content": "<p>Here is a concrete example:</p>\n<p>from US Core 3.1.1  Condition:</p>\n<p><a href=\"/user_uploads/10155/d4Co9KAaZaDUdg2tiCxdvh3s/image.png\">image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/d4Co9KAaZaDUdg2tiCxdvh3s/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/d4Co9KAaZaDUdg2tiCxdvh3s/image.png\"></a></div>",
+        "id": 277776269,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1649097648
+    },
+    {
+        "content": "<p>so now in US Core 4.1.0 Condition:</p>\n<p><a href=\"/user_uploads/10155/LMQQZcwlQ0MRumxczkUsnL2W/image.png\">image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/LMQQZcwlQ0MRumxczkUsnL2W/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/LMQQZcwlQ0MRumxczkUsnL2W/image.png\"></a></div>",
+        "id": 277776606,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1649097802
+    },
+    {
+        "content": "<p>if we flip flop on the interpretation of pattern. will remove the slice and apply pattern on the element.</p>",
+        "id": 277776895,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1649097956
+    },
+    {
+        "content": "<p>The 4.1.0 Condition example is exactly what I would expect.  I think we would not want to change the behavior of the value set binding at the element level on a repeating element.  When the data type is CodeableConcept, as in this case (and probably all or at least nearly all similar cases), then you still have the multiple codings available in each instance of the repeating element where you can send all of the other appropriate \"translation\" codes (regardless of whether or not they are in the bound value set).</p>",
+        "id": 277778344,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1649098667
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> - a bit too far down the simplification-train =).  That said, I feel like your example illustrates the same point. <br>\n I am of the opinion that those two ways of asking for <code>use</code> of <code>billing</code> should be equivalent, since you are defining a pattern for the content of that element.  If you want to describe a single element of an array, it should be done via slicing.</p>\n<p>Conversely, if we are describing 'one element of the array should look like this', we should have an element on <code>ElementDefinition</code> that is <code>0..*</code> instead of <code>0..1</code>, where you can list all of those things.  E.g., I want a <code>billing</code> and a <code>home</code>.  This is (to me) equivalent to slicing.</p>\n<p>(edit: wanted to explicitly note that I am not willing to die on this hill, because reading my comments it may sound like I am... need to figure out how to soften that in typed content  =)</p>",
+        "id": 277780324,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1649099679
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span> - Agreed.  At this point it seems a matter of either perspective or preference.  I don't think there is a \"right\" answer and I'm not willing to die on this hill either.  I just want to know the final answer so I can make sure that SUSHI works correctly. ;-)</p>",
+        "id": 277781590,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1649100356
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> , since I didn't see you on FHIR-I today: <a href=\"http://jira.hl7.org/browse/FHIR-36700\">FHIR-36700</a> resolves this (though not applied yet).  Someone can jump in if I miss something, but generally* the idea is that <code>pattern[x]</code> applies to everything, if you want to describe things in one element of an array, use slicing.</p>\n<p>*I say generally because there is still the fun behavior of elements that contain their own arrays - e.g., when drilling down into a CodeableConcept, only one of the members of <em>that</em> array needs to meet the pattern.</p>\n<p>(edit: details notes on the ticket)</p>",
+        "id": 277789746,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1649104506
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 277790820,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1649105039
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span>! I didn't realize that this would be discussed (although I probably should have guessed it) -- but I had a conflict anyway.  I don't have permissions to edit <a href=\"https://jira.hl7.org/browse/FHIR-33316\">FHIR-33316</a>, but would recommend that someone at least comment on it to point toward <a href=\"http://jira.hl7.org/browse/FHIR-36700\">FHIR-36700</a>.</p>",
+        "id": 277791162,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1649105182
+    },
+    {
+        "content": "<p>wonder if the IG publisher should throw a warning when someone tries to use pattern[x] on an array, to prevent someone from thinking it does something it doesn't do? Those that really mean it, can put in a ignore warning. (I am thinking that I am going to be hard pressed to find all of these places where I made that mistake)</p>",
+        "id": 277791651,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1649105409
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191451\">@Patrick Werner</span> </p>\n<blockquote>\n<p>Patrick Werner: To be honest, im very concerned about this change, which breaks the current validators. I had prefer to clarify the wording to reflect established reality by implementers.</p>\n</blockquote>\n<p>I don't think it's a change to current validators. Certainly not the java one. I reviewed it while we drafted the changes</p>",
+        "id": 277791831,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1649105501
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179177-conformance/topic/pattern.5Bx.5D.20on.200.2E.2E*.20elements/near/277791831\">said</a>:</p>\n<blockquote>\n<p><span class=\"user-mention silent\" data-user-id=\"191451\">Patrick Werner</span> </p>\n<blockquote>\n<p>Patrick Werner: To be honest, im very concerned about this change, which breaks the current validators. I had prefer to clarify the wording to reflect established reality by implementers.</p>\n</blockquote>\n<p>I don't think it's a change to current validators. Certainly not the java one. I reviewed it while we drafted the changes</p>\n</blockquote>\n<p>oh!  Then i mixed sth up. Never mind. Having a consistent behaviour across all implementations is a good thing.</p>",
+        "id": 277792044,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1649105600
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191404\">John Moehrke</span> <a href=\"#narrow/stream/179177-conformance/topic/pattern.5Bx.5D.20on.200.2E.2E*.20elements/near/277791651\">said</a>:</p>\n<blockquote>\n<p>wonder if the IG publisher should throw a warning when someone tries to use pattern[x] on an array, to prevent someone from thinking it does something it doesn't do? Those that really mean it, can put in a ignore warning. (I am thinking that I am going to be hard pressed to find all of these places where I made that mistake)</p>\n</blockquote>\n<p>would appreciate that as well. Used to profile like this in the past (at least i think, have to search for these profiles).</p>",
+        "id": 277792210,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1649105672
+    },
+    {
+        "content": "<p>Thought that this was an elegant solution for the min 1 rep should look like this problem. But i was wrong. Slicing it is.</p>",
+        "id": 277792355,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1649105750
+    },
+    {
+        "content": "<p>I just know that I have many profiles that I must now look thru for if the assignment in the profile is against a ..1 element, for which I will not change it... or against a ..* element, for which I now need to replace with slicing.</p>",
+        "id": 277792431,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1649105773
+    },
+    {
+        "content": "<p>so, i proposed some decoration in sushi for this... where as here I just proposed an IG publisher warning (info?)</p>",
+        "id": 277792518,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1649105823
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"222054\">Gino Canessa</span> <a href=\"#narrow/stream/179177-conformance/topic/pattern.5Bx.5D.20on.200.2E.2E*.20elements/near/277789746\">said</a>:</p>\n<blockquote>\n<p>*I say generally because there is still the fun behavior of elements that contain their own arrays - e.g., when drilling down into a CodeableConcept, only one of the members of <em>that</em> array needs to meet the pattern.</p>\n<p>(edit: details notes on the ticket)</p>\n</blockquote>\n<p>So the wording should reflect that a pattern on a nested array means at least one nested element repetition has to comply with the pattern  on that array. Right?</p>",
+        "id": 277792564,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1649105855
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191404\">John Moehrke</span> <a href=\"#narrow/stream/179177-conformance/topic/pattern.5Bx.5D.20on.200.2E.2E*.20elements/near/277792518\">said</a>:</p>\n<blockquote>\n<p>so, i proposed some decoration in sushi for this... where as here I just proposed an IG publisher warning (info?)</p>\n</blockquote>\n<p>I think a warning/info? would be good, in the IG Publisher and in Simplfiers QA check. Especially people working with .net are had the option to  us pattern wrong.</p>",
+        "id": 277792925,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1649106022
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191451\">Patrick Werner</span> <a href=\"#narrow/stream/179177-conformance/topic/pattern.5Bx.5D.20on.200.2E.2E*.20elements/near/277792564\">said</a>:</p>\n<blockquote>\n<p>So the wording should reflect that a pattern on a nested array means at least one nested element repetition has to comply with the pattern  on that array. Right?</p>\n</blockquote>\n<p>Yes, that is the goal of the 'recursive' line - and part of why we also asked for examples for all of the cases.  It is tricky to wordsmith by committee - but I <em>believe</em> the intentions are clear now (e.g., every element of the array must have something that meets the pattern - if the pattern is in a sub-array, then only <em>one</em> element of the sub-array needs to match).</p>\n<p>E.g., a pattern specifies that every element must have a LOINC code, but that pattern does not prevent an element from <em>also</em> having an equivalent code from another system.</p>",
+        "id": 277794763,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1649106938
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191451\">@Patrick Werner</span> can you clarify this?</p>\n<blockquote>\n<p>Especially people working with .net are had the option to us pattern wrong.</p>\n</blockquote>\n<p>the <em>option</em> to use it wrong?</p>",
+        "id": 277795135,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1649107098
+    },
+    {
+        "content": "<p>next release will make a hint on profiles about this</p>",
+        "id": 277796374,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1649107782
+    },
+    {
+        "content": "<p>Sorry about my earlier comments about the validators. Should have tested it more throughly! It’s a breaking chance for the .NET implementation if you have a pattern on repeating elements with a primitive type.</p>",
+        "id": 277796917,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1649108072
+    },
+    {
+        "content": "<p>For complex types it matches the behavior of the Java one.</p>",
+        "id": 277796982,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1649108107
+    },
+    {
+        "content": "<p>ouch</p>",
+        "id": 277797407,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1649108341
+    }
+]

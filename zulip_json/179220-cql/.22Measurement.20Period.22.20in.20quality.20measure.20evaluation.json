@@ -1,0 +1,50 @@
+[
+    {
+        "content": "<p>Hello, question about quality measure evaluation:</p>\n<p>The latest Quality Measure IG specifies that the \"Measurement Period\" CQL param should be made available to CQL libraries as the value of the <code>Measure.effectivePeriod</code> element (<a href=\"http://build.fhir.org/ig/HL7/cqf-measures/measure-conformance.html#measurement-period\">http://build.fhir.org/ig/HL7/cqf-measures/measure-conformance.html#measurement-period</a>).</p>\n<p>however, the $evaluate-measure operation also requires inputs \"periodStart\" and \"periodEnd,\" which are redundant with effectivePeriod. In addition, the IG provides the flexibility of <code>effectivePeriodAnchor</code> extensions, which can't really be represented in the evaluate-measure inputs. How are these two period definitions (periodStart|End vs. effectivePeriod) meant to relate to each other?</p>",
+        "id": 198795492,
+        "sender_full_name": "Miriam",
+        "timestamp": 1590514435
+    },
+    {
+        "content": "<p>The Measurement Period parameter is constructed from the periodStart/periodEnd inputs, because you can't serialize a Period value on the GET request. If we defined a \"Measurement Period\" parameter of type Period, it would force $evaluate-measure to be invoked with a POST, so we split them out that way to ensure it could be called with a GET.</p>",
+        "id": 198796488,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1590514956
+    },
+    {
+        "content": "<p>That makes sense. I'm wondering more about the guidance around \"effectivePeriod.\" Let's say for example I have a Measure like this:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;id&quot;: &quot;my-measure&quot;,\n  &quot;effectivePeriod&quot; : {\n    &quot;extension&quot; : [\n      {\n        &quot;url&quot; : &quot;http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-effectivePeriodAnchor&quot;,\n        &quot;valueDateTime&quot; : &quot;2018-01-01T00:00:00+00:00&quot;\n      },\n      {\n        &quot;url&quot; : &quot;http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-effectivePeriodDuration&quot;,\n        &quot;valueDuration&quot; : {\n          &quot;value&quot; : 1,\n          &quot;system&quot; : &quot;http://unitsofmeasure.org&quot;,\n          &quot;code&quot; : &quot;a&quot;\n        }\n      }\n    ]\n  },\n ....\n}\n</code></pre></div>\n\n\n<p>If I want to evaluate it using <code>$evaluate-measure</code>, I think the only valid way to do so is: <code>Measure/my-measure/$evaluate-measure?periodStart=2018-01-01&amp;periodEnd=2018-12-31</code>. It forces the caller to perform the duration \"offset\" calculation, and requires the start date to be represented in two places.</p>\n<p>Maybe that's fine, but it's probably worth adding a constraint to the IG along the lines of \"if the quality Measure is being evaluated using $evaluate-measure, the effectivePeriod SHALL match the periodStart and periodEnd input parameters for the operation.\"</p>",
+        "id": 198813056,
+        "sender_full_name": "Miriam",
+        "timestamp": 1590522816
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> actually in general, the IG's conformance requirement stating that \"effectivePeriod\" should be used for \"Measurement Period\" seems off, given it doesn't match up with the <code>Measure.effectivePeriod</code> description :</p>\n<blockquote>\n<p>The period during which the measure content was or is planned to be in active use.<br>\n... Allows establishing a transition before a resource comes into effect and also allows for a sunsetting process when new versions of the measure are or are expected to be used instead.<br>\n... The effective period for a measure determines when the content is applicable for usage and is independent of publication and review dates. For example, a measure intended to be used for the year 2016 might be published in 2015.</p>\n</blockquote>\n<p>This is very different from a measurement period. I would suggest just using <code>periodStart</code> and <code>periodEnd</code> to determine the \"Measurement Period\" CQL parameter. What do you think?</p>",
+        "id": 198831400,
+        "sender_full_name": "Miriam",
+        "timestamp": 1590533606
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"225239\">@Miriam</span> , that is a good point, and I agree, that should be clarified. Are you able to submit a tracker on that to the Quality Measure IG specification in Jira?</p>",
+        "id": 199167390,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1590765046
+    },
+    {
+        "content": "<p>Actually, I've gone ahead and created a ticket to clarify this issue: <a href=\"https://jira.hl7.org/browse/FHIR-27751\">https://jira.hl7.org/browse/FHIR-27751</a></p>",
+        "id": 199184395,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1590772753
+    },
+    {
+        "content": "<p>great, thanks <span aria-label=\"thumbs up\" class=\"emoji emoji-1f44d\" role=\"img\" title=\"thumbs up\">:thumbs_up:</span> <br>\nWhen you say Measurement Period is \"anchored by\" effective period, is the implication that the measurement period must fall within (or overlap) the effective period?  It's not clear to me what is meant by a measure being \"in active use\" -- does it relate to \"evaluation\" period (when you evaluate the measure) or \"measurement period\" (historical period that you evaluate the measure against). This could be clarified as well.</p>",
+        "id": 199185934,
+        "sender_full_name": "Miriam",
+        "timestamp": 1590773573
+    },
+    {
+        "content": "<p>Yes, the implication is that the effectivePeriod is used to say when the measure is active, and that the measurement period (historical period that you evaluate the measure against) must be either the effectivePeriod, or specified using the anchor and duration to produce a measurement period aligned with that. So a measure that was published with an effectivePeriodAnchor of 2018-01-01 and an effectivePeriodDuration of 1 year, could have valid Measurement Periods of [2018-01-01, 2018-12-31], [2019-01-01, 2019-12-31], ...</p>",
+        "id": 199186815,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1590773996
+    }
+]

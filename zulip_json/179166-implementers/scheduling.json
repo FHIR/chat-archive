@@ -1,0 +1,110 @@
+[
+    {
+        "content": "<p>We are implementing a scheduling system, where a patient-facing app or portal will allow the patient to reschedule their appointments. Since the workflow for this is simple and does not need asynchronous flows, we prefer to do a straight PUT on the Appointment (and not use pub/sub or AppointmentResponse).  We figure it works like this:</p>\n<ul>\n<li>The app does a PUT with the new time (start/end) + reference to the slot + status=\"proposed\" + all participants (with all statuses set to needs-action)</li>\n<li>Server processes any business rules, checks availability (single system, no need for AppointmentResponses)</li>\n<li>On success, returns the Appointment with the status set to \"booked\", and updates to the participants (status =accepted)</li>\n<li>On failure, returns 422, with an operation outcome detailing the why (mostly non-availability of resources)</li>\n</ul>\n<p>This seems to work but two things keep nagging me:</p>\n<ul>\n<li>We use the PUT to start a workflow, and the returned body will always differ from what was sent by the client. I know this is allowed by the spec, but is this the intention of how the Appointment is to be used in a synchronous workflow?</li>\n<li>We chose to return an OperationOutcome, and not an Appointment with participant.status=\"declined\" (and Appointment.status=????), since there might be other reasons the rescheduling failed</li>\n</ul>\n<p>Does this make sense?</p>",
+        "id": 153815586,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1458030621
+    },
+    {
+        "content": "<p>I would expect that the Appointment would not update (if these were the business rules) and that an OperationOutcome would be returned with the details of what went wrong, and a status of <code>422</code></p>",
+        "id": 153815587,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1458031532
+    },
+    {
+        "content": "<p>(as you pointed out, this is in the spec here: <a href=\"http://hl7.org/fhir/http.html#2.1.0.10.1\" target=\"_blank\" title=\"http://hl7.org/fhir/http.html#2.1.0.10.1\">http://hl7.org/fhir/http.html#2.1.0.10.1</a>)</p>",
+        "id": 153815588,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1458031562
+    },
+    {
+        "content": "<p>And yes, in a synchronous appointment booking that would be quite reasonable.</p>",
+        "id": 153815589,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1458031605
+    },
+    {
+        "content": "<p>Anyone have an opinion how to map checkin/arrival time for an appointment?</p>",
+        "id": 153818382,
+        "sender_full_name": "Mat Coolidge ",
+        "timestamp": 1459175752
+    },
+    {
+        "content": "<p>just found a relevant gforge ticket: <a href=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=9276\" target=\"_blank\" title=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=9276\">http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=9276</a></p>",
+        "id": 153818383,
+        "sender_full_name": "Mat Coolidge ",
+        "timestamp": 1459175871
+    },
+    {
+        "content": "<p>When the patient arrives, the Encounter begins, and that is where you would record the checkin time. The status would be recorded as arrived.</p>",
+        "id": 153818485,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1459200041
+    },
+    {
+        "content": "<p>Looping back around to this topic,  I understand the workflow and it makes perfect sense that the encounter has begun once the patient arrives. Practically speaking our developer is asking for the time in which that occured within his query of appointments. I dont see a way to reference the encounter(s) from an appointment like there is on the encounter backwards to appointment. If there was I could ask that he use _include in the query to get that back and find the start time. </p>",
+        "id": 153819895,
+        "sender_full_name": "Mat Coolidge ",
+        "timestamp": 1459797492
+    },
+    {
+        "content": "<p>You can use _revinclude.  (We try hard to make sure relationships only point way because otherwise things are quite complicated in REST.</p>",
+        "id": 153819930,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1459819418
+    },
+    {
+        "content": "<p>Thanks Lloyd! I guess thats workable, but I am sure other people will want to see the arrival time on upcoming appointments. This was actually driven by a feature request from a physician.</p>",
+        "id": 153819968,
+        "sender_full_name": "Mat Coolidge ",
+        "timestamp": 1459867052
+    },
+    {
+        "content": "<p>Mat and I have gone through this, and jsut for others benefit, this is essentially 2 queries.<br>\nOne for the appointments, and another for the Encounters.<br>\nThe second is required even if doing the revinclude, as walk-ins may not be recorded as an appointment, so need the other call anyway.</p>",
+        "id": 153820446,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1460091828
+    },
+    {
+        "content": "<p>The appointment contains the times that are planned, then once the patient arrives, all the actual times are then entered into the encounter (including the arrival time)</p>",
+        "id": 153820447,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1460091868
+    },
+    {
+        "content": "<p>Thanks Brian, one thing we also discussed is our requirement of an estimated arrival time. Our understanding is that this would be an extension on the appointment resource. Also as an FYI, our providers dont allow walk ins. They would instead always schedule a \"same day appointment\" so for our use case, we will likely be implementing  the _revinclude option on the appointments endpoint to return the encounter, drill into that encounters start time. </p>",
+        "id": 153820479,
+        "sender_full_name": "Mat Coolidge ",
+        "timestamp": 1460123080
+    },
+    {
+        "content": "<p>A couple things caught my attention in this discussion.</p>\n<p>First, as part of <a href=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_id=677&amp;tracker_item_id=7873\" target=\"_blank\" title=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_id=677&amp;tracker_item_id=7873\">http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_id=677&amp;tracker_item_id=7873</a>, it was previously advised that \"the period that is allocated to the Encounter may be used to describe future/expected end dates.\"  Thus, as much as I would prefer an explicit estimated period (for estimated arrival and estimated departure dates), it seems like the guidance was to use the existing period, such that I assume the status would then imply whether the dates were estimated or actuals.  Has this guidance changed to using an extension now for estimated dates?</p>\n<p>Second, I am wondering if we have the ability to calculate patient wait times based on registration date versus arrival date?  Is the recommendation to use the Encounter.location.period and assume that there is a waiting room location that could be used to infer the wait time?  If this is a common KPI (key performance indicator), then it seems cumbersome to understand all possible locations in order to calculate this.</p>",
+        "id": 153821215,
+        "sender_full_name": "Michelle (Moseman) Miller",
+        "timestamp": 1460467267
+    },
+    {
+        "content": "<p>Patient wait times would be in the status history, the length of time in the arrived status.<br>\nIsthis is what you were looking for, the amount of time that the patient spent waiting before being seen?</p>",
+        "id": 153821217,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1460467771
+    },
+    {
+        "content": "<p>FYI...  Our system doesn't have an \"arrived\" status, specifically, but we do track the dates and times....which leads to the question whether we should be mapping to FHIR's \"arrived\" status based on some combination of dates and our status.  We're internally discussing the implications of doing so....</p>",
+        "id": 153821369,
+        "sender_full_name": "Michelle (Moseman) Miller",
+        "timestamp": 1460502707
+    },
+    {
+        "content": "<p>Thanks for the info. Interested to hear where you get to and if you represent tracking the arrived state anywhere in your system.</p>",
+        "id": 153821401,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1460513016
+    },
+    {
+        "content": "<p>We determined that we aren't going to map to Encounter.status of arrived because the registration date/time is not a reliable way to know when the patient was seen (i.e. knowing when to change the status from arrived to in progress) as registration can happen before or after the patient is seen. </p>\n<p>That said, we do track the patient seen date/time on the appointment (just not the encounter).  I believe our wait time KPIs are all driving off the appointment, not encounter.</p>",
+        "id": 153830365,
+        "sender_full_name": "Michelle (Moseman) Miller",
+        "timestamp": 1464411293
+    }
+]

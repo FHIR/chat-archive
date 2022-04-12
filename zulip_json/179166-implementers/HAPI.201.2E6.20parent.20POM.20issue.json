@@ -1,0 +1,62 @@
+[
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> et al:<br>\nWhile doing a Maven build with HAPI 1.6, the animal-sniffer-maven-plugin (check-java-api) complained about signatures we were using with Java 1.8.  It  turns out that the parent hapi-deployable-pom POM.xml has the following snippet which is instructing the animal-sniffer-maven-plugin to validate signatures against Java 1.6:</p>\n<div class=\"codehilite\"><pre><span></span>                    &lt;configuration&gt;\n                        &lt;signature&gt;\n                            &lt;groupId&gt;org.codehaus.mojo.signature\n                            &lt;/groupId&gt;\n                            &lt;artifactId&gt;java16&lt;/artifactId&gt;\n                            &lt;version&gt;1.1&lt;/version&gt;\n                        &lt;/signature&gt;\n                    &lt;/configuration&gt;\n</pre></div>\n\n\n<p>However, maven-enforcer-plugin in hapi-fhir.pom requires Java 1.8:</p>\n<div class=\"codehilite\"><pre><span></span>                &lt;execution&gt;\n                    &lt;id&gt;enforce-java&lt;/id&gt;\n                    &lt;goals&gt;\n                        &lt;goal&gt;enforce&lt;/goal&gt;\n                    &lt;/goals&gt;\n                    &lt;configuration&gt;\n                        &lt;rules&gt;\n                            &lt;requireJavaVersion&gt;\n                                &lt;version&gt;[1.8,)&lt;/version&gt;\n                                &lt;message&gt;\n                                    The hapi-fhir Maven build requires JDK version 1.8 or higher.\n                                &lt;/message&gt;\n                            &lt;/requireJavaVersion&gt;\n                        &lt;/rules&gt;\n                    &lt;/configuration&gt;\n                &lt;/execution&gt;\n</pre></div>\n\n\n<p>Therefore, I believe we would need all of the \"org.codehaus.mojo.signature\" references in the POM's changed to:</p>\n<div class=\"codehilite\"><pre><span></span>                    &lt;configuration&gt;\n                        &lt;signature&gt;\n                            &lt;groupId&gt;org.codehaus.mojo.signature\n                            &lt;/groupId&gt;\n                            &lt;artifactId&gt;java18&lt;/artifactId&gt;\n                            &lt;version&gt;1.0&lt;/version&gt;\n                        &lt;/signature&gt;\n                    &lt;/configuration&gt;\n</pre></div>\n\n\n<p>When we changed our local cached hapi-deployable-pom to what's above, our build worked perfectly.  Thanks in advance.</p>",
+        "id": 153845290,
+        "sender_full_name": "Anthony Sute ",
+        "timestamp": 1472250089
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"192219\">@Anthony Sute </span> ,</p>\n<p>The situation you found is actually deliberate. We target Java 1.6 for the built library (aside from the CLI module) because there are still people using it in that environment. On the other hand, our build itself requires 1.8 because a few of the unit test dependencies require it (namely Jetty).</p>",
+        "id": 153845386,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1472469819
+    },
+    {
+        "content": "<p>Is there the expectation that Java 1.8 application implementers change their local instance of the hapi-deployable-pom pom.xml file in order for animal-sniffer to not raise signature errors when 1.7 and 1.8-specific classes are used?  Should we not be using the hapi-deployable-pom as a parent POM, even though there are encouragements in the code for implementers to do so?  Is the animal-sniffer plug-in really necessary in the hapi-deployable-pom?</p>",
+        "id": 153845428,
+        "sender_full_name": "Anthony Sute ",
+        "timestamp": 1472482234
+    },
+    {
+        "content": "<p>If the above is true, I'm concerned about our client raising concerns about the need to modify a local instance of a Maven dependency pom.xml in order to build a 1.8 application.</p>",
+        "id": 153845429,
+        "sender_full_name": "Anthony Sute ",
+        "timestamp": 1472482320
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> , would it be easier for application developers to add the Java JRE, perhaps (using the AnimalSniffer plugin)?</p>",
+        "id": 153845445,
+        "sender_full_name": "Ioana Singureanu",
+        "timestamp": 1472497390
+    },
+    {
+        "content": "<p>Ahhh I see where you are coming from.</p>\n<p>The intention is actually not for you to use this as your parent pom in your own projects. I can see why you would, the example HAPI project does use it. I think we should probably fix the example- I'm using it because it helps me to make sure we don't accidentally introduce any Java 8-isms into the examples, but there is no reason you can't use Java 8 stuff in your own projects if you aren't worrying about supporting Java 6.</p>",
+        "id": 153845462,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1472508508
+    },
+    {
+        "content": "<p>To confirm, you're saying I shouldn't use the hapi-fhir POM in my own project even though the JAX-RS Server Example does below?  The way the comment is phrased, it seems to indicate that one could use the parent POM in order to ensure all of the relevant dependencies are present.</p>\n<p>&lt;project xmlns=\"<a href=\"http://maven.apache.org/POM/4.0.0\" target=\"_blank\" title=\"http://maven.apache.org/POM/4.0.0\">http://maven.apache.org/POM/4.0.0</a>\" xmlns:xsi=\"<a href=\"http://www.w3.org/2001/XMLSchema-instance\" target=\"_blank\" title=\"http://www.w3.org/2001/XMLSchema-instance\">http://www.w3.org/2001/XMLSchema-instance</a>\" xsi:schemaLocation=\"<a href=\"http://maven.apache.org/POM/4.0.0\" target=\"_blank\" title=\"http://maven.apache.org/POM/4.0.0\">http://maven.apache.org/POM/4.0.0</a> <a href=\"http://maven.apache.org/xsd/maven-4.0.0.xsd\" target=\"_blank\" title=\"http://maven.apache.org/xsd/maven-4.0.0.xsd\">http://maven.apache.org/xsd/maven-4.0.0.xsd</a>\"&gt;<br>\n    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;</p>\n<div class=\"codehilite\"><pre>&lt;!-- Note: HAPI projects use the &quot;hapi-fhir&quot; POM as their base to provide easy management. You do not need to use this in your own projects, so the &quot;parent&quot; tag and it&#39;s contents below may be removed \n    if you are using this file as a basis for your own project. --&gt;\n&lt;parent&gt;\n    &lt;groupId&gt;ca.uhn.hapi.fhir&lt;/groupId&gt;\n    &lt;artifactId&gt;hapi-fhir&lt;/artifactId&gt;\n    &lt;version&gt;1.6&lt;/version&gt;\n    &lt;relativePath&gt;../pom.xml&lt;/relativePath&gt;\n&lt;/parent&gt;\n\n&lt;artifactId&gt;hapi-fhir-jaxrsserver-example&lt;/artifactId&gt;\n&lt;packaging&gt;war&lt;/packaging&gt;\n\n&lt;name&gt;HAPI FHIR JAX-RS Server - Example&lt;/name&gt;\n</pre></div>\n\n\n<p>...</p>",
+        "id": 153845469,
+        "sender_full_name": "Anthony Sute ",
+        "timestamp": 1472509923
+    },
+    {
+        "content": "<p>Now I'm confused again...</p>\n<p>You don't need to use either at all. The reason the examples use them is because they supply a bunch of sensible defaults and dependency versions. That could be useful to you though..</p>\n<p>The <code>hapi-deployable-pom</code> specifically seems like a bad one to use, since it brings in the Java6 sniffer. I thought that was the one you were using... The <code>hapi-fhir</code> one does not bring in animal sniffer, so it's probably fine to use. It does declare to compile at Java 6 level but you can override that in your own pom if you want something newer. </p>\n<p>Which one are you using?</p>",
+        "id": 153845472,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1472512043
+    },
+    {
+        "content": "<p>Oh wait! The parent pom does in fact bring in animal sniffer. That shoudn't be! </p>\n<p>Now I see why you're having this issue. Sorry! Will fix that now.</p>",
+        "id": 153845474,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1472512445
+    },
+    {
+        "content": "<p>Thanks for the clarification.  I agree that the hapi-deployable-pom is the wrong one to use.  We switched to the hapi-fhir one as parent and it actually worked.  However the animal-sniffer is invoked in the hapi-fhir pom seems to be different than in hapi-deployable-pom.  Yes, as you point out, the good thing about the hapi-fhir one is the list of sensible defaults and dependency versions we don't need to manually copy over to our application's POM.  Regarding the fixes you'll make, where can I pick them up?  Will they be in the nightly build version or could you forward me the fixed pom?</p>",
+        "id": 153846020,
+        "sender_full_name": "Anthony Sute ",
+        "timestamp": 1472695179
+    }
+]

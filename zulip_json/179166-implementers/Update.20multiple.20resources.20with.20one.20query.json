@@ -1,0 +1,44 @@
+[
+    {
+        "content": "<p>Hello, I'd like to update resources matching a query with one PUT (or PATCH?) command. I'm playing with a HAPI FHIR server and executing something that looks like</p>\n<p><code>PUT base/Encounter?_lastUpdated=gt2018-10-11T20:29:26.166-04:00</code> with a body of<br>\n<code>{\n    \"resourceType\": \"Encounter\",\n    \"status\": \"finished\"\n}\n</code></p>\n<p>This returns</p>\n<p><code>\n{\n    \"resourceType\": \"OperationOutcome\",\n    \"text\": {\n        \"status\": \"generated\",\n        \"div\": \"&lt;div xmlns=\\\"http://www.w3.org/1999/xhtml\\\"&gt;&lt;h1&gt;Operation Outcome&lt;/h1&gt;&lt;table border=\\\"0\\\"&gt;&lt;tr&gt;&lt;td style=\\\"font-weight: bold;\\\"&gt;ERROR&lt;/td&gt;&lt;td&gt;[]&lt;/td&gt;&lt;td&gt;&lt;pre&gt;Failed to UPDATE resource with match URL \\\"Encounter?_lastUpdated=gt2018-10-11T20:29:26.166-04:00\\\" because this search matched 5 resources&lt;/pre&gt;&lt;/td&gt;\\n\\t\\t\\t\\t\\t\\n\\t\\t\\t\\t\\n\\t\\t\\t&lt;/tr&gt;\\n\\t\\t&lt;/table&gt;\\n\\t&lt;/div&gt;\"\n    },\n    \"issue\": [\n        {\n            \"severity\": \"error\",\n            \"code\": \"processing\",\n            \"diagnostics\": \"Failed to UPDATE resource with match URL \\\"Encounter?_lastUpdated=gt2018-10-11T20:29:26.166-04:00\\\" because this search matched 5 resources\"\n        }\n    ]\n}\n</code></p>\n<p>Is there a way to update all (5 resources in the example above) resources that match my query in a single go?</p>\n<p>I see the docs (<a href=\"http://build.fhir.org/http.html#patch\" target=\"_blank\" title=\"http://build.fhir.org/http.html#patch\">http://build.fhir.org/http.html#patch</a>) say that 412 is the right response here, as my query isn't selective enough, but I can't find an example of a query/HTTP Verb that allows for this kind of behavior</p>",
+        "id": 154008452,
+        "sender_full_name": "Jeffrey Taylor",
+        "timestamp": 1539308624
+    },
+    {
+        "content": "<p>The simplest solution here is to retrieve all resources with search query (you will get a bundle) update the bundle and do a transaction with PUT requests inside. <a href=\"https://www.hl7.org/fhir/http.html#transaction\" target=\"_blank\" title=\"https://www.hl7.org/fhir/http.html#transaction\">https://www.hl7.org/fhir/http.html#transaction</a></p>",
+        "id": 154008487,
+        "sender_full_name": "Andrew Tropin",
+        "timestamp": 1539339936
+    },
+    {
+        "content": "<p>I thought a simple transaction like this (see below) may work, but no luck. I guess I'll have to include each and every resource separately as entries in this transaction? Imagine there are many many resources here - is there an easier way to do this 'bulk' update?</p>\n<div class=\"codehilite\"><pre><span></span>{\n    &quot;resourceType&quot;: &quot;Bundle&quot;,\n    &quot;id&quot;: &quot;bundle-transaction&quot;,\n    &quot;type&quot;: &quot;transaction&quot;,\n    &quot;entry&quot;: [\n        {\n            &quot;resource&quot;: {\n                &quot;resourceType&quot;: &quot;Encounter&quot;,\n                &quot;status&quot;: &quot;finished&quot;\n            },\n            &quot;request&quot;: {\n                &quot;method&quot;: &quot;PUT&quot;,\n                &quot;url&quot;: &quot;Encounter?_lastUpdated=gt2018-10-11T20:39:22.977-04:00&quot;\n            }\n        }\n    ]\n}\n</pre></div>",
+        "id": 154008504,
+        "sender_full_name": "Jeffrey Taylor",
+        "timestamp": 1539347260
+    },
+    {
+        "content": "<p>Meaning - I can 'bulk delete' a bunch of records like so </p>\n<div class=\"codehilite\"><pre><span></span>{\n    &quot;resourceType&quot;: &quot;Bundle&quot;,\n    &quot;id&quot;: &quot;bundle-transaction&quot;,\n    &quot;type&quot;: &quot;transaction&quot;,\n    &quot;entry&quot;: [\n        {\n            &quot;request&quot;: {\n                &quot;method&quot;: &quot;DELETE&quot;,\n                &quot;url&quot;: &quot;Encounter?_lastUpdated=gt2018-10-11T20:39:22.977-04:00&quot;\n            }\n        }\n    ]\n}\n</pre></div>\n\n\n<p>How would I select the same encounters here and just update the status?</p>",
+        "id": 154008505,
+        "sender_full_name": "Jeffrey Taylor",
+        "timestamp": 1539347548
+    },
+    {
+        "content": "<p>Actually operation in your example called Conditional update and delete respectively. The behavior of such request described here:<br>\n- <a href=\"https://www.hl7.org/fhir/http.html#cond-update\" target=\"_blank\" title=\"https://www.hl7.org/fhir/http.html#cond-update\">https://www.hl7.org/fhir/http.html#cond-update</a><br>\n- <a href=\"https://www.hl7.org/fhir/http.html#2.21.0.13.1\" target=\"_blank\" title=\"https://www.hl7.org/fhir/http.html#2.21.0.13.1\">https://www.hl7.org/fhir/http.html#2.21.0.13.1</a></p>\n<p>For each conditional operation you can find few different cases: no match, one match, multiple match.<br>\nLets take a closer look: <br>\n- for conditional update in case of multiple match server SHOULD respond with 412.<br>\n- for conditional delete in case of multiple match server may respond with 412 or delete all matched resource (depends on opinion of developers of your fhir server).</p>\n<p>That mean that some fhir servers can do bulk delete using conditional delete like in your second example, but according to fhir spec it's not possible to do bulk update with conditional update like in your first example.</p>\n<p><a href=\"https://www.hl7.org/fhir/http.html#transaction\" target=\"_blank\" title=\"https://www.hl7.org/fhir/http.html#transaction\">https://www.hl7.org/fhir/http.html#transaction</a><br>\nIn more details batch is just a list of requests to fhir server, but sent together. Transaction like a batch, but with guarantee that all operation will succeed or all changes will be rolled back.</p>\n<p>Therefore there is no difference if you send one PUT separately or inside transaction. </p>\n<p>The only way I can see right now is to make a <code>GET /Encounter?_lastUpdated=gt2018-10-11T20:39:22.977-04:00</code> query, obtain bundle, update entities inside that bundle with right values and add</p>\n<div class=\"codehilite\"><pre><span></span>&quot;request&quot;: {\n  &quot;method&quot;: &quot;PUT&quot;,\n  &quot;url&quot;: &quot;Encounter&quot;\n }\n</pre></div>\n\n\n<p>to each entity and POST a transaction bundle to your fhir server. At least now I don't see simpler way.</p>\n<p>Here can arise another question about atomicity of such update, but a solution for this question also exist.</p>\n<p>If you want we can make a call and try to write a simple program to solve this problem or even make a small online seminar about transaction and bulk updates if few more people are interested.</p>",
+        "id": 154008529,
+        "sender_full_name": "Andrew Tropin",
+        "timestamp": 1539353336
+    },
+    {
+        "content": "<p>I'm wondering if there is any new information on this front? I created and posted a transaction bundle with an example patient and about 200 observations (purely for testing purposes). I discovered I miss-typed a code system and would like to patch these observations to correct the typo. From what I gather, the only way is to write another transaction/batch bundle and explicitly include the id of each resource. I can write a script to search for these observations, record the ids, and write/submit bundle with patch request do this, but am hoping there was a simpler way.</p>",
+        "id": 253786081,
+        "sender_full_name": " Bob Milius",
+        "timestamp": 1631903103
+    },
+    {
+        "content": "<p>If your server supports it you can use a (transaction) bundle and have the request.method=\"PUT\" and request.ifMatch with a search expression that could find these Observations by \"business id\" rather than the FHIR server's \"logical\" (internal) id.    Of course with that you'd still need to have and know the unique \"business ids\" for the Observations you want to update.</p>",
+        "id": 253790763,
+        "sender_full_name": "John Silva",
+        "timestamp": 1631905067
+    }
+]

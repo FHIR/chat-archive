@@ -1,0 +1,746 @@
+---
+layout: page
+title: "FHIR Chat  · Terminology-powered search · terminology"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/index.html">terminology</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html">Terminology-powered search</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="275025508"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275025508" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275025508">(Mar 11 2022 at 19:53)</a>:</h4>
+<p>From discussion on the DaVinci "Formulary IG" call, they have a use case where a "Formulary Item" describes the details of how a particular drug is included in a formulary. Logically the "Formulary Item" says things like:</p>
+<blockquote>
+<p>"acetaminophen 325 MG / oxycodone hydrochloride 5 MG Oral Tablet" is covered on Formulary A with a quantity limit of 60 pills per 30 days</p>
+</blockquote>
+<p>Today, they want to support things like searching by various brand/generic names or different dose forms. All this information lives in vocabularies like RxNorm, but it's not easy to <em>search</em>, so instead of just listing an RxNorm code in the Formulary Item, the IG adds a <a href="https://build.fhir.org/ig/HL7/davinci-pdex-formulary/use_cases_and_overview.html#resource-relationships">new resource called "Formulary Drug"</a> -- a profile on MedicationKnowledge that basically acts an an "index" for drug properties (name, generic equivalents, dose forms, etc). This pattern is useful because it lets you use search params to find, say, brand name drugs via a query like:</p>
+<div class="codehilite"><pre><span></span><code> /Basic?code=formulary-item&amp;subject.drug-name=percocet&amp;doseform=tablet
+</code></pre></div>
+
+
+
+<a name="275025595"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275025595" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275025595">(Mar 11 2022 at 19:54)</a>:</h4>
+<p>... but <strong>it strikes me that this pattern  (creating a FormularyDrug resource to staple together terminology details into a resource, to enable search) is creating a whole new problem</strong> -- lots of state to manage, even when the underlying data already exist in terminologies (concepts, hierarchies, properties, etc). It would be nicer if a <code>FormularyItem</code> could just list a drug (say, by RxNorm code) and queries could ask these kinds of questions directly against the FormularyItem.</p>
+
+
+
+<a name="275025951"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275025951" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275025951">(Mar 11 2022 at 19:57)</a>:</h4>
+<p>In other words, it'd be nice to write queries like:</p>
+<div class="codehilite"><pre><span></span><code>/Basic?code=formulary-item&amp;drug:terminology=(rxnorm.type = SBD, rxnorm.doseform = Tablet, rxnorm.preferredTerm ~ Percocet)
+</code></pre></div>
+
+<p>(Never mind my ad-hoc syntax, hopefully you understand the kind of thing I mean.)</p>
+<p>Has there been discussion about this kind of capability, pushing terminology details (beyond above/below) into queries? (It's something the semantic web stack expresses really well, but I'm wondering if there's some practical application in FHIR too. </p>
+<p>Particularly interested whether <span class="user-mention" data-user-id="191318">@nicola (RIO/SS)</span> or <span class="user-mention" data-user-id="191376">@Jim Steel</span> have built features like this (standardized or non).</p>
+
+
+
+<a name="275027891"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275027891" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275027891">(Mar 11 2022 at 20:13)</a>:</h4>
+<p>We provide Concept resource with first-class extensions - i.e. rxnorm can be loaded with extra info. Custom resources can be used for formulary item, and query is quite trivial join with our SQL on FHIR</p>
+
+
+
+<a name="275030063"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275030063" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275030063">(Mar 11 2022 at 20:32)</a>:</h4>
+<p>Thanks!  Do you support a generic kind of query syntax where anytime you are searching by "token" type search parameter, there is a way to leverage properties from a terminology? And if you're defining a custom resource can it be (essentially) just a "materialized view" on a terminology? Or are you thinking about another model for supporting a Formulary Drug?</p>
+
+
+
+<a name="275132684"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275132684" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275132684">(Mar 13 2022 at 04:29)</a>:</h4>
+<p>These are the kinds of things you can do with ECL for snomed (which translate directly to an implicit valueset URI).<br>
+I've long thought a similar capability (and syntax) that approximates the Valuset compose functionality would be a great addition to FHIR Terminology services</p>
+
+
+
+<a name="275380838"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275380838" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275380838">(Mar 15 2022 at 14:34)</a>:</h4>
+<p>Interesting <span class="user-mention" data-user-id="191343">@Michael Lawley</span> ! Do you have any thoughts about what a good starting point for this would look like? And what do you think about the idea of surfacing this as a capability within FHIR search?</p>
+
+
+
+<a name="275448026"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275448026" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275448026">(Mar 15 2022 at 23:08)</a>:</h4>
+<p>I see the main use-case for such a VCL (ValueSet  Constraint/Compose Language) as being the basis for implicit valueset URIs much as ECL can be used to specify them of the form <code>http://snomed.info/sct?fhir_vs=ecl/[ECL]</code>.</p>
+<p>So, off the top of my head, I'd limit to a single codesystem (based on the base of said URI), and focus on simple &amp; common aspects of ValueSet.compose functionality, building from the existing ECL syntax pattern:<br>
+<code>[focus] : [property] [op] [value]</code><br>
+where <code>[focus]</code> includes <code>*</code> as a wildcard, and <code>&lt;&lt;</code>, <code>&lt;</code> etc operators for  hierarchy traversal, and then add in simple AND / OR / MINUS and bracketing to compose sub-expressions.</p>
+<p>The would give you things like:</p>
+<ul>
+<li><code>&lt;!  LP43571-6 MINUS 5932-9</code> (equivalent of <a href="http://hl7.org/fhir/ValueSet/example-intensional">http://hl7.org/fhir/ValueSet/example-intensional</a>)</li>
+<li><code>&lt;&lt; _ActClassROI MINUS _ActClassROI</code> (equivalent of <a href="http://terminology.hl7.org/ValueSet/v3-ActClassROI">http://terminology.hl7.org/ValueSet/v3-ActClassROI</a>), but more simply: <code>&lt; _ActClassROI</code></li>
+<li><code>* : {{ C STATUS = ACTIVE, CLASSTYPE = 1, CLASS != regex:"CYTO|HL7\\.CYTOGEN|HL7\\.GENETICS|^PATH(\\..*)?|^MOLPATH(\\..*)?|NR STATS|H&amp;P\\.HX\\.LAB|CHALSKIN|LABORDERS" }}</code> (equivalent of <a href="http://hl7.org/fhir/uv/ips/ValueSet/results-laboratory-observations-uv-ips">http://hl7.org/fhir/uv/ips/ValueSet/results-laboratory-observations-uv-ips</a>)</li>
+</ul>
+<p>That last one is perhaps stretching what might be needed in practice, but is a real-world example and shows how property filters would be expressed.  The others just constrain based on hierarchy.</p>
+<p>Finally, one might introduce the rule for implicit ValueSets that allows <code>[uri]?vcl=[expression]</code> to be used as an implicit valueset for the CodeSystem where <code>[uri]</code> is the "all code ValueSet", ie. the value of <code>CodeSystem.valueSet</code></p>
+
+
+
+<a name="275457090"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275457090" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275457090">(Mar 16 2022 at 01:16)</a>:</h4>
+<p>Cool! I like the idea of exposing the same machinery (or a subset) as ValueSet definitions inline. I'll try to write out examples from the RxNorm cases above.</p>
+
+
+
+<a name="275464693"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275464693" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275464693">(Mar 16 2022 at 03:53)</a>:</h4>
+<p>So if you wanted to find meds that included tylenol you could do a query using the generic (161) and branded (202433) ingredients like:</p>
+<div class="codehilite"><pre><span></span><code>MedicationUsage?code=(tty in [&#39;scd&#39;, &#39;sbd&#39;], has_ingredient in [161, 202433])
+</code></pre></div>
+
+<p>... though I'm not sure how to say "we're talking about RxNorm". I'm also not quite sure how to write a search over concept names (e.g., preferred terms or synonyms that match "tylenol") based on the properties defined in <a href="https://www.hl7.org/fhir/rxnorm.html">https://www.hl7.org/fhir/rxnorm.html</a> (I haven't worked with this page in the FHIR spec before, and the syntax is not super clear to me, so I may just be misunderstanding)</p>
+
+
+
+<a name="275465583"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275465583" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275465583">(Mar 16 2022 at 04:11)</a>:</h4>
+<p>For what I was brainstorming above, the ValueSet URI would be something like:<br>
+<code>http://www.nlm.nih.gov/research/umls/rxnorm/vs?vcl=*: has_ingredient =  (161 OR 202433) {{ C tty = ("scd"  "sbd") }}</code><br>
+with appropriate %-encoding.</p>
+<p>This is saying match any (<code>*</code>) RxNorm code (<code>http://www.nlm.nih.gov/research/umls/rxnorm/vs</code> is the all-codes valueset) with a <code>has_ingredient</code> relationship to either of the codes 161 or 202433 and a <code>tty</code> property of "scd" or "sbd".</p>
+<p>If you want to limit matches to those with "tylenol" in the display/designation text, then you would append a clause like <code>{{ D term="tylenol" }}</code></p>
+<p>( I'm basing all this on a straightforward re-use of SNOMED's ECL - <a href="http://snomed.org/ecl">http://snomed.org/ecl</a> )</p>
+
+
+
+<a name="275465673"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275465673" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275465673">(Mar 16 2022 at 04:13)</a>:</h4>
+<p>Putting it together we'd end up with:</p>
+<div class="codehilite"><pre><span></span><code>MedicationUsage?code:in=http://www.nlm.nih.gov/research/umls/rxnorm/vs?vcl=*: has_ingredient =  (161 OR 202433) {{ C tty = (&quot;scd&quot;  &quot;sbd&quot;) }} {{ D term=&quot;tylenol&quot; }}
+</code></pre></div>
+
+
+
+<a name="275465802"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275465802" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275465802">(Mar 16 2022 at 04:16)</a>:</h4>
+<p>This pushes all the interpretation off to the terminology server layer, rather than extending FHIRPath or _search syntax</p>
+
+
+
+<a name="275488038"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275488038" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275488038">(Mar 16 2022 at 09:55)</a>:</h4>
+<p><span class="user-mention" data-user-id="191315">@Josh Mandel</span>  You can add first-class extensions to Concept resource with rxnorm and formulary item  attrs, then define search params for it. Is it what you call "materialized" terminology? Or you can create custom resource for formulary item and join/filter with rxnorm concepts</p>
+
+
+
+<a name="275488593"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275488593" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275488593">(Mar 16 2022 at 10:00)</a>:</h4>
+<p>I think,  what you want may be expressed as chained search/_search (with only one join) with Concept resource. I do not like idea of one more "new ad-hock search syntax"</p>
+
+
+
+<a name="275509655"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275509655" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275509655">(Mar 16 2022 at 13:26)</a>:</h4>
+<p><span class="user-mention" data-user-id="191343">@Michael Lawley</span> thanks, those references are helpful. I'll read up on the ECL syntax (it's not totally transparent at first, which is fair). In your proposed example, I'm assuming this uses (depends on?) the definitions from <a href="https://www.hl7.org/fhir/rxnorm.html">https://www.hl7.org/fhir/rxnorm.html</a>? Even though none of those properties are defined (? I think?) as supporting subsumption?</p>
+
+
+
+<a name="275511464"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275511464" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275511464">(Mar 16 2022 at 13:42)</a>:</h4>
+<p><span class="user-mention" data-user-id="191318">@nicola (RIO/SS)</span> yes, I'm thinking about a world where a FHIR server generically "loads RxNorm" to support diverse use cases -- not specifically to populate a FormularyDrug resource or a ReconciliationRecommendation in particular, but in a way that <em>any search on any Coding</em> can ask questions like the ones above.</p>
+<p>Maybe it'd be good to work through similar examples with your architecture. How would a client ask for:</p>
+<ul>
+<li>
+<p>All MedicationUsage resources where patient is 123 and the drug code is an RxNorm code with "tylenol" or "acetaminophen" as part of the preferred name?</p>
+</li>
+<li>
+<p>All MedicationUsage resources where patient is 123 and the drug code is an RxNorm code that "has_ingredient"  of RxNorm CUI 161 or 202433?</p>
+</li>
+</ul>
+
+
+
+<a name="275522278"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275522278" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert McClure <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275522278">(Mar 16 2022 at 14:55)</a>:</h4>
+<p>Folks, we've bantered about a generic terminology query and representation syntax and it's never gotten anywhere. Apelon DTS uses "TQL" and obviously SCT uses ECL. I strongly agree that we need to expose a common general hierarchical and filter-based query syntax for use in defining value sets and performing inline queries as <span class="user-mention" data-user-id="191315">@Josh Mandel</span> wants. Can we get some folks to come and play at connectathon?  <span class="user-mention" data-user-id="340004">@Davera Gabriel</span> This discussion is perfect for connectathon topic.</p>
+
+
+
+<a name="275567453"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275567453" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275567453">(Mar 16 2022 at 19:45)</a>:</h4>
+<p><span class="user-mention" data-user-id="191315">@Josh Mandel</span>  now it can be done with something  like this:</p>
+<p>select mu.* from medicationusage mu, concept c where mu.resource#&gt;&gt;'{patient,id}' = '123' and mu.resource-&gt;'code' = c.resource-&gt;'code' and c.resource#&gt;&gt;'{rxnorm, prefName}' in ()</p>
+
+
+
+<a name="275567767"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275567767" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275567767">(Mar 16 2022 at 19:48)</a>:</h4>
+<p>If we introduce chain by code - it can be GET /Mu?pid=...&amp;code:Concept.rxnormPerf=a,b</p>
+
+
+
+<a name="275568173"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275568173" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275568173">(Mar 16 2022 at 19:51)</a>:</h4>
+<p>The key is Concept resource and application of FHIR search framework to it! Concept may be extended and profiled for specific terminology like rxnorm</p>
+
+
+
+<a name="275568258"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275568258" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275568258">(Mar 16 2022 at 19:52)</a>:</h4>
+<p>So we do not have to reinvent the wheel</p>
+
+
+
+<a name="275570749"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275570749" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275570749">(Mar 16 2022 at 20:12)</a>:</h4>
+<p>Neat! Can you write out a full example for the search query? I'm not 100% sure I follow the chaining, and whether/where composite search parameters are needed</p>
+
+
+
+<a name="275571333"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275571333" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275571333">(Mar 16 2022 at 20:14)</a>:</h4>
+<p>I will prepare working notebook for aidbox tomorrow with sql  - ok?</p>
+
+
+
+<a name="275571562"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275571562" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275571562">(Mar 16 2022 at 20:16)</a>:</h4>
+<p>Search query is hypothetical  - means we can "join" concept by code - but maybe implemented</p>
+
+
+
+<a name="275571962"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275571962" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275571962">(Mar 16 2022 at 20:20)</a>:</h4>
+<p>Thanks! I'm looking to understand how this would appear on the search API (I mean, the underlying SQL is great too but it doesn't quite answer my question).</p>
+
+
+
+<a name="275571993"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275571993" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275571993">(Mar 16 2022 at 20:20)</a>:</h4>
+<p>Example syntax is fine if you identify it as such.</p>
+
+
+
+<a name="275582471"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275582471" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275582471">(Mar 16 2022 at 21:53)</a>:</h4>
+<p><span class="user-mention" data-user-id="191315">@Josh Mandel</span> Yes, I've used the filters from <a href="https://www.hl7.org/fhir/rxnorm.html">https://www.hl7.org/fhir/rxnorm.html</a>, and in general I would expect any filter to be usable since a design goal would be that all expressions are transformable into an explicit <code>ValueSet.compose</code> element.  However the expressions above don't depend on subsumption wrt properties, only wrt the concepts themselves.</p>
+<p>Wrt syntax, SNOMED's ECL was modelled on its post coordination syntax which makes a lot of sense in that domain. It's also quite succinct.<br>
+It doesn't quite seamlessly translate to FHIR CodeSystems since it distinguishes concept properties and concept relationships (properties that reference other concepts in the same CodeSystem), distinguishes concept properties from designation properties (hence the <code>{{C</code> and <code>{{D</code> parts of the syntax), and doesn't cover all the FHIR datatypes (eg Coding).<br>
+We could probably define a prettier syntax, but coming from SNOMED-land, I like the idea of building something that's aligned with an existing domain-oriented syntax because there's less to learn.  It's also an implementation-independent syntax (i.e., doesn't leak out relational table design elements).</p>
+<p>Wrt <span class="user-mention" data-user-id="191318">@nicola (RIO/SS)</span> 's point of new syntaxes, ad hoc or not, his approach depends on a new Resource and associated additional extensions, which could also be labelled ad hoc :-). I'm not sure why, in such an approach, you'd need to introduce extensions to carry the rxnorm attrs; I would have expected generic attrs to be a fundamental aspect of such a Concept Resource?<br>
+However, use still requires some way to "chain" through a code/concept.  This pushes a pile of implementation logic into the FHIR Server itself, rather than leaving it all in the terminology subsystem sitting in an existing re-usable abstraction (ValueSet).</p>
+
+
+
+<a name="275585692"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275585692" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275585692">(Mar 16 2022 at 22:31)</a>:</h4>
+<p><span class="user-mention" data-user-id="191503">@Robert McClure</span> wrt TQL, I think the advantage here is that we'd be looking at an 80% approach that doesn't try to get at every possible underlying aspect of a code system, but rather covers off the core parts that are exposed using <strong>existing ValueSet functionality</strong>.  This would be my argument as to why this might get traction where other things remain niche / proprietary -- an open syntax that compiles down to existing standard capability that could even be provided as part of the standard libraries.</p>
+
+
+
+<a name="275589728"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275589728" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275589728">(Mar 16 2022 at 23:20)</a>:</h4>
+<p>Really enjoyed reading examples at  <a href="https://confluence.ihtsdotools.org/display/DOCECL/6.+Examples">https://confluence.ihtsdotools.org/display/DOCECL/6.+Examples</a> (in lieu of the spec itself ;-)). The main difference I see for terminologies like RxNorm is that the detailed relationship types aren't modeled as concepts in the terminology (whereas in SCT they are), but that's not any great impediment to reusing the syntax.</p>
+
+
+
+<a name="275590944"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275590944" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275590944">(Mar 16 2022 at 23:37)</a>:</h4>
+<p>I'm quite interested in how well a "regular FHIR server" (as opposed to a specialty terminology server) could join together clinical resources with (standardized / consistently modeled) concept tables to support this kind of thing. Of course, maybe the answer is "send the terminology piece to a terminology subsystem to resolve it into a set of concepts first" -- but with this approach you don't have the advantage of query optimization across the clinical and terminology data. </p>
+<div class="spoiler-block"><div class="spoiler-header">
+</div><div class="spoiler-content" aria-hidden="true">
+<p>Is that at all clear? What I mean is: some queries match a tiny number of clinical data rows and a huge number of terminology rows, like</p>
+<div class="codehilite"><pre><span></span><code>Observation?_id=123&amp;code:tx=(*: {term=&quot;*e*&quot;})
+</code></pre></div>
+
+<p>which asks whether observation 123 has a concept with any description containing "e".</p>
+<p>Whereas other queries match a huge number of clinical data rows and a tiny number of terminology rows, like </p>
+<div class="codehilite"><pre><span></span><code>Observation?code:tx=(*: {{term=&quot;*excited*&quot;})
+</code></pre></div>
+
+<p>which asks for any Observation that has a concept with a description containing "excited".</p>
+</div></div>
+
+
+
+<a name="275591145"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275591145" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275591145">(Mar 16 2022 at 23:40)</a>:</h4>
+<p>Since SCT now has non-concept relationships, and ECL supports those. I think that aligns very well with the kinds of properties you'd see in RxNorm.</p>
+
+
+
+<a name="275591446"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275591446" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275591446">(Mar 16 2022 at 23:45)</a>:</h4>
+<p>I guess I am assuming that 1. a "regular FHIR Server" already needs to support queries like <code>Observation.code:in=http://example.com/SomeValueset</code> and this proposal would leverage that capability, 2. if it doesn't, then both approaches require a bunch of server-side implementation.  It would not be hard for a server to recognise a trailing <code>?vcl=...</code> in a valueset URI and do local evaluation as an optimisation step (both approaches would require the raw terminology data to be available in the data server).</p>
+
+
+
+<a name="275591857"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275591857" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275591857">(Mar 16 2022 at 23:51)</a>:</h4>
+<p>In terms of optimisation, the FHIR (data) server can always (internally) compute the unique set of codes for <code>Observation.code</code> (which will be much smaller than the # unique Observation records) and then dynamically compose a ValueSet with these codes and the (compiled) VCL expression as an intersection resulting in a single call to the terminology server, and avoids the blowout in # of codes matching the unconstrained query.  Also, if desired/needed, the set of unique <code>Observation.code</code> values could be maintained incrementally rather than being computed on-demand.</p>
+
+
+
+<a name="275591865"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275591865" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275591865">(Mar 16 2022 at 23:51)</a>:</h4>
+<p>Thanks for the info on SCT non concept relationships!</p>
+<p>For (1) some servers do ":in" today but don't have all the data or infrastructure in place to support more sophisticated queries.  I'm thinking that the more we can support "raw terminology data" (with properties and relationships packaged and distributed in ways that facilitate querying "at the edge") in all kinds of FHIR services, the more choices server developers have about how to optimize.</p>
+
+
+
+<a name="275592013"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275592013" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275592013">(Mar 16 2022 at 23:53)</a>:</h4>
+<p>I also agree with all the suggestions you're making about how to optimize the communication between a data server and a terminology server, when that architecture is in play. These seem like excellent techniques to have in the bag of tricks.</p>
+
+
+
+<a name="275592319"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275592319" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275592319">(Mar 16 2022 at 23:58)</a>:</h4>
+<p>I think a key aspect is that if a server also has the relevant terminology data available locally (even for only some code systems), this approach is not really a stretch -- I'd probably limit the syntax to non-nested constraints in the first instance (since, as you say, most terminologies don't have intra-code system relationships), and then it would be pretty straightforward to turn into SQL with the main requirement being that you have parent-child edge and path (transitive closure) tables available if the code system has hierarchy.</p>
+
+
+
+<a name="275592439"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275592439" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275592439">(Mar 16 2022 at 23:59)</a>:</h4>
+<p>Yes! This is exactly why I'm excited about the idea. It should not be overly ambitious and opens up quite a lot of expressive capability.</p>
+
+
+
+<a name="275602939"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275602939" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275602939">(Mar 17 2022 at 03:08)</a>:</h4>
+<p>One other bit of semantics for RxNorm: relationships are described between atoms asserted by various sources and it would make sense to surface the "source" as a restriction on attribute queries. I.e. a way to request not just "any concept with property x having value y" but more specifically, "any concept with property x having value y as asserted by source z". (Syntactically this could use an optional "sab=" clause similar to the description filters in ECL taking optional clauses like "lang=" in <code>{{term="", lang=""}}</code>. But does FHIR CodeSystem have a way to assert such properties of properties?)</p>
+
+
+
+<a name="275663989"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275663989" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275663989">(Mar 17 2022 at 14:48)</a>:</h4>
+<p>hah!  FHIR Tx has a way to return subproperties (I think of them as grouped properties), but currently no way in the FHIR CodeSystem resource to specify such things.<br>
+SCT has them (for historical reasons its call "role grouping") and a server is supposed to know how to do this stuff (since its accepted that their isnt' a FHIR CodeSystem rendering of SCT).</p>
+<p>I'm not really across RxNorm details, but I don't recall the rxnorm page saying anything about grouping a set of properties with another that is the source of their assertion.  However, if one did follow this path, then ECL has syntax to suit with <code>{</code> and '}' to group the properties together (SCT and thus ECL doesn't actually care what the properties are "sub" of since it's always the same.</p>
+<p>This property grouping idea also comes up in meds terminologies with multi-ingredient drugs and their associated ingredient strengths; you can't just say this thing has codeine and paracetamol and strength 50mg and strength 200mg.  To resolve this in a FHIR CodeSystem for dm+d in the UK, Ontoserver (6.7.0, due end of the month) uses some extensions to capture the grouping .  Hopefully in R5 we'll be able to add this as a 1st class capability.</p>
+<p>So, these are not really properties of properties since that would be more like an association class, but it does result in a similar capability.</p>
+<p>Conceptually it is like this:</p>
+<div class="codehilite" data-code-language="JSON"><pre><span></span><code><span class="p">{</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"123"</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"display"</span><span class="p">:</span><span class="w"> </span><span class="s2">"p 200mg + c 50mg"</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"property"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"status"</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"active"</span><span class="w"></span>
+<span class="w">  </span><span class="p">},{</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"prop"</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"subproperty"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ingredient"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"codeine"</span><span class="w"></span>
+<span class="w">    </span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"unit"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"mg"</span><span class="w"></span>
+<span class="w">    </span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"strength"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"valueDecimal"</span><span class="p">:</span><span class="w"> </span><span class="mi">50</span><span class="w"></span>
+<span class="w">    </span><span class="p">}]</span><span class="w"></span>
+<span class="w">  </span><span class="p">},{</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"prop"</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"subproperty"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ingredient"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"paracetamol"</span><span class="w"></span>
+<span class="w">    </span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"unit"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"mg"</span><span class="w"></span>
+<span class="w">    </span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"strength"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"valueDecimal"</span><span class="p">:</span><span class="w"> </span><span class="mi">200</span><span class="w"></span>
+<span class="w">    </span><span class="p">}]</span><span class="w"></span>
+<span class="w">  </span><span class="p">}]</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre></div>
+<p>and in your case you'd have each "x = y, source = z" assertion grouped in a subproperty.  If a source was making multiple assertions then they'd all be in the same subproperty group.</p>
+
+
+
+<a name="275665981"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/275665981" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#275665981">(Mar 17 2022 at 15:00)</a>:</h4>
+<p>Very interesting. Yeah, the UMLS (and RxNorm) have a top level notion of Concepts and Atoms, and the question is whether FHIR can or should account for atoms and their sources. Will try to make some time to play with all this.</p>
+
+
+
+<a name="276112459"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/276112459" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#276112459">(Mar 21 2022 at 20:56)</a>:</h4>
+<p>It struck me that one other DSL we have is FHIRpath, and it could conceivably be bent into shape for things like (newlines added for clarity)</p>
+<div class="codehilite"><pre><span></span><code>GET MedicationRequest?code:tx=
+  Concept
+  .where(terms.IN.matches(&#39;acetaminophen&#39;))
+  .select(rels.ingredient_of)
+  .select(rels.constitutes)
+</code></pre></div>
+<p>i.e. "tell me all meds that have ingredients with tylenol in them", or whatever. Basic point being: there's a tree of Concepts each with terms, attrs, and rels as defined in an underlying terminology.</p>
+<p><strong>I made a quick demo of this at <a href="https://termquery-demo.fhir.me">https://termquery-demo.fhir.me</a> </strong> (note: this loads like 30MB into your browser and will probably run jankily because I have sqlite running in the UI thread ;-) -- you can link to a query by appending <code>#</code>).</p>
+<p>Bottom line: this was a fun diversion and FHIRpath has some interesting expressive capabilities here; it's approachable for the things it covers, but nowhere near as sophisticated as SNOMED ECL.</p>
+
+
+
+<a name="276113037"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/276113037" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#276113037">(Mar 21 2022 at 21:00)</a>:</h4>
+<p>Looking back at this thread, I think the "low hanging fruit" would be:</p>
+<ol>
+<li>A publication format that makes it easier for servers to load common vocabularies and make use of terms, attributes, and relationships from them</li>
+<li>Maybe a couple of standard modifiers on the token search param for simple jobs, like <code>:tx-term</code> that searches a token's terminology entries across all official terms, like <code>MedicationRequest?code:tx-term=acetaminophen</code>, and could specify prefixes to lock down term types or languages, like <code>code:tx-term=BN|Tylenol</code>. And a similar concept for attributes like <code>code:tx-attr=RXTERM_FORM|Tab</code> to look for tablets.</li>
+</ol>
+
+
+
+<a name="276140907"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/276140907" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#276140907">(Mar 22 2022 at 03:49)</a>:</h4>
+<ol>
+<li>Isn't CodeSystem itself already such a publication format?  It is, in fact, what we use.</li>
+</ol>
+
+
+
+<a name="276141002"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/276141002" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#276141002">(Mar 22 2022 at 03:50)</a>:</h4>
+<ol start="2">
+<li>Interesting, that would be a very stripped-down semantics.  Perhaps something modelled on <code>ValueSet.compose.include.filter</code> like <code>code:filter=[name].[op].[value]</code> leading to <code>code:filter=RXTERM_FORM.=.Tab</code>(although this doesn't really address language-specific matching as you've suggested, and I'm not sure whether you can do that in a ValueSet compose anyway)</li>
+</ol>
+
+
+
+<a name="276143632"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/276143632" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#276143632">(Mar 22 2022 at 04:53)</a>:</h4>
+<p>(1) I haven't seen how to publish large terminologies in CodeSystem with terms, attributes, and relationships included. It's possible this works; does someone host RxNorm, LOINC, and SNOMED in this format? (I was thinking formats that allow streaming processing would be preferable, but I don't think it's a strict requirement. <a href="http://tx.fhir.org/snomed/900000000000207008-20200731/?type=snomed&amp;id=*">http://tx.fhir.org/snomed/900000000000207008-20200731/?type=snomed&amp;id=*</a> seems to be broken at the moment and <a href="http://tx.fhir.org/r4/CodeSystem/snomedct?_format=json">http://tx.fhir.org/r4/CodeSystem/snomedct?_format=json</a> doesn't include concepts)</p>
+<p>(2) it seems like detailed terms might just be absent from the FHIR models, or they're intended to be treated as a kind of property?  The examples from (1) would help to clarify.</p>
+
+
+
+<a name="276842566"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/276842566" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Kai Kewley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#276842566">(Mar 28 2022 at 08:39)</a>:</h4>
+<p>This SNOMED example from tx shows terms, attributes and hierarchical relationships <a href="https://tx.fhir.org/snomed/900000000000207008-20210731/?type=snomed&amp;id=780128004">https://tx.fhir.org/snomed/900000000000207008-20210731/?type=snomed&amp;id=780128004</a><br>
+And a LOINC code with terms, attributes and categories <a href="https://tx.fhir.org/loinc/en-US?srch=60048-6">https://tx.fhir.org/loinc/en-US?srch=60048-6</a><br>
+Doesn't look like RxNorm is on tx.</p>
+
+
+
+<a name="276857132"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/276857132" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#276857132">(Mar 28 2022 at 11:13)</a>:</h4>
+<p><span class="user-mention" data-user-id="192855">@Kai Kewley</span>  RxNorm version 20210208 is available on <a href="http://tx.fhir.org">tx.fhir.org</a> (<a href="http://tx.fhir.org/r4/CodeSystem/$lookup?system=http://www.nlm.nih.gov/research/umls/rxnorm&amp;code=723">example</a>).  Since it's now over a year old it needs to be refreshed (I'll plan to do that as soon as I have a chance).</p>
+
+
+
+<a name="276872029"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/276872029" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#276872029">(Mar 28 2022 at 13:21)</a>:</h4>
+<p>In the snomed example, It looks like the UI is showing me this information but I don't know how to access it through the API. Is this information about concepts exposed directly? (For example <a href="https://tx.fhir.org/snomed/900000000000207008-20210731/?type=snomed&amp;id=780128004">https://tx.fhir.org/snomed/900000000000207008-20210731/?type=snomed&amp;id=780128004</a> didn't include anything like a "see JSON" link.)</p>
+
+
+
+<a name="276872487"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/276872487" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#276872487">(Mar 28 2022 at 13:25)</a>:</h4>
+<p>Of course there are FHIR servers that load and manage these vocabularies<br>
+My key questions for this thread are:</p>
+<ol>
+<li>Is there a consistent way to distribute them for easy sharing/loading into any FHIR server</li>
+<li>Can the FHIR search API provide ways to surface information from these terminologies in clinical data search</li>
+</ol>
+<p>For (1) I haven't seen this commonly done, and I've made some proposals for discussion</p>
+<p>For (2) I've submitted Jira issues to surface more terminology in information as standard/implicit "filters", but I think additional search modifiers are needed in order to surface these terminology filters in search</p>
+
+
+
+<a name="276936453"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/276936453" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#276936453">(Mar 28 2022 at 21:59)</a>:</h4>
+<p>The problem with (1) is that a SNOMED distribution (RF2 SNAPSHOT) contains a lot more stuff than just the CodeSystem; it contains Reference Sets in various formats, and a whole pile of technical (meta)data that is 99% of the time[*] irrelevant to clinical / runtime use of SNOMED, and only of interest to tool developers supporting SNOMED authoring.</p>
+<p>If you're a TX developer and want to support SNOMED properly (which you should), then you need to implement the implicit ValueSets, understand grouped relationships (subproperties in FHIR) and ECL, etc.  For this you need the RF2 distribution.<br>
+If you're only going to do a limited implementation, then a transform similar to the approach you did for LOINC with sqlite into a FHIR CodeSystem will get you some of the way there (subproperties would require an Extension, as we've done here: <a href="https://ontoserver.csiro.au/docs/6/ext-subproperties-cs.html">https://ontoserver.csiro.au/docs/6/ext-subproperties-cs.html</a>).</p>
+<p>[*] made up stat</p>
+
+
+
+<a name="277081674"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277081674" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277081674">(Mar 30 2022 at 00:37)</a>:</h4>
+<blockquote>
+<p>I haven't seen how to publish large terminologies in CodeSystem with terms, attributes, and relationships included.</p>
+</blockquote>
+<p><span class="user-mention" data-user-id="191315">@Josh Mandel</span> it's not necessary to actually publish them - the existing terminology servers make the data available as if they were published (it's an engineering question)</p>
+
+
+
+<a name="277081686"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277081686" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277081686">(Mar 30 2022 at 00:37)</a>:</h4>
+<p>the problem with all this approach is that we can do all sorts of super clever things on the terminology server side, but a search like this:</p>
+
+
+
+<a name="277081740"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277081740" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277081740">(Mar 30 2022 at 00:38)</a>:</h4>
+<p><code>GET MedicationRequest?code:tx={some clever syntax}&amp;date=2022-01-01</code></p>
+
+
+
+<a name="277081783"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277081783" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277081783">(Mar 30 2022 at 00:39)</a>:</h4>
+<p>is really hard for a server. it needs to turn whatever syntax this :tx thing is into a list of codes - and the list may be infinite in size - and then join that in to the rest of the criteria</p>
+
+
+
+<a name="277081828"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277081828" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277081828">(Mar 30 2022 at 00:40)</a>:</h4>
+<p>that's why the syntax only supports value set - :in.</p>
+
+
+
+<a name="277081844"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277081844" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277081844">(Mar 30 2022 at 00:40)</a>:</h4>
+<p>so that servers can line this up in advance, and perform whatever optimisations they believe are needed in order to support this search</p>
+
+
+
+<a name="277081871"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277081871" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277081871">(Mar 30 2022 at 00:41)</a>:</h4>
+<p>None of this thread has convinced me that this is not an unreasonable trade-off. Particularly given that very few servers support :in as it is. Significantly increasing the complexity isn't going to help</p>
+
+
+
+<a name="277081922"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277081922" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277081922">(Mar 30 2022 at 00:42)</a>:</h4>
+<p>I didn't see anything in your thinking that couldn't be done with value sets as they are.</p>
+
+
+
+<a name="277081980"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277081980" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277081980">(Mar 30 2022 at 00:43)</a>:</h4>
+<p>my own server maintains a join table in the background, and a robot that iterates through the observed codes and the observed value sets asking the terminology server whether the code is a member of the value set using $validate-code, and then it can join across that table as part of it's other queries.</p>
+
+
+
+<a name="277083542"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277083542" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277083542">(Mar 30 2022 at 01:13)</a>:</h4>
+<blockquote>
+<p>is really hard for a server. it needs to turn whatever syntax this :tx thing is into a list of codes - and the list may be infinite in size - and then join that in to the rest of the criteria</p>
+</blockquote>
+<p>Right -- my assertion is that there's a common set of property based search functionality that would enable diverse use cases and could be fueled by publishing data in consistent and reasonably complete format. This pattern could work with or without a dedicated/distinct "terminology server".</p>
+<p>Effectively these capabilities are <em>shy</em> of the needs that terminilogy developers might have, but similar to the use cases we already know how to index using search parameters on regular old FHIR resources. Indeed we are seeing groups like DaVinci Drug Formulary inventing FHIR resources just for this purpose, because there's no reliable access to terminology properties in search.</p>
+<p>To be clear, I quickly swung away from proposing a very expressive search functionality like SNOMED ECL, in favor of proposals that are based on simple property filters.</p>
+
+
+
+<a name="277083729"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277083729" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277083729">(Mar 30 2022 at 01:17)</a>:</h4>
+<p>I don't believe that there's a sweet spot</p>
+
+
+
+<a name="277083756"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277083756" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277083756">(Mar 30 2022 at 01:18)</a>:</h4>
+<blockquote>
+<p>None of this thread has convinced me that this is not an unreasonable trade-off. Particularly given that very few servers support :in as it is. Significantly increasing the complexity isn't going to help</p>
+</blockquote>
+<p>I think you have one too many negatives there ;-)</p>
+<p>I'm suggesting that publishing terminology data in an interoperable format that's aligned with fhir's terminology features lowers the implementation bar for servers or anyone else that wants to "do more" with terminologies. The fact that many (most?) severs today don't support <code>:in</code> even ok on simple terminologies is a symptom of the problem, and we should be offering anything we can to give severs pathways to successful implementation.</p>
+
+
+
+<a name="277083791"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277083791" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277083791">(Mar 30 2022 at 01:18)</a>:</h4>
+<p>If there's no sweet spot, do you think we should just encourage IG developers to design more "terminology proxy" resources to index the properties they care about?</p>
+
+
+
+<a name="277083808"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277083808" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277083808">(Mar 30 2022 at 01:19)</a>:</h4>
+<blockquote>
+<p>for servers or anyone else that wants to "do more" with terminologies. The fact that many (most?) severs today don't support :in even ok on simple terminologies is a symptom of the problem</p>
+</blockquote>
+<p>yes, though at least part of it is legacy, and around division of labor on the server and the dev teams</p>
+
+
+
+<a name="277083867"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277083867" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277083867">(Mar 30 2022 at 01:20)</a>:</h4>
+<p>your minimal syntax will never be enough until it's too much. You need at least intersections and unions of filters</p>
+
+
+
+<a name="277085830"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277085830" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277085830">(Mar 30 2022 at 01:55)</a>:</h4>
+<p>So again, do we just embrace/encourage the use of domain specific resources to act as termination caches (per Da Vinci Drug Formulary)? They don't seem to require intersection or union FWIW.</p>
+
+
+
+<a name="277085963"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277085963" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277085963">(Mar 30 2022 at 01:58)</a>:</h4>
+<p>not generally, though I could speak in favour of that particular approach. For the big terminologis we will inevitably define resources</p>
+<p>Rxnorm = MedicationKnowledge<br>
+LOINC = ObservationDefinition<br>
+SCT (Clinical arm) = ConditionDefinition</p>
+<p>you can build a set of the resources from the terminology, and there's reasons why that's a solid arrangement, since everyone has their own formulary, observables, and condition predicates that build on and extend beyond the underlying code systems</p>
+
+
+
+<a name="277086006"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277086006" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277086006">(Mar 30 2022 at 01:58)</a>:</h4>
+<p>I have spoken on this repeatedly and walked though the logic with, for instance, NLM RxNorm team</p>
+
+
+
+<a name="277086025"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277086025" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277086025">(Mar 30 2022 at 01:59)</a>:</h4>
+<p>but that doesn't mean we are generally in favor of it, or that I agree with what the project has done</p>
+
+
+
+<a name="277086273"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277086273" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277086273">(Mar 30 2022 at 02:01)</a>:</h4>
+<p>Hmm, I'm not sure I understand your position. But I'm confident that not every terminology will fit neatly into these resource types (e.g., your parenthetical on SNOMED above), so we'll have more and more resources and profiles to contend with as we travel down this path.</p>
+
+
+
+<a name="277086378"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277086378" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277086378">(Mar 30 2022 at 02:03)</a>:</h4>
+<p>yes agree with that</p>
+
+
+
+<a name="277086522"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277086522" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277086522">(Mar 30 2022 at 02:06)</a>:</h4>
+<p>In any case, I have more humility about this topic than I'm letting on here :) I just want to make sure we're giving FHIR servers (and their users) a chance to take advantage of the incredible amount of knowledge that gets poured into terminology development.</p>
+
+
+
+<a name="277086543"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277086543" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277086543">(Mar 30 2022 at 02:06)</a>:</h4>
+<p>going back to the start of the thread... they created a 'FormularyDrug' resource - though why they wouldn't use that resources we already had defined, I don't know. I hope that's been discussed with Pharmacy WG ( <a class="stream" data-stream-id="179249" href="/#narrow/stream/179249-Medication">#Medication</a>).</p>
+<p>But I did want to ask back when I read the start of the thread: why do you think that the formulary is limited to RxNorm? that seems like a clear problem in your approach to me</p>
+
+
+
+<a name="277086654"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277086654" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277086654">(Mar 30 2022 at 02:09)</a>:</h4>
+<p>Formulary Drug is a profile on Medication Knowledge (looking back: I did call this out when introducing the topic, but I can see it may have gotten lost) --  so that's reusing the existing resource, just with use case specific profiles, no?</p>
+
+
+
+<a name="277086682"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277086682" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277086682">(Mar 30 2022 at 02:09)</a>:</h4>
+<p>Re: RxNorm, it doesn't <em>have to be limited</em> but it currently <em>is</em> specified that way.</p>
+
+
+
+<a name="277086745"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277086745" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277086745">(Mar 30 2022 at 02:10)</a>:</h4>
+<p><a href="https://build.fhir.org/ig/HL7/davinci-pdex-formulary/StructureDefinition-usdf-FormularyDrug-definitions.html#MedicationKnowledge.code.coding:semantic-drug">https://build.fhir.org/ig/HL7/davinci-pdex-formulary/StructureDefinition-usdf-FormularyDrug-definitions.html#MedicationKnowledge.code.coding:semantic-drug</a></p>
+
+
+
+<a name="277086809"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277086809" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277086809">(Mar 30 2022 at 02:12)</a>:</h4>
+<p>Specifically they want to ensure that each formulary item is <em>indexed for search</em> based on RxNorm SBD/SCD/BPCK/GPCK designations as well as dose form.</p>
+
+
+
+<a name="277087033"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277087033" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277087033">(Mar 30 2022 at 02:17)</a>:</h4>
+<p>so can't use local drugs?</p>
+
+
+
+<a name="277087048"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277087048" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277087048">(Mar 30 2022 at 02:18)</a>:</h4>
+<p>so I don't think it's that bad an approach then</p>
+
+
+
+<a name="277087910"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277087910" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277087910">(Mar 30 2022 at 02:35)</a>:</h4>
+<p>I believe that's changing.  FormularyDrug isn't about the Medication, it's about the formulary information for a drug for a particular type of insurance.  It's a "joining" structure.</p>
+
+
+
+<a name="277090140"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277090140" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277090140">(Mar 30 2022 at 03:17)</a>:</h4>
+<p>The current design has a FormularyItem specifying the policy details (coverage, price tiers, etc), and that points to a FormularyDrug that acts as a search index for terms/properties that exist in RxNorm, to facilitate querying for FormularyItems.</p>
+
+
+
+<a name="277093576"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277093576" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277093576">(Mar 30 2022 at 04:31)</a>:</h4>
+<p>that's... not what I expected. (I was going to say weird, but that's not the same)</p>
+
+
+
+<a name="277738705"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277738705" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Davera Gabriel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277738705">(Apr 04 2022 at 14:27)</a>:</h4>
+<p>Hello All ...  We have discussed this thread in both the Vocab Working group and TSMG calls over the past few days and agree with <span class="user-mention" data-user-id="191503">@Robert McClure</span> that this would be a very good breakout topic for the upcoming May Connectathon.  I am eyeing 7-8p Tuesday  5/3 to schedule this discussion.  <span class="user-mention" data-user-id="191316">@Grahame Grieve</span> <span class="user-mention" data-user-id="191343">@Michael Lawley</span> <span class="user-mention" data-user-id="191315">@Josh Mandel</span> <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>  are you gentlemen available to attend a breakout on this topic at that time?  Please advise &amp; Thanks!  Davera</p>
+
+
+
+<a name="277742886"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277742886" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277742886">(Apr 04 2022 at 14:55)</a>:</h4>
+<p>Tuesday night doesn't work well for me.  I <em>might</em> be able to make the first 30 minutes.</p>
+
+
+
+<a name="277756151"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277756151" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Davera Gabriel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277756151">(Apr 04 2022 at 16:20)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191320">Lloyd McKenzie</span> <a href="#narrow/stream/179202-terminology/topic/Terminology-powered.20search/near/277742886">said</a>:</p>
+<blockquote>
+<p>Tuesday night doesn't work well for me.  I <em>might</em> be able to make the first 30 minutes.</p>
+</blockquote>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> would the prior hour work for you?  Will also see what our other discussion members have to say...</p>
+
+
+
+<a name="277756982"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277756982" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277756982">(Apr 04 2022 at 16:25)</a>:</h4>
+<p>It would work better.</p>
+
+
+
+<a name="277819813"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/277819813" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#277819813">(Apr 05 2022 at 02:19)</a>:</h4>
+<p>That would be 8am UTC+10 I think which works for me</p>
+
+
+
+<a name="278483239"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/278483239" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Davera Gabriel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#278483239">(Apr 10 2022 at 18:40)</a>:</h4>
+<p>Hello All:<br>
+I have scheduled a breakout session in the May Connectathon Terminology Services track on Tuesday 5/2, from 6-7:30p entitled "Terminology Queries &amp; Representation Syntax" and have tagged <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> <span class="user-mention" data-user-id="191343">@Michael Lawley</span> <span class="user-mention" data-user-id="191315">@Josh Mandel</span> and <span class="user-mention" data-user-id="191316">@Grahame Grieve</span> as leading the discussion. </p>
+<p>The following is the session description: "The need to expose a common general hierarchical and filter-based query syntax for use in defining value sets and performing inline queries has come up yet again as evidenced by a recent Zulip chat in the Terminology stream. This session aims to provide a real-time discussion of the topic, and identify the next steps to resolution."  </p>
+<p>Please suggest any alternative text for the description &amp; If I have abused your time / schedule <span class="user-mention" data-user-id="191316">@Grahame Grieve</span> &amp; <span class="user-mention" data-user-id="191315">@Josh Mandel</span> by indicating you will help led this discussion - my apologies, and I'm happy to remove this designation.</p>
+<p>Does this work for everyone?<br>
+Cheers<br>
+Davera</p>
+
+
+
+<a name="278486616"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/278486616" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#278486616">(Apr 10 2022 at 19:53)</a>:</h4>
+<p>I'm not sure I'm essential for the discussion, but will do my best to be there.</p>
+
+
+
+<a name="278488243"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/278488243" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Davera Gabriel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#278488243">(Apr 10 2022 at 20:32)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191320">Lloyd McKenzie</span> <a href="#narrow/stream/179202-terminology/topic/Terminology-powered.20search/near/278486616">said</a>:</p>
+<blockquote>
+<p>I'm not sure I'm essential for the discussion, but will do my best to be there.</p>
+</blockquote>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>  I do not have to list you as a lead if you'd rather not I not do that :)</p>
+
+
+
+<a name="278493359"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/278493359" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#278493359">(Apr 10 2022 at 22:35)</a>:</h4>
+<p>Er, Tue <em>3rd</em> May?</p>
+
+
+
+<a name="278502793"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/278502793" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#278502793">(Apr 11 2022 at 02:31)</a>:</h4>
+<p>And what time zone?</p>
+
+
+
+<a name="278503306"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Terminology-powered%20search/near/278503306" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Terminology-powered.20search.html#278503306">(Apr 11 2022 at 02:42)</a>:</h4>
+<p>I've been working on "Eastern" (and hoping that no daylight saving changes happen before 3/5 (or 5/3 ;-)</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

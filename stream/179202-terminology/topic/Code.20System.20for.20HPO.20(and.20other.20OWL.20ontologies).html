@@ -1,0 +1,230 @@
+---
+layout: page
+title: "FHIR Chat  · Code System for HPO (and other OWL ontologies) · terminology"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/index.html">terminology</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html">Code System for HPO (and other OWL ontologies)</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153938513"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153938513" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alejandro Metke <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153938513">(Feb 19 2018 at 05:49)</a>:</h4>
+<p>I noticed that in the list of FHIR code systems, the human phenotype ontology (HPO) is not mentioned. We think HPO is going to be used frequently enough in the genomics space to warrant having a special page describing how to use it in FHIR, just like SNOMED CT or LOINC. How would one go about creating such a page?</p>
+<p>Also, HPO is authored and distributed in OWL format and we currently support it in Ontoserver through an external transformation that takes an OWL file as input and produces a Bundle with a code system and several value sets as output. I think it would be really useful to standardise this transformation so it is easy to support any OWL-based ontology in a FHIR terminology server. </p>
+<p>We have written an initial version and we would like to get some feedback. We mapped the FHIR code system url to the ontology IRI and FHIR concept code to the full IRI of the OWL class. So an HPO code, for example would have system <a href="http://purl.obolibrary.org/obo/hp.owl" target="_blank" title="http://purl.obolibrary.org/obo/hp.owl">http://purl.obolibrary.org/obo/hp.owl</a> and code <a href="http://purl.obolibrary.org/obo/HP_0040091" target="_blank" title="http://purl.obolibrary.org/obo/HP_0040091">http://purl.obolibrary.org/obo/HP_0040091</a>.</p>
+<p>The main issue we found is the mismatch in terms of modularity supported by OWL ontologies and FHIR code systems. FHIR code systems do not support modularity, while OWL ontologies support it through an import mechanism. For example, HPO imports 11 additional ontologies. Our transformation creates codes for all the concepts from every ontology in the imports closure and adds them to the target code system. Also, a value set is created for the main ontology (excluding its imports) and for every imported ontology. This allows preserving the correct hierarchy in the code system (because some elements in the hierarchy might come from the imported ontologies) and at the same time allows restricting search to just the main ontology (or any of the imported ontologies) by using the value sets.</p>
+<p>The main issue with this approach is that the imported ontologies might be important code systems in their own right (for example, HPO imports the Gene Ontology). These could be imported again but you will end up with some concepts represented multiple times in different code systems, for example the concept <a href="http://purl.obolibrary.org/obo/GO_0003674" target="_blank" title="http://purl.obolibrary.org/obo/GO_0003674">http://purl.obolibrary.org/obo/GO_0003674</a> would end up in both the HPO code system and the GO code system.</p>
+<p>Any thoughts?</p>
+
+
+
+<a name="153938583"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153938583" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153938583">(Feb 19 2018 at 14:46)</a>:</h4>
+<p>Defining a page for a code system just requires a change proposal (click on the "propose a change" link at the bottom of the page).  In terms of imports, we generally want a concept from one code system to <em>only</em> be associated with the 'system' URL for that one code system.  Otherwise we lose computable interoperability.  You'll have to explain more about how imports work in HPO and why they're necessary for us to strategize about how to accomplish what's needed with FHIR.</p>
+
+
+
+<a name="153938719"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153938719" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alejandro Metke <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153938719">(Feb 19 2018 at 23:02)</a>:</h4>
+<p>Thanks <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>. I understand why you would want a concept from one code system to only be associated with one 'system' URL.</p>
+<p>I'll try to explain with a very simple example how imports in OWL work and why they are needed. Imports are a mechanism used to include external ontologies that you might need in your ontology. They are sort of an #include in C. </p>
+<p>Let's say an ontology <em>bar</em> defines the concepts B, C and D, and also declares the axioms C [ B and D [ C (i.e., C is a subclass of B, ...). Our ontology <em>foo</em> defines concepts A and E and needs concepts B and D. It also declares the axioms B [ A and E [ D.</p>
+<p>If B and D are redeclared in <em>foo</em> (or taken from <em>bar</em> without the other axioms) then the resulting hierarchy would look like this:</p>
+<div class="codehilite"><pre><span></span>__T__
+|   |
+A   D
+|   |
+B   E
+</pre></div>
+
+
+<p>However, if <em>bar</em> is imported into <em>foo</em>, then the hierarchy would look like this:</p>
+<div class="codehilite"><pre><span></span>T
+|
+A
+|
+B
+|
+C
+|
+D
+|
+E
+</pre></div>
+
+
+<p>This has obvious implications in both rendering of the code system and searching using subsumption.</p>
+<p>The other issue here is related to namespaces. If you redeclare B and D in <em>foo</em> their URIs would be foo:B and foo:D, which is not what you want. If you import <em>bar</em> then they would keep their original URI (i.e., bar:B and bar:D).</p>
+<p>The limitation of FHIR code systems is that you can't include the contents of an existing code system in a new code system definition. That is why we decided to go down the path of just importing everything in HPO (including the imported ontologies) into a single code system, but we also had to keep the namespace in the codes to avoid clashes (the short name of an imported concept might clash with the short name in the importing ontology). Ideally we would want the 11 imported ontologies to be standalone FHIR code systems (with codes being just the short name and the URI being the 'system' URL) and then the HPO code system would just import them. The only other option would be to ignore all imported content but this, as the simple example showed, would produce an incorrect hierarchy and would seriously affect subsumption querying.</p>
+
+
+
+<a name="153938721"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153938721" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153938721">(Feb 19 2018 at 23:05)</a>:</h4>
+<p>I don't <em>think</em> there's a rule that says that relationships defined within a CodeSystem need to exclusively be to concepts defined in that code system.  <span class="user-mention" data-user-id="191316">@Grahame Grieve</span> ?</p>
+
+
+
+<a name="153938724"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153938724" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153938724">(Feb 19 2018 at 23:18)</a>:</h4>
+<p>no that's why Coding is an option - so you can refer across code systems, since it's a perfectly reasonable thing to do - as in this case. We don't have any formal 'imports' mechanism though - you just always namespace your references</p>
+
+
+
+<a name="153938730"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153938730" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alejandro Metke <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153938730">(Feb 19 2018 at 23:26)</a>:</h4>
+<p>Thanks, this makes sense. I'll try rewriting the transformation using this approach.</p>
+
+
+
+<a name="153938742"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153938742" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153938742">(Feb 19 2018 at 23:51)</a>:</h4>
+<p>Ok let us know if anything else comes up.</p>
+
+
+
+<a name="153938767"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153938767" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153938767">(Feb 20 2018 at 02:28)</a>:</h4>
+<p>It seems to me that code system supplements might be of some use here.  It could be worth exploring that a bit.</p>
+
+
+
+<a name="153938798"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153938798" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153938798">(Feb 20 2018 at 03:47)</a>:</h4>
+<p>CodeSystem supplements are useful if you want to define relationships between codes from two other systems without interjecting any of your own codes and can't do it as part of either of the systems you're linking.  I didn't get a sense that was the case in Alejandro's scenario.</p>
+
+
+
+<a name="153939152"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939152" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939152">(Feb 20 2018 at 22:22)</a>:</h4>
+<p>One corner case is that it is possible that additional relationships between concepts B and C, defined in the imported code system _bar_, may be introduced by axioms in the importing code system _foo_.  This might then mean that, in the context of _bar_, B doesn't subsume C, but in the context of _foo_ it does.  The challenge then, is that FHIR only allows the context of subsumption tests (eg via $subsumes, $closure, or ?concept:below to be scoped by the original code system of the codes involved.</p>
+
+
+
+<a name="153939154"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939154" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939154">(Feb 20 2018 at 22:25)</a>:</h4>
+<p>no. we never say that the context of subsumption tests is the original code system. you name the context of subsumption directly</p>
+
+
+
+<a name="153939404"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939404" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert McClure <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939404">(Feb 21 2018 at 17:20)</a>:</h4>
+<p>I'm not sure that I agree with Lloyd's interpretation of what is needed here. If Alejandro's foo and bar are defined code systems as he has noted, then it seems to me that foo+bar, with foo as the base system, could be accomplished using a supplement with bar being the supplement. We had assumed most uses of this would be to add properties or relationships, and values, to the base system concepts. What we did not discuss before (that I know of) is how to reference what is essentially a new unified code system when doing operations (such as subsumption) yet we want each of the concepts to maintain their original code system identity. This is complicated because you could certainly argue that "the meaning" of the concept is changing from the original code system meaning to a certainly more nuanced meaning in foo+bar. I suspect what Alejandro wants is to make a new code system that is a base plus N supplements - but perhaps we call that something different, not supplements. <span class="user-mention" data-user-id="191316">@Grahame Grieve</span>  says that subsumption expects "you name the context of subsumption directly" so I'm wondering how that would work here.</p>
+
+
+
+<a name="153939408"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939408" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939408">(Feb 21 2018 at 17:48)</a>:</h4>
+<p>If code system A and B exists and you want to define a new code system C that specifies subsumption relationships with codes from A and B, there's no need to have a supplement.  A supplement would be if you just wanted to establish relationships between codes from A and B without introducing any of your own inbetween.</p>
+
+
+
+<a name="153939415"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939415" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert McClure <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939415">(Feb 21 2018 at 18:19)</a>:</h4>
+<p>Ok, so Alejandro's example fits into the "no need for a supplement" use case based on your definition. But how do you determine that E[A is true in a subsumption query of foo+bar?</p>
+<p><span class="user-mention" data-user-id="191389">@Alejandro Metke</span> Is HPO built so it meets Lloyd's requirement for no "insertion" relationships?</p>
+
+
+
+<a name="153939418"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939418" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939418">(Feb 21 2018 at 18:49)</a>:</h4>
+<p><code>But how do you determine that E[A is true in a subsumption query of foo+bar?</code> - Not sure what this is asking</p>
+
+
+
+<a name="153939422"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939422" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939422">(Feb 21 2018 at 19:11)</a>:</h4>
+<p>It's not very clear to me how code system C would reference the codes in A and B unless it was effectively a supplement to both code systems A and B (which currently we don't allow, as the cardinality of 'supplements' is 0..1).  I've done that before in OWL, using a "bridging" ontology that doesn't define new entities of it own but provides relationships/links between entities in two other ontologies, using the OWL import capability to bring them all together.  I think what Alejandro wants (at least part of it) is similar.  In OWL the subsumption in that case is clear, based on using rdfs:subclassOf (essentially equivalent to "is a").  But with OWL all of the ontologies are using the same underlying constructs (like rdfs:subclassOf).  That isn't necessarily the case across code systems, and if the notion of "is a" doesn't hold across them then you can't (safely) do subsumption.  I guess the question is how much of this do we need and want to be able to do in FHIR code systems.</p>
+
+
+
+<a name="153939441"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939441" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939441">(Feb 21 2018 at 19:34)</a>:</h4>
+<p>the question is how far do we want to go defining standard properties.</p>
+
+
+
+<a name="153939442"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939442" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939442">(Feb 21 2018 at 19:34)</a>:</h4>
+<p>some space to explore here, but I think we can do this in the normative space</p>
+
+
+
+<a name="153939443"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939443" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939443">(Feb 21 2018 at 19:35)</a>:</h4>
+<p>right - we can think about how far we want to go with it</p>
+
+
+
+<a name="153939454"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939454" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939454">(Feb 21 2018 at 19:45)</a>:</h4>
+<p>Supplementing means "adding relationships and properties to codes without defining new codes".  If you're defining a new code, you can define whatever relationships you like with other codes - including codes from other code systems.</p>
+
+
+
+<a name="153939455"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939455" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939455">(Feb 21 2018 at 19:47)</a>:</h4>
+<p>in principle yes but not in practice right now</p>
+
+
+
+<a name="153939462"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939462" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939462">(Feb 21 2018 at 19:56)</a>:</h4>
+<p>Not in practice right now because?</p>
+
+
+
+<a name="153939511"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939511" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert McClure <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939511">(Feb 21 2018 at 22:20)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> By 'But how do you determine that E[A is true in a subsumption query of foo+bar?' I was using Alejandro's syntax from his initial posts. E is-a A only in the foo+bar unified ontology/terminology. I'm guessing that HPO has it's own concepts fo it's like foo. Then there are many <em>bar</em> terminologies added into foo to make foo++ Rob's owl example is not the same.</p>
+
+
+
+<a name="153939516"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939516" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alejandro Metke <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939516">(Feb 21 2018 at 22:54)</a>:</h4>
+<p>I think it should be possible to model HPO (and any other OWL ontology) without using supplements, by specifying the is-a relationships with other code systems using the parent property. I guess the question is, if the hierarchy is modified in the new code system, what happens with operations that do not specify which code system to use? For example, a :below search. This is related to the "choosing the context of the subsumption" issue.</p>
+
+
+
+<a name="153939520"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939520" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939520">(Feb 21 2018 at 23:30)</a>:</h4>
+<p>If you declare A is a C and C is a B, then you can infer that A is a B, but have done so using only a code system (not a supplement).  If you want to directly assert that A is a B without defining code C, then you need a supplement.</p>
+
+
+
+<a name="153939545"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939545" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939545">(Feb 22 2018 at 01:50)</a>:</h4>
+<p><span class="user-mention" data-user-id="191503">@Robert McClure</span> Can you elaborate on what you mean by the "owl example is not the same"?</p>
+
+
+
+<a name="153939551"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939551" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert McClure <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939551">(Feb 22 2018 at 02:07)</a>:</h4>
+<p><span class="user-mention" data-user-id="191405">@Rob Hausam</span> I understood your example as a new code system that was purely the union of other code systems, no new concepts. I understand Alejandro's to be a new code system that <strong>also</strong> added concepts that only exist in the code system that "was created anew." My perspective is that these "new concepts" would have the code system ID that I would say is "the base" and the included code system concepts would have the code system identifier of their source. I think Lloyd is saying that if no "new things" are needed to weave the mess together, you don't need a supplement as long as this "choosing the context of subsumption" can be made clear. Do we have an answer on how that is done?</p>
+
+
+
+<a name="153939552"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939552" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939552">(Feb 22 2018 at 02:09)</a>:</h4>
+<p>Lloyd is saying that if you're introducing new codes and relationships to those codes (even if to external codes), you're a code system, not a supplement.  If you're defining relationships between external codes, you're a supplement.  If you're doing both within a single artifact, you're outside what FHIR currently says is legal.</p>
+
+
+
+<a name="153939553"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939553" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939553">(Feb 22 2018 at 02:10)</a>:</h4>
+<p>(Note that when defining relationships from codes you define to external codes, you may implicitly also infer relationships directly between the external codes.  So long as you don't declare those relationships explicitly, you're still in legal code system territory.)</p>
+
+
+
+<a name="153939555"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Code%20System%20for%20HPO%20%28and%20other%20OWL%20ontologies%29/near/153939555" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Code.20System.20for.20HPO.20(and.20other.20OWL.20ontologies).html#153939555">(Feb 22 2018 at 02:34)</a>:</h4>
+<p>I think the main point may be that the capabilities with OWL "modules" and imports don't match up exactly with what we have available in FHIR.  It's not necessarily the case that they should match up, but we may want to consider if there are features that we should add or better describe how to use.  To Lloyd's point about "doing both within a single artifact", I think that many OWL modules do (or at least are able to do) precisely that - whether or not that should be "legal" in FHIR is something else that could be considered.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

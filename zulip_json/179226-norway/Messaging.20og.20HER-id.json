@@ -1,0 +1,200 @@
+[
+    {
+        "content": "<p>Hei.</p>\n<p>I NAV er vi i en eksperimentell fase for meldingsutveksling i FHIR og vi ser på hvordan vi kan basere profilene på noe av arbeidet rundt <strong>Dialogmelding</strong> og <strong>Tjenestebasert adressering</strong>. I <a href=\"https://github.com/HL7Norway/best-practice/blob/master/docs/messaging.md\">best-practice</a> nevnes messaging, men det ser ikke ut å være noe aktivitet rundt dette og vi prøver oss derfor litt frem på egenhånd.</p>\n<p>En FHIR MessageHeader har få required felt, men den krever en source.endpoint og destionation.endpoint av datatype URL for å identifisere sender og mottaker. For å være i henhold til <em>Tjenestebasert adressering</em> vil det her være fornuftig å bruke en fully-qualified HER-id?<br>\nEksempel:  <code>urn:oid:2.16.578.1.12.4.1.2.131725</code>. </p>\n<p>En slik fully-qualified HER-id er en gyldig URL og kan regnes som en <em>logical URI</em> slik det er beskrevet i speken:</p>\n<blockquote>\n<p>If MessageHeader.source.endpoint and MessageHeader.destination.endpoint, are literal URLs, then they SHOULD identify the addresses to which messages can be delivered. If they are logical URIs (i.e. non-dereferenceable), message delivery intermediaries must know how to deliver the message to the destination application.</p>\n</blockquote>",
+        "id": 251363296,
+        "sender_full_name": "Eirik Myklebost",
+        "timestamp": 1630406037
+    },
+    {
+        "content": "<p>Jeg tenker at endpoint må beskrive en adresse som kan benyttes til å faktisk sende meldingen <span class=\"user-mention\" data-user-id=\"223185\">@Eirik Myklebost</span> . I norsk sammenheng er det en mailadresse til enepunktet (meldingstjener), altså en epostadresse. HERid bør ligge i destination.receiver</p>",
+        "id": 251665872,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1630558437
+    },
+    {
+        "content": "<p>For eksempel slik (fra <a href=\"https://simplifier.net/velferdteknologiskknutepunktr4/vkpmessageheader\">https://simplifier.net/velferdteknologiskknutepunktr4/vkpmessageheader</a>). </p>\n<div class=\"codehilite\"><pre><span></span><code>&quot;receiver&quot;:{\n   &quot;identifier&quot;:{\n      &quot;system&quot;:&quot;urn:oid:2.16.578.1.12.4.1.2&quot;,\n      &quot;value&quot;:&quot;102287&quot;\n   },\n   &quot;display&quot;:&quot;Sykepleietjeneste, pleie- og omsorg&quot;\n}\n</code></pre></div>\n<p>Men VKP har heller ikke løst endpoint utfordringen, det er jo mange tilfeller i Norge hvor receiver er kjent men endepunktet ikke er kjent. Kanskje noe vi burde gi tilbakemelding til HL7 International om? På den andre siden så kan vi jo slå opp endepunktet i Adresseregisteret hvis vi har HERid...</p>",
+        "id": 251666978,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1630559531
+    },
+    {
+        "content": "<p>Jeg har allerede sett på VKP sin MessageHeader og har inntrykk av at den jobber imot standarden. F.eks bruker den <code>sender</code> og <code>destination.receiver</code> istedenfor <code>source.endpoint</code> og <code>destination.endpoint</code> slik standarden legger opp til.  Det virker som dette er gjort med ønske om å bruke datatypen <code>Identifier</code> istedenfor <code>URI</code> til HER-id.</p>\n<p>Ved å bruke sender/receiver elementene må fremdeles source- og destination-endpoint ha verdier, å sette dette til en epost-adresse bare for å \"ha noe der\" bidrar til å gjøre meldingen mer verbose og kompleks.<br>\nVKP MessageHeader er heller ikke gyldig R4. Det ser ut som en blanding mellom STU3 og R4 ved at den fremdeles har <code>MessageHeader.receiver</code> fra STU3.</p>\n<p>Slik jeg tolker standarden er de <strong>valgfrie</strong> elementene <code>sender, enterer, author, responsible, destination.target, destination.receiver</code> ment for auditing og/eller intern-ruting.</p>\n<p>De <strong>påkrevde</strong> elementene<code>source.endpoint</code> og <code>destination.endpoint</code> brukes til å identifisere systemene som kommunikasjonen går mellom. Dette kan enten være en resolvable URL til en FHIR-Server, eller en id til en logisk entitet, slik som HER-id. <a href=\"https://www.hl7.org/fhir/messaging.html#basic\">Ref</a>:</p>\n<blockquote>\n<p>The only requirement for the transfer layer is that requests are sent to a known location and responses are returned to the source of the request. This specification considers the source and destination applications as logical entities, and the mapping from logical source and destination to implementation specific addresses is outside the scope of this specification.</p>\n</blockquote>\n<p>Under <a href=\"https://www.hl7.org/fhir/messageheader.html#search\">søkeparametre til MessageHeader speken</a> er følgende beskrivelser brukt:</p>\n<blockquote>\n<p>| destination-uri | uri | Actual destination address or id |<br>\n| source-uri | uri | Actual message source address or id |</p>\n</blockquote>",
+        "id": 251688477,
+        "sender_full_name": "Eirik Myklebost",
+        "timestamp": 1630574764
+    },
+    {
+        "content": "<p>Litt mer kontekst: Vi ser på mulighetene for å bruke et FHIR RESTful API som broker for meldinger, <a href=\"https://www.hl7.org/fhir/messaging.html#rest\">eksemplene i spesifikasjonen</a> legger opp til bruk av destination og source.</p>\n<blockquote>\n<p>GET [base]/Bundle?message.destination-uri=[rcv]&amp;_lastUpdated=&gt;2015-03-01T02:00:02+01:00</p>\n</blockquote>",
+        "id": 251689793,
+        "sender_full_name": "Eirik Myklebost",
+        "timestamp": 1630575562
+    },
+    {
+        "content": "<p>vkp-MessageHeader ble skrevet som STU3 profil, det ser ut som oversettelsen til R4 har det blitt introdusert en feil i forhold til hvordan receiver ligger i StructureDefinition. Jeg la inn en issue på akkurat dette med receiver tidligere idag, siden den ligger på feil sted i forhold til R4 spec: <br>\n<a href=\"https://github.com/HL7Norway/Velferdsteknologi/issues/12\">https://github.com/HL7Norway/Velferdsteknologi/issues/12</a></p>\n<p><span class=\"user-mention silent\" data-user-id=\"223185\">Eirik Myklebost</span> <a href=\"#narrow/stream/179226-norway/topic/Messaging.20og.20HER-id/near/251689793\">said</a>:</p>\n<blockquote>\n<p>De påkrevde elementenesource.endpoint og destination.endpoint brukes til å identifisere systemene som kommunikasjonen går mellom. Dette kan enten være en resolvable URL til en FHIR-Server, eller en id til en logisk entitet, slik som HER-id. Ref:</p>\n<p>The only requirement for the transfer layer is that requests are sent to a known location and responses are returned to the source of the request. This specification considers the source and destination applications as logical entities, and the mapping from logical source and destination to implementation specific addresses is outside the scope of this specification.</p>\n<p>Under søkeparametre til MessageHeader speken er følgende beskrivelser brukt:</p>\n<p>| destination-uri | uri | Actual destination address or id |<br>\n| source-uri | uri | Actual message source address or id |</p>\n</blockquote>\n<p>I Norsk sammenheng med meldingsformidling over ebXML er det i praksis SMTP adresser som identifiserer endepunktene. Skal man kjøre transporten over andre protokoller blir det selvfølgelig en kutt annen diskusjon.  De aller fleste meldinger i Norge vil ikke ha en resolvable URL som endepunkt men en smtp adresse. eResept benytter vel en SOAP adresse som endepunkt.</p>\n<p>Igjen ved meldingsformidling i Norge er det helt andre krav til hvilken informasjon som skal være med i meldingshode (eller MessageHeader) så sender/receiver elementene er ikke bare til auditing men også til faktisk adressering og sortering av meldingene til riktig mottaker i organisasjonen, så det kan hende at det vil stilles krav om innhold i disse i en eventuell norsk profil. </p>\n<p>Vanlig praksis i dag vil jo ofte være at fagsystemet ikke har noen forhold til de faktiske endepunktene, men adresserer til en organisasjon, da er sender og receiver den beste plasseringen for den informasjonen. Hvis man skal benytte HERid til routing kan jo HERid ligge i MessageHeader.receiver, men i utgangspunktet ville det være mest ryddig om HERid ligger i destination.receiver som en identifier referanse og at en eventuell meldingsformidler fyller inn det faktiske endepunktet (smtp adressen).</p>\n<p>Igjen i Norsk sammenheng er det vanlig at meldingshodet fylles ut av fagsystemet som egentlig ikke har noe forhold til faktiske endepunkt, derfor er det litt uheldig at FHIR standarden setter krav om endepunktadresser i MessageHeader, selv om disse bør ha verdi når faktisk routing skal foregå.</p>",
+        "id": 251699814,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1630581778
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"223185\">Eirik Myklebost</span> <a href=\"#narrow/stream/179226-norway/topic/Messaging.20og.20HER-id/near/251689793\">said</a>:</p>\n<blockquote>\n<p>Litt mer kontekst: Vi ser på mulighetene for å bruke et FHIR RESTful API som broker for meldinger, <a href=\"https://www.hl7.org/fhir/messaging.html#rest\">eksemplene i spesifikasjonen</a> legger opp til bruk av destination og source.</p>\n<blockquote>\n<p>GET [base]/Bundle?message.destination-uri=[rcv]&amp;_lastUpdated=&gt;2015-03-01T02:00:02+01:00</p>\n</blockquote>\n</blockquote>\n<p>Jeg tror dette use-caset ligger litt på siden av mainstream meldingsformidling i Norge idag. Vi bør antakelig tenke oss godt om før vi forsøker å bruke identifikatorer i endepunktsadressene, selv om det er mulig å angi en identifikator som en url. Men som jeg skriver over, en rekke systemer vil ikke ha noe forhold til de faktiske endepunktsadressene og må kanskje fylle ut HER-id i destination.receiver og source.endpoint slik dere foreslår.</p>",
+        "id": 251701114,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1630582632
+    },
+    {
+        "content": "<p>Standarden sier at source.endpoint og destination.endpoint <strong>ikke</strong> trenger å være faktisk adresser, og hvis det er det  tolker jeg det til å være URL til en FHIR Server, ikke en SMTP eller annen protokoll. FHIR messaging legger ingen føringer på hvilken transport protokoll som brukes, og dette er forståelig siden meldingene kan \"overleve\" bruken av protokoll (SMTP, HTTP, MQ, Kafka etc.).</p>\n<blockquote>\n<p>The exact mechanism of transfer is irrelevant to this specification, but may include file transfer, HTTP based transfer, MLLP (HL7 minimal lower layer protocol), MQ series messaging or anything else.</p>\n</blockquote>\n<p>En FHIR melding kan gå via flere mellomlag og forskjellige protokoller på sin vei fra sender til mottaker, f.eks <code>Sender -&gt; Kafka -&gt; HTTP -&gt; MQ -&gt; destination</code>. Det er derfor naturlig å referere til sender og mottaker som logiske entiteter uavhengig av transport protokoll, og metadata relatert til protokollen ligger da i det \"ytre lag\" og ikke embedded i selve FHIR meldingen.</p>",
+        "id": 251703590,
+        "sender_full_name": "Eirik Myklebost",
+        "timestamp": 1630584104
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"223185\">@Eirik Myklebost</span> absolutt, jeg prøver ikke å si at det skal være SMTP</p>",
+        "id": 251704005,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1630584325
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"223185\">Eirik Myklebost</span> <a href=\"#narrow/stream/179226-norway/topic/Messaging.20og.20HER-id/near/251703590\">said</a>:</p>\n<blockquote>\n<p>En FHIR melding kan gå via flere mellomlag og forskjellige protokoller på sin vei fra sender til mottaker, f.eks <code>Sender -&gt; Kafka -&gt; HTTP -&gt; MQ -&gt; destination</code>. Det er derfor naturlig å referere til sender og mottaker som logiske entiteter uavhengig av transport protokoll, og metadata relatert til protokollen ligger da i det \"ytre lag\" og ikke embedded i selve FHIR meldingen.</p>\n</blockquote>\n<p>Enig, og akkurat dette får meg til å tenke at å sette krav om endpoint i MessageHeader egentlig er en feil. Etter min mening bør dette routes etter hvem som skal motta  meldingen (for eksempel en HERid i destination.receiver), og ved hjelp av endpoint, hvis man kjenner til et faktisk endepunkt. I en multimodal routing vil antakelig den faktiske endepunktsadressen endre seg flere ganger underveis.</p>",
+        "id": 251704670,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1630584696
+    },
+    {
+        "content": "<p>Vi er nok enige. Det som er forvirrende er bruken av ordet <code>endpoint</code>, siden standarden sier det kan være <strong>enten</strong> en resolvable URL (endepunkt) eller en logisk-id. I mitt forslag er det altså snakk om å bruke dette som ID til kommunikasjonsparten (HER-id), ikke et faktisk endepunkt. At datatypen er URL og ikke URI skaper også forvirring, men dette er bare pga. historiske årsaker, det skal nemlig tolkes som en URI. </p>\n<p>Hadde det vært slik at <code>endpoint</code> het noe annet og var en choice type med URL og Identifier hadde nok dette vært tydeligere, men det er nå slik standarden er i dag.</p>",
+        "id": 251705638,
+        "sender_full_name": "Eirik Myklebost",
+        "timestamp": 1630585217
+    },
+    {
+        "content": "<p>Ja, tror det og med dagens utforming av standarden kan det godt hende at en id her er den beste løsningen.</p>\n<p>Min tolkning av endpoint har alltid vært faktiske endepunktsadresser på grunn av definisjonen av Endpoint ressursen altså at man kan legge en Endpoint.address direkte inn i MEssageHeader.destination.endpoint. I definisjonen av Endpoint ressursen er det helt tydelig at endepunktsadressen er tenkt å være en faktisk adresse. <br>\n<a href=\"https://www.hl7.org/fhir/endpoint.html\">https://www.hl7.org/fhir/endpoint.html</a></p>",
+        "id": 251706411,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1630585606
+    },
+    {
+        "content": "<p>Et <a href=\"https://data.developer.nhs.uk/specifications/sc-fhir-5.3/Examples/Profile.ADW-AdmissionNotice/ADW-Message-Admission-Notice-Bundle-1-Example-1.xml\">eksempel fra NHS</a> der de bruker en id som endpoint.</p>\n<div class=\"codehilite\"><pre><span></span><code>endpoint value=&quot;urn:nhs-uk:addressing:ods:RFM8C2\n</code></pre></div>",
+        "id": 251706488,
+        "sender_full_name": "Eirik Myklebost",
+        "timestamp": 1630585660
+    },
+    {
+        "content": "<p>Jeg har sett på Endpoint tidligere, men sliter med å se sammenhengen til MessageHeader, den eneste koblingen jeg har funnet er følgende setning:</p>\n<blockquote>\n<p>Messaging: (currently defined in the Message Header, but only as the address)</p>\n</blockquote>\n<p>Hvis Endpoint ressursen var ment å bli brukt i MessageHeader hadde jeg forventet type Reference(Endpoint) istedenfor URI.</p>",
+        "id": 251707863,
+        "sender_full_name": "Eirik Myklebost",
+        "timestamp": 1630586359
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192856\">@Thomas Tveit Rosenlund</span> , men tenker du at det er riktig av oss i NAV å fortsette i dette sporet med fully-qualified HER-id som \"endpoint\"? Så kan vi eventuelt ta opp tråden senere der vi presentere et forslag vi kan samarbeide med og forhåpentligvis utarbeide en nasjonal base profil for MessageHeader?</p>",
+        "id": 251708274,
+        "sender_full_name": "Eirik Myklebost",
+        "timestamp": 1630586575
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"223185\">Eirik Myklebost</span> <a href=\"#narrow/stream/179226-norway/topic/Messaging.20og.20HER-id/near/251707863\">said</a>:</p>\n<blockquote>\n<p>Jeg har sett på Endpoint tidligere, men sliter med å se sammenhengen til MessageHeader, den eneste koblingen jeg har funnet er følgende setning:</p>\n<blockquote>\n<p>Messaging: (currently defined in the Message Header, but only as the address)</p>\n</blockquote>\n<p>Hvis Endpoint ressursen var ment å bli brukt i MessageHeader hadde jeg forventet type Reference(Endpoint) istedenfor URI.</p>\n</blockquote>\n<p>Nettopp, det er akkurat det som er sammenhengen slik jeg forstår dokumentasjonen, for messaging så kan Endpoint benyttes til å angi alle slags endepunkter, inkludert endepunkter for messaging.</p>",
+        "id": 251821178,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1630643280
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"223185\">Eirik Myklebost</span> <a href=\"#narrow/stream/179226-norway/topic/Messaging.20og.20HER-id/near/251708274\">said</a>:</p>\n<blockquote>\n<p><span class=\"user-mention silent\" data-user-id=\"192856\">Thomas Tveit Rosenlund</span> , men tenker du at det er riktig av oss i NAV å fortsette i dette sporet med fully-qualified HER-id som \"endpoint\"? Så kan vi eventuelt ta opp tråden senere der vi presentere et forslag vi kan samarbeide med og forhåpentligvis utarbeide en nasjonal base profil for MessageHeader?</p>\n</blockquote>\n<p>Litt usikker av flere grunner. </p>\n<p>Vi må kanskje få ferdigstilt denne:<br>\n<a href=\"https://github.com/HL7Norway/basisprofiler-r4/blob/herid.namingsystem/NamingSystem/no-basis-herid.namingsystem.xml\">https://github.com/HL7Norway/basisprofiler-r4/blob/herid.namingsystem/NamingSystem/no-basis-herid.namingsystem.xml</a></p>\n<p>Har du noen gode innspill til diskusjonen?<br>\n<a href=\"https://github.com/HL7Norway/basisprofiler-r4/issues/36\">https://github.com/HL7Norway/basisprofiler-r4/issues/36</a></p>\n<p>Hvis dette skal være fast praksis, noe jeg er litt skeptisk til siden jeg heller ville hatt en faktisk identifikator i dette tilfellet, så må vi antakelig veilede her (men jeg er usikker på om dette egentlig er beste praksis):<br>\n<a href=\"https://github.com/HL7Norway/best-practice/blob/master/docs/HER-id.md\">https://github.com/HL7Norway/best-practice/blob/master/docs/HER-id.md</a></p>\n<p>Har du innspill <span class=\"user-mention\" data-user-id=\"192681\">@Espen Stranger Seland</span></p>",
+        "id": 251824283,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1630646391
+    },
+    {
+        "content": "<p>Hvis denne går igjennom og endpoint blir valgfri i R5, vil det antakelig være lurt å legge inn HER-id som en identifier referanse?<br>\n<a href=\"https://jira.hl7.org/browse/FHIR-26898\">https://jira.hl7.org/browse/FHIR-26898</a></p>",
+        "id": 251825840,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1630647917
+    },
+    {
+        "content": "<p>I sin enkleste form er HER-id er en business identifier som kan benyttes for å finne et endpoint ved oppslag - ett eller flere (ebXML/SMTP, WS, REST-API etc.) </p>\n<p>I Endpoint-ressursen ville det vært naturlig å benytte HER-id (Endpoint.identifier), da man kunne laget en katalog (Adresseregisteret), men slik FHIR er nå det man oppgir URL direkte for endpoint i MessageHeader faller HER-id mellom barken og veden. Én HER-id ville uansett vært gyldig for flere endpoint slik det er i dag, og ikke unik.  Og en endpoint-URL vil uansett være unik for alle praktiske formål, så jeg vil tro at den nesten kan fungere som en business identifier i seg selv. </p>\n<p>Slik er det egentlig også for f.eks. meldinger over ebXML, der \"fysisk\" endpoint oppgis i selve sendingen (\"<a href=\"mailto:legevakt@kommune.no\">legevakt@kommune.no</a>\") og HER-id kan ses på som en redundant opplysning i ebXML-konvolutten (men ligger i selve meldingen/dokumentet som business identifier, knyttet til/under organisasjon). </p>\n<p>MessageHeader blir i så måte litt lik, der man (etter evt oppslag) kun trenger den faktiske endpoint-adressen.</p>",
+        "id": 251828613,
+        "sender_full_name": "Espen Stranger Seland",
+        "timestamp": 1630650458
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192681\">@Espen Stranger Seland</span>, jeg refererer til mine tidligere kommentarer for min tolkning; <code>source.endpoint</code> kan enten være enten en \"fysisk\" adresse eller en logisk-id (URI), i norsk sammenheng er HER-id en logisk-id som er alt som trengs for å rute meldingen uavhengig av transport protokoll. At det heter Endpoint og har URL som datatype er forvirrende/uheldig, men standarden er konsis på at det kan være en ID og ikke bare en resolvable URL.</p>\n<p>MessageHeader er kandidat til å bli Normative i R5, så det blir spennende å se hva de legger seg på. Jeg foreslår at vi spør våre internasjonale venner ved å lage en topic på <strong>fhir-messages</strong> for å oppklare rundt tiltenkt bruk av endpoint, logisk-id og eventuell relasjon til Endpoint-ressursen.</p>",
+        "id": 251859447,
+        "sender_full_name": "Eirik Myklebost",
+        "timestamp": 1630665693
+    },
+    {
+        "content": "<p>Enig at det burde være en URI, og vi kunne brukt f.eks. \"urn:no:nhn:ar:her:123456\" eller noe lignende. Og helst bare i de tilfellene der man ikke kan/ønsker å oppgi \"fysisk\" endpoint. Samhandlingsarkitekturen for meldingsutveksling har en godt fleksibilitet, men den gir også noen ulemper ved at man ikke trenger å være så eksplisitt. FHIR sier jo \"The id may be a non-resolvable URI for systems that do not use standard network-based addresses.\", så vi kommer vel uansett rundt det ved å utforme det som URL (\"<a href=\"http://nhn.no/ar/her/123456\">http://nhn.no/ar/her/123456</a>\" eller lignende).</p>\n<p><span class=\"user-mention\" data-user-id=\"192856\">@Thomas Tveit Rosenlund</span> <span class=\"user-mention\" data-user-id=\"192654\">@Øyvind Aassve</span> og andre: Bør vi spille inn at URI bør brukes for MessageHeader.destination.endpoint med fler i R5? URL er jo subset av URI, så det burde dekke begge.</p>",
+        "id": 251867398,
+        "sender_full_name": "Espen Stranger Seland",
+        "timestamp": 1630669746
+    },
+    {
+        "content": "<p>Det jeg lurer på er om bruken av URL datatype her er relatert til <a href=\"https://www.hl7.org/fhir/resource.html#canonical\">Canonical URLs</a>, merk følgende:</p>\n<blockquote>\n<p>Some resource types have a defined element <code>url</code> which is the 'canonical URL' that always identifies the resource. This is a special kind of Business Identifier. Note that the element actually contains a URI, but is named <code>url</code> for legacy reasons.</p>\n</blockquote>\n<p>Dette samsvarer med bruken av URI ellers i MessageHeader beskrivelsen. F.eks søkeparametrene <code>destination-uri</code>og <code>source-uri</code>.</p>",
+        "id": 251868725,
+        "sender_full_name": "Eirik Myklebost",
+        "timestamp": 1630670405
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"192681\">Espen Stranger Seland</span> <a href=\"#narrow/stream/179226-norway/topic/Messaging.20og.20HER-id/near/251867398\">said</a>:</p>\n<blockquote>\n<p><span class=\"user-mention silent\" data-user-id=\"192856\">Thomas Tveit Rosenlund</span> <span class=\"user-mention silent\" data-user-id=\"192654\">Øyvind Aassve</span> og andre: Bør vi spille inn at URI bør brukes for MessageHeader.destination.endpoint med fler i R5? URL er jo subset av URI, så det burde dekke begge.</p>\n</blockquote>\n<p>Ja, det kunne vært en URI, men jeg tenker også at hvis det legges in fleksibilitet i forhold til destination.endpoint source.endpoint slik som foreslått på HL7 Jira så vil det være mer naturlig å benytte en identifier referanse for å henvise til noe som ikke har eller man ikke kjenner til en faktisk adresse. Det gir kanskje noen utfordringer knyttet til søk, siden man ikke har et spesifikt element man alltid kan søke på, men siden det er tilllatt både med id'er og faktiske adresser i endpoint er det ikke vanntett det heller. Hvis man søker på id vil man ikke få meldinger adressert med faktiske adresser og vise-versa.</p>",
+        "id": 251870701,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1630671468
+    },
+    {
+        "content": "<p>Jeg tror vi må følge med på WGM neste gang om hva som skjer med MessageHeader og kanskje starte en diskusjon her på chatten på forhånd. Personlig støtter jeg <span class=\"user-mention\" data-user-id=\"191764\">@Cooper Thompson</span>  sitt forslag: <a href=\"https://jira.hl7.org/browse/FHIR-26898\">https://jira.hl7.org/browse/FHIR-26898</a></p>",
+        "id": 251870909,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1630671577
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"192856\">Thomas Tveit Rosenlund</span> <a href=\"#narrow/stream/179226-norway/topic/Messaging.20og.20HER-id/near/251870909\">said</a>:</p>\n<blockquote>\n<p>Jeg tror vi må følge med på WGM neste gang om hva som skjer med MessageHeader og kanskje starte en diskusjon her på chatten på forhånd. Personlig støtter jeg <span class=\"user-mention silent\" data-user-id=\"191764\">Cooper Thompson</span>  sitt forslag: <a href=\"https://jira.hl7.org/browse/FHIR-26898\">https://jira.hl7.org/browse/FHIR-26898</a></p>\n</blockquote>\n<p>Det virker som Cooper har en tolkning av at endpoint <strong>må</strong> være en resolvable URL og ikke en logisk id, som er det han ønsker å bruke.</p>",
+        "id": 251871192,
+        "sender_full_name": "Eirik Myklebost",
+        "timestamp": 1630671716
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"223185\">Eirik Myklebost</span> <a href=\"#narrow/stream/179226-norway/topic/Messaging.20og.20HER-id/near/251871192\">said</a>:</p>\n<blockquote>\n<p><span class=\"user-mention silent\" data-user-id=\"192856\">Thomas Tveit Rosenlund</span> <a href=\"#narrow/stream/179226-norway/topic/Messaging.20og.20HER-id/near/251870909\">said</a>:</p>\n<blockquote>\n<p>Jeg tror vi må følge med på WGM neste gang om hva som skjer med MessageHeader og kanskje starte en diskusjon her på chatten på forhånd. Personlig støtter jeg <span class=\"user-mention silent\" data-user-id=\"191764\">Cooper Thompson</span>  sitt forslag: <a href=\"https://jira.hl7.org/browse/FHIR-26898\">https://jira.hl7.org/browse/FHIR-26898</a></p>\n</blockquote>\n<p>Det virker som Cooper har en tolkning av at endpoint <strong>må</strong> være en resolvable URL og ikke en logisk id, som er det han ønsker å bruke.</p>\n</blockquote>\n<p>Ja, det han skriver i Jira saken sammenfaller tilsynelatende med det jeg mener om hvordan MessageHeader bør brukes. Regner med at en diskusjon på Chat + WGM røyker ut forskjellige meninger om hvordan dette bør fungere, og at det er mulig å komme til en konklusjon om hvordan dette bør utformes for fremtiden (R5).</p>",
+        "id": 252573502,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1631165644
+    },
+    {
+        "content": "<p>Har opprettet en <a href=\"#narrow/stream/179263-fhir-messages/topic/Use.20of.20endpoints\">topic</a> på fhir-messages streamen, dere må gjerne komme med innspill der <span class=\"user-mention\" data-user-id=\"192856\">@Thomas Tveit Rosenlund</span> , <span class=\"user-mention\" data-user-id=\"192681\">@Espen Stranger Seland</span> .</p>",
+        "id": 253248467,
+        "sender_full_name": "Eirik Myklebost",
+        "timestamp": 1631625542
+    },
+    {
+        "content": "<p>Mange viktige momenter i den diskusjonen og svært godt underlag i starten av tråden <span class=\"user-mention\" data-user-id=\"223185\">@Eirik Myklebost</span></p>",
+        "id": 253371143,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1631689287
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192856\">@Thomas Tveit Rosenlund</span> , <span class=\"user-mention\" data-user-id=\"192681\">@Espen Stranger Seland</span>  Var diskusjonen i fhir-messages noe oppklarende?</p>\n<p>Jeg skal prøve å oppsummere det jeg plukket opp:</p>\n<ol>\n<li>Det virker som det er en enighet blant John M. og Lloyd M. om at endpoints i source/destination kan være IDer (URI) eller URL.</li>\n<li>At endpoint har datatypen URL og ikke URI er en feil i spec og bør endres.</li>\n<li>Cooper T. er opptatt av scenarioet med mellomledd (intermediaries). Hvis senderen har en Business-ID (f.eks HER-id) holder det å referere til denne i destination.endpoint og mellomleddet kan rute meldingen umodifisert videre. Dersom det er behov for å adressere mellomleddet foreslår John M. å pakke meldingen inn i en annen melding som er addressert til mellomleddet. Her vil jeg også trekke inn <a href=\"http://build.fhir.org/ig/HL7/davinci-alerts/branches/master/index.html\">davinci-alerts ig</a> som enda et løsningsforslag.</li>\n<li>Kevin M. tolker at endpoint må være en resolvable URL og har derfor gjort det på samme måte som i VKP ved å bruke Reference (sender og receiver) istedenfor endpoint. Dette strider med det John M. og Lloyd M. sier er intensjonen.</li>\n</ol>\n<p>Hvilken oppfatning sitter dere med?</p>",
+        "id": 254028024,
+        "sender_full_name": "Eirik Myklebost",
+        "timestamp": 1632133790
+    },
+    {
+        "content": "<p>Jeg tenker diskusjonen om de to Jira sakene blir avgjørende for hva vi bør anbefale her. </p>\n<p>Det er ikke noe direkte feil med å ha en identifikator med en prefix i source.endpoint, men jeg synes ikke nødvendigvis det er en god løsning av den grunn :-) Jeg synes forslag til John M. har styrker og svakheter, det øker kompleksiteten og setter fingeren på at MessageHeader kanskje bør rendyrke sitt mandat noe bedre. Ideelt sett burde MessageHeader kanskje ikke inneholde direkte endepunkter i det hele tatt siden rutingen svært sjelden vil foretas av det semantiske laget men skal håndteres på underliggende lag og identifisering av hvem (organisasjon/helsetjeneste) som skal motta/sende burde være tilstrekkelig?</p>",
+        "id": 254030728,
+        "sender_full_name": "Thomas Tveit Rosenlund",
+        "timestamp": 1632135320
+    },
+    {
+        "content": "<p>WGM onsdag Q3 er det som ser ut som størst sjanse for disse issuene (har ikke spurt rundt ennå). Jeg kommer til å være der uansett. <br>\n<a href=\"https://confluence.hl7.org/display/MnM/MnM+Agenda+WGM+202109+Virtual\">https://confluence.hl7.org/display/MnM/MnM+Agenda+WGM+202109+Virtual</a></p>",
+        "id": 254084416,
+        "sender_full_name": "Espen Stranger Seland",
+        "timestamp": 1632157951
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"192681\">Espen Stranger Seland</span> <a href=\"#narrow/stream/179226-norway/topic/Messaging.20og.20HER-id/near/254084416\">said</a>:</p>\n<blockquote>\n<p>WGM onsdag Q3 er det som ser ut som størst sjanse for disse issuene (har ikke spurt rundt ennå). Jeg kommer til å være der uansett. <br>\n<a href=\"https://confluence.hl7.org/display/MnM/MnM+Agenda+WGM+202109+Virtual\">https://confluence.hl7.org/display/MnM/MnM+Agenda+WGM+202109+Virtual</a></p>\n</blockquote>\n<p>Ble dette temaet nevnt i WGM?</p>",
+        "id": 256767708,
+        "sender_full_name": "Eirik Myklebost",
+        "timestamp": 1633711124
+    },
+    {
+        "content": "<p>Nei. Har dog ikke sjekket om det er noe bevegelse på Jira siden da.</p>",
+        "id": 257024660,
+        "sender_full_name": "Espen Stranger Seland",
+        "timestamp": 1633937735
+    }
+]

@@ -1,0 +1,146 @@
+---
+layout: page
+title: "FHIR Chat  · Is this differential correct? · shorthand"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/index.html">shorthand</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Is.20this.20differential.20correct.3F.html">Is this differential correct?</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="245459530"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Is%20this%20differential%20correct%3F/near/245459530" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Is.20this.20differential.20correct.3F.html#245459530">(Jul 09 2021 at 15:42)</a>:</h4>
+<p>I have an error when the publisher runs against my IG which I've raised in a different thread.  But I'm wondering if the differential that is being produced for my profile is correct.  Here is my FSH:</p>
+<div class="codehilite"><pre><span></span><code>* careTeam MS
+* careTeam.extension contains CareTeamClaimScope named careTeamClaimScope 1..1 MS
+* careTeam.sequence MS
+* careTeam.provider MS
+* careTeam.provider only Reference(PASPractitioner or PASOrganization)
+* careTeam.role MS
+* careTeam ^slicing.discriminator.type = #value
+* careTeam ^slicing.discriminator.path = &quot;extension(&#39;http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-careTeamClaimScope&#39;).valueBoolean&quot;
+* careTeam ^slicing.rules = #open
+* careTeam ^slicing.description = &quot;Slice based on whether the care team member belongs to the overall claim or to an individual claim item.&quot;
+* careTeam contains OverallClaimMember 0..14 and ItemClaimMember 0..10
+</code></pre></div>
+<p>I also have the two different slice info that I didn't include.  Here is what I'm getting in the differential and it seems strange.</p>
+<p>For the extension:</p>
+<div class="codehilite"><pre><span></span><code>      {
+        &quot;id&quot;: &quot;Claim.careTeam.extension&quot;,
+        &quot;path&quot;: &quot;Claim.careTeam.extension&quot;,
+        &quot;slicing&quot;: {
+          &quot;discriminator&quot;: [
+            {
+              &quot;type&quot;: &quot;value&quot;,
+              &quot;path&quot;: &quot;url&quot;
+            }
+          ],
+          &quot;ordered&quot;: false,
+          &quot;rules&quot;: &quot;open&quot;
+        },
+        &quot;min&quot;: 1
+      },
+      {
+        &quot;id&quot;: &quot;Claim.careTeam.extension:careTeamClaimScope&quot;,
+        &quot;path&quot;: &quot;Claim.careTeam.extension&quot;,
+        &quot;sliceName&quot;: &quot;careTeamClaimScope&quot;,
+        &quot;min&quot;: 1,
+        &quot;max&quot;: &quot;1&quot;,
+        &quot;type&quot;: [
+          {
+            &quot;code&quot;: &quot;Extension&quot;,
+            &quot;profile&quot;: [
+              &quot;http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-careTeamClaimScope&quot;
+            ]
+          }
+        ],
+        &quot;mustSupport&quot;: true
+      },
+</code></pre></div>
+<p>For the slices:</p>
+<div class="codehilite"><pre><span></span><code>      {
+        &quot;id&quot;: &quot;Claim.careTeam:OverallClaimMember&quot;,
+        &quot;path&quot;: &quot;Claim.careTeam&quot;,
+        &quot;sliceName&quot;: &quot;OverallClaimMember&quot;,
+        &quot;min&quot;: 0,
+        &quot;max&quot;: &quot;14&quot;
+      },
+      {
+        &quot;id&quot;: &quot;Claim.careTeam:OverallClaimMember.extension:careTeamClaimScope&quot;,
+        &quot;path&quot;: &quot;Claim.careTeam.extension&quot;,
+        &quot;sliceName&quot;: &quot;careTeamClaimScope&quot;
+      },
+      {
+        &quot;id&quot;: &quot;Claim.careTeam:OverallClaimMember.extension:careTeamClaimScope.valueBoolean&quot;,
+        &quot;path&quot;: &quot;Claim.careTeam.extension.valueBoolean&quot;,
+        &quot;min&quot;: 0,
+        &quot;max&quot;: &quot;1&quot;,
+        &quot;patternBoolean&quot;: true
+      },
+</code></pre></div>
+<p>I will admit to not completely understanding how extensions and slicing interact in differentials, so I'm really just looking for confirmation that SUSHI is generating this correctly.</p>
+
+
+
+<a name="245462449"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Is%20this%20differential%20correct%3F/near/245462449" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Is.20this.20differential.20correct.3F.html#245462449">(Jul 09 2021 at 16:06)</a>:</h4>
+<p>To be honest, I'm not sure.  I don't know if each slice on <code>Claim.careTeam</code> should be redeclaring the <code>careTeamClaimScope</code> sliceName within their own slice or not (e.g., in your last code snippet, should that second element be there?).  I <em>think</em> it's right -- because technically a tool should be able to process a differential _without_ looking at the <code>id</code> (using <code>path</code> only) - which is why, in general, we need to declare slicenames in a differential even when they are inherited from a parent.  So I <em>think</em> that's right -- but it is kind of tricky.</p>
+<p>One thing that's not quite right is that you declare the discriminator type as <code>#value</code> but you're using <code>patternBoolean</code> to fix the value.  Although I think the FHIR core team is considering eliminating the distinction between <code>#value</code> and <code>#pattern</code> in R5, I think they need to match in R4.  So either change the discriminator type to <code>#pattern</code> or change the assignment to use <code>(exactly)</code> so that <code>fixedBoolean</code> is used rather than <code>patternBoolean</code>.</p>
+
+
+
+<a name="245463248"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Is%20this%20differential%20correct%3F/near/245463248" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Is.20this.20differential.20correct.3F.html#245463248">(Jul 09 2021 at 16:12)</a>:</h4>
+<p>Thanks for the info.  I did change that to (exactly) and it didn't make my error go away. :)  It is a strange difference for primitive types - saying that my boolean has to have a pattern of true is pretty much the same thing as saying it's fixed to true.</p>
+
+
+
+<a name="245464415"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Is%20this%20differential%20correct%3F/near/245464415" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Is.20this.20differential.20correct.3F.html#245464415">(Jul 09 2021 at 16:23)</a>:</h4>
+<p>After looking at the code, I think that the 2nd element you identified isn't correct:</p>
+<div class="codehilite"><pre><span></span><code>      {
+        &quot;id&quot;: &quot;Claim.careTeam:OverallClaimMember.extension:careTeamClaimScope&quot;,
+        &quot;path&quot;: &quot;Claim.careTeam.extension&quot;,
+        &quot;sliceName&quot;: &quot;careTeamClaimScope&quot;
+      },
+</code></pre></div>
+<p>The code assumes that if there is a child element with a path that ends in '.extension' and has a 'sliceName', that it has a type with a profile:</p>
+<div class="codehilite"><pre><span></span><code>StructureDefinition exsd = worker.fetchResource(StructureDefinition.class, t.getType().get(0).getProfile().get(0).getValue());
+</code></pre></div>
+<p>This is right for the first definition of the extension but, if it is looking here, it fails.</p>
+
+
+
+<a name="245467294"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Is%20this%20differential%20correct%3F/near/245467294" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Is.20this.20differential.20correct.3F.html#245467294">(Jul 09 2021 at 16:47)</a>:</h4>
+<p>I just overrode the profile and added in the type information to that extension declaration and the publisher processed the validation fine, so I think this is a SUSHI bug that I'll raise.</p>
+
+
+
+<a name="245470100"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Is%20this%20differential%20correct%3F/near/245470100" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Is.20this.20differential.20correct.3F.html#245470100">(Jul 09 2021 at 17:08)</a>:</h4>
+<p>Hmm... interesting... IMO, the type should not be necessary, as the type should fallback (or inherit) from the base element being sliced.  We've already declared the extension slice and its corresponding type.  I do not know why we need to declare the type <em>again</em>.  That said, this stuff is tricky, and perhaps the type is needed just to keep the tooling sane.  Thanks for logging the bug -- hopefully the fix is not too difficult!</p>
+<blockquote>
+<p>saying that my boolean has to have a pattern of true is pretty much the same thing as saying it's fixed to true</p>
+</blockquote>
+<p>I guess it depends on your definition of "pretty much".  Remember that in FHIR, primitives are still elements, capable of holding an <code>id</code> and <code>extension</code> -- so when you use <code>pattern</code>, you allow for the data to additionally carry an <code>id</code> or <code>extension</code>; when you use <code>fixed</code> you're saying those cannot be present.</p>
+
+
+
+<a name="245475536"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Is%20this%20differential%20correct%3F/near/245475536" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Is.20this.20differential.20correct.3F.html#245475536">(Jul 09 2021 at 17:51)</a>:</h4>
+<p>I always raised an issue on the publisher side in case that code should be changed.</p>
+
+
+
+<a name="245487418"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Is%20this%20differential%20correct%3F/near/245487418" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Is.20this.20differential.20correct.3F.html#245487418">(Jul 09 2021 at 19:34)</a>:</h4>
+<p>I think the element should be .value and the id should be .value:valueBoolean</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

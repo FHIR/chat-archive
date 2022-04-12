@@ -1,0 +1,44 @@
+[
+    {
+        "content": "<p>Hi, is there a documentation how to use the CQL engine <a href=\"https://github.com/DBCG/cql_engine\">https://github.com/DBCG/cql_engine</a>?</p>",
+        "id": 274844525,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1646923735
+    },
+    {
+        "content": "<p>What specifically are you looking for? I don't think there is much in the way of a user guide, but Bryn, JP, and team have done an excellent job of supporting its use in many modes. You could try it out without any coding using the <a href=\"https://cql-runner.dataphoria.org/\">cql-runner</a> web app or the <a href=\"https://github.com/DBCG/cql-evaluator\">cql-evaluator</a> CLI project (which does have usage in the README). It is integrated in the <a href=\"https://github.com/DBCG/cqf-ruler\">cqf-ruler</a> implementation of the FHIR Clinical Quality Framework and that can serve as example code. I believe there is even a public instance of that somewhere that you could interact with if you wanted, but I'm not sure at what address. There are also <a href=\"https://atom.io/packages/language-cql\">Atom</a> and <a href=\"https://marketplace.visualstudio.com/items?itemName=cqframework.cql\">VSCode</a> plugins that provide for more integrated authoring and testing activities.</p>\n<p>My team created its own wrapper of the Java engine that has some similarities to the cql-evaluator and it is available under the <a href=\"https://github.com/Alvearie/quality-measure-and-cohort-service/\">Alvearie/quality-measure-and-cohort-engine</a> project. We have a fairly detailed <a href=\"https://alvearie.io/quality-measure-and-cohort-service/#/user-guide/getting-started\">user guide</a> on how to get started with it if you are looking for more example code. I also developed the prototype <a href=\"https://ibm.github.io/FHIR/guides/FHIRClinicalReasoningGuide\">Clinical Reasoning</a> support and <a href=\"https://github.com/IBM/FHIR/tree/main/cql\">CQL module</a> in the IBM FHIR Server and there are good examples there too. I'm happy to assist if you have more specific questions on how to get started coding.</p>",
+        "id": 274848402,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1646925293
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"341334\">@Corey Sanders</span> Thanks, I will look at your suggested resources. What I find interesting is, that you are working on Clinical Reasoning support for the IBM server. I myself are the main developer of the <a href=\"https://github.com/samply/blaze\">Blaze Server</a> which also has <a href=\"https://github.com/samply/blaze/blob/master/docs/cql-queries/api.md\">CQL support</a> via Quality Reporting.</p>\n<p>This is a bit off-topic to my initial question. But I'm currently in search for solutions to evaluate CQL criteria for measure populations in a more efficient way as to simply evaluate the patient context CQL expression for every patent existing in the FHIR server. While evaluating the expression for each patient might work for 100.000 patients in a matter of a few second total, it gets worse linearly of you have 1 million or 10 million patients. I've some ideas to speed up the evaluation in such scenarios and so like to look if others  already doing something to break the \"full scan\" other all existing patients.</p>",
+        "id": 274852550,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1646926938
+    },
+    {
+        "content": "<p>For the quality measure and cohort engine, our approach to scale has been to implement a \"big data\" mode that runs the CQL engine on Apache Spark and tabular data models. We have an internal pilot that was written against a custom/proprietary data model, but have also been doing work to prove out the use of OMOP as the underlying tabular data model. Our goal would be to have user-scale requests served directly via the FHIR server and bulk data processing done on data converted to OMOP and using the Spark backend.  I haven't done any work yet to bridge from that external project into the clinical reasoning module in IBM FHIR, but it is on my list. We've been sort of testing the waters to see if anyone is interested in the CQL functionality before investing more in that area.</p>",
+        "id": 274854441,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1646927674
+    },
+    {
+        "content": "<p>Your use-case is not about big data batch or stream processing. We like to run ad-hoc user driven feasibility queries over data from hospitals in Germany. The largest number of patients, I have seen is about 3 million. That queries need to finish in about 20 seconds. With a decent machine of about 16 cores and 64 GB RAM we are almost there, but cutting down from scanning over say 3 million patients to scanning over say all patients having a certain condition would bring down query times considerably if the condition is rare or one can find any other criteria cutting down on patient numbers in the first place.</p>\n<p>I'm keen to know whether all existing CQL evaluation engines just scan over all patients and evaluate the patient context expressions patient for patient even if most expressions would return false.</p>",
+        "id": 274881850,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1646939749
+    },
+    {
+        "content": "<p>I think what you want to focus on is the cqf-ruler implementation. The main body of that code was transitioned into the hapi-fhir-jpaserver-cql module in the HAPI FHIR project, so you may have to jump over there to find things. I'd specifically recommend looking at the MeasureEvaluation class (e.g. <a href=\"https://github.com/hapifhir/hapi-fhir/blob/dfd99c5471f9a49f8eda4ed0f55863d176e230f9/hapi-fhir-jpaserver-cql/src/main/java/ca/uhn/fhir/cql/r4/evaluation/MeasureEvaluation.java#L423\">R4</a>). My IBM FHIR implementation is based on <a href=\"https://github.com/DBCG/cql-evaluator/blob/master/evaluator.measure/src/main/java/org/opencds/cqf/cql/evaluator/measure/common/MeasureEvaluation.java\">a version</a> of that class from the cql-evaluator project, but they share a lineage. </p>\n<p>For ratio/proportion measures, the MeasureEvaluation will run on a patient-by-patient basis, but it evaluates the decision tree in such a way that it will short-circuit if the patient doesn't meet the population criteria for a specific population. For example, it will evaluate the Initial Population and then, if the patient isn't in that population, it will skip evaluation of the remaining Denominator, Numerator, etc.</p>\n<p>The FHIR backend will issue a data request for each retrieve expression in the CQL. It is obviously a best practice to author the CQL such that the retrieve expression is filtered by some type of terminology asset (code, valueset) because it limits the amount of data is streamed from the data provider and means less data objects for the CQL engine to evaluate. There isn't anything in the engine to enforce that, but there have been a few times that I've considered adding a compile warning or runtime exception for suboptimally authored queries. </p>\n<p>One area that my team innovated a bit for quality measure and cohort engine is that we created a caching data provider that will cache the result of a retrieve operation across CQL context objects. This means that if multiple CQLs / Quality Measures are being evaluated in a batch and they share data requirements, then we don't have to retrieve those multiple times. There are some squirrely bits to that caching and the memory requirements can be quite large, but the benefit is huge when evaluating, for example, all the CMS measures in the connectathon repo for a single patient.</p>",
+        "id": 274890209,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1646943753
+    },
+    {
+        "content": "<p>In terms of scale, performance testing of my internal Spark project against our proprietary data model is <a href=\"https://alvearie.io/quality-measure-and-cohort-service/#/user-guide/spark-performance\">documented</a> in the user guide. We were able to process 24 million claims records in about 20 minutes or so with 10 spark executors. The CQLs being evaluated for that benchmark are pretty trivial , so take it with a grain of salt. We haven't had an opportunity yet to run over patient data at the scale you've been testing, so I can't comment too much on what you are seeing, but I agree that there are areas for improvement of overall performance.</p>",
+        "id": 274890794,
+        "sender_full_name": "Corey Sanders",
+        "timestamp": 1646944083
+    }
+]

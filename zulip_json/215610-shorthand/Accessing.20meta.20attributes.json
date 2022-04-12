@@ -1,0 +1,152 @@
+[
+    {
+        "content": "<p>I'm trying to create a profile of Observation that requires the instance declare conformance with a particular profile:</p>\n<div class=\"codehilite\"><pre><span></span><code>* meta.profile[0] = Canonical(MyObservation)\n</code></pre></div>\n\n\n<p>But this line is failing with:</p>\n<div class=\"codehilite\"><pre><span></span><code>Sushi: error No element found at path meta.profile[0] for SpecializedObservation, skipping rule (00:04.0512)\n</code></pre></div>\n\n\n<p>Can I access meta elements in sushi? Interestingly, <code>^meta.profile</code> doesn't give an error, but I believe that sets the meta for the profile itself (ie. the StructureDefinition), not on instances of the profile.</p>\n<p>(I know I should do this with slicing rather than hardcoding the slots -- I'll get to that once I've proved the concept.)</p>",
+        "id": 210164601,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1600192412
+    },
+    {
+        "content": "<p>It's not great practice to force the declaration to be in a specific order.  It would be better to assert meta.where(profile=foo) - so that the assertion can be in any position.  Otherwise, you're going to force people to expose custom instances to each recipient.  As a rule, if order doesn't have a defined semantic meaning, profiles should be tolerant of desired data appearing in any order.</p>",
+        "id": 210165309,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1600192726
+    },
+    {
+        "content": "<p>Agree. And I'll change this to slicing shortly, but for now, it was failing on simply trying to set meta.profile.</p>",
+        "id": 210165591,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1600192834
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191380\">@Elliot Silver</span> -- Lloyd's concerns aside, from a <em>technical</em> standpoint, it seems that what you're attempting to do <em>should</em> be supported.  So, this appears to be a bug in SUSHI.  I've file <a href=\"https://github.com/FHIR/sushi/issues/601\">#601</a> for this one.</p>",
+        "id": 210180496,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1600199197
+    },
+    {
+        "content": "<p>I think this one may not be a bug. If you are writing this line:</p>\n<div class=\"codehilite\"><pre><span></span><code>* meta.profile[0] = Canonical(MyObservation)\n</code></pre></div>\n\n\n<p>on a <code>Profile</code>, it is expected that SUSHI would not find <code>meta.profile[0]</code>, because on a <code>Profile</code>, you cannot constrain specific array elements by their numerical index. You could set up an ordered slicing if you truly wanted to constrain the first element to be <code>Canonical(MyObservation)</code>.</p>",
+        "id": 210253782,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1600259370
+    },
+    {
+        "content": "<p>Yes, of course, <span class=\"user-mention\" data-user-id=\"239822\">@Nick Freiter</span> is right.  Brain lapse on my part.  As Lloyd said, however, an <em>ordered</em> slice is probably not ideal, so you probably want something like this:</p>\n<div class=\"codehilite\"><pre><span></span><code>Profile: MyObservation\nParent: Observation\n* meta.profile ^slicing.discriminator.path = &quot;$this&quot;\n* meta.profile ^slicing.discriminator.type = #value\n* meta.profile ^slicing.ordered = false\n* meta.profile ^slicing.rules = #open\n* meta.profile contains myobservation 1..1\n* meta.profile[myobservation] = Canonical(MyObservation) (exactly)\n</code></pre></div>",
+        "id": 210256191,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1600260625
+    },
+    {
+        "content": "<p>Thanks -- this looks like it works (with the correction that <code>Profile: MyObservation</code> and <code>Canonical(MyObservation)</code> should be different profiles).</p>\n<p>Interestingly, the snapshot only shows the constraints applied in the MyObservation profile (i.e. the requirement to claim the base profile), and none of the constraints from the base profiles. That seems both right and wrong at the same time.</p>",
+        "id": 210460836,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1600382909
+    },
+    {
+        "content": "<p>What do you mean by \"constraints\" exactly?  What specifically from the base profile is not showing up?  (If it's a lot, you don't need to list it all, but a few examples would help).</p>",
+        "id": 210513417,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1600433547
+    },
+    {
+        "content": "<blockquote>\n<p>Thanks -- this looks like it works (with the correction that Profile: MyObservation and Canonical(MyObservation) should be different profiles).</p>\n</blockquote>\n<p>So you want to have a profile that requires instances of it to declare that they conform to a <em>different</em> profile?  I guess that's possible, it's just not what I expected.</p>",
+        "id": 210536652,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1600443321
+    },
+    {
+        "content": "<blockquote>\n<p>So you want to have a profile that requires instances of it to declare that they conform to a different profile? I guess that's possible, it's just not what I expected.</p>\n</blockquote>\n<p>Yes, what I'm trying to do is achieve multiple inheritance of profiles. Given profiles A and B based on Observation, I want a new profile C that incorporates both A and B. Profile C may or may not impose additional constraints. I've approached this by declaring the parent of C is Observation, and C requires instances to claim conformance to A and B.</p>\n<blockquote>\n<p>What do you mean by \"constraints\" exactly? What specifically from the base profile is not showing up? (If it's a lot, you don't need to list it all, but a few examples would help).</p>\n</blockquote>\n<p>Profile C displays that meta.profile is required include A and B, which is absolutely expected. What I'm not seeing are the constraints from A and B showing up in the display of C. As I said, I can see this makes perfect sense--all the C profile is requiring is that profiles A and B are claimed, not that the constraints of A and B are implemented. The fact that claiming A and B without meeting the constraints of A and B is a conformance error is separate from the display of the C profile. However, from an implementer's point of view, it would be helpful if display of the C profile showed the constraints imposed by A and B.</p>\n<p>By the way, none of this are FSH or sushi issues. Also, based on comments from Lloyd in the IG stream, I may need to rethink the approach.</p>",
+        "id": 210560165,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1600454736
+    },
+    {
+        "content": "<p>Ah, OK.  Thanks for the clarification.  I get it now...  As you said, your profile C is really only requiring others <em>claim</em> conformance to A and B.  I didn't follow the other thread, but could the FHIRPath <code>conformsTo</code> function be used to more explicitly require this?  Something like <code>$this conformsTo('http://canonical/for/A') and $this.conformsTo('http://canonical/for/B')</code>?  I expect that still might be tricky for implementors though.</p>",
+        "id": 210561222,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1600455242
+    },
+    {
+        "content": "<p>Here is another approach, powered by RuleSets that might accomplish what you're looking for:</p>\n<div class=\"codehilite\"><pre><span></span><code>RuleSet: ConstraintsForA\n* code from http://foo.org\n\nProfile: A\nParent: Observation\n* insert ConstraintsForA\n\nRuleSet: ConstraintsForB\n* value[x] only CodeableConcept\n\nProfile: B\nParent: Observation\n* insert ConstraintsForB\n\nProfile: C\nParent: Observation\n* insert ConstraintsForA\n* insert ConstraintsForB\n</code></pre></div>\n\n\n<p>In this case, if you wanted to make the relationship explicit you could then add the <code>meta.profile</code> declarations -- but the constraints themselves force the relationship.</p>",
+        "id": 210561823,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1600455590
+    },
+    {
+        "content": "<p>In an early version of FSH we allowed profiles to act like RuleSets (so you could <code>insert A</code> directly), but I guess we dropped that.  I don't remember intentionally dropping it, but it's not in the spec and not supported by SUSHI.  Still, having the extra RuleSets isn't too bad.</p>",
+        "id": 210561998,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1600455665
+    },
+    {
+        "content": "<p>I thought about that before and it would work if we were publishing one IG that defined all of A, B, and C. However, the situation is a little more complex. I'm about to hop on a call -- I'll be back in a bit with details.</p>",
+        "id": 210562248,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1600455787
+    },
+    {
+        "content": "<p>Well, shoot.  You've reminded me of <em>why</em> we supported profiles as RuleSets in early versions of FSH.  We supported it precisely because we wanted people to be able to \"mix in\" profiles from regional IGs.  For example, you might want to base your <code>Condition</code> on a Condition profile defined in a clinical IG, but \"mix in\" constraints from US Core Condition to ensure you're aligned with US requirements.  That's only possible if we allow something like: <code>insert http://hl7.org/fhir/us/core/StructureDefinition/us-core-condition</code>.</p>",
+        "id": 210563264,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1600456347
+    },
+    {
+        "content": "<p>And now I'm also remembering why we don't support it... because it's <em>hard</em>!  I think we decided to push it off and consider it for FSH STU2.</p>",
+        "id": 210563441,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1600456444
+    },
+    {
+        "content": "<p>That is exactly the situation I'm dealing with. There are existing profiles for a US project, based on US Core, published by a separate group We want to do an international project, not using US Core, covering much of the same ground. We are in discussion with the US project about how they could restructure to allow us to leverage their content. The way I've been visualizing this is they publish an abstract USBaseObservation profile, an abstract ClinicalObservation profile, and a concrete USClinicalObservation profile that \"inherits\" from both of those; we publish an abstract InternationalBaseObservation, and a concrete InternationalClinicalObservation that inherits from the InternationalBaseObservation and the ClinicalObservation profiles.</p>",
+        "id": 210579134,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1600465714
+    },
+    {
+        "content": "<p>some of that was done with core vitalsigns... What you need to do is propose these changes to the workgroup owning the resource to be profiled to create a FHIR core profile. Even a CR with your recommended FSH Profile would go a long way to making it happen.</p>",
+        "id": 210620413,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1600529132
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span>,  I don’t understand. None of this work is being done inside HL7, and I don’t think we can influence already published US Core, but most importantly, I don’t know how to solve the multiple inheritance issue. I done think a new HL7 core profile changes anything.</p>",
+        "id": 210622207,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1600531621
+    },
+    {
+        "content": "<p>US-Core is a project within HL7</p>",
+        "id": 210625879,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1600536725
+    },
+    {
+        "content": "<p>and these are global profiles that are inside of core FHIR <a href=\"http://build.fhir.org/observation-profiles.html\">http://build.fhir.org/observation-profiles.html</a></p>",
+        "id": 210625895,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1600536772
+    },
+    {
+        "content": "<p>I was just mentioning that if that is not enough, then you can propose more</p>",
+        "id": 210625909,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1600536806
+    },
+    {
+        "content": "<p>ANYONE can submit a CR to the FHIR Core</p>",
+        "id": 210625920,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1600536825
+    },
+    {
+        "content": "<p>I agree with all of those. But it doesn't address my issue.</p>",
+        "id": 210625971,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1600536858
+    },
+    {
+        "content": "<p>A third party is working on profiles derived from US Core. We want to do similar profiles, except not based on US Core. I'm looking for ways that the third party (who we are talking to) can structure one of their profiles to separate the \"clinical\" part from the US Core-base. We could then take that \"clinical\" part and mix it in with our \"not-US core\" content.</p>",
+        "id": 210626268,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1600537301
+    }
+]

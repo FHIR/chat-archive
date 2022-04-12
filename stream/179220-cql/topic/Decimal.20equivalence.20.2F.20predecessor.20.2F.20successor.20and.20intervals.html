@@ -1,0 +1,209 @@
+---
+layout: page
+title: "FHIR Chat  · Decimal equivalence / predecessor / successor and intervals · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Decimal.20equivalence.20.2F.20predecessor.20.2F.20successor.20and.20intervals.html">Decimal equivalence / predecessor / successor and intervals</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="246655923"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Decimal%20equivalence%20/%20predecessor%20/%20successor%20and%20intervals/near/246655923" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Decimal.20equivalence.20.2F.20predecessor.20.2F.20successor.20and.20intervals.html#246655923">(Jul 20 2021 at 21:52)</a>:</h4>
+<p>There a couple potential inconsistencies in the CQL spec that I'm looking to get feedback on, in particular from <span class="user-mention" data-user-id="191469">@Chris Moesel</span> </p>
+<p>The decimal equivalence operator does the comparison of the precision of the least precise operand. IOW,</p>
+<div class="codehilite"><pre><span></span><code>1.1 ~ 1.199999 = true
+1.1 ~1.100000 = true
+</code></pre></div>
+<p>That implies that these intervals are equivalent:</p>
+<div class="codehilite"><pre><span></span><code>[1.1, 1.2) ~ [1.1, 1.1] ~ [1.1, 1.1999999]
+</code></pre></div>
+<p>The predecessor / successor operations  for decimals are defined as the minimum step size of decimal:</p>
+<blockquote>
+<p>For Decimal, predecessor is equivalent to subtracting the minimum precision value for the Decimal type, or 10-08.</p>
+</blockquote>
+<p>This is potentially problematic for CQL implementations that support higher levels of precision in that their minimum step size _could_ be more granular.</p>
+<p>It also runs somewhat counter to the the explanation of how to handle precision in the collapse / expand operations:</p>
+<blockquote>
+<p>Note that because the semantics for overlaps and meets are themselves defined in terms of the interval successor and predecessor operators, sets of Date-, DateTime-, or Time-based intervals that are only defined to a particular precision will calculate meets and overlaps at that precision.</p>
+</blockquote>
+<p>It seems to me that decimal intervals should also be handled with the same rules for precision.</p>
+<blockquote>
+<p>If the per argument is null, a per value will be constructed based on the coarsest precision of the boundaries of the intervals in the input set.</p>
+</blockquote>
+<p>This is means that given <code>expand { [1.0, 1.2000000) }</code> you'd get a default per of .1</p>
+<p>Intuitively, if I run that I'd expect a result that's <code>{ [1.0, 1.1), [1.1, 1.2) } </code></p>
+<p>Instead, in either the JS or Java engine you get a result like:</p>
+<p><code>{1.0, 1.09999999], [1.1, 1.1999999] }</code></p>
+<p>This is due to the fact that the predecessor and successor operations for decimals are defined as the minimum step size.</p>
+<p>I think that result is potentially incorrect because:</p>
+<ol>
+<li>It assumes a specific level of precision in these particular engines that may not be present in other implementations</li>
+<li>It constructs boundaries at a greater precision than the "per", which is counter-intuitive given the initial truncation behavior.</li>
+<li>It implies additional precision in the calculated intervals that's not present in the original numbers.</li>
+</ol>
+<p>I think the resolution is to define the successor / predecessor operations in terms of the precision of the original decimal, the same as the other types. This would mean:</p>
+<ol>
+<li>More precise implementations could support a smaller step size.</li>
+<li>The predecessor / successor definitions would be consistent with the equivalent definition</li>
+<li>The results of expand / collapse would preserve the original precision and give the "intuitively correct" result.</li>
+<li>Additional precision would not be implied by the result of expand / collapse. </li>
+</ol>
+<p>So, the end result would be (these would be equivalent base on the decimal equivalence semantics):</p>
+<div class="codehilite"><pre><span></span><code>expand { [1.0, 1.2000000] } =&gt;
+{ [1.0, 1.1), [1.1, 1.2), [1.2, 1.3) }  OR
+{ [1.0, 1.0], [1.1, 1.1], [1.2, 1.2] }
+</code></pre></div>
+
+
+
+<a name="246674604"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Decimal%20equivalence%20/%20predecessor%20/%20successor%20and%20intervals/near/246674604" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Decimal.20equivalence.20.2F.20predecessor.20.2F.20successor.20and.20intervals.html#246674604">(Jul 21 2021 at 02:57)</a>:</h4>
+<p>I don't think I have the mental capacity to process this right now (after a long day of work) but I'll try to take a look and provide feedback tomorrow!  If the day goes by and you haven't heard from me, feel free to send a reminder, <span class="user-mention" data-user-id="194178">@JP</span>!</p>
+
+
+
+<a name="246761210"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Decimal%20equivalence%20/%20predecessor%20/%20successor%20and%20intervals/near/246761210" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Decimal.20equivalence.20.2F.20predecessor.20.2F.20successor.20and.20intervals.html#246761210">(Jul 21 2021 at 18:39)</a>:</h4>
+<p>I'll try to boil it down a bit.</p>
+<p>Both DateTime and Decimal are precision-aware for equivalence (though behavior of each is different):</p>
+<div class="codehilite" data-code-language="cql"><pre><span></span><code>1.56 ~ 1.5 = true
+@2018 ~ @2018-01 = false
+</code></pre></div>
+<p>Both DateTime and Decimal are precision-aware for expand/collapse boundaries and selecting the "per":</p>
+<blockquote>
+<p>If the per argument is null, a per value will be constructed based on the coarsest precision of the boundaries of the intervals in the input set. For example, a list of DateTime-based intervals where the boundaries are a mixture of hours and minutes will expand at the hour precision.</p>
+</blockquote>
+<p>DateTime is precision-aware for predecessor/successor:</p>
+<div class="codehilite" data-code-language="cql"><pre><span></span><code>Successor(@2018) = 2019
+Predecessor(@2019-02) = 2019-01
+</code></pre></div>
+<p>Decimal is NOT precision-aware for predecessor/successor, rather it's "hard-coded" to minimum step-size</p>
+<blockquote>
+<p>For Decimal, predecessor is equivalent to subtracting the minimum precision value for the Decimal type, or 10-08.</p>
+</blockquote>
+<p>This gives counter-intuitive and, I'd argue, incorrect results.</p>
+<p>One issue is that the predecessor / successor operators should <em>not</em> increase the precision of the original value. This leads to potential errors in downstream calculations that are precision-aware.</p>
+<div class="codehilite" data-code-language="cql"><pre><span></span><code>1.4 ~ 1.45 = true
+Successor(1.4) = 1.40000001
+1.40000001 ~ 1.45 = false
+</code></pre></div>
+<p>The predecessor of 2*10^4 (20,000) should be 1*10^4 (10,000) because it's defined at a precision of 10^4. Similarly, the successor of 1*10^-4 (0.0001) should be 2*10^-4 (0.0002) because it's defined at a precision of 10^-4. </p>
+<p>The DateTime analog which is obviously incorrect is:</p>
+<div class="codehilite" data-code-language="cql"><pre><span></span><code>Successor(@2018) = @2018-01-01T00:00:00.0000001
+</code></pre></div>
+<p>Another issue is that CQL permits implementations to support a greater precision than the minimum required. In that scenario, the "successor" and "predecessor" would be broken in that the specified step-size is larger than the minimum step-size supported by the implementation.</p>
+<p>Making predecessor/successor precision-aware and combing that with the expand/collapse operators gives you results that are more intuitive (IMO), don't introduce potential precision related errors downstream, and allow specific implementations to support arbitrary levels of precision.</p>
+<p>Old:</p>
+<div class="codehilite" data-code-language="cql"><pre><span></span><code>expand { [1.0, 1.2000000] } =&gt;
+{ [1.0, 1.09999999], [1.1, 1.1999999], [1.2, 1.2999999] }
+</code></pre></div>
+<p>New:</p>
+<div class="codehilite" data-code-language="cql"><pre><span></span><code>expand { [1.0, 1.2000000] } =&gt;
+{ [1.0, 1.1), [1.1, 1.2), [1.2, 1.3) }  OR
+{ [1.0, 1.0], [1.1, 1.1], [1.2, 1.2] }
+</code></pre></div>
+
+
+
+<a name="246858114"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Decimal%20equivalence%20/%20predecessor%20/%20successor%20and%20intervals/near/246858114" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Decimal.20equivalence.20.2F.20predecessor.20.2F.20successor.20and.20intervals.html#246858114">(Jul 22 2021 at 14:54)</a>:</h4>
+<p>Thanks, <span class="user-mention" data-user-id="194178">@JP</span>.  If I recall correctly, using precision in predecessor/successor has been proposed before, and, after some discussion, we ultimately decided <em>against</em> it.  I think you make some convincing points above, but I'd like to see if I can dig up any notes of those old conversations to see what our arguments were <em>against</em> this approach.  Decimal precision is kind of tricky and confusing, so I expect that trying to address consistencies in one area might introduce inconsistencies in another.</p>
+<p>A few notes right away though...</p>
+<p>I think that your interpretation (or at least examples) of decimal equivalence are not quite correct.  According to the spec (emphasis mine):</p>
+<blockquote>
+<p>For decimals, equivalent means the values are the same with the comparison done on values <strong>rounded to the precision of the least precise operand</strong>; trailing zeroes after the decimal are ignored in determining precision for equivalent comparison.</p>
+</blockquote>
+<p>So, actually:</p>
+<div class="codehilite"><pre><span></span><code>1.1 ~ 1.199999 = false // since 1.199999 gets rounded to 1.2
+</code></pre></div>
+<p>which in turn means:</p>
+<div class="codehilite"><pre><span></span><code>[1.1, 1.2) !~ [1.1, 1.1] // at least according to current predecessor definition
+// and
+[1.1, 1.2) ~ [1.1, 1.1999999] // but would NOT be equivalent if we change the predecessor definition
+</code></pre></div>
+<p>That last bit does point to one inconsistency we would introduce if we change the definition of <code>predecessor</code>.  In the Author's Guide introduction to intervals, it indicates that <code>Interval[3.0, 5.0)</code> "contains all the real numbers &gt;= 3.0 and &lt; 5.0."  But the definition of interval End (in the CQL Reference) says: "If the high boundary of the interval is open, this operator returns the predecessor of the high value of the interval."  So if we change predecessor to use precision, then <code>Interval[3.0, 5.0)</code> becomes <code>Interval[3.0, 4.9]</code> and does not contain all real numbers &lt; 5 (for example, 4.95).</p>
+<p>Regarding the unexpected results of expand/collapse, you noted that you expected <code>{ [1.0, 1.1), [1.1, 1.2) }</code> but got <code>{1.0, 1.09999999], [1.1, 1.1999999] }</code>.  Based on current definitions, those are indeed equivalent.  Execution engines <em>could</em> potentially detect these situations and translated to the simpler representation and still be spec-compliant.</p>
+<p>If we change the definition of predecessor/successor, then<code>expand { [1.0, 1.2000000) }</code> becomes <code>{ [1.0, 1.1), [1.1, 1.2) }</code> which (according to the proposed definition) is actually the same as <code>{ [1.0, 1.0], [1.1, 1.1] }</code>. The expanded set now contains <em>gaps</em> between 1.0 and 1.1 and after 1.1.  The original unexpanded interval contains 1.05 and 1.11; the new expanded set of intervals does <em>not</em>.  I'd suggest that it is a problem if expanded intervals do not encompass all the same numbers as the original interval contained.</p>
+<p>All that said, I do understand the concern about introducing more precision than was originally specified -- but I wanted to bring at least the above into the discussion before looking into it more.</p>
+
+
+
+<a name="246861419"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Decimal%20equivalence%20/%20predecessor%20/%20successor%20and%20intervals/near/246861419" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Decimal.20equivalence.20.2F.20predecessor.20.2F.20successor.20and.20intervals.html#246861419">(Jul 22 2021 at 15:15)</a>:</h4>
+<blockquote>
+<p>The expanded set now contains gaps between 1.0 and 1.1 and after 1.1.</p>
+</blockquote>
+<p>I don't think this is the case if given precision-aware equivalence. Since the intervals would be defined at a granularity of .1, the intervals { [1.0, 1.0], [1.1,1.1] } would meet. Increments smaller than .1 simply don't exist or can't be represented. That's actually an important part of why the operators should not introduce additional precision. It creates gaps where there formally were none.</p>
+<p>I think the DateTime comparison is relevant here again. There's no gap between <code>{[@2018, @2018], [@2019, @2019] }</code> and there's no gap between <code>{[@2018-01-01, @2018-01-01], [@2018-01-02, @2018-01-02] }</code>. The precision at which the boundaries are specified determines that. </p>
+<blockquote>
+<p>Interval[3.0, 5.0) becomes Interval[3.0, 4.9] and does not contain all real numbers &lt; 5 (for example, 4.95).</p>
+</blockquote>
+<p>The same applies with the current definition, except that rather 4.95, it's 4.9999999995. There's still the same "gap" between 5 and the next smallest number than 5, it just is hard-coded to be the minimum decimal increment defined by the spec. It's not the case today that the intervals generated contain "all real numbers &lt; 5 ". They contain "all real numbers &lt; 5 that can be represented by the current minimum decimal precision listed in the spec, even though more precise implementations may actually be able to represent more of the numbers &lt;5."  For any given level of precision there will always be an arbitrarily small gap. The way around the "gap" is to make the interval calculations precision-aware, such that any gap that's smaller than the level of precision is not a gap. <span aria-label="smile" class="emoji emoji-1f642" role="img" title="smile">:smile:</span></p>
+
+
+
+<a name="246862438"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Decimal%20equivalence%20/%20predecessor%20/%20successor%20and%20intervals/near/246862438" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Decimal.20equivalence.20.2F.20predecessor.20.2F.20successor.20and.20intervals.html#246862438">(Jul 22 2021 at 15:23)</a>:</h4>
+<blockquote>
+<p>I'd suggest that it is a problem if expanded intervals do not encompass all the same numbers as the original interval contained.</p>
+</blockquote>
+<p>I think this too is already handled. Given precision-aware successors/predecessors the new expanded intervals are actually <em>broader</em> than the input intervals:</p>
+<p><code>{ [1.0, 1.0], [1.1, 1.1] }</code> -&gt; does contain 1.19999999999999. given precision-aware equivalence.</p>
+<p>This is consistent with guidance in the expand operation definition:</p>
+<blockquote>
+<p>If the interval boundaries are more precise than the per quantity, the more precise values will be truncated to the precision specified by the per quantity. In these cases, the resulting list of intervals may be more broad than the input range due to this truncation. For example:</p>
+</blockquote>
+
+
+
+<a name="246863226"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Decimal%20equivalence%20/%20predecessor%20/%20successor%20and%20intervals/near/246863226" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Decimal.20equivalence.20.2F.20predecessor.20.2F.20successor.20and.20intervals.html#246863226">(Jul 22 2021 at 15:30)</a>:</h4>
+<p>Actually,  I take that back. Given this bit:</p>
+<blockquote>
+<p>For decimals, equivalent means the values are the same with the comparison done on values rounded to the precision of the least precise operand; trailing zeroes after the decimal are ignored in determining precision for equivalent comparison</p>
+</blockquote>
+<p>you are correct. It wouldn't contain that.</p>
+
+
+
+<a name="246863621"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Decimal%20equivalence%20/%20predecessor%20/%20successor%20and%20intervals/near/246863621" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Decimal.20equivalence.20.2F.20predecessor.20.2F.20successor.20and.20intervals.html#246863621">(Jul 22 2021 at 15:33)</a>:</h4>
+<p>There's another inconsistency here, which is that the "expand" operator specifies truncation rather than rounding:</p>
+<blockquote>
+<p>If the interval boundaries are more precise than the per quantity, the more precise values will be truncated to the precision specified by the per quantity.</p>
+</blockquote>
+
+
+
+<a name="246864431"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Decimal%20equivalence%20/%20predecessor%20/%20successor%20and%20intervals/near/246864431" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Decimal.20equivalence.20.2F.20predecessor.20.2F.20successor.20and.20intervals.html#246864431">(Jul 22 2021 at 15:39)</a>:</h4>
+<p>So there's at least two issues here that make it difficult to produce an implementation of "expand" for decimals:</p>
+<ol>
+<li>The successor / predecessor operations that use a fixed precision</li>
+<li>Truncation vs rounding in expand and equivalent, respectively</li>
+</ol>
+
+
+
+<a name="246879033"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Decimal%20equivalence%20/%20predecessor%20/%20successor%20and%20intervals/near/246879033" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Decimal.20equivalence.20.2F.20predecessor.20.2F.20successor.20and.20intervals.html#246879033">(Jul 22 2021 at 17:25)</a>:</h4>
+<p>If rounding were used in the interval construction instead of truncation you still run into the scenario where the constructed intervals may exclude values in the original set. It depends on whether a lower boundary is rounded up or and upper boundary is rounded down. So changing the "expand" definition for decimals there to use rounding does not solve that particular issue on its own.</p>
+
+
+
+<a name="246882427"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Decimal%20equivalence%20/%20predecessor%20/%20successor%20and%20intervals/near/246882427" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Decimal.20equivalence.20.2F.20predecessor.20.2F.20successor.20and.20intervals.html#246882427">(Jul 22 2021 at 17:51)</a>:</h4>
+<p>Both DateTime and Decimals represent continuous variables to an arbitrary level of precision. DateTimes use a different base for each level of precision (365, 12, 30, 24, 60, 60...) so it's more clear that comparisions are only valid for a given level of precision. That makes me think rounding is the wrong answer for decimal equivalence. That said, comparing decimals only to the precision of the coarsest operand leads to some counter-intuitive results.</p>
+<div class="codehilite"><pre><span></span><code>1 &gt;= 1.05 = null
+@2018 &gt;= @2018-01-02 = null
+</code></pre></div>
+<p>Hmm...</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

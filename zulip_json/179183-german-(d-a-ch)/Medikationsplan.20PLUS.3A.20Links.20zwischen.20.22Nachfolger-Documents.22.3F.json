@@ -1,0 +1,194 @@
+[
+    {
+        "content": "<p>Bei der Bundereinheitliche Medikationsplan in Papierformat sind (wenn ich das richtig verstehe) aufeinanderfolgende Pläne unabhängig; ein neuer Papierplan ersetzt alle ältere Pläne. Wie <a href=\"#narrow/stream/27-german-(d-a-ch)/subject/Status.20Medikationsplan.20PLUS.20auf.20Simplifer\" title=\"#narrow/stream/27-german-(d-a-ch)/subject/Status.20Medikationsplan.20PLUS.20auf.20Simplifer\">in diesem Thread</a> diskutiert, könnte man das mit Medikationsplan PLUS in FHIR nachbilden, in dem man jeden neuen Plan (qua <code>Bundle</code>) POSTet. Dass ist auch im Einklang mit der generellen Regel für FHIR Documents, dass der Inhalt eines bestimmten Dokuments nie substantitiell geändert werden darf (was ja bei Medikationspläne meistens passiert).</p>\n<p>Wenn man aber immer POST macht (im Gegensatz zu PUT), hat man keine Verbindung mehr zwischen aufeinenanderfolgenden Pläne (Historie), genau wir bei ausgedruckten BMP-Plänen. In der elektronischen Welt möchte man aber vielleicht z.B. gerne von einem Med-Plan zum Vorgängerplan navigieren. Oder nach Plänen, die in einem bestimmten Zeitraum erstellt wurden, suchen, und dann wissen, welcher Plan am <em>Anfang</em> vom Zeitraum gültig war (also der Vorgänger vom ersten Plan, der von der Suche zurückkam).</p>\n<p>Daher meine Frage (endlich <span class=\"emoji emoji-1f604\" title=\"smile\">:smile:</span>): Gibt es schon Extensions für <code>Composition</code>, womit man FHIR Documents miteinander verlinken kann, und so z.B. auf einen \"Vorgänger\" zeigen kann? Was ich damit gerne kommunizieren würde wäre: \"Als dieser MPP-Plan erstellt wurde, war der folgende Plan gültig (wurde aber durch mich ungültig gemacht)\". Oder gibt es vielleicht ganz andere Ansätze?</p>",
+        "id": 154020858,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1543243934
+    },
+    {
+        "content": "<p>Interessante Frage.<br>\nEigentlich wäre dafür Composition.relatesTo gedacht, mit relatesTo.code=replaces (oder transforms) und targetReference auf die \"veraltete\" Composition.<br>\nIch bin aber gerade nicht sicher, ob eine Referenz auf eine Composition, die <em>ausschließlich</em> in einem Bundle existiert, zulässig ist.</p>",
+        "id": 154020903,
+        "sender_full_name": "Stefan Lang",
+        "timestamp": 1543254447
+    },
+    {
+        "content": "<p>Wobei beim MPP ja durchaus <em>auch</em> gedacht war, die Ressourcen aufzulösen, dann wäre das kein Thema.</p>",
+        "id": 154020904,
+        "sender_full_name": "Stefan Lang",
+        "timestamp": 1543254542
+    },
+    {
+        "content": "<p>Guter Punkt, das hatte ich irgendwie übersehen! Aber könnte man nicht die <code>Composition</code>, auf der man verweist, mit in das Bundle aufnehmen? Oder, als alternative, könnte man nicht <code>relatesTo.targeIdentifier</code>benutzen und damit auf eine <code>Composition</code>verweisen, auch wenn sie in einem <code>Bundle</code>\"eingeschlossen\" ist? Ich hätte eigentlich gedacht (gehofft), dass die Persistenzmethode für Bundles nicht darüber entscheidet, ob man auf andere Bundles verweisen kann oder nicht.</p>\n<p>Eigentlich frage ich mich, ob man nicht <em>immer</em> eine zweite<code>Composition</code>, auf der man so verweist, in das Bundle aufnehmen müsste,  denn <a href=\"https://www.hl7.org/fhir/documents.html#presentation\" target=\"_blank\" title=\"https://www.hl7.org/fhir/documents.html#presentation\">die Doku für FHIR Documents (STU3)</a> sagt ja: </p>\n<blockquote>\n<p>Any resource referenced directly in the Composition SHALL be included in the bundle when the document is assembled. </p>\n</blockquote>\n<p>und das würde ja eigentlich auf ein Referenz in <code>relatesTo</code>zutreffen. Allerdings gibt es gleich danach einen Liste von allen relevanten Feldern und da ist <code>relatesTo</code><em>nicht</em> drauf:</p>\n<blockquote>\n<p>Specifically, this means the following resource references:</p>\n<ul>\n<li>Composition.subject</li>\n<li>Composition.encounter</li>\n<li>Composition.author</li>\n<li>Composition.attester.party</li>\n<li>Composition.custodian</li>\n<li>Composition.event.detail</li>\n<li>Composition.section.entry</li>\n</ul>\n<p>Other resources that these referenced resources refer to may also be included in the bundle if the document construction system chooses to do so.</p>\n</blockquote>\n<p>Stehe ich auf dem Schlauch oder wiederspricht die Doku sich selbst hier?</p>",
+        "id": 154021060,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1543329511
+    },
+    {
+        "content": "<p>Ich denke, das Ziel von relatesTo (also die \"alte\" Composition) aufzunehmen, widerspricht ein wenig der Idee, mit Document-Bundles die Strukturen von (CDA-)Dokumenten zu repräsentieren.<br>\nIst aber sicher eine kurze Frage im Implementers-Chat wert, und wahrscheinlich auch einen Tracker zur Clarification.</p>",
+        "id": 154021122,
+        "sender_full_name": "Stefan Lang",
+        "timestamp": 1543342079
+    },
+    {
+        "content": "<p>Hallo, hier meine 5ct zu diesem Thema:</p>\n<p>Würde man ein FHIR-Repository dazu verwenden, Dokumente nur als unveränderliches Ganzes, also als Bundles zu persistieren, hätte man keinerlei Such-Funktionen über die API. Die Dokumente sind damit ungefähr genau so nützlich wie PDFs. Um die Bundles sinnvoll (im Sinne von FHIR) verwalten zu können, müsste man zu jedem eine DocumentReference-Ressource erstellen, die die Metadaten zu dem Dokument enthält (ählich wie man das in XDS mit dem ebXML zu einem CDA macht). Über die DocumentReference könnte man dann nach bestimmten Dokumenten suchen und auf sie zugreifen. Die DocumentReference hat auch die Möglichkeit,  über einen relatesTo-Link auf ein vorhergehendes Dokument zu verweisen. Das Bundle mit dem Inhalt würde man über content.attachment referenzieren.</p>\n<p>Zweite Möglichkeit: Man packt die Ressourcen aus (so wie wir das momentan au dem Testserver tun) und hat damit volle Such- und Zugriffsmöglichkeiten. Sinnvoll wäre indiesem Zusammenhang, das Original-Bundle ebenfalls zu speichern und über eine Provenance mit den daraus extrahierten Einzel-Ressourcen zu verknüpfen. Dann hat man beides: flexibel nutzbare Daten und unveränderliche Dokumente. Aber auch 100% Redundanz.</p>\n<p>Ich schätze, jeder Medikatinsplan-Annahme-Server muss für sich selbst - und abhängig vom UseCase - entscheiden, ob er ein Dokumenten- oder ein Daten-Repository sein will...</p>\n<p>Dass das Ziel eines relatesTo-Links einer Composition <em>nicht</em> in einem Document-Bundle enthalten sein muss ist m.E. richtig. Denn das Ziel hätte ja auch wiederum direkt verlinkte Ressourcen, die dann auch mitverpackt werden müssten und dann hätte man jedes mal die komplette Historie bis Adam und Eva in jedem Bundle.</p>",
+        "id": 154021234,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1543388294
+    },
+    {
+        "content": "<p>Die zweite Möglichkeit ist ja eigentlich beim MPP die Intention (s.o. \"... auch Ressourcen aufzulösen ...\").</p>\n<p>Via DocumentReference ist natürlich machbar, aber IMHO irgendwie von hinten durch die Brust ins Auge.</p>",
+        "id": 154021296,
+        "sender_full_name": "Stefan Lang",
+        "timestamp": 1543404853
+    },
+    {
+        "content": "<p>Danke für Euren Input!</p>\n<p><span class=\"user-mention\" data-user-id=\"191436\">@Stefan Lang</span> Jou, da werde ich mal nachfragen.</p>\n<p><span class=\"user-mention\" data-user-id=\"191450\">@Simone Heckmann</span>  Ja, einen \"dumb Bundle\" ist sicherlich nicht viel Wert. Anderseits ist das komplette Auseinandernehmen  &amp; Weiderzusammenbauen natürlich auch komplitziert (und ggf. redundant), und in unserem Fall brauchen wir z.B. keinen Zugriff oder Suche auf Einzelresources aus dem Plan. Wie Du ja sagst muss man sich das gut überlegen, ich habe da auch viel Zeit versenkt (und bin noch nicht ganz am Ziel...).</p>\n<p>Eine dritte Möglichkeit - die auch in der Doku zu FHIR Documents erwähnt wird - ist ja auch, dass man (teilweise) die Dokumente über eigene FHIR Operations (oder vielleicht Custom-Search) sucht/bearbeitet. Da geht man zwar über die vordefinierte FHIR-Elemente hinaus, was natürlich die \"offene Interoperabilität\" einschränkt. Anderseits kann man aber sehr gezielt die Workflows für einen bestimmten Usecase unterstützen, was ja auch für die Clients eine erhebliche Erleichterung sein kann, besonders wo sehr genaue und komplizierte Business-Logik involviert ist.</p>\n<p>Und stimmt, noch einen <code>Composition</code> im <code>Bundle</code> würde ja szs. zu einem Babuschka-Bundle führen - lieber nicht machen <span class=\"emoji emoji-263a\" title=\"smile\">:smile:</span></p>",
+        "id": 154021522,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1543481633
+    },
+    {
+        "content": "<p>BTW, habe gerade gesehen, dass in der R4 Doku  der verwirrende Satzt zu \"directly referenced Resources\" weg ist.</p>",
+        "id": 154021525,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1543482355
+    },
+    {
+        "content": "<p>Was man mit Dokumenten und eigenen Operations treibt ist natürlich jedem selbst überlassen (dafür gibt's ja frei definierbare Operations).<br>\nMan sollte nur darauf achten, die Funktionalitäten der RESTful API nicht via dieser Operations noch einmal komplett abzubilden ;-)</p>\n<p>\"Babuschka-Bundle\" trifft es sehr gut <span class=\"emoji emoji-1f602\" title=\"joy\">:joy:</span></p>",
+        "id": 154021528,
+        "sender_full_name": "Stefan Lang",
+        "timestamp": 1543482659
+    },
+    {
+        "content": "<p>Der \"directly referenced\"-Satz steht doch auch noch in R4?</p>",
+        "id": 154021530,
+        "sender_full_name": "Stefan Lang",
+        "timestamp": 1543482824
+    },
+    {
+        "content": "<p>Nee, der ist Weg, jetzt gibt es nur eine Liste von Felder, für die man referenzierte Resources inkludieren muss (und <code>relatesTo</code>ist nicht auf dieser Liste)</p>",
+        "id": 154021531,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1543482894
+    },
+    {
+        "content": "<p>Copy &amp; Paste von <a href=\"http://build.fhir.org/documents.html\" target=\"_blank\" title=\"http://build.fhir.org/documents.html\">http://build.fhir.org/documents.html</a><br>\n\"Any resource referenced directly in the Composition SHALL be included in the bundle when the document is assembled. Specifically, this means the following resource references: \"</p>\n<p>Oder was meinst Du?</p>",
+        "id": 154021532,
+        "sender_full_name": "Stefan Lang",
+        "timestamp": 1543482976
+    },
+    {
+        "content": "<p>ahh... ich war <a href=\"http://build.fhir.org/composition\" target=\"_blank\" title=\"http://build.fhir.org/composition\">bei der Doku für <code>Composition</code></a> und da steht jetzt nur eine Liste.</p>",
+        "id": 154021533,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1543483028
+    },
+    {
+        "content": "<p>Hehe, Konsistenz is an issue :D</p>",
+        "id": 154021534,
+        "sender_full_name": "Stefan Lang",
+        "timestamp": 1543483042
+    },
+    {
+        "content": "<p>Gut das Du das bemerkt hast, ich schreibe gerade die Frage für <em>implementers</em></p>",
+        "id": 154021535,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1543483073
+    },
+    {
+        "content": "<p>Frage in Implementer-Stream is <a href=\"#narrow/stream/4-implementers/topic/Composition.2ErelatesTo.20-.20how.20to.20use.20for.20Documents.3F\" title=\"#narrow/stream/4-implementers/topic/Composition.2ErelatesTo.20-.20how.20to.20use.20for.20Documents.3F\">hier</a>.</p>",
+        "id": 154021539,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1543484185
+    },
+    {
+        "content": "<blockquote>\n<p>[bundle]#[id] where bundle is the url of the bundle, and id is the id of the composition resource</p>\n</blockquote>\n<p>Ich hatte den fragment identifier gar nicht auf dem Schirm, gut zu wissen und danke fürs nachfragen.</p>",
+        "id": 154021568,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1543487827
+    },
+    {
+        "content": "<p>Dito. Wieder was gelernt!</p>",
+        "id": 154021587,
+        "sender_full_name": "Stefan Lang",
+        "timestamp": 1543489424
+    },
+    {
+        "content": "<p>ist sogar in DSTU3 enthalten, aber nur in der beschreibung von URI :-)</p>",
+        "id": 154021593,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1543490215
+    },
+    {
+        "content": "<p>Da musste ich auch erst mal schnell nachlesen... Aber ist das eindeutig?  - teoretisch könnten ja zwei unterschiedliche Resources unterschiedlichen Typs  im <code>Bundle</code> die gleiche ID haben.</p>",
+        "id": 154021630,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1543493387
+    },
+    {
+        "content": "<p>IDs sollten immer unterschiedlich sein, explizit finde ich das aber nicht. Man könnte es ableiten aus: <br>\n<em>bdl-7: FullUrl must be unique in a bundle, or else entries with the same fullUrl must have different meta.versionId (except in history bundles)</em><br>\nund bei details der FullURl: <em>The Absolute URL for the resource. The fullUrl SHALL NOT disagree with the id in the resource</em></p>",
+        "id": 154021648,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1543497784
+    },
+    {
+        "content": "<p>eine ID kann zudem den Type enthalten, also Patient/123</p>",
+        "id": 154021649,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1543497908
+    },
+    {
+        "content": "<p>Für die Referenz ins Bundle rein ist es damit eindeutig.<br>\nOb IDs global unique sein sollten, darüber kann man heftig diskutieren - darf aber nicht davon ausgehen, dass es so ist.</p>",
+        "id": 154021668,
+        "sender_full_name": "Stefan Lang",
+        "timestamp": 1543499487
+    },
+    {
+        "content": "<p>was wenn man keine FullUrls hat, aber IDs?</p>",
+        "id": 154021670,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1543499717
+    },
+    {
+        "content": "<p>Hm, dann autsch ... hast Recht.</p>",
+        "id": 154021672,
+        "sender_full_name": "Stefan Lang",
+        "timestamp": 1543499822
+    },
+    {
+        "content": "<p>Kleiner Nachtrag: Mir ist gerade aufgefallen, dass <code>Composition.relatesTo</code> in MPP gar nicht erlaubt ist, darüber kann man also nicht verlinken. Wisst Ihr, warum es rausgenommen wurde (im Profil selber steht leider kein Kommentar dazu)?</p>",
+        "id": 154025305,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1544700316
+    },
+    {
+        "content": "<p>Hallo Morten,<br>\nim MPP wurde leider die etwas unglückliche Entscheidung getroffen, alles was im Datenmodell <em>nicht vorgesehen</em> ist zu verbieten, was es im Prinzip unmöglich macht, neue Features hinzuzufügen.<br>\nAber mach doch bitte ein Issue ins GitHub des MPPs, damit der Ansatz überdacht werden kann...</p>",
+        "id": 154025389,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1544721417
+    },
+    {
+        "content": "<p>Hi Simone, wir haben genau damit zu kämpfen für unseren Usecase, habe gerade Gestern lange drüber nachgedacht. Ich hoffe, dass unsere Erfahrungen vielleicht auch für die Weiterentwicklung interessant sein könnten, da können wir gerne was mitbringen &amp; einbringen. Ich mache erstmal einen Issue auf.</p>",
+        "id": 154025618,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1544779104
+    },
+    {
+        "content": "<p>GitHub issue <a href=\"https://github.com/hl7germany/medikationsplanplusplus/issues/62\" target=\"_blank\" title=\"https://github.com/hl7germany/medikationsplanplusplus/issues/62\">#62</a></p>",
+        "id": 154025630,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1544789926
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191532\">@dr Kai U. Heitmann</span></p>",
+        "id": 154025656,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1544802515
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194952\">@Julian Sass</span></p>",
+        "id": 154025657,
+        "sender_full_name": "Simone Heckmann",
+        "timestamp": 1544802530
+    }
+]

@@ -1,0 +1,122 @@
+[
+    {
+        "content": "<p>Search context: <br>\nCatalogs implement the Composition resource and entries of a catalog are represented by CatalogEntry resources referenced by section.entry elements of the Composition. In the Catalog profile of Composition, section.entry is constrained to Reference(CatalogEntry).<br>\nI want to get all CatalogEntry resources referenced by section Hematology (LOINC 18723-7) of the catalog of id 4. Is the expression below syntactically correct and fit for this purpose?<br>\nGET [base]/CatalogEntry?_has:composition.where(id = 4).section.where(code.coding.where(system = %loinc and code = 18716-1))</p>",
+        "id": 153977253,
+        "sender_full_name": "François Macary",
+        "timestamp": 1532334321
+    },
+    {
+        "content": "<p>No, the URL-style query syntax is not integrated like this within FHIRPath.</p>\n<p>The only way to do \"anything\" with http directly, is the resolve() call, but this has to resolve to a single URL, e.g. <code>resolve('http://example.org/Patient/1').name.given</code>. </p>\n<p>Also, remember there's no concept of a \"server\" against which you execute the FHIRPath, it is evaluated against an (abstract) \"instance\", e.g. a single resource in FHIR.  </p>\n<p>Conceivably though, we could introduce a function http-get(string) that can return a bundle, which would be interpreted as a collection: <code>httpget('http://example.org/Patient?name=macary')</code></p>\n<p>In practice, you'd need more setup, since the server probably requires authentication and the like - all of this currently outside the scope of FHIRPath.</p>",
+        "id": 153977272,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1532344984
+    },
+    {
+        "content": "<p>Sorry Ewout, my topic title was maybe misleading.<br>\nMy intent is not to embed URL-style syntax within FHIRPath but the other way round:<br>\nI understoodd that FhirPath is usable to express search parameters. So I thought I could leverage a fhirpath expression embedded in my search parameter, which happens to use reverse chaining. <br>\nMy hope was that the fhirpath expression \"composition.where(id = 4).section.where(code.coding.where(system = %loinc and code = xxxx-x))\" would have specified the reverse chaining I wanted in my RESTful search: \"get resources referenced by Hematology section of catalog 4.\"<br>\nI'm on the server side and my plan was to implement this search with this syntax.<br>\nIf this does not work, then how is FHIRPath usable in search parameters? <br>\nThank you.</p>",
+        "id": 153977279,
+        "sender_full_name": "François Macary",
+        "timestamp": 1532346566
+    },
+    {
+        "content": "<p>what we say is that the API names search parameters so that the server can prepare the index in advance. it doesn't have to, of course. but that's why named parameters.</p>",
+        "id": 153977280,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1532346891
+    },
+    {
+        "content": "<p>we also provide search parmaeter definitions that have fhirpath for the parameters so they can be built automatically.</p>",
+        "id": 153977281,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1532346919
+    },
+    {
+        "content": "<p>but that's private to the server, whether it wants to do that or not</p>",
+        "id": 153977282,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1532346929
+    },
+    {
+        "content": "<p>Thank you Grahame.  I'm still struggling with search parameters.<br>\nSo given my current purpose: Search for CatalogEntry resources referenced under section coded xxx of Composition/4<br>\nI might solve it by naming a new composite search parameter for the CatalogEntry resource , which captures the two values _id of the Composition resource and the code of section referencing. <br>\nMy search would then look like this: GET [base]/CatalogEntry?in-catalog-section=4$18716-1<br>\nSorry for being in the wrong stream, now.</p>",
+        "id": 153977303,
+        "sender_full_name": "François Macary",
+        "timestamp": 1532356697
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span> I wonder if this is beyond our existing paradigm?</p>",
+        "id": 153977392,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1532384566
+    },
+    {
+        "content": "<p>Would we follow standard convention and allow \"foo ' bar\" and 'foo \" bar' to be legal, but not \"foo bar' or 'foo bar\"?</p>",
+        "id": 153977454,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1532398146
+    },
+    {
+        "content": "<p>I would think so.  Basically, either of ' or \" starts the string and you keep going until you find the 2nd occurrence of the character.</p>",
+        "id": 153977456,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1532398993
+    },
+    {
+        "content": "<p>yes that makes sense. but it's procedurally difficult</p>",
+        "id": 153977466,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1532406928
+    },
+    {
+        "content": "<blockquote>\n<p>Would we follow standard convention and allow \"foo ' bar\" and 'foo \" bar' to be legal, but not \"foo bar' or 'foo bar\"?</p>\n</blockquote>\n<p>I thought we fixed strings to always use 'xxxxx', since \"yyyyy\" is an escape for property names. Has that changed?</p>",
+        "id": 153977497,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1532416123
+    },
+    {
+        "content": "<p>no it hasn't but I'm finding that it's enduringly painful for me and others who are all confused.... wastes lots of my time</p>",
+        "id": 153977498,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1532416543
+    },
+    {
+        "content": "<blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span> I wonder if this is beyond our existing paradigm?</p>\n</blockquote>\n<p>You mean defining search parameters using a FHIRPath expression, where reverse chaining is involved?  Yes that's outside, currently we have a single instance in scope - and so doing:</p>\n<p>Composition.where(id = 4).section.where(...).entry.ofType(Reference).resolve().ofType(CatalogEntry) would only work if you already had the Composition in scope to begin with.</p>\n<p>You'd need to switch to \"Please bring all Compositions in scope, and then execute this\".  Feels like what CQL does with \"context Patient\", \"context Population\"....</p>",
+        "id": 153977499,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1532417465
+    },
+    {
+        "content": "<p>In general, the way CQL uses the \"Retrieve\" construct to kind of pre-load the evaluation context seems like a good way to do it: <a href=\"https://github.com/HL7/cql/blob/master/spec/2018May/02-authorsguide.adoc#retrieve\" target=\"_blank\" title=\"https://github.com/HL7/cql/blob/master/spec/2018May/02-authorsguide.adoc#retrieve\">https://github.com/HL7/cql/blob/master/spec/2018May/02-authorsguide.adoc#retrieve</a></p>",
+        "id": 153977501,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1532417818
+    },
+    {
+        "content": "<p>well, actually, I don't think that we can describe what Francois wants with our current search paradigm? (forget the FHIRPath bit)</p>",
+        "id": 153977502,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1532418128
+    },
+    {
+        "content": "<p>It is possible in the current Search framework to express exactly what <span class=\"user-mention\" data-user-id=\"192504\">@François Macary</span> intended with his GET example but it is a bit ugly and requires a very specialized searchparameter.</p>\n<p>A reverse chain (_has) can express two things:<br>\n1. The searchparameter that must chain the two resources together. In the example the most matching standard searchparameter for that is Composition.entry.<br>\n2. Filters on the referencing resource. In this example that is _id=4.<br>\nSo you can express:<br>\n<code>GET [base]/Catalogentry?_has:Catalog:entry:_id=4</code><br>\nThat will return the requested CatalogEntry resources. But it will also include any resources referenced by entries in sections not having code http://loinc.org|18716-1.</p>\n<p>So _has cannot express further filters to make a subselection of the references in the linking searchparameter (entry). And that is what is the intent here.</p>\n<p>To solve that, you need a searchparameter that already expresses that filter, and use that in the _has. This would be a very specialized searchparameter Composition.hematology-entry, with (corrected) expression<br>\n<code>Composition.section.where(code.coding.where(system=\"http://loinc.org\" and code=\"18716-1\")).entry</code><br>\nThe resulting GET would then be:<br>\n<code>GET [base]/CatalogEntry?_has:Catalog:hematology-entry:_id=4</code></p>\n<p>Note: Catalog and CatalogEntry are not (yet?) resourcetypes as far as I know, but to connect to the question I used them nonetheless.</p>",
+        "id": 153977505,
+        "sender_full_name": "Christiaan Knaap",
+        "timestamp": 1532422194
+    },
+    {
+        "content": "<p>I'm not a fan of a search parameter definition with a resolve in it, means that if the referenced item changes, it could change the search index value that I generated at the time. Have we done this anywhere?</p>",
+        "id": 153977812,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1532487695
+    },
+    {
+        "content": "<p>no</p>",
+        "id": 153977815,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1532487959
+    },
+    {
+        "content": "<p>phew, I didn't think we would have.</p>",
+        "id": 153977817,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1532488370
+    }
+]

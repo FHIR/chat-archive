@@ -1,0 +1,278 @@
+[
+    {
+        "content": "<p><strong>\"Idempotent\"</strong>: An idempotent operation is one that can be retried/replayed without affecting the outcome; the result will be the same if the operation is applied one time or a hundred times.</p>\n<p>By my reading, there are 4 \"writey\" operations in the FHIR spec:</p>\n<ul>\n<li>1. <code>PUT [base]/[type]/[id]</code></li>\n<li>2. <code>PUT [base]/[type]?[search parameters]</code></li>\n<li>3. <code>POST [base]/[type]</code></li>\n<li>4. <code>POST [base]/[type]</code> with <code>If-None-Exist: [search parameters]</code></li>\n</ul>\n<p>In HTTP, <code>PUT</code> operations are generally expected to be idempotent. I'm not a huge \"thou must perfectly follow the letter and spirit of the spec\" kind of person, but that particular assumption is baked into a lot of things. For instance, the Apache HTTP client library is (by default) configured to allow retry of <code>GET</code>s and <code>PUT</code>s, but not allow retry of <code>POST</code>s. No huge deal there: I can override the defaults. But things get a little bit more tricky with things that users don't directly control, such as HTTP proxies -- some of those will be configured to automatically retry things or not based on the HTTP operation.</p>\n<p>Unfortunately, of those 4 FHIR \"writey\" operations, only the last one (<code>POST [base]/[type]</code> with <code>If-None-Exist: [search parameters]</code>) is truly idempotent. The two <code>PUT</code> operations, per the spec, will create duplicate versions if they're retried.</p>\n<p>Why do I care? Because I'm pushing millions of FHIR write operations, a non-zero number of them fail for transport reasons, and I need to automatically retry them when that happens. So why don't I just use option #4? Because unfortunately, that option doesn't allow me to specify the resources' logical IDs as I'm creating them, which I'd really really like to do (makes maintaining the system MUCH simpler down the road).</p>",
+        "id": 153891376,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1495820630
+    },
+    {
+        "content": "<p>Anyone geeky/nerdy enough to have thoughts on this? I've checked and <a class=\"stream\" data-stream-id=\"8\" href=\"/#narrow/stream/hapi\">#hapi</a> doesn't honor the <code>If-None-Exist</code> header on <code>PUT</code>s -- and it shouldn't, per the spec.</p>",
+        "id": 153891377,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1495820779
+    },
+    {
+        "content": "<p>What I'd really love is to be able to add an <code>If-None-Exist: true</code> or somesuch header to option 1 submissions, and have it be honored as a different type of conditional create operation.</p>",
+        "id": 153891378,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1495820863
+    },
+    {
+        "content": "<p>Well, that's the quick and dirty solution, anyways. If you guys really wanted to ensure that <code>PUT</code>s were idempotent (per the HTTP spec), the FHIR spec would state that retrying the exact same <code>PUT</code> request with the exact same content would <strong>not</strong> result in duplicate versions.</p>",
+        "id": 153891379,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1495820950
+    },
+    {
+        "content": "<p>Wouldn't this (version aware updates) meet your requirement for a PUT operation that doesn't result in duplicate versions?<br>\n<a href=\"http://build.fhir.org/http.html#versionaware\" target=\"_blank\" title=\"http://build.fhir.org/http.html#versionaware\">http://build.fhir.org/http.html#versionaware</a></p>",
+        "id": 153891380,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1495821364
+    },
+    {
+        "content": "<p>Assuming the server supports it, that is.</p>",
+        "id": 153891381,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1495821445
+    },
+    {
+        "content": "<p>Unfortunately not, because <code>If-Match: null</code> isn't supported. I'd need something like that to say \"create this resource that shouldn't exist yet, but don't add a second version of it if I have to retry this request.\"</p>",
+        "id": 153891382,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1495822430
+    },
+    {
+        "content": "<p>Put another way: yeah, that could work for updates, but it wouldn't work for creates.</p>",
+        "id": 153891383,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1495822650
+    },
+    {
+        "content": "<p>I'm not following this exactly - why does it matter if it creates a new version?</p>",
+        "id": 153891384,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1495822977
+    },
+    {
+        "content": "<p>Wastes space with versions that are exact dupes.</p>",
+        "id": 153891385,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1495823057
+    },
+    {
+        "content": "<p>It seems to me you may be looking for a custom operation.</p>\n<p>For resource creation, the standard RESTful API uses a different HTTP verb (POST),  which may support the If-None-Exist header.</p>",
+        "id": 153891387,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1495823127
+    },
+    {
+        "content": "<p>Is more or less of a problem depending on how many resources one includes in each <code>Bundle</code>.</p>",
+        "id": 153891388,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1495823151
+    },
+    {
+        "content": "<p>Joel: Yup. But that <code>POST</code> operation doesn't allow clients to specify the logical ID.</p>",
+        "id": 153891389,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1495823202
+    },
+    {
+        "content": "<p>Why would the client need the ability to specify the logical id for a newly created resource?  Isn't that id supposed to be local to (and assigned by) the server?</p>",
+        "id": 153891390,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1495823402
+    },
+    {
+        "content": "<p>Quoting the spec:</p>\n<hr>\n<p>Note that servers MAY choose to allow clients to PUT a resource to a location that does not yet exist on the server - effectively, allowing the client to define the id of the resource. Whether a server allows this is a deployment choice based on the nature of its relationships with the clients. While many servers will not allow clients to define their ids, there are several reasons why it may be necessary in some configurations:</p>\n<ul>\n<li>client is reproducing an existing data model on the server, and needs to keep original ids in order to retain ongoing integrity</li>\n<li>client is a server doing push based pub/sub (this is a special case of the first reason)</li>\n<li>multiple clients doing push in the context of agreed data model shared across multiple servers where ids are shared across servers</li>\n</ul>\n<p>Alternatively, clients may be sharing an agreed identification model (e.g. key server, scoped identifiers, or UUIDs) where clashes do not arise.</p>\n<p>Servers can choose whether or not to support client defined ids, and indicate such to the clients using CapabilityStatement.rest.resource.updateCreate.</p>",
+        "id": 153891391,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1495823486
+    },
+    {
+        "content": "<p>there's a number of reasons why we would not state that \" retrying the exact same PUT request with the exact same content would not result in duplicate versions\"</p>",
+        "id": 153891392,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1495823601
+    },
+    {
+        "content": "<p>we might say that a server was allow to not create duplicate versions - that is, to ignore a change that isn't a change. that does seem possible</p>",
+        "id": 153891393,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1495823653
+    },
+    {
+        "content": "<p>But I'm wondering about the record-keeping requirements / provenance aspects of that. </p>",
+        "id": 153891394,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1495823665
+    },
+    {
+        "content": "<p>and i\"m also wondering what % of time this occurs - it seems sufficiently rare to me that the loss of resources is not overly strong</p>",
+        "id": 153891395,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1495823700
+    },
+    {
+        "content": "<p>What about a smaller change, like a mechanism to specify <code>If-Match: null</code> or something equivalent?</p>",
+        "id": 153891396,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1495823749
+    },
+    {
+        "content": "<p>It's a bit frustrating that all the _pieces_ I need are there: client-specified logical IDs, a mechanism to make creates idempotent, a mechanism to make updates idempotent, etc. But I can't combine them in the specific configuration that I need.</p>",
+        "id": 153891397,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1495823864
+    },
+    {
+        "content": "<p>Propagating logical IDs seems like a special case to me, involving systems which are not loosely coupled.</p>\n<p>Does the data travel in only one direction between these systems?  Is the downstream system a read-only copy of the upstream one?</p>",
+        "id": 153891399,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1495824290
+    },
+    {
+        "content": "<p>Yes and yes.</p>",
+        "id": 153891400,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1495824914
+    },
+    {
+        "content": "<p>This is an odd debate to me:</p>\n<ul>\n<li>Graham is arguing that duplicate versions/idempotency shouldn't matter, but there's already <code>If-Match</code>supports for updates, so the spec has conceded that issue.</li>\n<li>Joel is arguing that client-specified logical IDs shouldn't be needed, but there's already support for that with <code>PUT [base]/[type]/[id]</code> submissions, so the spec has conceded that issue.</li>\n</ul>\n<p>Are these features that folks disagree with and are hoping to pull from the spec eventually? Or is there some other reason to oppose adding a way to avoid duplicate versions for resource creates (instead of just updates, as things exist now)?</p>",
+        "id": 153891598,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1496103789
+    },
+    {
+        "content": "<p>I'm not arguing anything - just exploring the issues. But adding if-match because we need to support version aware updates is not the same as conceding that idempotency at this level matters</p>",
+        "id": 153891599,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1496104000
+    },
+    {
+        "content": "<p>(nor is it saying it doesn't)</p>",
+        "id": 153891600,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1496104042
+    },
+    {
+        "content": "<p>For the Blue Button FHIR server, idempotent creates get us two things:</p>\n<ul>\n<li>Allows us to retry the creates when they fail. We're seeing more socket/timeout errors in AWS than I've seen other places. Still not \"a lot\", butit's nice not having to worry about polluting the version history when it happens.</li>\n<li>Allows us to avoid building a lot of additional progress-tracking logic into our ETL service. It already checkpoints our initial load every .1% or so, so we can now stop in the middle of those .1% chunks (which can still take hours) and safely restart later without worrying about polluting the version history or wasting disk space.</li>\n</ul>\n<p>These are more concrete benefits than we were getting from predictable logical IDs, so I've just finished updating our code to handle creates by <code>POST</code>ing with <code>If-None-Exists</code>. It's be nice to not have to make that tradeoff, but oh well for now.</p>",
+        "id": 153891601,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1496104733
+    },
+    {
+        "content": "<p>I'm not arguing anything either.  Just observing that using the FHIR API to replicate logical IDs across multiple servers looks like a new use case.</p>",
+        "id": 153891603,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1496109535
+    },
+    {
+        "content": "<p>that's not new - we've had this from the beginning for many reasons</p>",
+        "id": 153891604,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1496109583
+    },
+    {
+        "content": "<p>In that case, I must be missing something.  Is there a way to specify the logical ID when creating a new resource via the REST API?</p>",
+        "id": 153891605,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1496110688
+    },
+    {
+        "content": "<p>yes. Just PUT it to the place you want it at </p>",
+        "id": 153891606,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1496110720
+    },
+    {
+        "content": "<p>Thanks, that's helpful.  Now I see the update (PUT) interaction \"creates an initial version if no resource already exists for the given id.\"</p>",
+        "id": 153891622,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1496127684
+    },
+    {
+        "content": "<p>HTTP's <code>If-None-Match: *</code>would seem to match this use-case exactly (<a href=\"https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.26\" target=\"_blank\" title=\"https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.26\">https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.26</a>)</p>",
+        "id": 153891981,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1496351547
+    },
+    {
+        "content": "<p>What about ´If-None-Match´with the client-generated logical ID as etag in the POST? Would that be considered a violation of the standard?</p>",
+        "id": 153892047,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1496388336
+    },
+    {
+        "content": "<p><code>PUT</code> with <code>If-None-Match: *</code> gives you an idempotent create operation .  Idempotent update is also do-able, but you need to know the E-Tag of the resource that you're updating.  I'm not clear if <span class=\"user-mention\" data-user-id=\"192789\">@Karl M. Davis</span> 's use case requires update or just create</p>",
+        "id": 153892092,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1496403157
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span> but don't you then leave it up to server to decide if it has seen the resource before - meaning it will be (entirely) proprietary? If the identifiers issued by the client can be embedded in the etag (using weak validation), it would be up to the client to decide what it sees as duplicate resources at the moment of creation?</p>",
+        "id": 153892096,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1496403893
+    },
+    {
+        "content": "<p>Our use case requires both create and update, but we can use different options for each, if need be.</p>",
+        "id": 153892097,
+        "sender_full_name": "Karl M. Davis",
+        "timestamp": 1496404141
+    },
+    {
+        "content": "<p>I agree, <code>PUT</code> with <code>If-None-Match: *</code> looks reasonable for idempotent creates.</p>\n<p>The version aware update mechanism (if supported) could perform idempotent updates.<br>\n<a href=\"http://build.fhir.org/http.html#versionaware\" target=\"_blank\" title=\"http://build.fhir.org/http.html#versionaware\">http://build.fhir.org/http.html#versionaware</a></p>",
+        "id": 153892140,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1496421530
+    },
+    {
+        "content": "<p>Has FHIR guidance regarding usage of <code>PUT</code> with <code>If-None-Match: *</code> yet been considered, or decided?  (e.g. to support <em>updateCreate</em> combined with <em>conditionalCreate</em>)</p>\n<p>Notably, as pointed out here by <span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span>, the <code>If-None-Match</code> section of RFC 2616 indicates <code>If-None-Match: *</code> is \"intended to be useful in preventing races between <code>PUT</code> operations.\"  (a.k.a. the \"lost update\" problem)<br>\n<a href=\"https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.26\" target=\"_blank\" title=\"https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.26\">https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.26</a></p>\n<p>Per <span class=\"user-mention\" data-user-id=\"192789\">@Karl M. Davis</span>, a header such as <code>If-None-Match: *</code> (or maybe <code>If-None-Exist: true</code>) would enable precise data replication between version-aware servers, where the downstream server is an exact, read-only copy of the upstream one.</p>\n<p>The FHIR spec presently describes usage of <code>If-None-Match</code> in conjunction with <code>GET</code>, but is apparently silent on its usage (if any) with <code>PUT</code>.  The spec additionally describes usage of a HL7-defined extension header, <code>If-None-Exist</code>, in conjunction with <code>POST</code>.<br>\n<a href=\"http://build.fhir.org/http.html\" target=\"_blank\" title=\"http://build.fhir.org/http.html\">http://build.fhir.org/http.html</a></p>\n<p>With this in mind, would it be reasonable to add guidance for using <code>PUT</code> with <code>If-None-Match: *</code> to the FHIR spec?</p>",
+        "id": 153892595,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1496799178
+    },
+    {
+        "content": "<p>we document use of the if-match header. I don't understand what extra is needed?</p>",
+        "id": 153892597,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1496799314
+    },
+    {
+        "content": "<p>Using <code>If-Match</code>, is there a way to require that the target resource does not exist?  E.g., in a <code>PUT</code> request which attempts to create a new resource with an assigned id.</p>",
+        "id": 153892605,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1496801839
+    },
+    {
+        "content": "<p>This is an old thread, but I'm now coming around to implement <code>PUT</code> and <code>If-Match</code> but this doesn't help with the case of using <code>PUT</code> to do a <code>create</code> -- I am planning to use <code>If-None-Match: *</code> rather than the FHIR-invented <code>If-None-Exist</code>.<br>\nIt would be really nice if the spec were updated to deal with this case and provide canonical advice.</p>",
+        "id": 205073794,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1595810051
+    },
+    {
+        "content": "<p>Is there any consensus here? I'm running into a similar issue. There is no standard way to create a resource with a client specified ID AND ensure an existing resource is not updated, if one already exists. If-None-Match (<a href=\"https://tools.ietf.org/html/rfc7232#section-3.2\">https://tools.ietf.org/html/rfc7232#section-3.2</a>) seems like the right solution.</p>",
+        "id": 209818200,
+        "sender_full_name": "Aaron Nash",
+        "timestamp": 1599849155
+    },
+    {
+        "content": "<p>I think we should add \"If-None-Match: *\" to PUT for this case.</p>\n<p>I think there is also some additional clarification that would be useful on If-Match. Can I If-Match on a deleted version (tombstone)? If the resource does not exist and never existed, and I PUT with \"If-Match: xyz\", is that still a 412 Precondition Failed? Should we call out \"If-Match: *\" as allowed by RFC 7232 to match any existing version?</p>",
+        "id": 209820514,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1599850389
+    },
+    {
+        "content": "<p>I created <a href=\"https://jira.hl7.org/browse/FHIR-28495\">https://jira.hl7.org/browse/FHIR-28495</a> for supporting \"If-None-Match\" for update operations.</p>\n<p><span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span> those seem like good clarifications to make. I haven't yet developed a opinion on the specific questions you've raised. Do you have any thoughts on the correct behaviors for those instances? I do believe it would be best if FHIR matched the behaviors described in RFC 7232 for the sections that FHIR supports.</p>",
+        "id": 209824585,
+        "sender_full_name": "Aaron Nash",
+        "timestamp": 1599852414
+    },
+    {
+        "content": "<p>I think it should be possible to If-Match on tombstones, the non-version should not If-Match any version, and If-Match: * would be useful.</p>",
+        "id": 209827252,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1599853874
+    }
+]

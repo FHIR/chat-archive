@@ -1,0 +1,122 @@
+---
+layout: page
+title: "FHIR Chat  · slow response on moderate dataset · ibm"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/index.html">ibm</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html">slow response on moderate dataset</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="180524434"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/slow%20response%20on%20moderate%20dataset/near/180524434" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Xiaocheng Luan <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html#180524434">(Nov 12 2019 at 14:59)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="191676">@Lee Surprenant</span> I'm seeing unusual slowness in responses, I'm wondering if I missed anything or whether you have any rough performance numbers? I understand Derby DB will be slow, but not sure if the numbers observed below are "normal".<br>
+Here are the details:<br>
+- The FHIR server was deployed with the default configurations (Derby DB), on a server with 8 CPU and 32G memory (hmm, did not explicitly set -Xmx).<br>
+- Uploaded some 300K resources, most of which are observations, total json data size ~300MB, took less than an hour to load<br>
+On the API calls, however, the responses were surprisingly slow:<br>
+- Getting (well, searching/retrieving) 1 (out of 300K observations), took 12 seconds: <a href="https://localhost:9443/fhir-server/api/v4/Observation?_count=1" target="_blank" title="https://localhost:9443/fhir-server/api/v4/Observation?_count=1">https://localhost:9443/fhir-server/api/v4/Observation?_count=1</a>; repeat the same request multiple times and the response times were comparable. <br>
+- Getting  1 (out of 45) patient was ok, took some 250ms: <a href="https://localhost:9443/fhir-server/api/v4/Patient?_count=1" target="_blank" title="https://localhost:9443/fhir-server/api/v4/Patient?_count=1">https://localhost:9443/fhir-server/api/v4/Patient?_count=1</a><br>
+- Getting 1 (out of ~3000) condition was not too bad, took some 400ms: <a href="https://localhost:9443/fhir-server/api/v4/Condition?_count=1" target="_blank" title="https://localhost:9443/fhir-server/api/v4/Condition?_count=1">https://localhost:9443/fhir-server/api/v4/Condition?_count=1</a><br>
+- Searching (and get 1) observation of a given patient, took 22 seconds: <a href="https://localhost:9443/fhir-server/api/v4/Observation?_count=1&amp;subject=Patient/xxxx" target="_blank" title="https://localhost:9443/fhir-server/api/v4/Observation?_count=1&amp;subject=Patient/xxxx">https://localhost:9443/fhir-server/api/v4/Observation?_count=1&amp;subject=Patient/xxxx</a><br>
+- Getting an observation by id, took ~700ms: <a href="https://localhost:9443/fhir-server/api/v4/Observation/8850efc8-c110-4e8b-a035-36f5e138e5db" target="_blank" title="https://localhost:9443/fhir-server/api/v4/Observation/8850efc8-c110-4e8b-a035-36f5e138e5db">https://localhost:9443/fhir-server/api/v4/Observation/8850efc8-c110-4e8b-a035-36f5e138e5db</a></p>
+
+
+
+<a name="180547414"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/slow%20response%20on%20moderate%20dataset/near/180547414" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lee Surprenant <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html#180547414">(Nov 12 2019 at 18:46)</a>:</h4>
+<p>thanks Xiaocheng, we'll have a look.  agree those numbers look bad.  we'll try running a similar test against Derby and Db2 and report back.</p>
+
+
+
+<a name="180547751"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/slow%20response%20on%20moderate%20dataset/near/180547751" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lee Surprenant <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html#180547751">(Nov 12 2019 at 18:49)</a>:</h4>
+<p>in the meantime, if you are curious to poke around, you can enable logging on our persistence layer to see the exact SQL getting executed.  as you might expect, Getting by an id should be little more than a straight select from the corresponding table, so i'd be curious how long it takes if we execute the SQL directly (e.g. via the derby <code>ij</code> tool or similar)</p>
+
+
+
+<a name="180619092"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/slow%20response%20on%20moderate%20dataset/near/180619092" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Bastide <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html#180619092">(Nov 13 2019 at 12:14)</a>:</h4>
+<p>Hi Xiaocheng, Did you use embedded derby? by default we set 4GB in jvm.options.  If you used the Derby network server, it's default is 512M, you'd want to increase this.</p>
+
+
+
+<a name="180636336"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/slow%20response%20on%20moderate%20dataset/near/180636336" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Albert(Xu) Wang <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html#180636336">(Nov 13 2019 at 15:19)</a>:</h4>
+<p>hi XiaoCheng, we had some similar bad performance results when using derby, I would suggest you to try db2. you can use the db2 docker image here <a href="https://hub.docker.com/r/ibmcom/db2" target="_blank" title="https://hub.docker.com/r/ibmcom/db2">https://hub.docker.com/r/ibmcom/db2</a> for your testing, and make sure to use the the 90-day trail license to remove the memory limitation.  I had created 300K observations and patients with db2, and all my search tests were finished in just few seconds. let us know if you need some help to set up db2 for your fhir server.</p>
+
+
+
+<a name="180637664"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/slow%20response%20on%20moderate%20dataset/near/180637664" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lee Surprenant <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html#180637664">(Nov 13 2019 at 15:31)</a>:</h4>
+<p>Given this good feedfack on the poor performance of derby, we just added the following line in the docs: <br>
+<a href="https://github.com/IBM/FHIR/pull/404/files" target="_blank" title="https://github.com/IBM/FHIR/pull/404/files">https://github.com/IBM/FHIR/pull/404/files</a></p>
+
+
+
+<a name="180639448"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/slow%20response%20on%20moderate%20dataset/near/180639448" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Xiaocheng Luan <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html#180639448">(Nov 13 2019 at 15:47)</a>:</h4>
+<blockquote>
+<p>in the meantime, if you are curious to poke around, you can enable logging on our persistence layer to see the exact SQL getting executed.  as you might expect, Getting by an id should be little more than a straight select from the corresponding table, so i'd be curious how long it takes if we execute the SQL directly (e.g. via the derby <code>ij</code> tool or similar)</p>
+</blockquote>
+<p>Will do when I get a chance and report back, thanks for the response.</p>
+
+
+
+<a name="180639614"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/slow%20response%20on%20moderate%20dataset/near/180639614" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Xiaocheng Luan <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html#180639614">(Nov 13 2019 at 15:48)</a>:</h4>
+<blockquote>
+<p>hi XiaoCheng, we had some similar bad performance results when using derby, I would suggest you to try db2. you can use the db2 docker image here <a href="https://hub.docker.com/r/ibmcom/db2" target="_blank" title="https://hub.docker.com/r/ibmcom/db2">https://hub.docker.com/r/ibmcom/db2</a> for your testing, and make sure to use the the 90-day trail license to remove the memory limitation.  I had created 300K observations and patients with db2, and all my search tests were finished in just few seconds. let us know if you need some help to set up db2 for your fhir server.</p>
+</blockquote>
+<p>Thanks for sharing the experience, and thanks for the tips.</p>
+
+
+
+<a name="180639750"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/slow%20response%20on%20moderate%20dataset/near/180639750" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Xiaocheng Luan <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html#180639750">(Nov 13 2019 at 15:49)</a>:</h4>
+<blockquote>
+<p>Hi Xiaocheng, Did you use embedded derby? by default we set 4GB in jvm.options.  If you used the Derby network server, it's default is 512M, you'd want to increase this.</p>
+</blockquote>
+<p>Yes, we use derby, and everything default. I just checked the process it's using 4GB, so should be reasonable.</p>
+
+
+
+<a name="180640181"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/slow%20response%20on%20moderate%20dataset/near/180640181" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Xiaocheng Luan <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html#180640181">(Nov 13 2019 at 15:53)</a>:</h4>
+<p>Thanks for the answers, <span class="user-mention" data-user-id="246296">@Albert(Xu) Wang</span> , <span class="user-mention" data-user-id="192632">@Paul Bastide</span> . For whatever reason "quote and reply" within your messages put my responses under Lee's message.</p>
+
+
+
+<a name="180642967"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/slow%20response%20on%20moderate%20dataset/near/180642967" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lee Surprenant <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html#180642967">(Nov 13 2019 at 16:16)</a>:</h4>
+<blockquote>
+<p>For whatever reason "quote and reply" within your messages put my responses under Lee's message.</p>
+</blockquote>
+<p>thats just how zulip works...no subthreads like slack has</p>
+
+
+
+<a name="180655551"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/slow%20response%20on%20moderate%20dataset/near/180655551" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Albert(Xu) Wang <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html#180655551">(Nov 13 2019 at 18:19)</a>:</h4>
+<p>hi XiaoCheng, we have just added a new testng test here <a href="https://github.com/IBM/FHIR/blob/master/fhir-server-test/src/test/java/com/ibm/fhir/server/test/SearchPerformaceTest.java" target="_blank" title="https://github.com/IBM/FHIR/blob/master/fhir-server-test/src/test/java/com/ibm/fhir/server/test/SearchPerformaceTest.java">https://github.com/IBM/FHIR/blob/master/fhir-server-test/src/test/java/com/ibm/fhir/server/test/SearchPerformaceTest.java</a>  <a href="/user_uploads/10155/Rql3k1UETyR_cKPn0oUyQhaT/Screen-Shot-2019-11-13-at-8.44.27-AM.png" target="_blank" title="Screen-Shot-2019-11-13-at-8.44.27-AM.png">Screen-Shot-2019-11-13-at-8.44.27-AM.png</a>  and the test results of db2 with 300K observations and patients.</p>
+<div class="message_inline_image"><a href="/user_uploads/10155/Rql3k1UETyR_cKPn0oUyQhaT/Screen-Shot-2019-11-13-at-8.44.27-AM.png" target="_blank" title="Screen-Shot-2019-11-13-at-8.44.27-AM.png"><img src="/user_uploads/10155/Rql3k1UETyR_cKPn0oUyQhaT/Screen-Shot-2019-11-13-at-8.44.27-AM.png"></a></div>
+
+
+
+<a name="180658751"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/slow%20response%20on%20moderate%20dataset/near/180658751" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lee Surprenant <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html#180658751">(Nov 13 2019 at 18:51)</a>:</h4>
+<p>Albert, those results were from running the db2 container like you mentioned earlier in the thread?  What were the limits there again?  4GB of RAM?</p>
+
+
+
+<a name="180982474"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/212434-ibm/topic/slow%20response%20on%20moderate%20dataset/near/180982474" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Albert(Xu) Wang <a href="https://fhir.github.io/chat-archive/stream/212434-ibm/topic/slow.20response.20on.20moderate.20dataset.html#180982474">(Nov 18 2019 at 02:06)</a>:</h4>
+<p>this is the instruction about how to use db2 docker container for integration test, the limitation is removed by enabling the 90 dail trail license in <a href="http://create-database.sh" target="_blank" title="http://create-database.sh">create-database.sh</a>.   <a href="https://github.com/IBM/FHIR/blob/master/fhir-install/README-DB2.md" target="_blank" title="https://github.com/IBM/FHIR/blob/master/fhir-install/README-DB2.md">https://github.com/IBM/FHIR/blob/master/fhir-install/README-DB2.md</a></p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

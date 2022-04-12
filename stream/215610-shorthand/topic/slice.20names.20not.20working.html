@@ -1,0 +1,113 @@
+---
+layout: page
+title: "FHIR Chat  · slice names not working · shorthand"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/index.html">shorthand</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/slice.20names.20not.20working.html">slice names not working</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="276102811"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/slice%20names%20not%20working/near/276102811" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/slice.20names.20not.20working.html#276102811">(Mar 21 2022 at 19:34)</a>:</h4>
+<p>Given a test IG I have -- <a href="https://github.com/JohnMoehrke/SlicingSlicedExtension">https://github.com/JohnMoehrke/SlicingSlicedExtension</a><br>
+which I have simplified... but seems a slice inside an extension inside a slice is such that my examples can't use the slicename... I can't use my slice name of <code>npi</code> or <code>provider-id</code></p>
+<p>I want to say</p>
+<div class="codehilite"><pre><span></span><code>* agent[user].extension[extOtherId][npi].valueIdentifier.type = http://terminology.hl7.org/CodeSystem/v2-0203#NPI
+* agent[user].extension[extOtherId][npi].valueIdentifier.value = &quot;1234567@myNPIregistry.example.org&quot;
+* agent[user].extension[extOtherId][provider-id].valueIdentifier.type = http://terminology.hl7.org/CodeSystem/v2-0203#PRN
+* agent[user].extension[extOtherId][provider-id].valueIdentifier.value = &quot;JohnD&quot;
+</code></pre></div>
+<p>but am forced to say</p>
+<div class="codehilite"><pre><span></span><code>* agent[user].extension[extOtherId][+].valueIdentifier.type = http://terminology.hl7.org/CodeSystem/v2-0203#NPI
+* agent[user].extension[extOtherId][=].valueIdentifier.value = &quot;1234567@myNPIregistry.example.org&quot;
+* agent[user].extension[extOtherId][+].valueIdentifier.type = http://terminology.hl7.org/CodeSystem/v2-0203#PRN
+* agent[user].extension[extOtherId][=].valueIdentifier.value = &quot;JohnD&quot;
+</code></pre></div>
+
+
+
+<a name="276131479"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/slice%20names%20not%20working/near/276131479" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/slice.20names.20not.20working.html#276131479">(Mar 22 2022 at 00:37)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="191404">@John Moehrke</span>.  You've run into one of the few cases where ordering of statements does matter for SUSHI.  When you slice an element, SUSHI creates the slices using copies of that element with the constraints that were there <em>at the time it was sliced</em>.  If you add constraints to the base element <em>after</em> you've already sliced it, the slices will not take on those constraints.  This is a limitation of SUSHI, but there is a workaround.  Ensure that you define all constraints on the base slice <em>before</em> slicing it.</p>
+<p>So, in your example, instead of this:</p>
+<div class="codehilite"><pre><span></span><code>* agent.extension contains OtherId named extOtherId 0..* MS
+// Here you are slicing agent *before* you sliced agent.extension, so these agent slices don&#39;t get the extension slices
+* agent ^slicing.discriminator.type = #pattern
+* agent ^slicing.discriminator.path = &quot;type&quot;
+* agent ^slicing.rules = #open
+* agent contains
+    user 1.. and
+    userorg 0..
+* agent[user].type = http://terminology.hl7.org/CodeSystem/v3-ParticipationType#IRCP &quot;information recipient&quot;
+* agent[user].who 1..1
+// Here is where you slice agent.extension, but it&#39;s just a little too late for SUSHI to add them to the slices
+* agent.extension[extOtherId] ^slicing.discriminator.type = #value
+* agent.extension[extOtherId] ^slicing.discriminator.path = &quot;type&quot;
+* agent.extension[extOtherId] ^slicing.rules = #open
+* agent.extension[extOtherId] contains
+    npi 0..1 and
+    provider-id 0..1
+* agent.extension[extOtherId][npi].valueIdentifier.type = http://terminology.hl7.org/CodeSystem/v2-0203#NPI
+* agent.extension[extOtherId][provider-id].valueIdentifier.type = http://terminology.hl7.org/CodeSystem/v2-0203#PRN
+* agent[userorg].type = http://terminology.hl7.org/CodeSystem/v3-RoleClass#PROV &quot;healthcare provider&quot;
+* agent[userorg].who 1..1
+</code></pre></div>
+<p>do this:</p>
+<div class="codehilite"><pre><span></span><code>// Add all the constraints to agent FIRST
+* agent.extension contains OtherId named extOtherId 0..* MS
+* agent.extension[extOtherId] ^slicing.discriminator.type = #pattern
+* agent.extension[extOtherId] ^slicing.discriminator.path = &quot;value.type&quot;
+* agent.extension[extOtherId] ^slicing.rules = #open
+* agent.extension[extOtherId] contains
+    npi 0..1 and
+    provider-id 0..1
+* agent.extension[extOtherId][npi].valueIdentifier.type = http://terminology.hl7.org/CodeSystem/v2-0203#NPI
+* agent.extension[extOtherId][provider-id].valueIdentifier.type = http://terminology.hl7.org/CodeSystem/v2-0203#PRN
+// THEN slice it
+* agent ^slicing.discriminator.type = #pattern
+* agent ^slicing.discriminator.path = &quot;type&quot;
+* agent ^slicing.rules = #open
+* agent contains
+    user 1.. and
+    userorg 0..
+* agent[user].type = http://terminology.hl7.org/CodeSystem/v3-ParticipationType#IRCP &quot;information recipient&quot;
+* agent[user].who 1..1
+* agent[userorg].type = http://terminology.hl7.org/CodeSystem/v3-RoleClass#PROV &quot;healthcare provider&quot;
+* agent[userorg].who 1..1
+</code></pre></div>
+<p>This fixes the SUSHI issue (so you can reference the slices by name), but there are still IG Publisher issues w/ validation.  I've been looking into those too, but so far not making a ton of progress.</p>
+
+
+
+<a name="276132039"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/slice%20names%20not%20working/near/276132039" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/slice.20names.20not.20working.html#276132039">(Mar 22 2022 at 00:49)</a>:</h4>
+<p>Oh, I also had to fix <code>agent.extension[extOtherId]</code>'s discriminator type (<code>#value</code> --&gt; <code>#pattern</code>) and path (<code>type</code> --&gt; <code>value.type</code>).</p>
+
+
+
+<a name="276132461"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/slice%20names%20not%20working/near/276132461" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/slice.20names.20not.20working.html#276132461">(Mar 22 2022 at 00:56)</a>:</h4>
+<p>I've been able to fix some, but not all, of the QA errors by directly modifying the structure definition.  This was necessary because some of the issues were that the IG Publisher wants the differential to declare some properties that aren't really <em>different</em> -- and SUSHI is kind of a stickler for only putting truly <em>different</em> things into the differential.</p>
+<p>That got me down to 6 errors:</p>
+<ul>
+<li>Two of these: <code>Slicing cannot be evaluated: Could not match discriminator ([value.type]) for slice AuditEvent.agent:user.extension:extOtherId in profile http://johnmoehrke.github.io/SlicingSlicedExtension/StructureDefinition/ThirdSliceProfile - the discriminator [value.type] does not have fixed value, binding or existence assertions</code></li>
+<li>Two of these: <code>Profile http://johnmoehrke.github.io/SlicingSlicedExtension/StructureDefinition/ThirdSliceProfile, Element matches more than one slice - extOtherId, extOtherId/npi</code></li>
+<li>Two of these: <code>Profile http://johnmoehrke.github.io/SlicingSlicedExtension/StructureDefinition/ThirdSliceProfile, Element matches more than one slice - extOtherId, extOtherId/provider-id</code></li>
+</ul>
+<p>I can't figure out those first two (slicing cannot be evaluated) because as far as I can tell, the <code>value.type</code> is <em>definitely</em> fixed.  And the last four (matches more than one slice) seem like a bug in IGP to me -- it's not properly handling the re-slicing.  But I suspect this may actually be a consequence of those first two errors (i.e., it can't figure out how to evaluate the reslicing).</p>
+<p>I don't know where to go from here.  Here's my hand-modified structure definition for that profile: <a href="/user_uploads/10155/-6ad01xH9o-AfvhqstikG1h_/StructureDefinition-ThirdSliceProfile.json">StructureDefinition-ThirdSliceProfile.json</a></p>
+
+
+
+<a name="276176086"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/slice%20names%20not%20working/near/276176086" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/slice.20names.20not.20working.html#276176086">(Mar 22 2022 at 11:48)</a>:</h4>
+<p>ah, so rearranging the order of the slicing definition here is unfortunate hack solution, as I really only want the otherId slice within a specific slice on agent.. I put this forward as I was hoping that using Identifier would have made the second slice easier.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

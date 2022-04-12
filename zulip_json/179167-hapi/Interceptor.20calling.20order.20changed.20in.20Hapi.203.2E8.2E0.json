@@ -1,0 +1,26 @@
+[
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> It appears that the Interceptor lifecycle has changed. <br>\n<a href=\"http://hapifhir.io/doc_rest_server_interceptor.html#_toc_registering_interceptors\" target=\"_blank\" title=\"http://hapifhir.io/doc_rest_server_interceptor.html#_toc_registering_interceptors\">http://hapifhir.io/doc_rest_server_interceptor.html#_toc_registering_interceptors</a><br>\n\"Note that order is important: The server will invoke incomingRequestPreProcessed and incomingRequestPostProcessed in the same order that they are registered to the server. The server will invoke outgoingResponse in the reverse order to the order in which the interceptors were registered. This means that interceptors can be thought of as \"wrapping\" the request. \"</p>\n<p>We register a UsageLoggingInterceptor, then AuthorizationInterceptor, then ProfileInterceptor. After upgrading to Hapi 3.8.0 we noticed that we started getting duplicate Usage log records from search operations where the client is not authorized to access a Patient's data. It seems that Hapi calls UsageLoggingInterceptor's outgoingResponse method first, then AuthorizationInterceptor. AuthorizationInterceptor then throws an Exception and PHR loops through the handleException methods.</p>\n<p>I know there's a new Hook mechanism but isn't the ordering of the Hook &amp; Pointcut basically same as with the earlier IServerInterceptor interface?</p>",
+        "id": 169109391,
+        "sender_full_name": "Matti Uusitalo",
+        "timestamp": 1561619371
+    },
+    {
+        "content": "<p>Could we perhaps mitigate it by implementing Hook to Pointcut.STORAGE_PREACCESS_RESOURCE in our AuthorizationInterceptor?</p>",
+        "id": 169110342,
+        "sender_full_name": "Matti Uusitalo",
+        "timestamp": 1561620532
+    },
+    {
+        "content": "<blockquote>\n<p>Could we perhaps mitigate it by implementing Hook to Pointcut.STORAGE_PREACCESS_RESOURCE in our AuthorizationInterceptor?</p>\n</blockquote>\n<p>We could. What we did was we overrode AuthorizationInterceptor's outgoingResponse implementation with a no-op version and implemented a new method with Hook(Pointcut.STORAGE_PREACCESS_RESOURCE) which calls the super.outgoingResponse implementation.</p>\n<p>I still consider this a workaround and we would prefer if the earlier ordering of interceptor calls were used.</p>",
+        "id": 169118794,
+        "sender_full_name": "Matti Uusitalo",
+        "timestamp": 1561628398
+    },
+    {
+        "content": "<p>Hmm, I'd consider this a bug in the new framework.</p>\n<p>Ultimately, we are no longer relying on the order of registration, since that has always seemed brittle. In the new world, the <code>@Hook</code> and <code>@Interceptor</code> annotations have an optional attribute called <code>order()</code> that can be used to specify the order that an interceptor or any of its individual hooks should be executed in.</p>\n<p>Looks like we haven't yet specified an order for AuthorizationInterceptor though. Will investigate.</p>",
+        "id": 169166223,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1561663042
+    }
+]

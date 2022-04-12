@@ -1,0 +1,620 @@
+[
+    {
+        "content": "<p>In the last step of Bulk Data Export, getting NDJSON files, could server return 301 redirect instead of 200?</p>\n<p><a href=\"http://hl7.org/fhir/uv/bulkdata/STU1.0.1/export/index.html#file-request\">http://hl7.org/fhir/uv/bulkdata/STU1.0.1/export/index.html#file-request</a></p>",
+        "id": 261687076,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1637088075
+    },
+    {
+        "content": "<p>If we were going to support that pattern, I think we'd need to say something about whether/when to convey authorization headers upon following the redirect.</p>",
+        "id": 261687354,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637088202
+    },
+    {
+        "content": "<p>e.g., see discussion at <a href=\"https://stackoverflow.com/a/28671822\">https://stackoverflow.com/a/28671822</a></p>",
+        "id": 261687396,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637088229
+    },
+    {
+        "content": "<p>My situation is that server authorized bulk data client's file reading request using OAuth token and then redirected client to get files from S3 bucket.</p>",
+        "id": 261688130,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1637088556
+    },
+    {
+        "content": "<p>So you mean that current IG (v1.0.1 and v2.0.0) does not support 301 redirect. Is that correct?</p>",
+        "id": 261688565,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1637088732
+    },
+    {
+        "content": "<p>I mean, do we describe anything about it? (I'm thinking we don't.)</p>",
+        "id": 261688634,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637088765
+    },
+    {
+        "content": "<p>I could be misremembering</p>",
+        "id": 261688704,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637088794
+    },
+    {
+        "content": "<p>I don't think the specification calls out behavior of redirects, but will say the Cerner implementation uses a redirect at this step, as well.  Inferno Program Edition leverages the rest-client gem which I believe follows 3xx redirects by default.</p>",
+        "id": 261700539,
+        "sender_full_name": "Dennis Patterson",
+        "timestamp": 1637093758
+    },
+    {
+        "content": "<p>I'm assuming the ruby library does <em>not</em> send Authz headers across the redirect?</p>",
+        "id": 261702470,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637094658
+    },
+    {
+        "content": "<p>And so this strategy only works if the post-redirect file doesn't require any authz headers. If that's a common pattern we probably need to call it out, and if anyone thinks headers <em>will be supplied</em> they need to re-think assumptions.</p>",
+        "id": 261702827,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637094813
+    },
+    {
+        "content": "<p>I could have missed it, but I'm not seeing a removal of the Authz header within rest-client's <a href=\"https://github.com/rest-client/rest-client/blob/2c72a2e77e2e87d25ff38feba0cf048d51bd5eca/lib/restclient/abstract_response.rb#L220\">redirect logic</a>, but agree that some clients strip this and implementers can't assume the redirect will receive that header.  I can confirm Cerner's implementation does not make this assumption.</p>",
+        "id": 261704836,
+        "sender_full_name": "Dennis Patterson",
+        "timestamp": 1637095800
+    },
+    {
+        "content": "<p>Yeah, I think you'll see divergent client behavior here</p>",
+        "id": 261705073,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637095937
+    },
+    {
+        "content": "<p>FYI, I believe this is related to the github issue I posted to Inferno here: <a href=\"https://github.com/onc-healthit/inferno-program/issues/398\">https://github.com/onc-healthit/inferno-program/issues/398</a></p>\n<p>In our case, the redirect is to a temporarily generated signed S3 URL. These signed URLs do not need an access token to work.</p>",
+        "id": 262381949,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1637617625
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"276585\">@Brian Forbis</span> just pointed out that S3 does not allow request having token in the header. This is getting more complicated. Does anyone know if Azure requires/allows/rejects request with token?</p>",
+        "id": 263901526,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1638818279
+    },
+    {
+        "content": "<p>What kind of token do you mean?</p>",
+        "id": 263904267,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1638819081
+    },
+    {
+        "content": "<p>We've already said it would be a mistake to pass a SMART authn token in to a cloud bucket storage endpoint, right?</p>",
+        "id": 263904293,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1638819100
+    },
+    {
+        "content": "<p>Did we?</p>",
+        "id": 263911053,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1638820424
+    },
+    {
+        "content": "<p>As far as I can tell, the only patterns that will work for cloud storage APIs with bulk data are signed urls, or putting an auth proxy that understands SMART tokens in front of the storage API to determine which cloud storage paths this token should have access to.</p>",
+        "id": 263919513,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1638822176
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span> the complication here is that ONC does not allow for using requiresAccessToken=false in the Bulk spec for satisfying the 21cc g(10) requirements. If this was allowed (and I'd love for it to be), we would simply just return signed URLs in our polling endpoint.</p>\n<p>In the use case I'm looking at, we want to build a lightweight serverless auth mechanism (not a straight up file proxy). Serverless FaaS  solutions like Lambda do not have ways to stream large amounts of data (data limits, timeouts), so we'd rather have S3 handle this for us. This is something that is able to validate an auth token and then send a 302 redirect to the user to a temporary signed URL.</p>\n<p>However, if the client code which follows that HTTP redirect by navigating to the response header location decides to copy the original request headers (ie: Authorization Bearer), then Amazon S3 responds with an error since you are calling into a bucket with both a bearer token and a signed URL.</p>",
+        "id": 263928870,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1638826980
+    },
+    {
+        "content": "<p>Hmm, it does look like we've backed ourselves into a corner on this one.</p>\n<p>I expect that my team will try writing such a proxy for Google Cloud Storage at some point and probably discover our own equivalents of all of these issues, but we haven't done so yet so we don't have workaround patterns to suggest.</p>",
+        "id": 263930105,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1638827664
+    },
+    {
+        "content": "<p>Writing up a full file proxy is a workaround solution, I just have my own internal goals to make things FaaS when possible. We have no expectations on using Bulk Export outside of cert in the near term, so standing up the full file proxy seems a bit heavy weight.</p>",
+        "id": 263930333,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1638827793
+    },
+    {
+        "content": "<p>Wait, why does ONC not allow using the capabilities defined by the specification to meet these requirements?</p>",
+        "id": 263939796,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1638833464
+    },
+    {
+        "content": "<p>Where does the limitation defined and what is the justification?</p>",
+        "id": 263939841,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1638833497
+    },
+    {
+        "content": "<p>The restriction is in inferno test suite.<br>\nSpecifically <code>BDE-09: Bulk Data Server returns requiresAccessToken with value true</code>.</p>\n<p>Some has tried to get this clarified with ONC and ONC stands with this requirement.<br>\n<a href=\"https://github.com/onc-healthit/inferno-program/issues/303\">https://github.com/onc-healthit/inferno-program/issues/303</a> has some history.</p>",
+        "id": 263990160,
+        "sender_full_name": "Jeffy Mathew Jose",
+        "timestamp": 1638878026
+    },
+    {
+        "content": "<p>It seems to be that because 21cc ruling has no explicit callouts or allowances on accessing any health data outside of using bearer token auth, they have interpreted this to mean that using requiresAccessToken=false is not allowed to meet the g(10) guidance.</p>\n<p>In reality, it seems this is just a gap between the authors of the bulk spec and the authors of 21cc ruling. I believe we could push to get this clarified and resolved, but it is a pretty steep uphill battle.</p>",
+        "id": 264004595,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1638885563
+    },
+    {
+        "content": "<p>When writing the g10 Inferno tests, our interpretation of requiresAccessToken=false is that it means that the client needs to consult documentation to determine how to be authorized for those files, which would include effort by the client to implement a completely separate, potentially nonstandard authorization mechanism.  Which is why, in the context of g10, we interpreted that as not allowed.</p>",
+        "id": 264061265,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1638906518
+    },
+    {
+        "content": "<p>But if there is a case where requiresAccessToken=false where that alternate authorization mechanism is completely transparent to the client, and no extra effort is involved, then that may be ok.  Maybe we can just have the inferno g10 client try accessing the files without the Authorization header if requiresAccessToken=false, and as long as that works then that is good enough.</p>",
+        "id": 264061323,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1638906538
+    },
+    {
+        "content": "<p>Did we read way too much into this field, and it simply means \"if requiresAccessToken=false, don't send Authorization headers when accessing the files?\"</p>",
+        "id": 264061670,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1638906697
+    },
+    {
+        "content": "<p>I'd say 'if requiresAccessToken=false, you do not need to send Authorization headers when accessing the files'</p>",
+        "id": 264068828,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1638909879
+    },
+    {
+        "content": "<blockquote>\n<p>means that the client needs to consult documentation to determine how to be authorized for those files</p>\n</blockquote>\n<p>This was never the intent! <code>false</code> means: \"just do a GET on this URL and you'll have your data.\"</p>\n<blockquote>\n<p>Maybe we can just have the inferno g10 client try accessing the files without the Authorization header if requiresAccessToken=false, and as long as that works then that is good enough.</p>\n</blockquote>\n<p>That sounds like a great plan.</p>",
+        "id": 264076961,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1638913406
+    },
+    {
+        "content": "<p>Here's the relevant bits from last time I opened a case with ONC on their portal about allowing for requiresAccessToken=false<br>\n<a href=\"https://github.com/onc-healthit/inferno-program/issues/303#issuecomment-933748162\">https://github.com/onc-healthit/inferno-program/issues/303#issuecomment-933748162</a></p>\n<p>Do we need to reclarify this intent with ONC?</p>",
+        "id": 264079365,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1638914428
+    },
+    {
+        "content": "<p>The <code>requireAccessToken</code> description says \"AWS bucket URLs\" -- how is that described in a vendor-agnostic way?  Is that \"signed URLs\" as described in the Security Considerations page?  I'm just looking for the easiest way to help justify allowing this approach (even though it isn't OAuth) -- and this line seems like the best way to bring in this as an acceptable authorization method: \"Implementations MAY include non-RESTful services that use authorization schemes other than OAuth 2.0, such as mutual-TLS or signed URLs.\"</p>",
+        "id": 264354199,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639078320
+    },
+    {
+        "content": "<p>\"AWS bucket URLs\" is an example of a self-contained signed URL that doesn't require external context to authenticate.</p>",
+        "id": 264368432,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1639085036
+    },
+    {
+        "content": "<p>The point is: just issue a GET, and get the data. The URLs are high-entropy and generally time-bounded, but they work in a simple interoperable way.</p>",
+        "id": 264368543,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1639085072
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191315\">Josh Mandel</span> <a href=\"#narrow/stream/179250-bulk-data/topic/301.20redirect/near/264368432\">said</a>:</p>\n<blockquote>\n<p>\"AWS bucket URLs\" is an example of a self-contained signed URL that doesn't require external context to authenticate.</p>\n</blockquote>\n<p>Thanks Josh.  I understand what you mean here after clarification.  But just to highlight why I missed this earlier:  not all “AWS Bucket URLs” are self-contained signed URLs that don’t require external context to authenticate, right?  They can be, but up until last week I thought you were referring to the traditional AWS Authorization header mechanism here.  And maybe leaving the possibility open for something like AWS VPN where that header isn’t required, but extra context is needed in order for it to be secure.</p>",
+        "id": 264740863,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639416566
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191315\">Josh Mandel</span> <a href=\"#narrow/stream/179250-bulk-data/topic/301.20redirect/near/264368543\">said</a>:</p>\n<blockquote>\n<p>The point is: just issue a GET, and get the data. The URLs are high-entropy and generally time-bounded, but they work in a simple interoperable way.</p>\n</blockquote>\n<p>I think this is at the core of it: equally interoperable and secure.  I agree those self-contained signed URLs are as interoperable as just using the same backend services authorization headers for the export request, as they require no extra work by clients (just don't include the header if <code>requiresAccessToken=false</code> - easy!).</p>",
+        "id": 264741086,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639416660
+    },
+    {
+        "content": "<p>Thanks for the comments here! Agree we can make this clearer in the specification. Do you want to propose something specific (or ask us to)?</p>",
+        "id": 264741238,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1639416729
+    },
+    {
+        "content": "<p>The second piece: are self-contained signed URLs capable of being equally secure as the Authentication header-based mechanism used in Backend Services in all contexts?  Your position is that it is an unequivocal YES?  There is nothing magic about storing that kind of data in the Authorization header vs. the URL itself?  I can’t think of any reason why they wouldn’t be equivalently secure, but when it comes to security small differences may have subtle implications, so I wouldn’t want to be the one making that claim without more research.  Better if the guide does (or at least the guide implies it and that was the author’s intent).</p>",
+        "id": 264741243,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639416733
+    },
+    {
+        "content": "<p>So then the final piece here is that besides no downsides for clients and system-wide interop/security, there are very tangible upsides to allow servers to use self-contained signed URLs.  Requiring systems to host a proxy in front of these kinds of services is needlessly expensive, while potentially less secure as they add another component that needs to be monitored, maintained and patched.</p>",
+        "id": 264741652,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639416940
+    },
+    {
+        "content": "<p>Agreed. Let me know if you think there's anything blocking Inferno from supporting this mode of access for official tests, or if an out of band spec comment or anything official is needed. (As a background process, we should for sure expand the spec to add more context on these points.)</p>",
+        "id": 264741914,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1639417041
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191315\">Josh Mandel</span> <a href=\"#narrow/stream/179250-bulk-data/topic/301.20redirect/near/264741914\">said</a>:</p>\n<blockquote>\n<p>Agreed. Let me know if you think there's anything blocking Inferno from supporting this mode of access for official tests, or if an out of band spec comment or anything official is needed. (As a background process, we should for sure expand the spec to add more context on these points.)</p>\n</blockquote>\n<p>This is the type of thing I'd take back to ONC and ask for a green light on.  Inferno is supposed to test very specifically bulk data group export using backend services authorization.  At first glance, this looks like we are allowing servers to require clients to support a separate authorization mechanism, and ONC didn't vet that alternate authorization mechanism (as far as I know).  But the argument here is that, while this is a different authorization mechanism, it is completely transparent to the client and effectively an implementation detail the client can be unaware of.  I'd just like to make sure they are ok with that.</p>",
+        "id": 264744955,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639418119
+    },
+    {
+        "content": "<p>Anything we can get into later versions of the spec would be helpful so it is clear there is consensus around the intent here.  I think this thread itself is helpful too.</p>",
+        "id": 264745181,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639418196
+    },
+    {
+        "content": "<p>Signed URLs are not equal to regular authentication. At a minimum, they need additional best practices like strictly limiting the time the URL is valid, and in some implementations limiting the IP range from which the URL can be used is also possible. It adds one more bearer token to the ecosystem and makes audit logs less complete as that token could have been passed around. It is likely that a Google Cloud implementation will recommend against using signed URLs.</p>",
+        "id": 264755149,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1639422609
+    },
+    {
+        "content": "<p>Right, by using Backend Services OAuth tokens you are given requirements  like \"Access tokens issued under this profile SHALL be short-lived\", whereas that requirement wouldn't carry over to these pre-signed URLs unless that kind of language is added... somewhere.</p>",
+        "id": 264762183,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639425872
+    },
+    {
+        "content": "<p>Agreeing with <span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span>  here on security best practices for signed URLs. There is nothing in a signed URL that identifies the client, so for systems to implement it effectively they must take caution.</p>\n<p>In the case for the bulk spec, I would say that signed URLs should be generated as a  side affect of hitting the polling endpoint in its \"Completed\" status. These should be generated as one-time use signed URLs with a short life span. Access control checks based on the bearer token passed to the polling locations shall be done before generating these signed urls.</p>",
+        "id": 264764088,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1639426711
+    },
+    {
+        "content": "<p>So presumably the way of 'refreshing' an expired signed url would be to have new ones reissued every time the polling endpoint is visited while it is in 'Completed' status?  Otherwise you'd have to start over with a new export, if for example it took 5 minutes to download the first ndjson file and the other files expire before you get to them?</p>",
+        "id": 264764701,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639426952
+    },
+    {
+        "content": "<p>Size of the export should be taken into consideration when determining the time to live for the signed URLs. Five minutes seems like it may be a bit aggressive for large patient exports. I think having at least an hour would be good for most cases.</p>",
+        "id": 264770248,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1639429769
+    },
+    {
+        "content": "<p>right, so the point is that there's no refresh mechanism on the \"token\" included in the signed URL, so the usual way of dealing with this is not available</p>",
+        "id": 264770413,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1639429831
+    },
+    {
+        "content": "<p>Calling the status endpoint should probably generate a fresh one with the expiry reset.</p>",
+        "id": 264770536,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1639429912
+    },
+    {
+        "content": "<p>Yes, though deciding how to continue a half-complete download after your URLs have been generated may be difficult to do. The URLs will be different the next time the status endpoint is called if they are re-generated, so it will be difficult to compare them (I suppose you could use ordering?)</p>\n<p>For this reason, I think the URLs should be given a substantial enough time to be able to complete downloading all the files, even on congested networks.</p>",
+        "id": 264770979,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1639430150
+    },
+    {
+        "content": "<p>Going back to the original topic, there are implementations that use signed urls, but don't return them directly in the Completion response.  In these cases, requiresAccessToken=true, but then GETting the file redirects the client to another domain with a signed url.  It was pointed out that 1) some signed url implementations (like S3) error out if an Authorization header is propagated to the signed url endpoint  and 2) while it's atypical for an http client to propagate an Authorization header to another domain, there are enough StackOverflow posts to show it still happens.</p>\n<p>Do we need some language in the spec around behavior for redirects, especially when requiresAccessToken=true?</p>",
+        "id": 264938179,
+        "sender_full_name": "Dennis Patterson",
+        "timestamp": 1639522274
+    },
+    {
+        "content": "<p>\"Value MAY be false for file servers that use access-control schemes other than OAuth 2.0,\" does this situation includes file server don't use any access-control scheme? In such way, when requiresAccessToken=false, client does not know if the url provided is secured or non secured.</p>",
+        "id": 265016617,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1639578177
+    },
+    {
+        "content": "<p>You quickly move beyond the territory of interoperability if the URL is not directly GETtable. If you wanted to define some specific scheme, you'd need extensions to the response to accomplish this.</p>",
+        "id": 265028525,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1639583114
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> you're saying extensions is the answer to Yunwei's comment if the caller needs to do something proprietary, correct?  Seems like the use-case for redirects should be supportable as standard http</p>",
+        "id": 265032485,
+        "sender_full_name": "Dennis Patterson",
+        "timestamp": 1639584547
+    },
+    {
+        "content": "<p>Redirects (with <em>no auth token being passed along</em>) can be covered with standard HTTP, I agree.</p>",
+        "id": 265035899,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1639585861
+    },
+    {
+        "content": "<blockquote>\n<p>Redirects (with no auth token being passed along) can be covered with standard HTTP, I agree.</p>\n</blockquote>\n<p>Sorry if I'm just missing something here.  But you are saying that standard HTTP dictates that Authorization headers must be stripped on redirects?  I didn't realize that was the case.</p>",
+        "id": 265061276,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639596228
+    },
+    {
+        "content": "<p>Or are you just saying that the HTTP spec allows clients to pass them along, or not pass them along... either is acceptable <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> ?</p>",
+        "id": 265064029,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1639597333
+    },
+    {
+        "content": "<p>I don't think http spec has anything to say about this (correct me if I'm wrong!).  See <a href=\"https://stackoverflow.com/q/17092259/318206\">https://stackoverflow.com/q/17092259/318206</a> for some discussion and <a href=\"https://curl.se/docs/CVE-2018-1000007.html\">https://curl.se/docs/CVE-2018-1000007.html</a>  For an example of a CVE in curl to prevent passing authorization headers through redirects</p>",
+        "id": 265074205,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1639601933
+    },
+    {
+        "content": "<p>But sending an authorization header across arbitrary redirects (blindly, by default) is obviously the wrong thing to do.</p>",
+        "id": 265074529,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1639602084
+    },
+    {
+        "content": "<p>In this case, the specifics on how to properly follow redirects by stripping out the Authorization header should be called out in the Bulk spec as a required client behavior (Or should this be called in the <a href=\"https://www.hl7.org/fhir/http.html\">FHIR http spec</a> instead?). Depending on the client application HTTP client library, this may require special handling of 3xx redirects as opposed to using the http clients default redirect behavior. For example, the Ruby HTTP library which Inferno uses does not strip the Authorization header, so would require custom code.</p>\n<p>Additionally, if providing clarification on client's special handling of redirects, it should specify which of the 3xx status codes are allowed to be used. Some servers may return 301, others may return 302, and so on.</p>",
+        "id": 266178311,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1640616883
+    },
+    {
+        "content": "<p>Hey all, are there any next steps here? Is ONC prepping an announcement for a change in interpretation of the FHIR Bulk spec regarding use of signed URLs? I would like to know this so I can communicate this internally and adjust our timelines for certification.</p>",
+        "id": 267102560,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1641497033
+    },
+    {
+        "content": "<p>Re: ONC's plans, this is something worth raising with them directly. <span class=\"user-mention\" data-user-id=\"192576\">@Robert Scanlon</span> have you had this conversation? Is there someone Dan or I should speak with?</p>\n<p>Re: clarifications in the spec, we could propose a technical correction indicating expected behaviors, but that certainly shouldn't be a blocker for ONC's supporting the flexibility already allowed by the spec.</p>",
+        "id": 267109173,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1641500481
+    },
+    {
+        "content": "<p>I have brought up this issue with them, and they are aware of it.  I'm waiting on direction from them if I'm allowed to loosen the tests to simply follow the link without an authorization header (noting there are no rules in place about how those URLs are secured, if they need to be 'unguessable', if they need to have expiration times, etc... basically all the things that are in Backend Services regarding securing tokens but we don't get because this falls outside of Backend Services).</p>",
+        "id": 267123247,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1641507674
+    },
+    {
+        "content": "<p>I understand that Bulk Data allows this flexibility in itself.  But we are testing Bulk Data using Backend Services Authorization, which provides some guarentees around communications being appropriately secured.</p>",
+        "id": 267123624,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1641507922
+    },
+    {
+        "content": "<blockquote>\n<p>we are testing Bulk Data using Backend Services Authorization, which provides some guarentees around communications being appropriately secured</p>\n</blockquote>\n<p>(Re: my points below, you already know this of course Rob; I'm just trying to re-state here for the sake of the record, and to shore up the argument in light of the point you made above.) </p>\n<p>Yes, and in the context of this testing, Backend Services Authorization protects the whole set of interactions for performing the export; it's explicitly not required for fetching the resulting files, which is why the spec defines a runtime boolean flag to indicate whether an access token is needed.</p>",
+        "id": 267125603,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1641509101
+    },
+    {
+        "content": "<p>Overall the testing that Inferno performs doesn't try to evaluate things like the amount of entropy in a value (to my knowledge!); rather it's testing for API conformance. These considerations are of course important for security and API developers should be investing in other kinds of tests and tools to evaluate their API security -- that's distinct from certification testing.</p>",
+        "id": 267125791,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1641509204
+    },
+    {
+        "content": "<p>My current take is that clarifications around entropy, expiration, etc wouldn't be quite the right fit for a technical correction -- but if we discover that the current spec is <em>unimplementable</em> because of these issues, I'd change my tune.</p>",
+        "id": 267125876,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1641509267
+    },
+    {
+        "content": "<p>My concern is as follows (a bunch of hypotheticals, I know, and thank you for your patience).  Let's say we alter our tests to allow this, which essentially means that ONC is blessing this approach for systems in the context that certified APIs are being used (open internet, not behind firewalls, no mutual TLS, etc).  At some point someone implements this in a very inappropriate manner for the context that these APIs are being used (e.g. they use AWS Bucket URLs that are publicly accessible — where does it say they can’t?).  The question is raised: why did this system get certified?  ONC’s certification criteria is about OAuth-based exchanges, and this isn’t OAuth.  Because the language in the spec is so vague about whether or not this is intended to be used in the context we are talking about here (open internet, not behind firewalls, no mutual TLS, etc), there is deniability that the spec is intended to allow this at all.  Because it is so vague, is there really consensus that this is a safe approach, in this specific context?  Even within this thread, there doesn’t seem to be agreement that these URLs are safe to use in the way we are talking about here.</p>",
+        "id": 267179517,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1641555629
+    },
+    {
+        "content": "<p>And when ONC chose backend services authorization, did they do so in part because of some of the guidelines within it (e.g. \"Access tokens issued under this profile SHALL be short-lived\"), and all of the guideliness associated with OAuth 2, which no longer apply here?  I do not know.</p>",
+        "id": 267180860,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1641556696
+    },
+    {
+        "content": "<p>I'm afraid I'm not doing a great job articulating the issue -- maybe we can find time to discuss at the connectathon next week?</p>",
+        "id": 267184234,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1641559213
+    },
+    {
+        "content": "<p>I think you're doing very well at articulating the concern -- <em>and</em> I think it'd be good for us to discuss in a session at the connectathon (advertised here too in case anyone needs to join who isn't otherwise participating in the connectathon). <span class=\"user-mention\" data-user-id=\"191414\">@Dan Gottlieb</span> do you want to suggest time that fits with the track schedule (ideally avoiding times when SMARTv2 track has a scheduled meeting)?</p>",
+        "id": 267194587,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1641565575
+    },
+    {
+        "content": "<p>Nothing stops someone to implement backend auth with a private key that is actually publicly available, or implement SMART-on-FHIR without actually checking any user name and password etc etc - the fact that a system passes certification does not imply that is in any way secure (and vice-versa). Do not really see why this should be different</p>",
+        "id": 267199609,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1641568183
+    },
+    {
+        "content": "<p>Would 2pm ET on 1/12 work for folks to meet and discuss this (<span class=\"user-mention\" data-user-id=\"192576\">@Robert Scanlon</span>, <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>, <span class=\"user-mention\" data-user-id=\"276585\">@Brian Forbis</span>, <span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span>, other interested parties)?</p>",
+        "id": 267201233,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1641568967
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191912\">Michele Mottini</span> <a href=\"#narrow/stream/179250-bulk-data/topic/301.20redirect/near/267199609\">said</a>:</p>\n<blockquote>\n<p>Nothing stops someone to implement backend auth with a private key that is actually publicly available, or implement SMART-on-FHIR without actually checking any user name and password etc etc - the fact that a system passes certification does not imply that is in any way secure (and vice-versa). Do not really see why this should be different</p>\n</blockquote>\n<p>I agree, but there is very explicit consensus that OAuth 2.0-based exchanges can be sufficiently secure in this context that ONC is requiring their use, and there is a lot of material/best practices out there describing how to properly secure them (and what to be careful of).  Is there the same thing for these URLs, whatever they are called (pre-signed urls?). Someone needs to say that they can be sufficiently secure -- either the spec, ONC, or  the test tool.  The argument is that the spec says they are sufficiently secure simply by naming them.  But the problem is that bulk data  may only be saying they could be secure, perhaps with other layered security that isn't part of the context of ONC's criteria (e.g. you can use AWS Buckets if the client is VPNd).  It is vague enough that I don't really know. And who is defining 'sufficiently secure' anyhow?  I suppose ONC is because it is their certificaiton criteria, and do they think these URLs are secure?  They don't name them anywhere in their rule. That's why I was trying to just state earlier that these are 'just as secure' as using oauth authorization headers (if ONC okayed OAuth auth headers over https, then these are just as good so they are implicitly okaying it), but there was some pushback on that statement in this thread.</p>",
+        "id": 267204608,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1641570625
+    },
+    {
+        "content": "<p>Certainly we don't claim anything is secure simply by naming it. And there are plenty of ways to follow all of our specifications and still produce a system that is completely insecure.  But I do take your main point which is how much community understanding is there of best practices and how likely are people to get it wrong even if they're trying hard.</p>",
+        "id": 267204727,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1641570698
+    },
+    {
+        "content": "<p>In our conversation next week, one of the things that I want to understand is the level of  difficulty or concerns that developers are facing in just implementing Backend Services protection over their output files.  Maybe some example code showing how to do this kind of thing in the context of a serverless proxy in front of a bucket would help.</p>",
+        "id": 267204949,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1641570811
+    },
+    {
+        "content": "<p>I am very sympathetic towards implementers that feel that they need to create and maintain a proxy just to satisfy the certification criteria.  I do not want that to happen, its a waste of time and bandwidth if these URLs are good enough.  What can I point to that states these URLs are good enough in the context of ONC's criteria?</p>",
+        "id": 267205781,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1641571223
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> I have tried to understand this stream, specifically what is meant by \"these URLs\". Can you let me know when this will be discussed next week. I would be glad to join. I do tend to think that we must recommend best practice as a moving goal, and never imply that a static thing can be declared \"secure\".</p>",
+        "id": 267208971,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1641572668
+    },
+    {
+        "content": "<blockquote>\n<p>In our conversation next week, one of the things that I want to understand is the level of difficulty or concerns that developers are facing in just implementing Backend Services protection over their output files. Maybe some example code showing how to do this kind of thing in the context of a serverless proxy in front of a bucket would help.</p>\n</blockquote>\n<p>I can't share the code specifically, but I'll summarize a few details of the situation I'm in with how AWS works so it's here all in one post:</p>\n<ul>\n<li>We are implementing as much of our infrastructure for Bulk Export as we can using AWS serverless offerings. These include the use of Lambda for running our business logic and S3 for file delivery.</li>\n<li>If we were to build a serverless API to act as an OAuth proxy to our backed S3 buckets (URLs responded to the client on polling completion), we would run into a limitation with how lambda works which only works in a buffered response mode (ie: cannot stream data to the client for large files) and additionally has runtime timeout limitations on it</li>\n<li>If we instead decided that the serverless OAuth proxy should just validate the oauth token then return a 302 temporary redirect to a signed S3 URL, we run into a separate issue where we cannot guarantee that all FHIR clients understand how to properly handle 3xx redirects. In the case of S3 signed URLs, the client MUST drop the Authorization header or they will run into a 4xx error from S3 directly. Note that HTTP does not specify how clients should treat Authorization headers when following 3xx redirects. The Inferno HTTP client (Ruby library) currently decides to include the header.</li>\n<li>It therefore seems that the only approach that would work giving these constraints is to have an always running EC2 instance proxy which is able to both handle Authorization logic and stream the result files to the client.</li>\n</ul>\n<p>My preference is to make use of the AWS managed infrastructure that exists, which works a lot better in a cloud-native way if we are able to return the signed S3 URLs directly to the client.</p>",
+        "id": 267209881,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1641573123
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191414\">@Dan Gottlieb</span> Do you mean Jan-12 2PM on Bulk Data track?</p>",
+        "id": 267491241,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1641844641
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191506\">@Yunwei Wang</span> yup!</p>",
+        "id": 267494962,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1641846407
+    },
+    {
+        "content": "<p>From today's discussion: the near-term plan is to get feedback on the points below and include them in a Confluence page. We'll also take feedback for new features that would apply in a future release.</p>\n<ul>\n<li>\n<p>When <code>requiresAccessToken</code> is false and no additional authz-related extensions are present on the output, then  the output URLs SHALL be dereferenceable directly, and SHALL follow expiration timing requirement that we have in place for bearer tokens in SMART Backend Services (specifically: \"SHALL be short-lived\").</p>\n</li>\n<li>\n<p>Clients MAY use the <code>Expires</code> header on the output response, when present, as a hint to know when capability URLs will expire.</p>\n</li>\n<li>\n<p>Clients MAY re-fetch the output manifest if output links have expired.</p>\n</li>\n<li>\n<p>Clients SHALL NOT provide a Backend Services access token when dereferencing an output URL where <code>requiresAccessToken</code> is false.</p>\n</li>\n<li>\n<p>As long as servers are following relevant security guidance, they MAY choose to generate output manifests where <code>requiresAccessToken</code> is true or false; this applies even for servers available on the public internet.</p>\n</li>\n</ul>",
+        "id": 267779020,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1642018086
+    },
+    {
+        "content": "<p>Maybe not for a near term, but I'd like to call out that \"Expires\" should be revisited. There are two types of expiration when discussing short lived signed URLs.</p>\n<ol>\n<li>The expiration time of a short-lived signed URL to data in a file server. These could be refreshed by calling back into the completed polling endpoint.</li>\n<li>The lifetime of the files on the file server itself, after which they may be permanently deleted requiring a full re-run of the bulk export.</li>\n</ol>",
+        "id": 267916835,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1642101413
+    },
+    {
+        "content": "<p>Agreed! The initial intention for this header was to communicate how long the files will be available for. That said, our current rules recommend that servers keep the files available as long as they're still being downloaded, and a client refetching the manifest could easily be incorporated as a trigger for keeping them alive, so I'm also comfortable with a short-term guidance that we have proposed yesterday.</p>",
+        "id": 267917672,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1642101807
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191315\">Josh Mandel</span> <a href=\"#narrow/stream/179250-bulk-data/topic/301.20redirect/near/267779020\">said</a>:</p>\n<blockquote>\n<p>From today's discussion: the near-term plan is to get feedback on the points below and include them in a Confluence page. We'll also take feedback for new features that would apply in a future release.</p>\n</blockquote>\n<p>Sorry to keep pushing this issue, but since my org is currently blocked on the results from this, do we have an idea on when/if this might be adopted by ONC/Inferno to pass (g)(10) cert? I need to plan for building a temporary solution just to pass cert vs waiting for this to be adopted into the testing tool.</p>",
+        "id": 268416878,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1642522937
+    },
+    {
+        "content": "<p>I've added <a href=\"https://confluence.hl7.org/display/FHIRI/Capability+URLs+for+Download+Links\">https://confluence.hl7.org/display/FHIRI/Capability+URLs+for+Download+Links</a>; based on this, I'm hoping <span class=\"user-mention\" data-user-id=\"192576\">@Robert Scanlon</span> and the ONC team will have what they need to proceed (and if more is required, please let me know).</p>",
+        "id": 268418853,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1642523683
+    },
+    {
+        "content": "<p>Thanks Josh.  Is there a reason why you only reference v2.0.0 of the Bulk Data spec? v1 also provides this ability (and is what is referenced in the rule).</p>",
+        "id": 268419471,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1642523947
+    },
+    {
+        "content": "<p>Oh that's a good point.  It applies to both and I will update accordingly.</p>",
+        "id": 268421461,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1642524772
+    },
+    {
+        "content": "<p>Done</p>",
+        "id": 268421692,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1642524852
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"192576\">@Robert Scanlon</span>, are there any updates on ONC's take regarding this topic and whether changes will be incorporated into Inferno?</p>",
+        "id": 269455736,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1643220500
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"276585\">@Brian Forbis</span>  -- the Inferno team's plan is to include the option in an upcoming release.  I do not speak for ONC but believe they are looking at it now to decide if the option can be enabled for certification.  I'm hopeful that the clarification provided by the group is sufficient, but can't say for certain one way or another.</p>",
+        "id": 269638959,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1643318068
+    },
+    {
+        "content": "<p>Ok, thanks for the update! Is there someone from ONC that can post here when they are done evaluating?</p>",
+        "id": 269639721,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1643318464
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"276585\">@Brian Forbis</span> , yes someone from ONC will drop a note in this thread if there are any relevant CCG changes</p>",
+        "id": 269760256,
+        "sender_full_name": "Keith Carlson",
+        "timestamp": 1643386518
+    },
+    {
+        "content": "<p>Ok, thanks <span class=\"user-mention\" data-user-id=\"308473\">@Keith Carlson</span>. Is this actively being looked at? Is there a date in the near future we can expect a response?</p>",
+        "id": 269760660,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1643386687
+    },
+    {
+        "content": "<p>Yep we (ONC) have been actively monitoring and working on this. Can't provide a specific timeframe but we understand the importance and can hopefully circle back here soon</p>",
+        "id": 269772463,
+        "sender_full_name": "Keith Carlson",
+        "timestamp": 1643391396
+    },
+    {
+        "content": "<p>I've taken a look at the confluence page and the defined behavior if a client wishes to return \"capability urls\" / signed urls in your completion response.  In the context of this thread, we've also discussed returning urls which result in a redirect (such as to a signed url).   Is that being implicitly disallowed by encouraging returning the signed urls directly?    We were preferring the redirect as a mechanism to track file access, keep signed url lifetime low, and delay generation until needed</p>",
+        "id": 270051937,
+        "sender_full_name": "Dennis Patterson",
+        "timestamp": 1643643878
+    },
+    {
+        "content": "<p>In discussion, we didn't hit on a set of guidelines for redirects that didn't raise the same concerns as for capability URLs. We haven't forbidden or disallowed redirects, but didn't come up with consensus language for additional guidance here, and no server developers identified a hard requirement for using redirects.</p>",
+        "id": 270056839,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643645357
+    },
+    {
+        "content": "<p>For redirects to signed URLs, the client must drop the Authorization: Bearer header. This won't necessarily be communicated using the requiresAccessToken=false manifest response, as they WILL be passing a bearer token to the initial entry point which returns the redirect.</p>",
+        "id": 270212420,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1643723459
+    },
+    {
+        "content": "<p>Hi all. ONC has updated the <a href=\"https://www.healthit.gov/test-method/standardized-api-patient-and-population-services#ccg\">(g)(10) CCG</a> with a clarification relevant to this discussion. The clarification is copied below and please feel free to <a href=\"https://cloud.connect.hhs.gov/certification?email=\">sign up</a> for the ONC Health IT Certification Program listserv to keep up with future updates!</p>\n<p><strong>Clarification to Paragraph <a href=\"https://www.federalregister.gov/d/2020-07419/p-3468\">85 FR 170.315(g)(10)(v)(B)</a> (ONC Cures Act Final Rule)</strong>:</p>\n<blockquote>\n<p>Health IT Modules may use access control schemes other than OAuth 2.0 for controlling access to the file server, such as capability URLs. The HL7 FHIR-I Work Group has documented expectations for the use of capability URLs with the Bulk Data Access IG on the <a href=\"https://confluence.hl7.org/x/RGvUB\">HL7 confluence website</a>. For purposes of Certification testing, Health IT Modules will be tested for the ability to share bulk data files either using OAuth 2.0 bearer tokens or via capability URLs accessible without preconditions or additional steps.</p>\n</blockquote>\n<p>cc: <span class=\"user-mention\" data-user-id=\"276585\">@Brian Forbis</span></p>",
+        "id": 272422874,
+        "sender_full_name": "Keith Carlson",
+        "timestamp": 1645201681
+    },
+    {
+        "content": "<p>Fantastic! Thanks all for the collaboration on this.</p>",
+        "id": 272429430,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1645204576
+    },
+    {
+        "content": "<p>One thing that I want to make sure is that in the case of calling a url with a bearer token and then needing to strip the Authorization header during a redirect to another domain (e.g. signed S3 url), that such a process would not constitute the forbidden \"additional steps\" cc: <span class=\"user-mention\" data-user-id=\"276585\">@Brian Forbis</span></p>",
+        "id": 272430135,
+        "sender_full_name": "Dennis Patterson",
+        "timestamp": 1645204984
+    },
+    {
+        "content": "<p>Following redirects to another domain is not explicitly called out in any of the guides related to Bulk FHIR, though we do know that if Authorization headers are passed to S3 signed URLs it will not work.</p>\n<p>In the meetings / chat we discussed that:</p>\n<ul>\n<li>HTTP IETF standards do not clarify how HTTP clients should handle Authorization headers when following redirects to a different domain</li>\n<li>In a brief review of several open source HTTP clients, there seems to be no consensus on whether Authorization headers should be dropped or not</li>\n<li>It is <em>generally</em> agreed on that sending Authorization headers to a <em>different</em> domain is likely a security issue and behavior we would want to discourage </li>\n</ul>\n<p>I believe that clarifications on how to handle Authorization headers for redirects should be documented in FHIR's HTTP standards guide, not necessarily within Bulk.</p>",
+        "id": 272431571,
+        "sender_full_name": "Brian Forbis",
+        "timestamp": 1645205653
+    },
+    {
+        "content": "<p>Agreed with all of Brian's points; this is why, after discussion, we didn't draft additional guidance on redirection behavior for Backend Services.</p>",
+        "id": 272440105,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1645209475
+    }
+]

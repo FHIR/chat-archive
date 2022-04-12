@@ -1,0 +1,68 @@
+---
+layout: page
+title: "FHIR Chat  · Restricted Resources · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Restricted.20Resources.html">Restricted Resources</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="233443789"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Restricted%20Resources/near/233443789" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Newt <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Restricted.20Resources.html#233443789">(Apr 07 2021 at 07:20)</a>:</h4>
+<p>Storing and implementing restricted resources in a FHIR server:</p>
+<p>TLDR: <br>
+What is the best way to “store” data about which resources are restricted in such a way it makes sense from a FHIR point of view, but also the checks can be implemented on every interaction with the FHIR server in a somewhat efficient way?</p>
+<p>DETAILS:<br>
+We have a scenario where our Clinical Information System (CIS) is synchronizing data out to a FHIR Repository, and then multiple consumers can access data from the FHIR repository instead of the CIS itself – from the API consumer’s point of view, it’s a read-only repository, the only way data gets in there is via the CIS sending the data over.  We are actively developing this as a proof of concept using HAPI as an example (but we hope to be able to choose any FHIR server assuming it meets our needs into the future).</p>
+<p>We have two scenarios in the CIS around a particular clinician being able to restrict information.  One is that they may want to restrict an entire patient’s record so that only they can see it.  Another is that they may want to restrict a particular resource, such as a “DocumentReference”.  Let’s leave out any argument that this is maybe a bad idea, it’s a feature in the CIS that exists so we need to support it through our API so that if that clinician is viewing the record, they can see things that they can see in the CIS but no one else can see them.  A future possible requirement is they may want to restrict it to more than one person, maybe a “care team” if we introduce that concept, so that’s worth just keeping in mind (I.e. we only have a requirement for a single user now, but our solution ideally would not lock us into that).</p>
+<p>We have a process that pulls the data out of CIS and generates FHIR resources as it sends them into HAPI, so we have full control over what we might want to do with these resources on the way in.</p>
+<p>We started out by looking at the simpler example of a DocumentReference and how we might do that.  It seemed like marking it with a Security Label might be a start (<a href="https://www.hl7.org/fhir/security-labels.html">https://www.hl7.org/fhir/security-labels.html</a>) – it would seem that setting the “Confidentiality Classification” to “Very Restricted” would make sense (<a href="https://www.hl7.org/fhir/v3/ConfidentialityClassification/vs.html">https://www.hl7.org/fhir/v3/ConfidentialityClassification/vs.html</a>) however that just tells us that it’s restricted, not who can access it.  The “Compartment Category” could then possibly be used to say “who” can access it – but there is not one for an individual, the closest looks to be “Care Team” (<a href="https://www.hl7.org/fhir/v3/Compartment/vs.html">https://www.hl7.org/fhir/v3/Compartment/vs.html</a>).</p>
+<p>I guess the first question is are we on the right track with that thinking, or are we going to need something like a custom extension to “mark” who can access it, or maybe even some concept of a custom compartment?</p>
+<p>Looking at “how” we might restrict it using HAPI as the example, we would want to keep that logic as close to the data as possible.  Based on the HAPI documentation, it would seem ideally, we would want to implement some rules in an “Authorization Interceptor” (<a href="https://hapifhir.io/hapi-fhir/docs/security/authorization_interceptor.html">https://hapifhir.io/hapi-fhir/docs/security/authorization_interceptor.html</a>) as the “place” to implement the restriction since it should take care of FHIR features such as “_includes” that may be able to bypass the check.</p>
+<p>Assuming that is the “correct” (or best) place to implement the logic, it would seem that to lock down either an individual resource or a whole patient, somehow knowing that the logged in user has access to that resource or patient, would be to do it at a compartment level, as that could take care of the hierarchy of related restricted items.  If that is true, does that answer the question around how we might restrict one DocumentReference (I.e. we would have to put it in its own compartment)?</p>
+
+
+
+<a name="233593151"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Restricted%20Resources/near/233593151" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Restricted.20Resources.html#233593151">(Apr 08 2021 at 02:34)</a>:</h4>
+<p>security-labels could restrict something to only 'author' (which would be typical if restricting to only one person).  If you need to restrict to someone other than author or need to have a list of individuals, you'd indeed need an extension.  You could submit a change request to propose defining a standard one (this seems like something that could reasonably manifest for a variety of systems in a variety of countries.  In terms of how best to implement in HAPI, you might raise that specific question on <a class="stream" data-stream-id="179167" href="/#narrow/stream/179167-hapi">#hapi</a></p>
+
+
+
+<a name="233598928"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Restricted%20Resources/near/233598928" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joel Schneider <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Restricted.20Resources.html#233598928">(Apr 08 2021 at 04:15)</a>:</h4>
+<p>Security labels can be used to implement something like a role-based access policy.  The <a class="stream" data-stream-id="179247" href="/#narrow/stream/179247-Security-and-Privacy">#Security and Privacy</a> stream is a good place to find other discussions about the use of security labels, such as <a href="#narrow/stream/179247-Security-and.20Privacy/topic/clinical.20outcomes.20registry.20data.20access.20control.20use.20case">this one</a>.</p>
+
+
+
+<a name="233608811"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Restricted%20Resources/near/233608811" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jose Costa Teixeira <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Restricted.20Resources.html#233608811">(Apr 08 2021 at 06:46)</a>:</h4>
+<p>The Permission resource is designed to be attached to a) a definition or b) an instance resource, allowing people to capture who(1) can/cannot access(2) this a) type of resources or b) specific resource</p>
+
+
+
+<a name="233608897"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Restricted%20Resources/near/233608897" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jose Costa Teixeira <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Restricted.20Resources.html#233608897">(Apr 08 2021 at 06:47)</a>:</h4>
+<p>(1): the "who" can be any reference<br>
+(2): "access" means - to write, to store, to change...</p>
+
+
+
+<a name="237408043"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Restricted%20Resources/near/237408043" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Luis Raygada <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Restricted.20Resources.html#237408043">(May 04 2021 at 22:05)</a>:</h4>
+<p>can you tag a code system with more than one security-label?</p>
+
+
+
+<a name="237408172"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Restricted%20Resources/near/237408172" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Restricted.20Resources.html#237408172">(May 04 2021 at 22:06)</a>:</h4>
+<p>You can tag any resource with as many security labels as you like.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

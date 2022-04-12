@@ -1,0 +1,146 @@
+---
+layout: page
+title: "FHIR Chat  · Dealing w/ matching medication[x] against value sets · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dealing.20w.2F.20matching.20medication.5Bx.5D.20against.20value.20sets.html">Dealing w/ matching medication[x] against value sets</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153955078"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dealing%20w/%20matching%20medication%5Bx%5D%20against%20value%20sets/near/153955078" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dealing.20w.2F.20matching.20medication.5Bx.5D.20against.20value.20sets.html#153955078">(Apr 30 2018 at 20:13)</a>:</h4>
+<p>I'm writing some CQL that needs to match <code>MedicationOrder</code> against a value set of possible medications.  The tricky bit is that the medication code might be buried in a reference to a <code>Medication</code> resource (rather than inlined in the <code>MedicationOrder</code>).  Here's what I came up with for FHIR DSTU2-based CQL, but I'm curious if anyone has come up w/ anything better:</p>
+<div class="codehilite"><pre><span></span>[MedicationOrder] O
+where O.medicationCodeableConcept in &quot;My Med VS&quot;
+  or exists(
+    [Medication: &quot;My Med VS&quot;] M
+    where EndsWith(O.medicationReference.reference.value, &#39;Medication/&#39; + M.id.value)
+  )
+</pre></div>
+
+
+<p>(I do realize that I could also use <code>Match</code> w/ a regex instead of <code>EndsWith</code>, but I'm looking for other approaches that might be more performant or easy to read.)  I don't <em>love</em> this solution because it would be inefficient without optimization (since it pulls <em>all</em> the patient's <code>MedicationOrder</code>s and <em>all</em> the <code>Medication</code>s represented by the value set -- which could be hundreds).</p>
+
+
+
+<a name="153955129"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dealing%20w/%20matching%20medication%5Bx%5D%20against%20value%20sets/near/153955129" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christopher Schuler <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dealing.20w.2F.20matching.20medication.5Bx.5D.20against.20value.20sets.html#153955129">(Apr 30 2018 at 22:58)</a>:</h4>
+<p><span class="user-mention" data-user-id="191469">@Chris Moesel</span>  I am shooting from the hip but would this work?</p>
+<div class="codehilite"><pre><span></span>[MedicationOrder: code in &quot;My Med VS] union [MedicationOrder: medication in &quot;My Med VS&quot;]
+</pre></div>
+
+
+
+<a name="153955138"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dealing%20w/%20matching%20medication%5Bx%5D%20against%20value%20sets/near/153955138" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dealing.20w.2F.20matching.20medication.5Bx.5D.20against.20value.20sets.html#153955138">(May 01 2018 at 00:00)</a>:</h4>
+<p>Thanks for the reply <span class="user-mention" data-user-id="191897">@Christopher Schuler</span>.  I don't <em>think</em> that would work, as neither <code>code</code> nor <code>medication</code> are valid properties for <code>MedicationOrder</code> in the FHIR 1.0.2 data model.  You're definitely right that it <em>could</em> be expressed as a union though:</p>
+<div class="codehilite"><pre><span></span>[MedicationOrder: &quot;My Med VS&quot;]
+union
+[MedicationOrder] O
+  where exists (
+    [Medication: &quot;My Med VS&quot;] M
+      where EndsWith(O.medicationReference.reference.value, &#39;Medication/&#39; + M.id.value)
+  )
+</pre></div>
+
+
+<p>I'm not sure if that's better or not.  It may be a matter of preference?</p>
+
+
+
+<a name="153955141"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dealing%20w/%20matching%20medication%5Bx%5D%20against%20value%20sets/near/153955141" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christopher Schuler <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dealing.20w.2F.20matching.20medication.5Bx.5D.20against.20value.20sets.html#153955141">(May 01 2018 at 00:08)</a>:</h4>
+<p><span class="user-mention" data-user-id="191469">@Chris Moesel</span> "code" and "medication" are search parameters defined in the FHIR spec (<a href="http://hl7.org/fhir/DSTU2/medicationorder.html#search" target="_blank" title="http://hl7.org/fhir/DSTU2/medicationorder.html#search">http://hl7.org/fhir/DSTU2/medicationorder.html#search</a>). They should resolve correctly when building a URL to fetch the resource (e.g. {base}/MedicationOrder?code:in="My Med VS"). I am not sure how you're fetching resources though...</p>
+
+
+
+<a name="153955142"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dealing%20w/%20matching%20medication%5Bx%5D%20against%20value%20sets/near/153955142" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christopher Schuler <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dealing.20w.2F.20matching.20medication.5Bx.5D.20against.20value.20sets.html#153955142">(May 01 2018 at 00:30)</a>:</h4>
+<p>The following is an example url of fetching orders by code:<br>
+<a href="http://fhirtest.uhn.ca/baseDstu2/MedicationOrder?code=http://www.nlm.nih.gov/research/umls/rxnorm|313782" target="_blank" title="http://fhirtest.uhn.ca/baseDstu2/MedicationOrder?code=http://www.nlm.nih.gov/research/umls/rxnorm|313782">http://fhirtest.uhn.ca/baseDstu2/MedicationOrder?code=http://www.nlm.nih.gov/research/umls/rxnorm|313782</a></p>
+
+
+
+<a name="153955143"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dealing%20w/%20matching%20medication%5Bx%5D%20against%20value%20sets/near/153955143" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dealing.20w.2F.20matching.20medication.5Bx.5D.20against.20value.20sets.html#153955143">(May 01 2018 at 01:10)</a>:</h4>
+<p><span class="user-mention" data-user-id="191897">@Christopher Schuler</span> - Thanks for the clarification.  I understand that <code>code</code> and <code>medication</code> are search parameters in FHIR, but they're not defined properties in the FHIR 1.0.2 model-info file that CQL uses (see <a href="https://github.com/cqframework/clinical_quality_language/blob/master/Src/java/quick/src/main/resources/org/hl7/fhir/fhir-modelinfo-1.0.2.xml#L878-L896" target="_blank" title="https://github.com/cqframework/clinical_quality_language/blob/master/Src/java/quick/src/main/resources/org/hl7/fhir/fhir-modelinfo-1.0.2.xml#L878-L896">here</a>). That being the case, I don't think I can use them in CQL retrieves or queries (unless I defined my own custom model-info, but I'd rather stick to the published one).</p>
+
+
+
+<a name="153955146"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dealing%20w/%20matching%20medication%5Bx%5D%20against%20value%20sets/near/153955146" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christopher Schuler <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dealing.20w.2F.20matching.20medication.5Bx.5D.20against.20value.20sets.html#153955146">(May 01 2018 at 01:32)</a>:</h4>
+<p>Hmm. I guess I am not explaining this well. Perhaps an example would help illustrate what I am trying to say. I have an environment that executes STU3 code, but the following concept should work for the DSTU2 model as well. Navigate to <a href="http://cql-runner.dataphoria.org" target="_blank" title="http://cql-runner.dataphoria.org">http://cql-runner.dataphoria.org</a>. Paste the following CQL:</p>
+<div class="codehilite"><pre><span></span>library Example version &#39;1.0&#39;
+
+using FHIR version &#39;3.0.0&#39;
+
+valueset &quot;Benzo&quot;: &#39;benzodiazepines&#39;
+
+context Patient
+
+// note that code is not a valid STU3 MedicationRequest property
+define BenzoMedication:
+  [MedicationRequest: code in &quot;Benzo&quot;]
+</pre></div>
+
+
+<p>Select the config button and input example-rec-11-benzo-trigger-with-opioid as the patientId and press OK.<br>
+Select the Run button.<br>
+You should see a MedicationRequest in the results for the BenzoMedication expression.</p>
+<p>Hopefully that shows that what I am suggesting is valid CQL with the published data model.</p>
+
+
+
+<a name="153955148"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dealing%20w/%20matching%20medication%5Bx%5D%20against%20value%20sets/near/153955148" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dealing.20w.2F.20matching.20medication.5Bx.5D.20against.20value.20sets.html#153955148">(May 01 2018 at 01:48)</a>:</h4>
+<p>Wow.  That's really interesting.  I understand what you're getting at now and why we have a disconnect.</p>
+<p>Are you sure cql-runner is using the <em>published</em> (on GitHub) FHIR 3.0.0 model-info file?  I can't get your CQL to compile using the <code>cql-to-elm</code> on GitHub's <code>clinical_quality_language</code> master branch:</p>
+<div class="codehilite"><pre><span></span>clinical-quality-language <span class="o">(</span>master<span class="o">)</span> $ <span class="nb">cd</span> Src/java/cql-to-elm/
+cql-to-elm <span class="o">(</span>master<span class="o">)</span> $ gradle installDist
+
+&gt; Task :cql-to-elm:compileJava
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked <span class="k">for</span> details.
+
+
+BUILD SUCCESSFUL in 3s
+<span class="m">23</span> actionable tasks: <span class="m">5</span> executed, <span class="m">18</span> up-to-date
+cql-to-elm <span class="o">(</span>master<span class="o">)</span> $ vi Example.cql
+cql-to-elm <span class="o">(</span>master<span class="o">)</span> $ build/install/cql-to-elm/bin/cql-to-elm --input ./Example.cql
+<span class="o">================================================================================</span>
+TRANSLATE ./Example.cql
+Translation completed with messages:
+Warning:<span class="o">[</span><span class="m">11</span>:3, <span class="m">11</span>:38<span class="o">]</span> Could not resolve code path code <span class="k">for</span> the <span class="nb">type</span> of the retrieve FHIR.MedicationRequest.
+Warning:<span class="o">[</span><span class="m">11</span>:3, <span class="m">11</span>:38<span class="o">]</span> Could not resolve membership operator <span class="k">for</span> terminology target of the retrieve.
+ELM output written to: ./Example.xml
+
+cql-to-elm <span class="o">(</span>master<span class="o">)</span> $
+</pre></div>
+
+
+
+<a name="153955150"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dealing%20w/%20matching%20medication%5Bx%5D%20against%20value%20sets/near/153955150" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christopher Schuler <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dealing.20w.2F.20matching.20medication.5Bx.5D.20against.20value.20sets.html#153955150">(May 01 2018 at 02:21)</a>:</h4>
+<p>Huh. That's weird. That project uses the cql-to-elm translator (v1.2.18) and I am not using a custom FHIR model-info. I am getting the same errors using the translator from the command line. Maybe the different versions are causing an issue? Dang... I'll have to investigate that.</p>
+
+
+
+<a name="153955154"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dealing%20w/%20matching%20medication%5Bx%5D%20against%20value%20sets/near/153955154" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christopher Schuler <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dealing.20w.2F.20matching.20medication.5Bx.5D.20against.20value.20sets.html#153955154">(May 01 2018 at 03:15)</a>:</h4>
+<p>But if I remove "code" so it is <code>[MedicationRequest: "Benzo"]</code>, then I get the following error:<br>
+<code>Warning:[10:3, 10:30] Could not resolve code path medicationCodeableConcept for the type of the retrieve FHIR.MedicationRequest.</code></p>
+
+
+
+<a name="153955219"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dealing%20w/%20matching%20medication%5Bx%5D%20against%20value%20sets/near/153955219" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dealing.20w.2F.20matching.20medication.5Bx.5D.20against.20value.20sets.html#153955219">(May 01 2018 at 13:11)</a>:</h4>
+<p>Ah.  I think there is a bug in the model-info.  I see that the <code>primaryCodePath</code> is set to <code>medicationCodeableConcept</code>, but when Bryn introduced the ChoiceType support, he changed the <code>medicationCodeableConcept</code> property to <code>medication</code> (with a choice) -- but did not update the <code>primaryCodePath</code>.  I think that must be what's going on there.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

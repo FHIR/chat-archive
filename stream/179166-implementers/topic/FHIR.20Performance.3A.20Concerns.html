@@ -1,0 +1,237 @@
+---
+layout: page
+title: "FHIR Chat  · FHIR Performance: Concerns · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html">FHIR Performance: Concerns</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="208594011"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208594011" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208594011">(Aug 31 2020 at 18:05)</a>:</h4>
+<p>I've been spending a lot of time this year thinking about FHIR performance. It's something we keep running into (painfully) at work and, from a survey of the topics here, I don't think we're the only ones.</p>
+<p>I'd be curious to hear from anyone else out there who's running into performance problems with FHIR servers, clients, etc. If you, too, are (or have been) stressed about scale, performance, cost, etc. for your FHIR deployments, could you reply here or reach out via private message?</p>
+<p>I imagine there are a lot of lessons-learned and strategies that can be shared to help each other and the community at large.</p>
+
+
+
+<a name="208595716"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208595716" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208595716">(Aug 31 2020 at 18:20)</a>:</h4>
+<p>I'll go first: we've seen performance-/scale-related problems with all of the following:</p>
+<ul>
+<li>Storage size (and cost! oh my goodness, the cost...).<ul>
+<li>Initially mitigated this by moving away from HAPI's JPA storage engine, which was hilariously excessive for our needs.</li>
+<li>More recently mitigated this by moving from AWS' RDS for PostgreSQL to AWS' RDS <em>Aurora</em> for PostgreSQL, which saves money if you have a lot of read replicas.</li>
+</ul>
+</li>
+<li>Very spiky demand, especially for the batch/bulk use cases we support.<ul>
+<li>Relatively simple to (kinda') fix: just start auto-scaling.</li>
+<li>Two outstanding issues, though:<ul>
+<li>Scaling up is <strong>slow</strong>, particularly when accounting for JVM warm-up.</li>
+<li>Latency starts to climb rapidly with CPU utilization, which leads to us wanting to leave boxes very under-utilized.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Serialization and deserialization of JSON FHIR bundles is <strong>expensive</strong>: really slows things down dramatically.<ul>
+<li>Our best solution for this by far is just to avoid it entirely: generate the JSON once such that downstream services won't have to modify it.</li>
+<li>That still leaves the initial JSON serialization, though, which drives the vast majority of our services' latency.</li>
+</ul>
+</li>
+</ul>
+
+
+
+<a name="208595794"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208595794" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208595794">(Aug 31 2020 at 18:20)</a>:</h4>
+<p>From the search I mentioned earlier, it sounds like a lot of folks are also running into performance problems with terminology services and validation?</p>
+
+
+
+<a name="208597731"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208597731" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vassil Peytchev <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208597731">(Aug 31 2020 at 18:34)</a>:</h4>
+<p>Is it possible to categorize the performance concerns that are related to a particular implementation (e.g. hapi), a particular platform (e.g. JVM), and general?</p>
+
+
+
+<a name="208598327"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208598327" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208598327">(Aug 31 2020 at 18:38)</a>:</h4>
+<p>A lot of them are <em>likely</em> related to HAPI, since we're using it. But part of my reason for asking here is to figure out what performance problems other folks are seeing with what <em>they're</em> using. Nothing's perfect; these things are always tradeoffs. <span aria-label="smile" class="emoji emoji-1f642" role="img" title="smile">:smile:</span></p>
+
+
+
+<a name="208599240"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208599240" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208599240">(Aug 31 2020 at 18:44)</a>:</h4>
+<p>The only really FHIR-related performance issue we had was serialization - we rewrote the serialization code of the .NET library we use and now it is OK (not super-fast for sure, but negligible compared with everything else)</p>
+
+
+
+<a name="208599338"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208599338" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208599338">(Aug 31 2020 at 18:45)</a>:</h4>
+<p>We had / have plenty of other perf challenges, but are not really anything FHIR-specific</p>
+
+
+
+<a name="208599554"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208599554" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208599554">(Aug 31 2020 at 18:47)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191912">Michele Mottini</span> <a href="#narrow/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns/near/208599338">said</a>:</p>
+<blockquote>
+<p>We had / have plenty of other perf challenges, but are not really anything FHIR-specific</p>
+</blockquote>
+<p>I'd still be curious to hear about some of those! Even if they're not FHIR-specific, I bet a lot of other FHIR projects are running into them.</p>
+
+
+
+<a name="208600125"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208600125" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208600125">(Aug 31 2020 at 18:52)</a>:</h4>
+<p>They are always 'I do this FHIR search and it is slow' or 'I do this bulk export and it is slow' - and then the underlying cause is missing indexes, or database not using them, or our code going to the database for each single resource instead of once per search page or.... - variety of system-specific things that have nothing particular to do with FHIR</p>
+
+
+
+<a name="208600705"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208600705" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208600705">(Aug 31 2020 at 18:56)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191912">Michele Mottini</span> <a href="#narrow/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns/near/208600125">said</a>:</p>
+<blockquote>
+<p>They are always 'I do this FHIR search and it is slow' or 'I do this bulk export and it is slow' - and then the underlying cause is missing indexes, or database not using them, or our code going to the database for each single resource instead of once per search page or.... - variety of system-specific things that have nothing particular to do with FHIR</p>
+</blockquote>
+<p>Interesting! Do you support a wide variety of searches/operations, then? (We don't, mostly to avoid exactly these kinds of problems.)</p>
+
+
+
+<a name="208601742"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208601742" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208601742">(Aug 31 2020 at 19:05)</a>:</h4>
+<p>Yes, lots of resources with lots of search parameters: <a href="https://fhir.careevolution.com/Master.Adapter1.WebClient/fhir?prefix=fhir-r4">https://fhir.careevolution.com/Master.Adapter1.WebClient/fhir?prefix=fhir-r4</a></p>
+
+
+
+<a name="208601795"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208601795" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208601795">(Aug 31 2020 at 19:05)</a>:</h4>
+<p>We have both financial and clinical data, that is probably rare</p>
+
+
+
+<a name="208602232"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208602232" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208602232">(Aug 31 2020 at 19:08)</a>:</h4>
+<p>Oh, those search parameter lists are giving me a real big case of the sads. Good on you for supporting all that! <em>(Glad it's not me!)</em></p>
+
+
+
+<a name="208603092"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208603092" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208603092">(Aug 31 2020 at 19:16)</a>:</h4>
+<p><span class="user-mention" data-user-id="191416">@Iryna Roy</span></p>
+
+
+
+<a name="208623611"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208623611" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208623611">(Aug 31 2020 at 22:32)</a>:</h4>
+<p>The Google implementation has tough constraints in terms of performance. It's a fully managed service where customers have no access to the underlying storage (Spanner), so we have to anticipate everyone's use cases and load test ahead of them. At the same time we can't look at customers' data, so I never know exactly what people are doing with the service unless they tell me. It is multi-tenant and basically zero-configuration for scalability (except for quota limits) so a customer can show up and start dumping terabytes of FHIR into a store without warning. It's actually really cheap too. Billed entirely on usage.</p>
+<p>We try to support all use cases, to the point where our conformance documentation lists the things we don't support instead of the things we do support. All DSTU2, STU3, and R4 resources. Almost all search parameters with a few exceptions that we haven't gotten to yet.</p>
+<p>The most challenging use case is from large provider and/or payor entities that want to construct a secondary FHIR data layer that unifies numerous facilities, diverse EHRs, and many years of historical data in a single monolithic store that is updated in near-real-time and feeds an entire ecosystem of apps and analytics making thousands of queries per second. The scale is on the order of single-digit billions of resources today and double-digit billions very soon.</p>
+<p>So we had, and continue to have, some performance challenges.</p>
+<ul>
+<li>Indexing. The search index is a proprietary document index. We made the indexing asynchronous which is a bit unfortunate but at scale you have to hide the tail latency somewhere. Because it's a document index it doesn't really do joins, so chained search is limited.</li>
+<li>Import cold-start. Importing a lot of resources into an empty store really needs some smart preallocation or it spends hours getting throttled while the storage layer incrementally adjusts without being aware of the full data size.</li>
+<li>Index hotspotting. Any index on primary storage needs to be carefully looked at for what pattern it would be vulnerable to. Someone will eventually come up with a dataset that hits that vulnerability.</li>
+<li>Auto-scaling of every layer of the system. All it takes to slow down everything is one layer not scaling rapidly enough.</li>
+<li>Spiky demand in a multi-tenant system. Maintaining enough isolation to keep tenants from impacting each other while taking advantage of averaging out each tenant's spikes in traffic over a set of shared backends.</li>
+</ul>
+
+
+
+<a name="208628045"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208628045" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Iryna Roy <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208628045">(Aug 31 2020 at 23:25)</a>:</h4>
+<p>Hello <span class="user-mention" data-user-id="192789">@Karl M. Davis</span>, yes we have completed the analysis of various FHIR implementations recently and have some lessons learned re: performance and size of HAPI FHIR and similar architecture implementations. I will try to summarize and we are also working on the white paper, related to the topic.  Interesting to hear about Google experience!</p>
+
+
+
+<a name="208634101"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208634101" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208634101">(Sep 01 2020 at 00:54)</a>:</h4>
+<p>on my server, I trade storage for turn around time, and pre-store ready to go json and xml for the common views of a resource. For most searches, I just stream the raw bytes into the bundle. The other obvious issue for me is speed of processing PUT/POST - the time taken comes from validation + indexing. I can turn validation off, but indexing... it's costly. Doing it later is something I've considered but not yet done.</p>
+
+
+
+<a name="208639087"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208639087" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208639087">(Sep 01 2020 at 02:34)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191416">Iryna Roy</span> <a href="#narrow/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns/near/208628045">said</a>:</p>
+<blockquote>
+<p>Hello <span class="user-mention silent" data-user-id="192789">Karl M. Davis</span>, yes we have completed the analysis of various FHIR implementations recently and have some lessons learned re: performance and size of HAPI FHIR and similar architecture implementations. I will try to summarize and we are also working on the white paper, related to the topic.  Interesting to hear about Google experience!</p>
+</blockquote>
+<p>I'd love to see the white paper when it's available! Have you publlished anything ahead of that, e.g. blog posts or podcast appearances or such?</p>
+
+
+
+<a name="208639327"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208639327" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208639327">(Sep 01 2020 at 02:39)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191316">Grahame Grieve</span> <a href="#narrow/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns/near/208634101">said</a>:</p>
+<blockquote>
+<p>on my server, I trade storage for turn around time, and pre-store ready to go json and xml for the common views of a resource. <br>
+For most searches, I just stream the raw bytes into the bundle.</p>
+</blockquote>
+<p>I understand the tradeoff: that's the plan we <em>started</em> with for BB2, but had to abandon eventually as it became unworkable. Our experience with HAPI's JPA layer was about a... 25x storage increase over a relational representation. It got to the point where, even aside from storage costs, it was just going to take us <em>months</em> to write out that much data to the disk for our initial load.</p>
+<blockquote>
+<p>The other obvious issue for me is speed of processing PUT/POST - the time taken comes from validation + indexing. I can turn validation off, but indexing... it's costly. Doing it later is something I've considered but not yet done.</p>
+</blockquote>
+<p>Do you have any latency stats? I've found that folks have wildly divergent views on what "fast" is, so I'm always curious to anchor those opinions to real numbers a bit.</p>
+
+
+
+<a name="208639539"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208639539" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208639539">(Sep 01 2020 at 02:44)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="197072">Paul Church</span> <a href="#narrow/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns/near/208623611">said</a>:</p>
+<blockquote>
+<p>The Google implementation has tough constraints in terms of performance. ...</p>
+</blockquote>
+<p>That's really fascinating! Like I was mentioning with Graham, I'm <strong>super</strong> glad we were able to avoid having to deploy and support (and pay for the storage for!) a document store, so hats off to you for managing that successfully at scale! To say nothing of the nightmare that managing multi-tenant load spikes at that scale must be! (I know it's kinda' Google's whole schtick, but still.)</p>
+<p>Do ya'all have any published benchmarks or latency/performance SLAs?</p>
+<p>I'm also wondering if you've found folks unable to cope with the constraints imposed by the delayed indexing? Eventual consistency is... fraught, for a lot of applications.</p>
+
+
+
+<a name="208721249"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208721249" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208721249">(Sep 01 2020 at 17:35)</a>:</h4>
+<p><span class="user-mention" data-user-id="192789">@Karl M. Davis</span> The delayed indexing is primarily a problem for conditional operations. In our beta API you can do conditional operations with any search criteria, but the search isn't inside the transaction. This isn't very useful, especially for conditional create, so it will probably go away eventually. Instead we're working on an implementation where the only condition allowed is 'identifier' but it's transactional and performant. Identifier seems to address 99% of the use cases that we've run into.</p>
+<p>Other than that, delayed indexing hasn't been too bad of a pain point. The median latency usually sits well under 1 second, so it's not like you have to wait a long time for search consistency.</p>
+<p>We have internal latency targets but nothing published yet. FHIR has a lot of dimensions to a request that make it tricky to publish numbers with a reproducible methodology. If we say that a search takes 100ms, that's not going to hold once you bulk up the query with a bunch of chains and includes and put the system under heavy load.</p>
+
+
+
+<a name="208772230"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208772230" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208772230">(Sep 02 2020 at 02:08)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="197072">Paul Church</span> <a href="#narrow/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns/near/208721249">said</a>:</p>
+<blockquote>
+<p><span class="user-mention silent" data-user-id="192789">Karl M. Davis</span> Instead we're working on an implementation where the only condition allowed is 'identifier' but it's transactional and performant. Identifier seems to address 99% of the use cases that we've run into.</p>
+<p>Other than that, delayed indexing hasn't been too bad of a pain point. The median latency usually sits well under 1 second, so it's not like you have to wait a long time for search consistency.</p>
+</blockquote>
+<p>Interesting!</p>
+<blockquote>
+<p>We have internal latency targets but nothing published yet. FHIR has a lot of dimensions to a request that make it tricky to publish numbers with a reproducible methodology. If we say that a search takes 100ms, that's not going to hold once you bulk up the query with a bunch of chains and includes and put the system under heavy load.</p>
+</blockquote>
+<p>Do you happen to know if there's anything in the GCP ToS that prevents benchmarking? I'm wondering if anyone else has published anything about it, even if it's just anecdotal.</p>
+
+
+
+<a name="208854116"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/208854116" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#208854116">(Sep 02 2020 at 16:50)</a>:</h4>
+<p>My product counsel gets a migraine any time I advise someone on the contents of the ToS. I am certainly aware of customers doing performance testing but not of anything being published. Most customers are doing load tests tailored to their anticipated production workloads so they aren't likely to disclose the details.</p>
+
+
+
+<a name="258256077"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/258256077" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> ℭ𝔞𝔭⥠⦿𝔟𝔦𝔩𝔩 <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#258256077">(Oct 19 2021 at 19:18)</a>:</h4>
+<p>What are people using to estimate load of patients expected to use FHIR APIs via app after adoption in Oct 2022... </p>
+<p>What would the expected usage and call rates?</p>
+
+
+
+<a name="258257953"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20Performance%3A%20Concerns/near/258257953" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20Performance.3A.20Concerns.html#258257953">(Oct 19 2021 at 19:31)</a>:</h4>
+<p>that depends ....</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,128 @@
+[
+    {
+        "content": "<p>Is the v2 to FHIR group only focused on mapping the v2  data models to FHIR?  Or is there also work to map the messaging exchange model to a REST API model?   It seems like data model conversion is the easy part.  We've seen folks work on \"v2 to FHIR\" thinking that they just need to map data, but the sticking point is that the intermediary always has to do the query/match/create/update/delete process to convert from snapshot content in a message to a set of interactions on the REST API.  </p>\n<p>For example, in order to convert GT1 from a message to Account in the REST API, you need to:</p>\n<ol>\n<li>Gather the list of GT1s from the message.</li>\n<li>Gather the list of Accounts from the REST API server.</li>\n<li>Match the GT1 records to Account records.</li>\n<li>Delete any Accounts on the FHIR server that are not in the GT1 list.</li>\n<li>Update any Accounts on the FHIR server that are in the GT1 list.</li>\n<li>Create any Accounts that are in the  GT1 list but not on the FHIR server.</li>\n<li>Roll back if anything in this whole process failed.</li>\n</ol>\n<p>Since you need to do this same thing for basically every set of segments (or at least snapshot-mode style segment), this gets <em>really</em> chatty on the wire.</p>\n<p>Or were we hoping that v2 to FHIR would be using FHIR messaging?</p>",
+        "id": 260140054,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1635949094
+    },
+    {
+        "content": "<p>Even if we were to use FHIR messaging, the receiving FHIR server (one that supports FHIR messaging) would still have to do all of the above. This is highly contextual business layer stuff, so other than best practices it's unlikely that HL7 will ever provide detailed guidance in this area.</p>",
+        "id": 260147595,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1635952136
+    },
+    {
+        "content": "<p>Yeah - that makes sense to me too.  I just think folks (or at least some) have a perception that \"v2 to FHIR\" is something that will make it relatively straightforward to do a \"v2 message\" to \"FHIR API\" conversion.</p>",
+        "id": 260165305,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1635959068
+    },
+    {
+        "content": "<p>The work by HL7 to create a segment-to-resource mapping is tremendously helpful, but even there one will need tweaks because of variability in usage of v2. But the hard parts lie elsewhere. </p>\n<p>FHIR to v2 has an entirely different set of challenges assiciated with it, but IMHO in general that'll probably be easier to implement than v2 to FHIR.</p>",
+        "id": 260237080,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1636011442
+    },
+    {
+        "content": "<p>The purpose of the project is to focus on the data mapping using a FHIR message as the target to ensure all data is considered. Then it is up to the mapper/receiver to determine whether to actually just use to to persist the FHIR resources, continue as a FHIR Message, switch into a chatty RESTFul API mode, or whatever.  The project team is not providing any guidance for each of those more specifically.  It is also not setting an expectation that it is relatively easy to go to FHIR APIs, assuming you mean with that \"individual resource level API granularity\" rather than \"message level API coarseness\" which are both FHIR APIs.  That term is assumed to be fairly limited in scope by most.</p>\n<p>Agreed that attempting to switch from a v2 message paradigm into a chatty, resource at a time API approach (RESTful or otherwise) is a bit strange. The intent of a message to begin with is to get all the relevant data across in one go.  Clearly you can still use RESTful APIs for that (i.e., a RESTFul API need not be at the granular resource level, although that is what most seem to assume.  Writing a Bundle of type message to an API still could use a RESTFul API I guess), but the more fundamental question would be how to have different interactions using non-messaging to enable a full workflow that otherwise would be done using HL7 v2 messaging.  That is not part of the v2-FHIR project.  Just strictly ensuring that those interested to tap into existing HL7 v2 streams to understand how to map out of that, and in the future how to map into that using existing v2 and FHIR terminology.  That could then also be used to help understand implementers figure out how their internal structures now map to FHIR where they are already familiar with v2.</p>",
+        "id": 260277544,
+        "sender_full_name": "Hans Buitendijk",
+        "timestamp": 1636036410
+    },
+    {
+        "content": "<p>To add to <span class=\"user-mention\" data-user-id=\"191764\">@Cooper Thompson</span> 's comments, repeating segments aren't the only difficult challenge. Handling of not-populated elements, explicit nulls, and repeating segment groups are also challenging. </p>\n<p>From the v2 spec:</p>\n<div class=\"codehilite\"><pre><span></span><code>A field may exist in one of three population states in an HL7 message:\nPopulated. (Synonyms: valued, non-blank, not blank, not empty.) The sending system sends a value in the field. For example, if a sending system includes medical record number, that would be communicated as |1234567^^^MR^KP-CA|. Note that the field might be populated with a code that means &quot;no information&quot; or &quot;unknown&quot;.\n\nNot populated. (Synonyms: unpopulated, not valued, unvalued, blank, empty, not present, missing.) The sending system does not supply a value for the field. The Sender might or might not have a value for the field. The receiving system can make no inference regarding the absence of an element value if there is not a conformance profile governing the implementation. However, if there is a Conformance Message Profile in effect, then special rules apply; see section 2.B, &quot;Conformance Using Message Profiles&quot;.\n\nNull. Any existing value for the corresponding data base element in the receiving application should be deleted. This is symbolically communicated as two double-quotes between the delimiters (i.e., |&quot;&quot;|).Employing consecutive double quote characters as the only content of a field for other purposes is prohibited.\n</code></pre></div>\n<p>You essentially need merge logic to update existing resources in place to handle these things. For the case of explicit NULL values, you can't carry that into a blindly transformed FHIR resource - i.e. can't put \"\" into a dateTime attribute. I suppose you could come up with extensions that carry some of the v2 semantics and tooling that knows how to interpret and merge an intermediary v2-transformed resource into an existing resource on a FHIR server, or perhaps using FHIR patch.</p>",
+        "id": 274163547,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1646415720
+    },
+    {
+        "content": "<p>However, the use of \"\" in v2 is exceedingly rare, and quite often the fields/components that are populated with \"\"(in a given context) are relatively well known.</p>",
+        "id": 274171754,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1646419360
+    },
+    {
+        "content": "<p>Thanks for the context <span class=\"user-mention\" data-user-id=\"191372\">@René Spronk</span>  - it's something I've wondered about as far as how common that may be in the wild. Does that imply that not populating previously sent elements is also rare?  For instance sending patient IDs but not full demographics in some messages? Or is that something that would be more dictated by the trigger event?</p>",
+        "id": 274176481,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1646421601
+    },
+    {
+        "content": "<p>We (Epic) do use \"\" as a deletion indicator in several of our v2 interfaces.  I'll admit it isn't universally implemented across all our fields on all message types, but several fields do use it.  And since those interfaces are fairly commonly used by many healthcare systems, I think \"irregularly used\" might be a better description than \"exceedingly rare\".</p>",
+        "id": 274190118,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1646428993
+    },
+    {
+        "content": "<p>Messaging is 'snapshot' in nature, so a sender sends everything they have/know, time and time and time again. Messaging is also making works case assumptions: the receiver may never have heard from this sender before, nor anything about this patient. The use of \"\" kind of assumes the receiver already has some data which we want to explicitly delete. So \"\" is a bit of a strange beast in v2, and is \"irregularly used\". If I were to create a v2-FHIR transformation I'd be working on the assumption that the use of \"\" is very low, so PATCH would not be the default way of handling v2-FHIR mappings.</p>",
+        "id": 274231563,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1646471439
+    },
+    {
+        "content": "<p>The two double quotes are NOT equal to null. That are two distinct concepts. We are fighting for years to clarify that. Some tables, which are also weird, have values equal to null, or at least similar, like UNK.<br>\nThe \"\" are 'delete indicators': the recipient must delete the information he has. <br>\nWith null values the recipient can keep them. <br>\nA null value on V2 is an empty field/component.<br>\nThe \"\" are used erroneously when fields are marked as R, and/but no information is available.<br>\nThat in return indicates, that v2x combines a core framework with aka basic profiles. For V2+ I have tried to separate that, allowing for cleaner specs.<br>\nMy question here: would that be appreciated or endorsed?</p>",
+        "id": 274233489,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1646474260
+    },
+    {
+        "content": "<p>Sure - in training courses we state that \"\" means \"known to be empty\", as in the example: this patient is known not to have any academic titles (thus using \"\" in the academic title component of a patient name). </p>\n<p>|| and ^^ are null flavours (for some reason a normal value [which includes \"\"] isn't known nor available when sending a message). Other than educating the HL7v2 community I don't see how we could improve the understanding of these two different concepts. Profiling would allow one to state whether null flavours are allowed or not, off the top of my head I don't really see a use case for it in the v2 space however. R means: no null flavours, there has to be a normal value (which could be \"\" if the value is known to be empty).</p>",
+        "id": 274240445,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1646482973
+    },
+    {
+        "content": "<p>R means to get a value which \"\" is not. If you extend your notion to the maximum that would mean to send only \"\" which seems weird.<br>\nAgain, null flavors and delete something are not the same concepts. With \"\" the recipient has to delete what he has, with a null flavor he can keep it.</p>",
+        "id": 274260241,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1646507934
+    },
+    {
+        "content": "<p>To qoute v2 (which does indeed indicate my wording to be erroneous, 2.7 ch. 2.5.3.0):</p>\n<p>A field may exist in one of three population states in an HL7 message:</p>\n<ol>\n<li>\n<p>Populated. (Synonyms: valued, non-blank, not blank, not empty.)  The sending system sends a value in the field.  For example, if a sending system includes medical record number, that would be communicated as |1234567^^^MR^KP-CA|. Note that the field might be populated with a code that means \"no information\" or \"unknown\".</p>\n</li>\n<li>\n<p>Not populated.  (Synonyms:  unpopulated, not valued, unvalued, blank, empty, not present, missing.)  The sending system does not supply a value for the field. The Sender might or might not have a value for the field. The receiving system can make no inference regarding the absence of an element value if there is not a conformance profile governing the implementation. However, if there is a Conformance Message Profile in effect, then special rules apply; see section 2.B, \"Conformance Using Message Profiles\".</p>\n</li>\n<li>\n<p>Null. Any existing value for the corresponding data base element in the receiving application should be deleted. This is symbolically communicated as two double-quotes between the delimiters (i.e., |\"\"|).Employing consecutive double quote characters as the only content of a field for other purposes is prohibited.</p>\n</li>\n</ol>",
+        "id": 274295163,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1646558083
+    },
+    {
+        "content": "<p>In my example of a persons academic titles: sending ^^ would indicate not knowing if a person has academic titles. \"\" indicates (as a creator of a message) that I'm aware the person has no academic titles (and if you as the receiver have academic titles in your database, you'd better delete them). That use is somewhat wider than the more limited definition:</p>\n<p>Given the definition of \"\" one could state that \"\" shall only be used by a sender if they know they've sent erroneous information in the past which they want to explicitly delete. That's a fairly narrow use case, which calls for a lot of complexity on the sender's side. 'To null' in the sense of 'canceling out' some earlier value. </p>\n<p>Going back to the formal definition: Populated includes the notion of what in v3 we'd call nullFlavours.  The Not Populated option would also be nullFlavours. The only option that doesn't allow nullFlavours is .. Null. </p>\n<p>Some updating of the wording may be in order, nit to redefine the meaning, but to align it more with terminology used in subsequent HL7 standards.</p>",
+        "id": 274295789,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1646559005
+    },
+    {
+        "content": "<p>We can continue down the rabbit hole of deletion indicators and null flavors, but what I'm really interested in is whether anyone (implementer) is planning to handle this in a v2 to FHIR product.  I'm still really curious what happens when we get the v2 field to FHIR property mapping done.  Will that actually be usable?  Only usable when doing v2 message -&gt; FHIR messages?  Or is anyone realistically thinking they'll be doing v2 messages to REST API?</p>",
+        "id": 274406677,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1646666620
+    },
+    {
+        "content": "<p>It will be usable as a reference mapping, a starting point for defining ones own contextual mapping. It doesn't help when it comes to all sorts of issues one will have to deal with when going from messaging to REST (\"\" just being a very tiny example of this). Which people are already doing, given the plethora of v2 stuff out there this is probably a must for any large scale project.</p>",
+        "id": 274420036,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1646671688
+    },
+    {
+        "content": "<p>I am really interested in knowing what people are actually doing this.  I've heard of folks <em>trying</em> to do this for the various cloud data warehouse imports, but I haven't heard of those projects going well.</p>",
+        "id": 274439859,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1646679164
+    },
+    {
+        "content": "<p>We have to think about the mechanics, how it should be, and not what people have done to solve an issue. There are a lot of quick fixes - for good reasons, but those are not helpful in the end.<br>\nAnd one problem are the statements if early days that use improper technical terminology. <br>\nV2 has no notion of null flavors. We have some code in tables for that purpose. I know the sentences in the standard, they are misleading. And trying to fix that failed for years...</p>",
+        "id": 274650501,
+        "sender_full_name": "Frank Oemig",
+        "timestamp": 1646809893
+    },
+    {
+        "content": "<p>Luckily at least FHIR uses 'dataAbsentReason' instead of nullFlavour, this helps to some degree to avoid the confusion. Doesn't help in the case of v2, though. But we can't retrofit a legacy standard..</p>",
+        "id": 274651802,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1646811191
+    },
+    {
+        "content": "<p>From a content perspective, I can see this being a bit issue in cancer and pathology reporting as there are many \"flavors of null\" in the CAP electronic Cancer Checklists (CAP eCC) content.  For example if a field is blank, does it mean it doesn't apply, wasn't seen in the specimen,  or did the pathologist skip the question/miss answering, etc.?   This assumes the data are messaged discretely.  Some may be captured discretely in synoptic reports, but it may not be sent discretely and isn't encoded in a number of cases (although some fields are).  Work is occurring in this area....</p>",
+        "id": 276347400,
+        "sender_full_name": "Andrea Pitkus, PhD, MLS(ASCP)CM, CSM",
+        "timestamp": 1648048085
+    }
+]

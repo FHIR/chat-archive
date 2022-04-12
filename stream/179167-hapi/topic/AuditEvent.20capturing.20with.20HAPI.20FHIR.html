@@ -1,0 +1,94 @@
+---
+layout: page
+title: "FHIR Chat  · AuditEvent capturing with HAPI FHIR · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/AuditEvent.20capturing.20with.20HAPI.20FHIR.html">AuditEvent capturing with HAPI FHIR</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="204765531"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/AuditEvent%20capturing%20with%20HAPI%20FHIR/near/204765531" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> AnujAroshA <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/AuditEvent.20capturing.20with.20HAPI.20FHIR.html#204765531">(Jul 23 2020 at 06:57)</a>:</h4>
+<p>We want to capture <strong>AuditEvent</strong> using HAPI FHIR in our environment. We could able to up and run the HAPI FHIR as Docker container in our environment. Following is the URL that we are trying to capture the AuditEvents.</p>
+<p><code>http://localhost:8080/hapi-fhir-jpaserver-example/baseDstu2/AuditEvent?_pretty=true</code></p>
+<p>But always what I'm getting is something similar to below</p>
+<div class="codehilite"><pre><span></span><code>{
+  &quot;resourceType&quot;: &quot;Bundle&quot;,
+  &quot;id&quot;: &quot;f8214d9d-0514-4a81-ad67-c3f29b7614a7&quot;,
+  &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2020-07-23T06:39:46.825+00:00&quot;
+  },
+  &quot;type&quot;: &quot;searchset&quot;,
+  &quot;total&quot;: 0,
+  &quot;link&quot;: [
+    {
+      &quot;relation&quot;: &quot;self&quot;,
+      &quot;url&quot;: &quot;http://localhost:8080/hapi-fhir-jpaserver-example/baseDstu2/AuditEvent&quot;
+    }
+  ]
+}
+</code></pre></div>
+
+
+<ul>
+<li>Am I not capturing any audit events?</li>
+<li>Is auditing not properly working?</li>
+<li>Why always total=0 ?</li>
+</ul>
+
+
+
+<a name="204792481"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/AuditEvent%20capturing%20with%20HAPI%20FHIR/near/204792481" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/AuditEvent.20capturing.20with.20HAPI.20FHIR.html#204792481">(Jul 23 2020 at 12:55)</a>:</h4>
+<p>I suspect nothing is recording AuditEvents. You likely need to debug why code that you think is recording an AuditEvent is not succeeding.</p>
+
+
+
+<a name="205084494"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/AuditEvent%20capturing%20with%20HAPI%20FHIR/near/205084494" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> AnujAroshA <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/AuditEvent.20capturing.20with.20HAPI.20FHIR.html#205084494">(Jul 27 2020 at 06:10)</a>:</h4>
+<p><span class="user-mention" data-user-id="191404">@John Moehrke</span> I have debug the JAVA plugin that we are using to send an AuditEvent. To capture audit event, we are using  <a href="https://hub.docker.com/r/polyakov/hapi-fhir-jpaserver-example/">polyakov/hapi-fhir-jpaserver-example</a> which runs as a Docker container.</p>
+<p>Docker compose file looks like below</p>
+<div class="codehilite"><pre><span></span><code>version: &#39;3.5&#39;
+services:
+  fhir:
+    image: polyakov/hapi-fhir-jpaserver-example
+    container_name: hapi-fhir
+    ports:
+      - 8080:8080
+</code></pre></div>
+
+
+<p>In the JAVA plugin we are having a code like below to send the Audit Event to the above mentioned service.</p>
+<div class="codehilite"><pre><span></span><code>    try {
+      MethodOutcome outcome = client.sendAuditEvent(auditEvent);
+      if (outcome != null &amp;&amp; outcome.getId() != null) {
+        log.debug(&quot;Successfully sent audit event to audit server, with ID {}&quot;, outcome.getId().getValue());
+      } else {
+        throw new DipsAuditLoggerException(ErrorCode.SERVER_ERROR, &quot;The audit event was not properly created on the audit server side&quot;);
+      }
+    } catch (BaseServerResponseException ae) {
+      log.error(&quot;Request to audit service failed. Response body is {}&quot;, ae.getResponseBody());
+      throw new DipsAuditLoggerException(ErrorCode.SERVER_ERROR, &quot;Error while talking to DIPS Audit service&quot;, ae);
+    }
+</code></pre></div>
+
+
+<p>It hits <strong><em>BaseServerResponseException</em></strong> and it gives <strong>HTTP Status 404 error</strong>. </p>
+<p>So, I think from the JAVA plugin, it creates the Audit Event properly and send to the audit service as well.</p>
+<p>Do you know any way that we can inspect the server hits on polyakov/hapi-fhir-jpaserver-example where I can investigate more or do you have any other opinion?</p>
+<p>Thank you very much</p>
+
+
+
+<a name="205107746"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/AuditEvent%20capturing%20with%20HAPI%20FHIR/near/205107746" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/AuditEvent.20capturing.20with.20HAPI.20FHIR.html#205107746">(Jul 27 2020 at 11:57)</a>:</h4>
+<p>not I, I only can help with the standard, not a system.  did you look at the content of the http response body? Did you look at the OperationOutcome? Most platforms put really helpful things in the response body.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,158 @@
+[
+    {
+        "content": "<p>I have a profile on a resource that has contained resources.  Those contained resources reference the containing resource and other contained resources (Organization.contained[1] = HealthcareService, Organization.contained[2] = OrganizationAffiliation, Organization.contained[3] = Organization2.  OrganizationAffiliation references the containing resource and Organization2.  I am using the '#' to refer to the containing resource and \"#blah\" to refer to other contained resources as it indicates in the specification: <a href=\"http://hl7.org/fhir/references.html#contained\">http://hl7.org/fhir/references.html#contained</a></p>\n<p>Unfortunately, it appears that the validator can not resolve those references.  I have a slice that is of type #profile and thus the validator needs to resolve that reference and it complains about it.</p>\n<div class=\"codehilite\"><pre><span></span><code>Unable to resolve resource &#39;#&#39;\n</code></pre></div>\n<p>NOTE: This only occurs if I set the slicing to be of type #profile.  I suppose that it doesn't need to resolve the references otherwise.</p>",
+        "id": 224406637,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611874763
+    },
+    {
+        "content": "<p>unfortunately, this is raised as an error and not a warning, so I can't suppress them.</p>",
+        "id": 224406685,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611874793
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span><code>Organization.contained[3] = Organization\n</code></pre></div>\n<p>I assume you've simplified here, and this isn't a circular reference?</p>",
+        "id": 224409565,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1611876670
+    },
+    {
+        "content": "<p>sorry, yes, it's a different organization that is referenced by the orgAffiliation (I updated my original post to reflect that)</p>",
+        "id": 224409613,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611876702
+    },
+    {
+        "content": "<p>Interesting. I wonder if the validator expects only the containing resource to reference contained resources, not contained resources to reference each other? This is on a profile... I wonder what the instance behaviour would be?</p>",
+        "id": 224409906,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1611876863
+    },
+    {
+        "content": "<p>it's not actually complaining about that - it's complaining that it can't find the containing resource in HealthcareService which only references the containing resource.</p>",
+        "id": 224409992,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611876926
+    },
+    {
+        "content": "<p>right. (The second part of my comment still stands.)</p>",
+        "id": 224410105,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1611876987
+    },
+    {
+        "content": "<p>true.  i'm expecting that servers who support contained resources would support this way of referencing them, but I'll certainly have the team test that.</p>",
+        "id": 224410183,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611877050
+    },
+    {
+        "content": "<p>Can you simplify the example? You start off saying Org1 contains HCS, OA, Org2; OA references Org1, Org2. But then you say HCS references Org1, and that's where the error comes up. Are OA and Org2 just a distraction from the issue?</p>",
+        "id": 224410498,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1611877281
+    },
+    {
+        "content": "<p>yes, i have a simpler instance that just has Org1 containing HCS which HCS referencing Org1.  And that fails as well.</p>",
+        "id": 224410535,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611877321
+    },
+    {
+        "content": "<p>In R4, there's an invariant that mandates that all contained resources must <em>directly</em> reference the container or be referenced by the container.  There's no support for container references contained1 which then references contained2.  This is a known issue.  Unfortunately, it's not super obvious how to fix it.  There's no easy way to say \"contained resource must reference or be referenced by the container either directly or through some recursive reference path via other contained resources\" using FHIRPath (let alone XPath).  <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> thoughts on how we can tackle this in R5?</p>\n<p>In R4, only solution is have a useless extension that includes a reference to the parent (or from parent to non-directly linked children)</p>",
+        "id": 224430935,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1611896120
+    },
+    {
+        "content": "<p>Okay, that's going to put a crimp in my profiling plans.  I still don't think that is my current issue as I have a Organization resource that has a contained HealthcareService that references the parent and I'm still getting the error in the QA of \"unable to reference #\".</p>",
+        "id": 224432942,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611898888
+    },
+    {
+        "content": "<p>because I'm using OrganizationAffilation to just show a link between the parent Organization and the contained Organization, if I'm going to have to define an extension to meet the constraint, I might as well drop the use of the OrganizationAffiliation.</p>",
+        "id": 224433100,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611899089
+    },
+    {
+        "content": "<p>unless i'm parsing the fhirpath wrong, as long as somewhere in the resource, other contained resources too, there is the correct #id reference (it doesn't seem to even care if it's self-referential, at least in the invariant) or the contained resource itself has a '#' reference to the containing resource then there isn't a problem. <br>\nLloyd, where in that invariant do you see that the #id reference search doesn't include other contained resources?<br>\nfor reference I'm looking at dom-3 <a href=\"https://www.hl7.org/fhir/domainresource.html#invs\">https://www.hl7.org/fhir/domainresource.html#invs</a></p>",
+        "id": 224498836,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1611938360
+    },
+    {
+        "content": "<p>I was going to come back this morning to report that after I made the change above - using an extension and deleting the OrganizationAffiliation, I suddenly get an error on the constraint Lloyd mentioned.  I <em>didn't</em> get that constraint failure before.  So I went from the validator not being able to follow # references to it not being able to do that <em>and</em> the constraint firing. :)</p>\n<p>If anyone wants to see the errors, the latest fhir-spl guide has them: <a href=\"http://build.fhir.org/ig/HL7/fhir-spl/branches/main/qa.html\">http://build.fhir.org/ig/HL7/fhir-spl/branches/main/qa.html</a></p>",
+        "id": 224499496,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611938637
+    },
+    {
+        "content": "<p>I mean the obvious question is why do you need contained resources (especially this many) but it should work from everything I'm seeing..</p>",
+        "id": 224500699,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1611939075
+    },
+    {
+        "content": "<p>we don't actually have that many contained resources.  We have a parent Organization that identifies two optional Organizations who perform services for it and a set of HealthcareServices that define its services.  We determined that none of the contained resources actually have a lifetime/identity of their own.</p>",
+        "id": 224501222,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611939278
+    },
+    {
+        "content": "<blockquote>\n<p>There's no support for container references contained1 which then references contained2</p>\n</blockquote>\n<p>I don't think that this is true</p>",
+        "id": 224790596,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1612213475
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179252-IG-creation/topic/Validator.20can't.20follow.20references.20in.20contained.20resources/near/224790596\">said</a>:</p>\n<blockquote>\n<blockquote>\n<p>There's no support for container references contained1 which then references contained2</p>\n</blockquote>\n<p>I don't think that this is true</p>\n</blockquote>\n<p>Yeah, I think we determined that since my guide doesn't complain about that constraint.</p>",
+        "id": 224790766,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1612213553
+    },
+    {
+        "content": "<p>The current invariant allows A to contain B and C where B and C point to each other, but neither have a reference to or from A - which does not meet our objective.</p>",
+        "id": 224903109,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1612285915
+    },
+    {
+        "content": "<p>to get back to my original concern/problem - it appears that the validator can't resolve the references between contained resources.  I made a simple instance where the contained resource had a reference back to the container via &lt;reference value=\"#\"/&gt; and I got the error \"Unable to resolve resource '#'\".  So I don't think that the validator in the IG publisher supports those references?</p>",
+        "id": 224943125,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1612303121
+    },
+    {
+        "content": "<p>how do I reproduce this? I think it should work</p>",
+        "id": 224944273,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1612303690
+    },
+    {
+        "content": "<p>i checked in my guide (fhir-spl) which has that error.</p>",
+        "id": 224944295,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1612303708
+    },
+    {
+        "content": "<p>If anyone wants to see the errors, the latest fhir-spl guide has them: <a href=\"http://build.fhir.org/ig/HL7/fhir-spl/branches/main/qa.html\">http://build.fhir.org/ig/HL7/fhir-spl/branches/main/qa.html</a></p>",
+        "id": 224944314,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1612303718
+    },
+    {
+        "content": "<p>btw, i'll be glad to be told that the validator is fine and I'm doing something wrong</p>",
+        "id": 224944355,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1612303755
+    },
+    {
+        "content": "<p>ok fixed next release. It turned out that # was supported, but there was a bug in the implementation of conformsTo()</p>",
+        "id": 225110469,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1612403976
+    }
+]

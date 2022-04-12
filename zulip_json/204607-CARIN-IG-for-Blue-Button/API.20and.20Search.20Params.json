@@ -1,0 +1,770 @@
+[
+    {
+        "content": "<p>I may have missed the documentation but is there anything published on the required and suggested search parameters for the Coverage, ExplanationOfBenefit, and Patient endpoints? I am expecting to find similar guidance as was published for USCore: <a href=\"https://www.hl7.org/fhir/us/core/searchparameters.html\" target=\"_blank\" title=\"https://www.hl7.org/fhir/us/core/searchparameters.html\">https://www.hl7.org/fhir/us/core/searchparameters.html</a>.  At a minimum I would imagine that we would support searches based upon the patient identifier for all resources. </p>\n<p>Also is there any best practice on how to ensure that client apps are not having to retrieve the patients full EOB and coverage history each time they need an update?</p>",
+        "id": 181223275,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1574267231
+    },
+    {
+        "content": "<p>I'm not aware of such guidance and I agree that it is needed. At the Atlanta connectathon servers supported various subsets of search parameters.</p>\n<p>re: best practices on incremental data retrieval, perhaps Patient $everything with the _since parameter.</p>",
+        "id": 181229629,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1574270927
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"246928\">@josh lamb</span> , <span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span> : Thanks. We are working on incorporating a Search Parameters spec for the IG which would allow for retrieval of EOBs since lastUpdated. Not sure if we would need an explicit lookup based on patient id in the IG, since this IG is for a consumer-facing, Individual Right to Access, EOB History API. I can definitely see an IG leveraging the same CARIN BB profiles for a provider-facing API that allows for patient id or group id Search Parameters. Thoughts?</p>",
+        "id": 182898595,
+        "sender_full_name": "Amol Vyas",
+        "timestamp": 1575821593
+    },
+    {
+        "content": "<p>If it is patient facing you need the search by patient id - SMART auth sequence will give the client the paitent id, then the client has to use that to get the ExplanationOfBenefit, so it needs search by patient id</p>",
+        "id": 182899509,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1575823091
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span>,  Could you please comment on above based on our discussion at Baltimore CARIN Connectathon?</p>",
+        "id": 183089817,
+        "sender_full_name": "Amol Vyas",
+        "timestamp": 1576004106
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192132\">@Amol Vyas</span> and <span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span> and <span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> , Here is my suggestion for the search parameters for the three resources: </p>\n<p><strong>Patient</strong><br>\nSHALL GET [base]/Patient/{id}<br>\nSHOULD GET [base]/Patient/{id}/everything<br>\nSHOULD GET [base]/Patient/{id}/everything?_since={date}<br>\nSHOULD GET [base]/Patient/{id}/everything?_since={date}&amp;_type=Patient,Coverage,ExplanationOfBenefit</p>\n<p><strong>Coverage</strong><br>\nSHALL GET [base]/Coverage/{id}<br>\nSHALL GET [base]/Coverage?beneficiary=Patient/{id}</p>\n<p><strong>ExplanationOFBenefit</strong><br>\nSHALL GET [base]/ExplanationOfBenefit/{id}<br>\nSHALL GET [base]/ExplanationOfBenefit?patient=Patient/{id}<br>\nSHOULD GET [base]/ExplanationOfBenefit?patient=Patient/{id}&amp;_lastUpdated=gt{date}</p>",
+        "id": 183940851,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1576853037
+    },
+    {
+        "content": "<p>I would avoid $everything: the guide is about getting claims data, but $everything will return all the data the server has for that patient, that can vary a lot. If we want a single call to get all data: SHOULD GET [base]/Patient?_id={id}&amp;_revinclude=ExplanationOfBenefit:patient&amp;_revinclude=Coverage:patient</p>",
+        "id": 183945121,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1576855749
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> , I was worried about this too. I am not very family with the smart auth process, but wouldn't we assign resource scopes to apps that would determine the allowed resources? _revInclude does seem more explicit so it is probably better in either event. My only concern is that the number of explanationOfBenefit resources will be very large for some patients. I have not seen an example of applying a filter on a revinclude (to filter on dateUpdated).</p>",
+        "id": 183946062,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1576856390
+    },
+    {
+        "content": "<p>We could use the _type param on $everything to limit to these three. I think the key shortcoming with revinclude is that you can't do anything like _since.</p>",
+        "id": 183947512,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1576857324
+    },
+    {
+        "content": "<p>Oh yes, _type will work - I did not know that it was added to $everything</p>",
+        "id": 183947811,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1576857525
+    },
+    {
+        "content": "<p>So this: SHOULD GET [base]/Patient/{id}/everything?_since={date}&amp;_type=Patient,Coverage,ExplanationOfBenefit  ?</p>",
+        "id": 183948711,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1576858064
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"246928\">@josh lamb</span> - would you add other profiles search parameters as well?<br>\nThe missing once are RelatedPerson, Organization, PractitionerRole :|</p>",
+        "id": 183949624,
+        "sender_full_name": "Elkhan Yusubov",
+        "timestamp": 1576858623
+    },
+    {
+        "content": "<p>Probably, we also need to suggest a new search param for \"eob-type\" by asking FM HL7 WG to consider our request.<br>\nWe need to empower Patient with ability to share only type of EOBs that s/he would like to. <br>\nAny other thoughts <span class=\"user-mention\" data-user-id=\"192132\">@Amol Vyas</span> <span class=\"user-mention\" data-user-id=\"246928\">@josh lamb</span> <span class=\"user-mention\" data-user-id=\"192609\">@Mark Scrimshire</span> ?</p>",
+        "id": 183950631,
+        "sender_full_name": "Elkhan Yusubov",
+        "timestamp": 1576859368
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"196903\">@Elkhan Yusubov</span> good point. My assumption is that anything referenced should be found at the reference location. For RelatedPerson, Organization, and PractitionerRole the searches would be referenced by Patient, Coverage, and ExplanationOfBenefit. So these should all be found at [base]/{resource}/{id} as indicated by Resource References. Ill include these in my initial suggestion and we can get more feedback during meeting. </p>\n<p>I am not sure about searching on eob-type and other consumer focused use cases. It could be that this is enabled through the applications that are serving up this data. I would be interested to hear what everything thinks about this.</p>",
+        "id": 183951206,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1576859822
+    },
+    {
+        "content": "<p>CMS BB2.0 is moving to offer search by claim type. e.g. carrier, pde etc. This needs to allow multiple claim types to be requested.</p>",
+        "id": 183961943,
+        "sender_full_name": "Mark Scrimshire",
+        "timestamp": 1576867838
+    },
+    {
+        "content": "<blockquote>\n<p>If we want a single call to get all data: SHOULD GET [base]/Patient?_id={id}&amp;_revinclude=ExplanationOfBenefit:patient&amp;_revinclude=Coverage:patient</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> posed this as a condition (\"if we want...\") Do we? Is this a requirement? Given where we are in the ballot cycle and what's been tested at Connectathon, I'd be very cautious about adding new requirements.</p>",
+        "id": 184014705,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1576942370
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>  there is a call scheduled today with the goal of selecting the required and suggested search criteria that should be supported. The current documentation in the IG is lacking.That being said, i am inclined to agree that patient Everything and _revInclude do not provide much benefit since there are only 3 endpoints that can all be searched by using the patient id that will be provided through the SMART app flow.</p>",
+        "id": 184105479,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1577109049
+    },
+    {
+        "content": "<p>Thanks. Not sure if I can join, but are you able to share the dial-in details here? Basically I'd recommend supporting</p>\n<ul>\n<li>\n<p>Patient read;</p>\n</li>\n<li>\n<p>EoB search by patient, type,  _lastUpdated;</p>\n</li>\n<li>\n<p>Coverage search by patient, _lastUpdated.</p>\n</li>\n</ul>",
+        "id": 184106613,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1577110066
+    },
+    {
+        "content": "<p>Good suggestion <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span><br>\nAdding details of the call, for community members to join:</p>\n<p>Join from PC, Mac, Linux, iOS or Android: <a href=\"https://leavittpartners.zoom.us/j/342513194\" target=\"_blank\" title=\"https://leavittpartners.zoom.us/j/342513194\">https://leavittpartners.zoom.us/j/342513194</a> <br>\nOr iPhone one-tap (US Toll):  +16468769923,,,342513194#  or +16699006833,,,342513194# <br>\nOr Telephone: <br>\n    Dial: <br>\n    +1 646 876 9923 (US Toll) <br>\n    +1 669 900 6833 (US Toll) <br>\n    Meeting ID: 342 513 194 <br>\n    International numbers available: <a href=\"https://leavittpartners.zoom.us/u/asP88u56n\" target=\"_blank\" title=\"https://leavittpartners.zoom.us/u/asP88u56n\">https://leavittpartners.zoom.us/u/asP88u56n</a> <br>\nOr an H.323/SIP room system: <br>\n    H.323: 162.255.37.11 (US West) or 162.255.36.11 (US East) <br>\n    Meeting ID: 342 513 194 <br>\n    SIP: <a href=\"mailto:342513194@zoomcrc.com\" title=\"mailto:342513194@zoomcrc.com\">342513194@zoomcrc.com</a> <br>\nOr Skype for Business (Lync): <br>\n    SIP:<a href=\"mailto:342513194@lync.zoom.us\" title=\"mailto:342513194@lync.zoom.us\">342513194@lync.zoom.us</a></p>",
+        "id": 184107512,
+        "sender_full_name": "Elkhan Yusubov",
+        "timestamp": 1577111040
+    },
+    {
+        "content": "<blockquote>\n<ul>\n<li>\n<p>Patient read;</p>\n</li>\n<li>\n<p>EoB search by patient, type,  _lastUpdated;</p>\n</li>\n<li>\n<p>Coverage search by patient, _lastUpdated.</p>\n</li>\n</ul>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>, I'm wondering whether insurance companies ever update EOBs once these get created and whether all companies store the last updated date and would support search by _lastUpdated. The alternative we had discussed was to use search by \"created\", which is a required element in EOB, but likely, doesn't get updated in case insurance companies do perform updates.</p>",
+        "id": 184110210,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1577113570
+    },
+    {
+        "content": "<p>Throughout the adjudication process we do update the EOBs. There is also the possibility of corrections to be made. Search by _lastUpdated (property on meta) would return EOBs that have been modified. Last updated would be optional but data holders that wish to limit the amount of data they are sending would have an incentive to make this option available.</p>",
+        "id": 184111108,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1577114342
+    },
+    {
+        "content": "<p>Thank you <span class=\"user-mention\" data-user-id=\"246928\">@josh lamb</span>. Do you think there is any benefit to support search by \"created\" in addition to search by \"_lastUpdated\"?</p>",
+        "id": 184111496,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1577114684
+    },
+    {
+        "content": "<p>Seems like searching on \"created\" would omit updates. The use case that I am imagining for _lastUpdated is that an app developer will query our endpoints for only things that have been updated since the last call. If created was used for this things would be missed.</p>",
+        "id": 184112083,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1577115237
+    },
+    {
+        "content": "<p>Thank you Josh. I agree that searching on \"created\" would omit updates. This was the reason I had asked whether EOB records ever get updated.  Also, technically, it's possible to create new EOBs with the created date in the past (e.g. when loading historical paper records into the database). I think the use case is clear now. To use this parameter, 3rd party apps would need to store the timestamp of their last call to get the patient's data from each API and to use this stored timestamp with the _lastUpdated parameter to get all the new and updated EOB resources.</p>",
+        "id": 184112847,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1577116011
+    },
+    {
+        "content": "<p>Re: <code>_lastUpdated</code>, my recommendation is to put it on the required list and ensure that at least all API providers can <em>tolerate</em> the presence of this search parameter (i.e., if you don't want to allow searching by last updated, just ignore the param -- but don't refuse the query). This allows consistent client behavior, and allows servers that care about efficiency to remain efficient. (This behavior of \"ignore search params you can't process\" is standard for FHIR.)</p>",
+        "id": 184114451,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1577117515
+    },
+    {
+        "content": "<p>Do we expect that obtaining a patient ID from the SMART context is the primary or only way that clients find a patient? I'm not sure how this interacts with access to data on spouses, dependents, etc.</p>",
+        "id": 184117060,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1577120070
+    },
+    {
+        "content": "<p>There's an extension that allows linking a RelatedPerson to their Patient.  However there's no expectation SMART systems will support it.  It also raises some tricky privacy issues.</p>",
+        "id": 184118306,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1577121228
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span> I am curious about this too. Would be good to ask on call if family members are within scope since this is supposed to deal with an individuals right of access. It could be that a member would need to enter their dependents/spouses credentials to obtain their information. Somewhat off topic and out of scope, but to add to what <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> is saying maybe a resource like FamilyMemberHistory could achieve this as well.</p>",
+        "id": 184118518,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1577121389
+    },
+    {
+        "content": "<p>In general I'd like to hear from the app developers about what API functionality they need. It's easy for me to just suggest supporting everything, I have a general-purpose FHIR server. I think <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> suggestions above make sense as a minimum but it's not hard to make a case for several other search parameters on EoB like created, status, provider...</p>",
+        "id": 184119157,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1577121872
+    },
+    {
+        "content": "<p>If a user has access to multiple records - eg family members - he/she will pick up the one they want to connect to during the authentication sequence and the corresponding patient id is returned to the app</p>",
+        "id": 184119546,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1577122178
+    },
+    {
+        "content": "<p>If the relationship the app wants to have with the server is that it just makes an occasional Patient $everything call with _since and _type and syncs the results into its own storage, that's a very different model than one where the app is hitting the server with searches on EoB during user interaction.</p>",
+        "id": 184119785,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1577122432
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> in this case would they be accessing the patient's data as if they were that patient? i.e., entering the patients credentials that they want to access?</p>",
+        "id": 184119891,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1577122544
+    },
+    {
+        "content": "<p>yes, the client would access the data as if that patient logged in - but it is the user (using his / her own credential) that selected that</p>",
+        "id": 184120215,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1577122886
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span> the app developer capability statement is silent on this. I was actually considering rate limiting the frequency that an app can hit our endpoints. The CMS bluebutton has guidance that suggests hitting their endpoints one time a day, from <a href=\"https://bluebutton.cms.gov/developers/#developer-guidelines\" target=\"_blank\" title=\"https://bluebutton.cms.gov/developers/#developer-guidelines\">https://bluebutton.cms.gov/developers/#developer-guidelines</a>: \"We recommend you have a daily or weekly job to fetch new claims data for your users. Please be responsible with your API usage and comply with the Service Management Rights to Limit conditions in the Blue Button API Terms of Service.\"</p>",
+        "id": 184120284,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1577122937
+    },
+    {
+        "content": "<p>This is Epic for example:<br>\n<a href=\"/user_uploads/10155/NljURYy2CX6cZZ4NgmjMM5Mk/pasted_image.png\" target=\"_blank\" title=\"pasted_image.png\">pasted image</a> <br>\nLogged in as Jason Argonaut, that have access to both his record and Jessica's one  - so I am prompted to choose one and that's the patient id that get returned to the client</p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/NljURYy2CX6cZZ4NgmjMM5Mk/pasted_image.png\" target=\"_blank\" title=\"pasted image\"><img src=\"/user_uploads/10155/NljURYy2CX6cZZ4NgmjMM5Mk/pasted_image.png\"></a></div>",
+        "id": 184120328,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1577123033
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span>, this makes me a bit worried about sensitive information, such as infectious diseases, pregnancy screenings, and mental health claims. Hopefully this process grants full access (falls outside of HIPPA under individual right to access).</p>",
+        "id": 184120441,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1577123155
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> <span class=\"user-mention\" data-user-id=\"246928\">@josh lamb</span>   Sorry to join this conversation late. I think we're generally on the same page here re: minimum requirements. Proxy access is something that we've brought up before, and I agree that we should have a patient picker in the OAuth flow like other EHR vendors have and then the user is connected to one patient at a time.</p>",
+        "id": 184129124,
+        "sender_full_name": "Ricky Bloomfield",
+        "timestamp": 1577131859
+    },
+    {
+        "content": "<p>Good! (And sorry I couldn't join the call today). Yes, basic SMART support should mean supporting the <code>launch/patient</code> context, with a patient picker when needed.</p>",
+        "id": 184129873,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1577132676
+    },
+    {
+        "content": "<p>Thanks, <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>. There was a question about server support for the user scope to be able to download all data at once, but EHRs don't currently follow this pattern for client apps and I think it could result in some ambiguity and safety issues.</p>",
+        "id": 184129906,
+        "sender_full_name": "Ricky Bloomfield",
+        "timestamp": 1577132748
+    },
+    {
+        "content": "<p>Based upon Monday's meeting it sounds like the primary use case that we are supporting is similar to the CMS bluebutton flow, where an app developer will pull all data for a single patient onto the users device and will periodically poll the FHIR server for updates, using the _lastUpdated param to get updates. There was also a use case for apps that will not display all EOB types, which necessitates the use of an EOB type param. </p>\n<p>Here is my attempt at recapping the searches we discussed on Monday's call: <br>\nGET [base]/Patient/{id} <br>\nGET [base]/Coverage/{id}<br>\nGET [base]/Coverage?beneficiary=Patient/{id}&amp;_lastUpdated=gt{date}<br>\nGET [base]/ExplanationOfBenefit/{id}<br>\nGET [base]/ExplanationOfBenefit?patient=Patient/{id}&amp;type=[system]|[code] &amp;_lastUpdated=gt{date}</p>\n<p>There was also talk of supporting includes (not revInclude), but we did not get into details. Here is my best guess: <br>\nCoverage:<br>\n    _include=Coverage:beneficiary<br>\n    _include=Coverage:payor<br>\nExplanationOfBenefit: <br>\n    _include=ExplanationOfBenefit:patient<br>\n    _include=ExplanationOfBenefit:insurer<br>\n    _include=ExplanationOfBenefit:provider</p>",
+        "id": 184323640,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1577456559
+    },
+    {
+        "content": "<p>Quick feedback: it'd be good to ensure that queries <em>without</em> lastupdated are also supported (it's worth mentioning these explicitly). That's important for initial backfill / one-shot queries.</p>",
+        "id": 184355439,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1577500874
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>  and <span class=\"user-mention\" data-user-id=\"193764\">@Ricky Bloomfield</span> thanks for the input, this is very informative. Based upon what I am reading User context does not seem appropriate for our use case, since it seems geared more toward resource specific access rather than patient access. </p>\n<p>I am confused about how the patient selection process will function. Is the basic idea that we will provide a widget, using HTML, that will have click events tied to the available patients and on click we will redirect to an authorization URL? I am having a hard time finding examples of this.</p>",
+        "id": 184556582,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1577814683
+    },
+    {
+        "content": "<p>For single patient access, The expectation is that the redirect to the authorization server happens first, and then the authorization server is responsible for any context gathering required (For example, signing in a user and presenting any patient selection screens necessary).</p>",
+        "id": 184558585,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1577816952
+    },
+    {
+        "content": "<p>The authorization tests at <a href=\"https://inferno.healthit.gov\" target=\"_blank\" title=\"https://inferno.healthit.gov\">https://inferno.healthit.gov</a> are probably a good source for testing the expected behavior</p>",
+        "id": 184558881,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1577817248
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> , thanks, this clears things up. It sounds like the client app will not even be aware that a patient selection occurred, it will only know which patient is in scope.</p>",
+        "id": 184559255,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1577817669
+    },
+    {
+        "content": "<p>That's right! (And this is by design, since until authorization is provided, the client app has no business knowing anything.)</p>",
+        "id": 184559491,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1577817925
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"246928\">@josh lamb</span>  I don't have much to add here. Thanks, Josh M! FYI, there are a number of EHR sandboxes that allow you to test out an E2E flow where you can see how the auth works for patient selection.</p>",
+        "id": 184566153,
+        "sender_full_name": "Ricky Bloomfield",
+        "timestamp": 1577826685
+    },
+    {
+        "content": "<p>FYI, you can see Epic's auth flow as part of their Patient Authentication tutorial their open.epic site, including the user selection as part of that flow: <a href=\"https://open.epic.com/Tutorial/PatientAuthentication\" target=\"_blank\" title=\"https://open.epic.com/Tutorial/PatientAuthentication\">https://open.epic.com/Tutorial/PatientAuthentication</a>. The content of this flow is up to the health organization.</p>",
+        "id": 184574438,
+        "sender_full_name": "Ricky Bloomfield",
+        "timestamp": 1577840189
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> , thanks for being on the call today. After you dropped off there were more discussions on if we should support Coverage search. There seems to be some confusion regarding how resource references are resolved, e.g. that supporting search on referenced resources by resource Id would result in a scope change. It sounds as if some servers are leaning toward using contained resources for Coverage, Patient, Organization, etc. My concern is that this will limit our ability to adopt future IGs and that we are deviating from FHIR norms.</p>",
+        "id": 185540082,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1578951166
+    },
+    {
+        "content": "<p>Thanks! Please note that It's not an appropriate use of contained resources if the coverage and patient and organization can be properly identified. This isn't a grey area; an IG won't make it through a ballot that way.</p>",
+        "id": 185540323,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1578951353
+    },
+    {
+        "content": "<p>I'd basically recommend following the straightforward pattern for resource access set up in US Core, including \"read\" (if you know a FHIR id) and \"search\" (by id, identifier, patient, or other relevant parameters).</p>",
+        "id": 185540449,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1578951428
+    },
+    {
+        "content": "<p>I think there's probably some kind of misunderstanding leading to more complex proposals.</p>",
+        "id": 185540464,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1578951444
+    },
+    {
+        "content": "<p>It'd be great to explain here what the issue is with CARIN following US Core practices (and letting servers support extra/fancy API features if they like)</p>",
+        "id": 185540551,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1578951487
+    },
+    {
+        "content": "<p>Thanks for providing more details. I agree that there seems to be some confusion. Search of Patient, Coverage, and EOB by PatientId does follow US Core and makes logical sense to me. Additionally if we could include a SHOULD guidance on _lastUpdated it may alleviate server strain.</p>",
+        "id": 185540639,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1578951571
+    },
+    {
+        "content": "<p>That sounds just right to me. If someone disagrees, it'd be great to articulate the reasoning here.</p>",
+        "id": 185540725,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1578951605
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192132\">@Amol Vyas</span>  <span class=\"user-mention\" data-user-id=\"238353\">@Mark Roberts</span> <span class=\"user-mention\" data-user-id=\"246928\">@josh lamb</span> - is CARIN Health Plan Workgroup call for upcoming Monday cancelled?</p>",
+        "id": 185926704,
+        "sender_full_name": "Elkhan Yusubov",
+        "timestamp": 1579275736
+    },
+    {
+        "content": "<p>I think most offices will be closed, including mine.</p>",
+        "id": 185930180,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1579277551
+    },
+    {
+        "content": "<p>Good question, Elkhan. 1/20 is a working day for me. Considering that 1/27 is ONC Annual Meeting, and several of us (including me) will be attending, we may need to move next week's meeting instead of cancelling it. <span class=\"user-mention\" data-user-id=\"214364\">@Ryan Howells</span> ?</p>",
+        "id": 185965496,
+        "sender_full_name": "Amol Vyas",
+        "timestamp": 1579301377
+    },
+    {
+        "content": "<p>Hi, everyone! The latest draft of the CARIN BB RESTful API document was reviewed today during our weekly call. We would love for this group to take a look and provide feedback in advance of the comment period closing on Monday, 1/27. <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> <span class=\"user-mention\" data-user-id=\"246928\">@josh lamb</span> <span class=\"user-mention\" data-user-id=\"243554\">@Pat Taylor</span> <span class=\"user-mention\" data-user-id=\"192609\">@Mark Scrimshire</span> <span class=\"user-mention\" data-user-id=\"192132\">@Amol Vyas</span> <span class=\"user-mention\" data-user-id=\"191570\">@Lisa Nelson</span> <span class=\"user-mention\" data-user-id=\"191339\">@Pascal Pfiffner</span> <span class=\"user-mention\" data-user-id=\"216906\">@Amy Ballard</span>  <a href=\"/user_uploads/10155/xGlsRHPHJJAWd1lisJLyH5AD/CARIN-BB-RESTful-API-Draft-v4.1.docx\" target=\"_blank\" title=\"CARIN-BB-RESTful-API-Draft-v4.1.docx\">CARIN-BB-RESTful-API-Draft-v4.1.docx</a></p>",
+        "id": 186130211,
+        "sender_full_name": "Ricky Bloomfield",
+        "timestamp": 1579551277
+    },
+    {
+        "content": "<p>Hi everyone, as context to the document that Ricky shared, assumptions are that the scope of this version of the CARIN BB API service is an EOB service, not a Coverage or Patient service that are independent of the EOB.  </p>\n<p>EOBs may be returned for a five year span of time.  EOB.insurance.coverage resolves the question of, “What insurance covered this claim as of date the service took place?”   The Implementation Guide assumes that Coverage, Patient and other supporting resources will be that effective as of the service date of the claim. <span class=\"user-mention\" data-user-id=\"191393\">@Igor Sirkovich</span> <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span></p>",
+        "id": 186181014,
+        "sender_full_name": "Pat Taylor",
+        "timestamp": 1579612526
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"243554\">@Pat Taylor</span> and <span class=\"user-mention\" data-user-id=\"193764\">@Ricky Bloomfield</span>  I think we have come a long way toward consensus on search Params. My only suggestion is that the additional search params for ExplanationOfBenefit be moved to the optional column. These include insurer, identifier, and eob-date. We should also consider adding an optional search param for Coverage:Subscriber (the patient that has coverage).</p>\n<p>We should also define the app / server interactions. Right now my assumption is that we will define \"responsible\" API useage that mirrors the CMS Bluebutton. This will involve applications persisting retrieved data on the users device and polling for updates, using the _lastUpdated param.</p>",
+        "id": 186191404,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1579619161
+    },
+    {
+        "content": "<p>As a matter of style, I suggest that the eob-date search parameter be named just 'date', or something like 'service-date' if applicable. Search parameters are attached to specific resources, so it would be against the general pattern of FHIR to put the resource name in the param name.</p>",
+        "id": 186193389,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1579620362
+    },
+    {
+        "content": "<p>+1 for the service-date search param on EOB resource.</p>",
+        "id": 186203433,
+        "sender_full_name": "Elkhan Yusubov",
+        "timestamp": 1579626083
+    },
+    {
+        "content": "<p>I think service-date is a good name. My only concern is that this name might make an impression that this search parameter applies only on a servicedDate element, while in practice, the search would be performed against both serviced (servicedDate, servicedPeriod) and billablePeriod.</p>",
+        "id": 186217014,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1579634431
+    },
+    {
+        "content": "<p>+1 for service-date given Igor's clarification</p>",
+        "id": 186297398,
+        "sender_full_name": "Pat Taylor",
+        "timestamp": 1579707358
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"246928\">@josh lamb</span> The API document shared by Ricky defines a Coverage:subscriber parameter for include, i.e. when searching for EOBs, a consumer app can request to include (iterate) Coverage:subscriber, which can be either RelatedPerson or Patient resource. Also, when searching for Coverage by its resource _id, a consumer app can request to include subscriber.</p>\n<p>Or, are you requesting support searching for Coverage by subscriber id.  If so, I believe there was agreement that only search by _id would be in the current scope.</p>",
+        "id": 186297721,
+        "sender_full_name": "Pat Taylor",
+        "timestamp": 1579707513
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"243554\">@Pat Taylor</span> and <span class=\"user-mention\" data-user-id=\"193764\">@Ricky Bloomfield</span> , its actually Coverage:Beneficiary that I suggest we include as an optional search param. I misspoke earlier. The Coverage:Beneficiary is the individual who is receiving benefits from a coverage and this will be the same individual that is referenced in the EOB. Coverage:Beneficiary will always reference a Patient resource.</p>\n<p>Since we are doing patient scope it does not make much sense to support Includes or Search on Coverage:Subscriber. The subscriber referenced may be different than the beneficiary. Using launch/patient scope the subscriber would only be accessible if the current scope was for the subscriber. Coverage:Beneficiary is also mandatory while Coverage:Subscriber is optional within the IG and does not contain a \"must support\" flag.</p>\n<p>My suggestion is to remove references to Coverage:Subscriber in the Word document posted by Ricky and replace them with Coverage:Beneficiary. I am also suggesting that we include optional support for search on Coverage:Subscriber. Supporting search on Coverage, EOB, and Patient by FHIR Patient Id seems more in line with CMS Bluebutton and the US Core IG.</p>",
+        "id": 186302526,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1579710091
+    },
+    {
+        "content": "<p>Yes, to got all data for a patient (that is the main use case) we need the Coverage.patient (beneficiary) search parameter</p>",
+        "id": 186308921,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1579713656
+    },
+    {
+        "content": "<p>Ditto for RelatedPerson: we need the patient search parameter</p>",
+        "id": 186309164,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1579713826
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"193300\">@Lenel James</span></p>",
+        "id": 186310262,
+        "sender_full_name": "Pat Taylor",
+        "timestamp": 1579714550
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"246928\">@josh lamb</span>, <span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span>, A consumer should be able to requests to include Coverage:subscriber (who might be Patient or RelatedPerson), assuming both API and consumer app support includes.</p>\n<p>On the other hand, requesting Coverage:beneficiary would be redundant as it would always point to the same Patient resource that can be requested to be included using _include=ExplanationOfBenefit:patient, e.g. in the following example, Coverage:beneficiary would be redundant:<br>\nGET [base]/ExplanationOfBenefit?patient=[id]&amp;_include=ExplanationOfBenefit:patient&amp;_include=ExplanationOfBenefit:coverage&amp;_include:iterate=Coverage:beneficiary</p>\n<p>If an API and/or app doesn't support or doesn't use includes and assuming there is an agreement that for the supporting (non-EOB) resources, CARIN BB allows search/read by resource id only, I believe the following workflow would apply:</p>\n<ol>\n<li>a consumer searches for EOBs</li>\n<li>a consumer searches/reads Patient by resource id (this might actually be done before searching EOBs)</li>\n<li>a consumer gets Coverage id of a specific EOB from the list of returned EOBs</li>\n<li>a consumer searches/reads Coverage by resource id</li>\n<li>a consumer gets RelatedPerson id from the returned Coverage resource (if this patient is not the subscriber)</li>\n<li>a consumer searches/reads RelatedPerson by resource id</li>\n</ol>\n<p>Just to summarize, if there is an agreement that EOB is always an entry point for consumer queries and that for non-EOB resources CARIN BB allows search/read by resource id only, I believe there is no need for Coverage:beneficiary or RelatedPerson:patient search parameters.</p>",
+        "id": 186325356,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1579723452
+    },
+    {
+        "content": "<p>Agree with <span class=\"user-mention\" data-user-id=\"191393\">@Igor Sirkovich</span> on supporting use case, where Server does not have a support for \"_include\" expression.</p>",
+        "id": 186330152,
+        "sender_full_name": "Elkhan Yusubov",
+        "timestamp": 1579726656
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191393\">@Igor Sirkovich</span> If our only entry point is EOB then I am okay with just these two searches: <br>\nGET [base]/ExplanationOfBenefit?patient=[patient]<br>\nGET [base]/ExplanationOfBenefit?patient=[patient]&amp;_lastUpdated</p>\n<p>If we support standalone search of coverage (outside of Id) then my suggestion was to also include \"GET [base]/Coverage?Beneficiary=[patient]\".</p>\n<p>In either event I think we want to avoid the complex queries included in the above Word document. The doc that was posted by Ricky has this example query: <br>\nGET /ExplanationOfBenefit?patient=[id]&amp;_lastUpdated=[prefix][date] &amp;_include=ExlanationOfBenefit:care-team&amp;_include=ExlanationOfBenefit:patient&amp;_include=ExlanationOfBenefit:provider&amp;_include=ExlanationOfBenefit:insurer&amp;_include=ExlanationOfBenefit:coverage&amp;_include:iterate=PractitionerRole:practitioner&amp;_include:iterate=PractitionerRole:organization&amp;_include:iterate=Coverage:payor&amp;_include:iterate=Coverage:subscirber</p>\n<p>I am not sure if the IG has to call this out, but i think its a fair assumption that any resource references should be searchable by the referenced Id.</p>",
+        "id": 186337207,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1579731582
+    },
+    {
+        "content": "<p>These complex chains of _include are motivated by a client that wants to get all relevant resources in a single query.</p>\n<p>There are a few alternatives:</p>\n<ul>\n<li>insist that the client may have to make numerous search or read calls, which has performance implications for many more round-trip queries - but as a lowest common denominator perhaps acceptable?</li>\n<li>the IG could require the Patient/$everything operation, but this only covers the case of getting all EoBs under a patient</li>\n<li>the GraphDefinition resource and $graph operation provide a generalized way of gathering a linked collection of resources (the description at <a href=\"http://hl7.org/fhir/graphdefinition.html\" target=\"_blank\" title=\"http://hl7.org/fhir/graphdefinition.html\">http://hl7.org/fhir/graphdefinition.html</a> specifically describes this use case as motivation) but I don't think this is widely implemented</li>\n<li>similarly, graphQL could be used but it's not in the spec</li>\n</ul>",
+        "id": 186339325,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1579732912
+    },
+    {
+        "content": "<p>These are not particularly good alternatives - I think the future development and adoption of GraphDefinition would be very useful but we're not there today. Not to speak for everyone, but my impression is that most implementers consider _include to be the best option even if it leads to such elaborate queries as the one quoted above.</p>",
+        "id": 186341194,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1579734437
+    },
+    {
+        "content": "<p>I agree with Paul. I would like to use GraphDefinition or graphQL, but we are not there yet from the development &amp; adoption perspective. I would prefer to avoid using Patient/$everything as this might have too many implications and expectation gaps. Multiple \"_include\"s is not pretty and not perfect, but I believe it's the most practical option at this point and is supported by most open source  libraries.</p>",
+        "id": 186343043,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1579736064
+    },
+    {
+        "content": "<p>Most existing servers do not support _include, so clients (like ours myFHR app) are not designed to use it and rely on doing search by patient - so having a search by patient for all resources would be better, it would match what existing servers do for other resources</p>",
+        "id": 186357670,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1579755553
+    },
+    {
+        "content": "<p>I strongly agree with Michele's perspective on this. Define a \"basic\" approach with limited API surface area, similar to US Core. Then (or optionally) define support for Batch or _include or _graph etc, as a performance enhancement.</p>",
+        "id": 186357836,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1579755763
+    },
+    {
+        "content": "<p>But let's make sure the simple thing works.</p>",
+        "id": 186357849,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1579755808
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> <span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span>, my concern is that defining Coverage search for the current release at this stage might complicate things rather than simplify them. Technically, from the FHIR perspective, it's a minor update - just declare support for an existing search parameter in the CapabilityStatement. But my understanding is that the use cases for searching Coverage independent of EOB are not defined for the current scope of CARIN BB. <br>\nDo we know what would be the expectation of a consumer app? Some app developers might assume they get just one Coverage for a Patient, but a Patient might have one current personal coverage, one current spouse's coverage and multiple historical personal and spouse's coverages. <br>\nOn the other end, health plans might not currently store all the historical coverages in a retrievable form - these might be stored in the context of the adjudicated claims / EOBs. But even health plans that do have easy access to historical coverage, might not know the current coverage if no claims have been adjudicated against this coverage yet.<br>\nJust to clarify - I don't say that CARIN BB shouldn't support searching Coverage by patient. I just think that this might need to be addressed in the next release to allow more time for proper analysis and consultations.</p>",
+        "id": 186361478,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1579762173
+    },
+    {
+        "content": "<p>The existing CMS BlueButton supports it: <a href=\"https://bluebutton.cms.gov/developers/#core-resources\" target=\"_blank\" title=\"https://bluebutton.cms.gov/developers/#core-resources\">https://bluebutton.cms.gov/developers/#core-resources</a> - that likely means that existing apps rely on it</p>",
+        "id": 186361772,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1579762579
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 186363139,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1579762708
+    },
+    {
+        "content": "<p>My understanding is that the definition and management of coverage by health plans is different from CMS. So this probably emphasizes my concern about app's expectations.</p>",
+        "id": 186366317,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1579766865
+    },
+    {
+        "content": "<p>The scope defined Monday is that the CARIN BB API service is an EOB service, not a Coverage or Patient service that are independent of the EOB.  Providing an independent Coverage or Patient service would expand the scope; these capabilities can be addressed in future CARIN releases. </p>\n<p>The requirement is that EOBs should be returned for a five year span of time.  EOB.insurance.coverage resolves the question of, “What insurance covered this claim as of date the service took place?”   </p>\n<p>The question, “what is your insurance coverage?” is a different question and one that results in an answer that spans and may change over time.     Various scenarios need to be considered.  Commercial Payer’s coverage data may span several employers or there may be gaps if an employer uses a different payer.   </p>\n<p>Patients may span multiple Subscribers in Coordination of Benefits situations, or have multiple employers over time and therefore have multiple Subscriber IDs with different coverages, or move from a dependent to a subscriber when they turn 18 and get a job.  Patients transition from employer coverage to individual policies or Medicaid,  or from commercial coverage to Medicare Advantage or Medicare / Medicare Gap.  These situations would need to be considered when designing a Coverage or Patient search independent of the EOB.</p>\n<p><span class=\"user-mention\" data-user-id=\"192988\">@John Kelly</span></p>",
+        "id": 186396356,
+        "sender_full_name": "Pat Taylor",
+        "timestamp": 1579791546
+    },
+    {
+        "content": "<p>What is the consensus on includes for the resources that support EOB? Should these be mandatory, optional, or not not mentioned in IG? The US Core IG only requires support for revInclude on Provenance:target, but it does specify some SHOULD includes for other resource types. </p>\n<p>Think most of the debate of support for Coverage search is based upon the CMS bluebutton implimentation, where they support 3 searches (<a href=\"https://sandbox.bluebutton.cms.gov/testclient/\" target=\"_blank\" title=\"https://sandbox.bluebutton.cms.gov/testclient/\">https://sandbox.bluebutton.cms.gov/testclient/</a>). The ability to search Patient should not be up for debate since its an id search, e.g. Patient/123, and it will be required since it will be referenced within EOB directly. </p>\n<p>What about defining client / server interactions in terms of persisting data on the users device and responsible API usage, here is the guidance from CMS bluebutton: <br>\n\"Your use of the Blue Button 2.0 APIs will be subject to certain limitations on access, calls, or use as set forth within these Terms or otherwise provided by CMS. These limitations are designed to manage the load on the system, promote equitable access, and prevent abuse, and these limitations may be adjusted without notice, as deemed necessary by CMS. If CMS reasonably believes that you have attempted to exceed or circumvent these limits, your ability to use the Blue Button 2.0 APIs may be temporarily or permanently blocked. CMS may monitor your use of the Blue Button 2.0 APIs to, for example, improve the service or to ensure compliance with these Terms.\"</p>",
+        "id": 186403848,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1579795702
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"246928\">@josh lamb</span> , I think this would be helpful to have a performance recommendation (best practices) in the IG. However, I'm not sure if this should be as prescriptive as the CMS one. The main difference is that CMS spec is tightly tied to one API implementation while CARIN BB is a more broad spec that is supposed to be used by many different API implementations, which might have varying degree of scalability and performance capacity.</p>",
+        "id": 186407212,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1579797412
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"246928\">@josh lamb</span> , To your point, the ability to search Patient is not up for debate since its an id search, e.g. Patient/123, and it will be required since it will be referenced within EOB directly.  The push back is a search for Patient outside of the EOB.</p>",
+        "id": 186423835,
+        "sender_full_name": "Pat Taylor",
+        "timestamp": 1579806823
+    },
+    {
+        "content": "<p>Technically you can simply read a patient without having to be able to search (e.g., <code>GET /Patient/123</code> is a FHIR read interaction, not a search interaction; a search would be <code>GET /Patient?_id=123</code>)</p>",
+        "id": 186432590,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1579811784
+    },
+    {
+        "content": "<p>Definitely should define support for read, and I would recommend including search as well.</p>",
+        "id": 186432664,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1579811867
+    },
+    {
+        "content": "<p>regarding coverage search, I feel like I must be missing something. Searching for the coverage resource by patient would be a way to answer the question \"what coverages has this patient had, now and in the past\"?</p>",
+        "id": 186432773,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1579811945
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> , i think the hesitance to include patient  and coverage not tied to an EOB is related to the CURES act proposed rule. The section of the rule that I think this IG is meant to address does not mention patient or coverage data. Section III of the CURES act specifies the following: <br>\n\"Under our proposal, the scope and volume of the information to be provided or made accessible through the open API would include: Adjudicated claims (including cost); encounters with capitated providers; provider remittances; enrollee cost-sharing; and clinical data, including laboratory results (where available). \". Someone please correct me if I am wrong.</p>",
+        "id": 186445623,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1579820364
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"246928\">@josh lamb</span> <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> That may be true, but as we've discussed, this guide will need to be flexible enough to handle use cases that may not be explicitly defined by Cures or anywhere else. Defining these basic server interactions will set the foundation for the experiences. We've discussed in our meetings that while support for standalone Coverage isn't an explicit goal, this guide should also not prohibit it by payers who are interested in making it available.</p>",
+        "id": 186451557,
+        "sender_full_name": "Ricky Bloomfield",
+        "timestamp": 1579825524
+    },
+    {
+        "content": "<p>Hi, I've been using Carin BB Profile for a bit, and notice a a conflict with the profile specific search parameter with code <code>status</code>  and the base search spec <code>ExplanationOfBenefit</code> <code>status</code>, one uses data, and the other uses token.  Is this as expected? it seems a strange mutation of the type. I also created <a href=\"https://jira.hl7.org/browse/FHIR-27738\">https://jira.hl7.org/browse/FHIR-27738</a> (just in case)...</p>",
+        "id": 198910220,
+        "sender_full_name": "Paul Bastide",
+        "timestamp": 1590593901
+    },
+    {
+        "content": "<p>This Search Parameter is for \"created\", not for \"status\", but it has a typo: \"code\": \"status\" should actually be \"code\": \"created\". I've added a comment in JIRA, even though all search parameters are going to change in a new version of CARIN BB IG.</p>",
+        "id": 198912634,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1590595010
+    },
+    {
+        "content": "<p>Thanks Igor for the insight</p>",
+        "id": 198912973,
+        "sender_full_name": "Paul Bastide",
+        "timestamp": 1590595154
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191393\">@Igor Sirkovich</span> I'm confused about why this IG is re-defining/re-distributing SearchParameters that are already in the base spec.  Can it just point to the SearchParameter uris from its CapabilityStatement instead of repackaging them?</p>",
+        "id": 198924769,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1590600533
+    },
+    {
+        "content": "<p>My understanding is that the goal was to just show a couple of examples of search parameters as a placeholder for the real search parameters expected in the next version.</p>",
+        "id": 198925051,
+        "sender_full_name": "Igor Sirkovich",
+        "timestamp": 1590600679
+    },
+    {
+        "content": "<p>Is there a pre-read on the \"new\" search parameters? I remember this document from the connectathon:<br>\n<a href=\"https://confluence.hl7.org/pages/viewpage.action?pageId=82911348&amp;preview=/82911348/82911352/CARIN%20BB%20RESTful%20API%20Combined%20-%20FHIR-26702%20-%20FHIR-26693%200513%202020.docx\">https://confluence.hl7.org/pages/viewpage.action?pageId=82911348&amp;preview=/82911348/82911352/CARIN%20BB%20RESTful%20API%20Combined%20-%20FHIR-26702%20-%20FHIR-26693%200513%202020.docx</a></p>",
+        "id": 199032234,
+        "sender_full_name": "Jason Teeple",
+        "timestamp": 1590677324
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"197108\">Jason Teeple</span> <a href=\"#narrow/stream/204607-CARIN-Blue.20Button.20IG/topic/API.20and.20Search.20Params/near/199032234\">said</a>:</p>\n<blockquote>\n<p>Is there a pre-read on the \"new\" search parameters? I remember this document from the connectathon:<br>\n<a href=\"https://confluence.hl7.org/pages/viewpage.action?pageId=82911348&amp;preview=/82911348/82911352/CARIN%20BB%20RESTful%20API%20Combined%20-%20FHIR-26702%20-%20FHIR-26693%200513%202020.docx\">https://confluence.hl7.org/pages/viewpage.action?pageId=82911348&amp;preview=/82911348/82911352/CARIN%20BB%20RESTful%20API%20Combined%20-%20FHIR-26702%20-%20FHIR-26693%200513%202020.docx</a></p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"196361\">@Ryan Howells</span>  sorry that I keep tagging you - but would you be able to help provide an answer?</p>",
+        "id": 199439964,
+        "sender_full_name": "Jason Teeple",
+        "timestamp": 1591058807
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197108\">@Jason Teeple</span>  The document you linked is not yet reflected in the IG. We are in the process of finalizing the details surrounding search but that document still reflects the current intent.</p>",
+        "id": 199489834,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1591104200
+    },
+    {
+        "content": "<p>Can someone here please respond to this Stack Overflow query (which is search parameter related): <a href=\"https://stackoverflow.com/questions/62144768/fhir-coverage-resource\">https://stackoverflow.com/questions/62144768/fhir-coverage-resource</a>?  In general, when skimming through the IG, it seems to be missing CapabilityStatements for client and server and a clear description of the interactions and search parameters to be supported as well as an explicit description and examples of the business flow.</p>\n<p>As an aside, best practice for IGs is to support navigation via hyperlinks within the narrative of the IG (especially from the home page).  Readers should not have to click 'next' and 'previous' or use the ToC to navigate through the IG as though it were a PDF.</p>",
+        "id": 199493570,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1591105904
+    },
+    {
+        "content": "<p>(i.e. it should still be possible to navigate the IG if the next/previous links and ToC link were removed.)</p>",
+        "id": 199493659,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1591105934
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/204607-CARIN-Blue.20Button.20IG/topic/API.20and.20Search.20Params/near/199493570\">said</a>:</p>\n<blockquote>\n<p>Can someone here please respond to this Stack Overflow query (which is search parameter related): <a href=\"https://stackoverflow.com/questions/62144768/fhir-coverage-resource\">https://stackoverflow.com/questions/62144768/fhir-coverage-resource</a>?</p>\n</blockquote>\n<p>Thanks for letting us know, Lloyd. I have responded to that Medicare-related question.</p>",
+        "id": 199501504,
+        "sender_full_name": "Amol Vyas",
+        "timestamp": 1591108543
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"246928\">@josh lamb</span> Is the previously linked document the best source for search, instead of using the IG?</p>",
+        "id": 199502551,
+        "sender_full_name": "Jason Teeple",
+        "timestamp": 1591108973
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197108\">@Jason Teeple</span> the linked document is more of an FYI to garner feedback until the IG is updated with the workgroups decisions on how search will function. I would not finalize a search implementation until the IG is published.</p>",
+        "id": 199503180,
+        "sender_full_name": "Josh Lamb",
+        "timestamp": 1591109277
+    },
+    {
+        "content": "<p>When is the next IG going to be published?</p>",
+        "id": 199504917,
+        "sender_full_name": "Jason Teeple",
+        "timestamp": 1591110014
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197108\">@Jason Teeple</span> are you implementing a server? If so - start implementing just the <code>patient</code> (and possibly <code>_lastUpdated</code>) search parameter, those are going to stay and is what most app will use</p>",
+        "id": 199519465,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1591115902
+    },
+    {
+        "content": "<p>This is all tied to the Patient Access regulations.  We have a team building out the server and we are getting hung up on the search features.</p>",
+        "id": 199523281,
+        "sender_full_name": "Jason Teeple",
+        "timestamp": 1591117708
+    },
+    {
+        "content": "<p>Do any know patient access API require payers to send claims/encounter data with date of service from 01/01/2016 to the current date of request? or CMS meant to say only last 5 years from current date?  Final rule does have hard coded date as \"on or after 01/01/2016\"  and not any reference to last 5 years. We are concerned about size of data over time that we need to exchange and would like to hear from what others planning to implement.</p>\n<p>Below is the excerpt from CMS patient access final rule.</p>\n<p>\"Data must be made available no later than one (1) business day after a claim is adjudicated or encounter data are received. We are requiring that beginning January 1, 2021, impacted payers make available through the Patient Access API the specified data they maintain with a date of service on or after January 1, 2016. This is consistent with the requirements for the payer-to-payer data exchange detailed in section V. of this final rule. Together these policies facilitate the creation and maintenance of a patient’s cumulative health record with their current payer.\"</p>",
+        "id": 199673156,
+        "sender_full_name": "Bhanu Vemuri",
+        "timestamp": 1591216449
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"197261\">@Bhanu Vemuri</span> : On our last CARIN community call on 5/28, CMS verbally confirmed health plans must provide claims data to their member via the Patient Access API with DOS of 1/1/2016 up to the current date of the request via the Patient Access API. Reference Slides 8-12 in the attached presentation for this clarification. We've also addressed other misconceptions we've heard from health plans in the slide deck. We will be posting this deck on our website in the days ahead. <a href=\"/user_uploads/10155/d8iglzHAfstJ9OTTNt_XOLWP/CARIN_community_meeting_05282020_v3.pdf\">CARIN_community_meeting_05282020_v3.pdf</a></p>",
+        "id": 199681980,
+        "sender_full_name": "Ryan Howells",
+        "timestamp": 1591221309
+    },
+    {
+        "content": "<p>Thank you, Ryan. It's very helpful. One last question on this particular topic.</p>\n<p>Payers historically required to maintain claims data for 11 years only for non-repudiation purposes.  Based on above clarification, It does require payers to keep data forever to support patient data access API. is this correct?   We are planning to rely on existing operational services but those services have limitations on how far back it can extract EOB information (4 years currently) . I assume, it's a challenge for those that planning to do run-time FHIR transformation/Facade pattern. Thoughts?</p>",
+        "id": 199740018,
+        "sender_full_name": "Bhanu Vemuri",
+        "timestamp": 1591274405
+    },
+    {
+        "content": "<p>It's a nuanced question. A member can request the claims and clinical information their <em>current</em> payer has stored in their system back to a DOS of 1/1/2016 (or for as long as that member has been a member). A member can <em>only</em> request their USCDI clinical data from a previous payer (payer-to-payer) for up to 5 years from the time the member disenrolls in their previous payer's plan. So technically, a payer could delete the USCDI clinical data they have stored in their system once a member has been disenrolled for 5 years but we (CARIN) hope they don't do that. Having the data available to the consumer forever, as you indicate, is clearly better for the individual.</p>",
+        "id": 201052867,
+        "sender_full_name": "Ryan Howells",
+        "timestamp": 1592330708
+    },
+    {
+        "content": "<p>Below is the additional clarity provided by Denise St  Clair (CMS Health Policy Team)</p>\n<p>\"If a member stays with an insurer until 2030 and requests their data via the Patient Access API in 2030, and has been a member since 2014, the expectation is the insurer would make the patient's data from 2016 through 2030 available. \"</p>",
+        "id": 201260403,
+        "sender_full_name": "Bhanu Vemuri",
+        "timestamp": 1592483282
+    },
+    {
+        "content": "<p>The below search parameter document represents the agreement of the CARIN Workgroup and FM co-chairs regarding the search parameters, payer requirements to provide data for reference resources (i.e., is it to be provided as of the date or service or as of the current date), and how payers will return data bundles in response to requests.</p>\n<p><a href=\"/user_uploads/10155/7xkrawr2rbLxuKU_lXOufzCZ/CARIN-BB-RESTful-API-Combined-FHIR-26702-FHIR-26693-0617-2020.docx\">CARIN-BB-RESTful-API-Combined-FHIR-26702-FHIR-26693-0617-2020.docx</a></p>",
+        "id": 201331425,
+        "sender_full_name": "Mark Roberts",
+        "timestamp": 1592518021
+    },
+    {
+        "content": "<p>Note that service-date is not the only additional search parameter defined by this IG - EoB.type is also not a standard search parameter.</p>",
+        "id": 201339501,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1592524263
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"243554\">Pat Taylor</span> <a href=\"#narrow/stream/204607-CARIN-IG.20for.20Blue.20Button.C2.AE/topic/API.20and.20Search.20Params/near/186396356\">said</a>:</p>\n<blockquote>\n<p>The scope defined Monday is that the CARIN BB API service is an EOB service, not a Coverage or Patient service that are independent of the EOB.  Providing an independent Coverage or Patient service would expand the scope; these capabilities can be addressed in future CARIN releases. </p>\n</blockquote>\n<p>Is the above comment explicitly stated anywhere in the IG or any other official channel? Looking for something to reference in our documentation that justifies why we implemented this way. </p>\n<p>Also, does this mean that endpoints like the following don't need to be supported?</p>\n<p>GET [base]/Coverage<br>\nGET [base]/Patient</p>\n<p><span class=\"user-mention\" data-user-id=\"243554\">@Pat Taylor</span></p>",
+        "id": 228293602,
+        "sender_full_name": "Abhishek",
+        "timestamp": 1614627769
+    },
+    {
+        "content": "<p>They need to be supported but without search - they are used only to access resources by id</p>",
+        "id": 228295507,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1614628537
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191912\">Michele Mottini</span> <a href=\"#narrow/stream/204607-CARIN-IG.20for.20Blue.20Button.C2.AE/topic/API.20and.20Search.20Params/near/228295507\">said</a>:</p>\n<blockquote>\n<p>They need to be supported but without search - they are used only to access resources by id</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> thanks so to be more explicit:</p>\n<p><code>GET [base]/Coverage/[id]</code> but NOT <code>GET [base]/Coverage</code><br>\n<code>GET [base]/Patient/[id]</code> but NOT <code>GET [base]/Patient</code></p>\n<p>right? We do not have to support endpoints without an identifier?</p>",
+        "id": 228296997,
+        "sender_full_name": "Abhishek",
+        "timestamp": 1614629145
+    },
+    {
+        "content": "<p>Correct - nor you have to support any other search parameter (note that that's called an id, not an identifier)</p>",
+        "id": 228298679,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1614629791
+    },
+    {
+        "content": "<p>Gotcha, thanks <span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> !</p>",
+        "id": 228492613,
+        "sender_full_name": "Abhishek",
+        "timestamp": 1614721903
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"365352\">@Abhishek</span>  see <a href=\"http://hl7.org/fhir/us/carin-bb/Background.html#us-core\">http://hl7.org/fhir/us/carin-bb/Background.html#us-core</a>;  <a href=\"http://hl7.org/fhir/us/carin-bb/CapabilityStatement-c4bb.html\">http://hl7.org/fhir/us/carin-bb/CapabilityStatement-c4bb.html</a></p>",
+        "id": 228494506,
+        "sender_full_name": "Pat Taylor",
+        "timestamp": 1614722616
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"243554\">@Pat Taylor</span> !</p>",
+        "id": 228501015,
+        "sender_full_name": "Abhishek",
+        "timestamp": 1614725270
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"243554\">@Pat Taylor</span> <span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> <br>\nThe language below is listed on the Guidance page under section 4.5: <br>\n\"Conformance to US Core Profiles</p>\n<p>Any actor acting as a Health Plan API actor in this IG SHALL:<br>\n  (bullet 2)  Conform to the US Core Server Capability Statement expectations for that profile's type.\"</p>\n<p>It says the same for actors acting as a FHIR Client.</p>\n<p>The way I am reading that implies that the C4BB profiles (Organization, Patient and Practitioner) would inherit the same search parameters as US Core profiles of the same type. That seems to be contradictory to the use cases and the discussions on this string. Can you please provide some clarification. TIA!</p>",
+        "id": 238549385,
+        "sender_full_name": "Caitlin Ryan",
+        "timestamp": 1620855923
+    },
+    {
+        "content": "<p>The US core search parameters are designed to cover various use cases, including providers app. For pure patient apps what's needed is to be able to get the core resources (eg ExplanationOfBenefit) by patient and then the referenced resource, you do not really need any search capability on things like Organization, Practitioner, Location etc.</p>",
+        "id": 238622800,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1620913476
+    },
+    {
+        "content": "<p>The US core search parameters are designed to cover various use cases, including providers app. For pure patient apps what's needed is to be able to get the core resources (eg ExplanationOfBenefit) by patient and then the referenced resource, you do not really need any search capability on things like Organization, Practitioner, Location etc.</p>",
+        "id": 238622813,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1620913486
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> is correct about the scope and intent. The CARIN BB IG is centered around the EoB. The other information is referenced from there and only has meaning (in the IG) as it relates to the EoB.</p>",
+        "id": 238771254,
+        "sender_full_name": "Corey Spears",
+        "timestamp": 1621000835
+    },
+    {
+        "content": "<p>Check out our white paper on Health Plan Directory! This is based on what we discussed at the last CARIN connectathon in April. Let us know your feedback, or ideas to improve so we can continue to move the needle on health plan members getting access to their data. <a href=\"/user_uploads/10155/ZPp5OFHLpfq-kT6aZzsGGNHS/Health-Plan-Directory-for-Consumer-Apps-Final.pdf\">Health-Plan-Directory-for-Consumer-Apps-Final.pdf</a></p>",
+        "id": 239150220,
+        "sender_full_name": "Tone Southerland",
+        "timestamp": 1621281436
+    },
+    {
+        "content": "<p>The CARIN BB IG speaks to this.  see \"Since these are supporting / reference profiles (rather than a focus profile) in CARIN IG for Blue Button®, the alignment with the US Core is on the content of these profiles, but not on the search parameters. \" <a href=\"https://build.fhir.org/ig/HL7/carin-bb/1_Background.html#relation-to-other-IGs\">https://build.fhir.org/ig/HL7/carin-bb/1_Background.html#relation-to-other-IGs</a></p>",
+        "id": 240929052,
+        "sender_full_name": "Pat Taylor",
+        "timestamp": 1622547952
+    }
+]

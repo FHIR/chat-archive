@@ -1,0 +1,212 @@
+[
+    {
+        "content": "<p>Is there a way to limit the number of search results (excluding \"_include\" and \"_revinclude\")? We typically want to get only the most recent resource of a specific type, so we often use \"_sort:desc=date&amp;_count=1\", but according to the FHIR paging specification, _count does not limit the number of resources returned, only the number of resources returned in a single page.<br>\nFor example, we would like to get only the latest Composition of a specific type for a patient, with all the resources that it references (using _include). How can do that? Using sorting and count=1, we get a paged result, where the first bundle contains only what we requested, but it also contains a link to the next bundle, which provides yet another Composition. How do we know if we should fetch the next page or not? Can we know if the next page is a Composition that is irrelevant for us (since we only need the latest one), or if the next page contains some of the included resources?</p>",
+        "id": 153889008,
+        "sender_full_name": "Shlomy Reinstein",
+        "timestamp": 1494417635
+    },
+    {
+        "content": "<p>Each page contains up to _count of the focal resources for the search -the resource in the search URL - plus <em>all</em> included resources for all of the resources on the page.</p>",
+        "id": 153889009,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1494418305
+    },
+    {
+        "content": "<p>So <code>[base]/Patient?_count=10&amp;_revinclude=Observation:subject</code> could come back with a Bundle that contained 10k+ entries - 10 patients plus every observation ever captured for any of those patients.  (_revinclude should be used with caution . . .)</p>",
+        "id": 153889011,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1494418399
+    },
+    {
+        "content": "<p>As well, when retrieving subsequent pages, you may well see _included and _revincluded resources that you saw on previous pages - there's no expectation that you remember \"included\" resources you'd see in previous pages.  (In part because there's no presumption you'll navigate sequentially.  You might hit the \"last\" link after the first page and navigate backwards</p>",
+        "id": 153889013,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1494418531
+    },
+    {
+        "content": "<p>Thanks! Does this mean that the size of a page is not limited in any way? If I ask for a Composition with _include=*, and it contains 1000 references, they will all be returned in a single page?</p>",
+        "id": 153889014,
+        "sender_full_name": "Shlomy Reinstein",
+        "timestamp": 1494418813
+    },
+    {
+        "content": "<p>could be, yes</p>",
+        "id": 153889015,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1494418829
+    },
+    {
+        "content": "<p>Right.  Page count doesn't limit number of entries in the Bundle, only the number of primary resources in the Bundle.  There is no way to say you don't want 10000+ rows in a single response from a query with _revinclude.  (Cardinalities are typically such that this is less of an issue for _include)</p>",
+        "id": 153889018,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1494419243
+    },
+    {
+        "content": "<p>Observation implemented this concept of only give me last X as a new operation: <a href=\"http://hl7.org/fhir/STU3/observation.html#lastn\" target=\"_blank\" title=\"http://hl7.org/fhir/STU3/observation.html#lastn\">http://hl7.org/fhir/STU3/observation.html#lastn</a></p>",
+        "id": 153889020,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1494421164
+    },
+    {
+        "content": "<p>Here is my understanding:<br>\n1. There is <em>no way</em> to tell FHIR how many focal resources to return overall. I can just tell it <em>the max number</em> of focal resources to return in a page, but it will provide a \"next\" link with more resources (which I don't have to fetch). This in itself can be a performance problem, if the server wants the query result to be coherent and provide a \"next page\" which doesn't take into account changes made between the original query and the fetching of the next page.<br>\n2. Since _count specifies the <em>max number</em> of focal resources to return in a page. The server may return a page with fewer focal resources, and provide a \"next\" link to fetch the rest of the focal resources. Hence, if I wanted to get the 2 \"latest\" Compositions, the server may return just one of them in the first page, and the next one in the next page.<br>\nIs the above true?</p>",
+        "id": 153889025,
+        "sender_full_name": "Shlomy Reinstein",
+        "timestamp": 1494423370
+    },
+    {
+        "content": "<p>(as an elaboration of (1) above, if the server wants to compute the entire query results at one time, and then store them and return one page at a time, it will have to find <em>all</em> the resources in the database that match the search criteria, since nothing in the query provides a limit to the overall query result)</p>",
+        "id": 153889026,
+        "sender_full_name": "Shlomy Reinstein",
+        "timestamp": 1494423458
+    },
+    {
+        "content": "<p>3. There's another issue that may come into play here. How do I know, from the search results, which are the <em>focal</em> resources and which are included? E.g. if I ask for a Composition with _include=*, and some of the included resources are Composition resources.</p>",
+        "id": 153889027,
+        "sender_full_name": "Shlomy Reinstein",
+        "timestamp": 1494423547
+    },
+    {
+        "content": "<p>1. yes. server writers have not generally raised this as an issue.<br>\n2. yes, it may, but I have not seen any servers actually do that<br>\n3. see Bundle.entry.search.mode</p>",
+        "id": 153889034,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1494424230
+    },
+    {
+        "content": "<p>Re (1) - HAPI FHIR computes the results of a query at one time, sends back the first page to the client, but persists the entire result set in the DB to serve the other pages later, without having to compute the query again (and maintaining a coherent set of results, no matter what happened in FHIR meanwhile). We used to get a lot of issues due to that, and only now I understand the reason (because most of our queries are with _count=1).</p>",
+        "id": 153889036,
+        "sender_full_name": "Shlomy Reinstein",
+        "timestamp": 1494424512
+    },
+    {
+        "content": "<p>why did you get issues with that?</p>",
+        "id": 153889037,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1494424539
+    },
+    {
+        "content": "<p>Because we used to send many concurrent queries, most of which were expected to return a single result (due to _count), when actually many resources were included in the result set, which were sent to storage.</p>",
+        "id": 153889041,
+        "sender_full_name": "Shlomy Reinstein",
+        "timestamp": 1494424681
+    },
+    {
+        "content": "<p>my server artificially limits to fairly short lists - about 1000. </p>",
+        "id": 153889042,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1494424734
+    },
+    {
+        "content": "<p>no one has ever noticed ;-)</p>",
+        "id": 153889043,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1494424745
+    },
+    {
+        "content": "<p>re (1) Yes, that is one of the reasons we added lastN for Observation (there were many other reasons, like how hard it can for a client to find a server that has implemented _count and _sort etc)<br>\nre (2) Our server does this. Mostly for performance. IE: you asked for 10,000 and we're only going to get 50 at a time. I don't know that we would stop \"2\" or a low number from coming back, but we absolutly have a max behind the scenes</p>",
+        "id": 153889045,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1494424851
+    },
+    {
+        "content": "<p>I would like to see lastN as a connectathon topic.   This is something that was on top of the list for Jenni and right now is only in spec for Observation but I can see it be used for other resources to address this issue.  </p>",
+        "id": 153889290,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1494504371
+    },
+    {
+        "content": "<p>Do any servers support it at this time? I don't think mine does</p>",
+        "id": 153889291,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1494504433
+    },
+    {
+        "content": "<p>Hence the need for a connectathon. :-)  to socialize the operation.</p>",
+        "id": 153889292,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1494504478
+    },
+    {
+        "content": "<p>We will support it as soon as we get the time :) We have many people asking for this.</p>",
+        "id": 153889365,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1494513346
+    },
+    {
+        "content": "<p>Up for a connectathon</p>",
+        "id": 153889366,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1494513354
+    },
+    {
+        "content": "<p>I'll support it for San Diego</p>",
+        "id": 153889386,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1494514722
+    },
+    {
+        "content": "<p>I can as well</p>",
+        "id": 153889390,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1494515095
+    },
+    {
+        "content": "<p>I'll create the wiki and be the titular lead.</p>",
+        "id": 153889392,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1494515123
+    },
+    {
+        "content": "<p>The grouping defined in Observation.$lastn is very specific to and may only make sense for Observation. It seems to utilize the search parameters and there is potential for a conflict between the explicit max, sorting specified for $lastn with general search parameters like _count and _sort. </p>",
+        "id": 153889584,
+        "sender_full_name": "Anand Mohan Tumuluri",
+        "timestamp": 1494542898
+    },
+    {
+        "content": "<p>On a tangentially related topic, does anyone see a need for something like _summary=id? This would return within the bundle only the resource ids. The client could then  retrieve the individual resources separately.<br>\nIt is an idea present in XDS, and it seems useful to me, but I don't recall ever seeing it discussed. Is there something else about FHIR that makes it not needed?</p>",
+        "id": 153889585,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1494544941
+    },
+    {
+        "content": "<p>no one has asked for it before</p>",
+        "id": 153889604,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1494565061
+    },
+    {
+        "content": "<p>_elements=id</p>",
+        "id": 153889621,
+        "sender_full_name": "Jim Steel",
+        "timestamp": 1494570355
+    },
+    {
+        "content": "<p>Nope, the spec says <code>Clients SHOULD list all mandatory elements in a resource as part of the list of elements</code>. So this isnt possible unless there are no mandatory elements in the resource</p>",
+        "id": 153889623,
+        "sender_full_name": "Anand Mohan Tumuluri",
+        "timestamp": 1494572016
+    },
+    {
+        "content": "<p>OK, so it looks like I could get close using _elements. Anyone have a thought about why there hasn't been a demand? (I'm trying to figure out if I'm thinking of the issue the wrong way.)</p>",
+        "id": 153889638,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1494577232
+    },
+    {
+        "content": "<p>Usually want text as well for display purposes </p>",
+        "id": 153889691,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1494587004
+    },
+    {
+        "content": "<p>We can't omit minOccurs=1 elements.  We could return Bundles that only include fullUrl but no resource, but we'd need to change some of the constraints.  If we include the resource, then there's no way to have that without all the resource mandatories present.  So you're not going to get a different behavior than _elements=id.</p>",
+        "id": 153889708,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1494589775
+    },
+    {
+        "content": "<p>see <a href=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=10001\" target=\"_blank\" title=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=10001\">GF#10001</a></p>",
+        "id": 153889980,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1494880880
+    }
+]

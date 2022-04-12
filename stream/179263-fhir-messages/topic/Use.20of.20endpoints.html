@@ -1,0 +1,280 @@
+---
+layout: page
+title: "FHIR Chat  · Use of endpoints · fhir-messages"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/index.html">fhir-messages</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html">Use of endpoints</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="252626891"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/252626891" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eirik Myklebost <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#252626891">(Sep 09 2021 at 13:38)</a>:</h4>
+<p>Hi,</p>
+<p>We are currently having a discussion in the <a href="#narrow/stream/179226-norway/topic/Messaging.20og.20HER-id">norway stream</a> regarding messaging and how to correctly interpret and use the required elements: <code>source.endpoint</code> and <code>destination.endpoint</code>. The use of the word <strong>endpoint</strong> with the datatype <strong>url</strong> suggests that this should be a resolvable protocol specific endpoint where the message can be delivered, e.g. http, ftp or email endpoint.</p>
+<p>However, the <a href="https://www.hl7.org/fhir/messageheader.html#notes">Notes</a> says the following:</p>
+<blockquote>
+<p>If  _MessageHeader.source.endpoint_  and  _MessageHeader.destination.endpoint_, are literal URLs, then they SHOULD identify the addresses to which messages can be delivered. If they are logical URIs (i.e. non-dereferenceable), message delivery intermediaries must know how to deliver the message to the destination application.</p>
+</blockquote>
+<p>And from the <a href="https://www.hl7.org/fhir/messaging.html#basic">Basic Messaging Assumptions</a>:</p>
+<blockquote>
+<p>The exact mechanism of transfer is irrelevant to this specification, but may include file transfer, HTTP based transfer, MLLP (HL7 minimal lower layer protocol), MQ series messaging or anything else. The only requirement for the transfer layer is that requests are sent to a known location and responses are returned to the source of the request. This specification considers the source and destination applications as logical entities, and the mapping from logical source and destination to implementation specific addresses is outside the scope of this specification</p>
+</blockquote>
+<p>Is it correct to interpret that an endpoint can either be a protocol-specific URL or a business identifier (URI) to identify the logical entity, e.g. a practitioner, organization or office? In this case, why is not the uri datatype used, is it related to this paragraph from <a href="https://www.hl7.org/fhir/resource.html#canonical">Canonical URLs</a>?</p>
+<blockquote>
+<p>Some resource types have a defined element <code>url</code> which is the 'canonical URL' that always identifies the resource. This is a special kind of Business Identifier. Note that the element actually contains a URI, but is named <code>url</code> for legacy reasons.</p>
+</blockquote>
+<p>In Norway we use a business identifier called HER-id to identify the communicating entities within the health sector, e.g. a practitioner-role or a department within an organization. When using the Identifier datatype this would look like this:</p>
+<div class="codehilite"><pre><span></span><code>&quot;identifier&quot;:{
+  &quot;system&quot;:&quot;urn:oid:2.16.578.1.12.4.1.2&quot;,
+  &quot;value&quot;:&quot;102287&quot;
+}
+</code></pre></div>
+<p>In some cases this is the only known address of the destination and the message could pass through multiple transfer-protocols (http, kafka, mq, mail) before arriving at the destination. Since <code>destination.endpoint</code> is of type url and not Identifier, would the following be the preferred representation?:</p>
+<div class="codehilite"><pre><span></span><code>&quot;destination&quot;: [
+  {
+    &quot;endpoint&quot;: &quot;urn:oid:2.16.578.1.12.4.1.2.102287&quot;
+  }
+]
+</code></pre></div>
+<p>The alternative would be to add the identifier in the <code>destination.receiver</code> as a logical-reference, but that leaves us with empty endpoint elements. This situation is similar to <a href="https://jira.hl7.org/browse/FHIR-26898">this Jira issue</a>.</p>
+<p>What about the <a href="https://www.hl7.org/fhir/endpoint.html">Endpoint</a> resource, what is its intended use in the messaging context? The only mentioning is the following, which I do not understand:</p>
+<blockquote>
+<p>Messaging: (currently defined in the Message Header, but only as the address)</p>
+</blockquote>
+
+
+
+<a name="253212126"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253212126" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eirik Myklebost <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253212126">(Sep 14 2021 at 07:57)</a>:</h4>
+<p><span class="user-mention" data-user-id="191404">@John Moehrke</span> , <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>, do you have any insight to share on this topic?</p>
+
+
+
+<a name="253244959"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253244959" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253244959">(Sep 14 2021 at 12:55)</a>:</h4>
+<p>I don't have deep insight into how the model got to where it is, but I suspect it is modeled off of early concepts in FHIR and thus might not benefit from current modeling methodology.</p>
+
+
+
+<a name="253245210"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253245210" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253245210">(Sep 14 2021 at 12:57)</a>:</h4>
+<p>That said, i would expect in a messaging pattern that the sender and destination should be URI or Identifiers. Having them be references would seem odd. So one recommendation may be to allow them to be identifiers or URI, with another to use current URI modeling.</p>
+
+
+
+<a name="253245384"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253245384" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253245384">(Sep 14 2021 at 12:58)</a>:</h4>
+<p>I don't see the relationship of what you describe to the Jira ticket you mention. (I don't understand how the jira ticket expects to work as to me a destination seems always to be necessary in messaging. But I leave that to the workgroup).</p>
+
+
+
+<a name="253245499"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253245499" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253245499">(Sep 14 2021 at 12:59)</a>:</h4>
+<p>Overall, I your interpretation is workable. I would recommend you create jira tickets that describe where you feel the specification is lacking and where your design chose to go.</p>
+
+
+
+<a name="253247555"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253247555" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eirik Myklebost <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253247555">(Sep 14 2021 at 13:13)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191404">John Moehrke</span> <a href="#narrow/stream/179263-fhir-messages/topic/Use.20of.20endpoints/near/253245384">said</a>:</p>
+<blockquote>
+<p>I don't see the relationship of what you describe to the Jira ticket you mention. (I don't understand how the jira ticket expects to work as to me a destination seems always to be necessary in messaging. But I leave that to the workgroup).</p>
+</blockquote>
+<p>I interpret the Jira issue as being the same as our scenario:<br>
+What he refers to as destination URL is what I refer to as protocol specific endpoint. Because he lacks an endpoint he uses the destination.receiver of type Reference(Organization) as a logical-reference to the destination, but that still leaves him with an empty destination.endpoint.</p>
+<p>Maybe <span class="user-mention" data-user-id="191764">@Cooper Thompson</span> can clarify this himself?</p>
+
+
+
+<a name="253249046"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253249046" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253249046">(Sep 14 2021 at 13:22)</a>:</h4>
+<p>I agree with John that I'd normally expect the sender and destinations to be URIs or identifiers rather than references.</p>
+
+
+
+<a name="253249049"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253249049" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253249049">(Sep 14 2021 at 13:22)</a>:</h4>
+<p>For messaging, there always may be a destination, but the entity that is generating the MessageHeader may not know it.    Or rather, there are two types of destinations:  1) the ultimate recipient(s)  2) the first hop (e.g. to a routing intermediary).  I don't think we will normally want the MessageHeader.destination to point to the routing intermediaries <em>unless</em> that routing intermediary is a first-class entity in the exchange (like an HIE.  For the purpose of this discussion, I consider the first-class intermediaries as just a recipient.  The routing intermediaries I'm thinking about here are org-internal helper systems like CorePoint, Cloverleaf, etc.  Those routing intermediaries may be the party that knows the ultimate destination(s).</p>
+
+
+
+<a name="253249418"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253249418" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253249418">(Sep 14 2021 at 13:24)</a>:</h4>
+<p>We (Epic) have had a TON of internal discussion about FHIR messaging, and one of the key points is that the entity that generates and sends a message may not know who the ultimate recipient(s) will be.  And this is desired, as it creates a decoupled architecture.</p>
+
+
+
+<a name="253249672"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253249672" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253249672">(Sep 14 2021 at 13:26)</a>:</h4>
+<p>that feels more like an internal systems-design challenge where you could simply ignore the 1..1...  That is to say that there is communication between internal systems to some goal, but by the time the "message" is complete it has a destination.</p>
+
+
+
+<a name="253249779"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253249779" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253249779">(Sep 14 2021 at 13:27)</a>:</h4>
+<p>as to intermediaries... agree, tendency should be to just target the endpoint.. if one needs to target an intermediary, then wrap it again in another messageHeader. (turtles all the way down)</p>
+
+
+
+<a name="253250060"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253250060" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253250060">(Sep 14 2021 at 13:28)</a>:</h4>
+<p>I expect Epic and Corepoint (for example) would want to talk "real" FHIR to each other, since we are different systems within an organization footprint.  I think the base spec should be 0..1.  An IG could make that 1..1 if that IG was intended to be used only for non-internal use.</p>
+
+
+
+<a name="253250164"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253250164" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253250164">(Sep 14 2021 at 13:29)</a>:</h4>
+<p>Unless you're telling me that we can fudge all the FHIR spec requirements as long as we are just talking org-internal :p.</p>
+
+
+
+<a name="253250488"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253250488" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253250488">(Sep 14 2021 at 13:31)</a>:</h4>
+<p>im not against it. just giving my initial reaction. I am sure there is some communication of the destination end point, so why is that acceptable in your model to not be part of the interop standard?</p>
+
+
+
+<a name="253250599"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253250599" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eirik Myklebost <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253250599">(Sep 14 2021 at 13:32)</a>:</h4>
+<p>What about using the destination.endpoint as a logical id (URI) as mentioned in this topic?</p>
+
+
+
+<a name="253250768"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253250768" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253250768">(Sep 14 2021 at 13:32)</a>:</h4>
+<p>im not sure how the idea of multi-casting was intended... Send this patient demographics update to all members...</p>
+
+
+
+<a name="253250897"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253250897" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253250897">(Sep 14 2021 at 13:33)</a>:</h4>
+<p>it might eventually be unicast, but I can see how an intermediary that only role is to change multi-cast to unicast(s)</p>
+
+
+
+<a name="253251163"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253251163" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253251163">(Sep 14 2021 at 13:35)</a>:</h4>
+<p>my overall impression is that messaging has not received much attention, and been denigrated by many core. So I would expect you should see this as an opportunity to improve the spec, rather than that the spec has some reason to be so poorly defined.</p>
+
+
+
+<a name="253251175"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253251175" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253251175">(Sep 14 2021 at 13:35)</a>:</h4>
+<p>I expect most FHIR messages might be going to multiple recipients.  The benefit of a message is that it is a unit of (event,data) that a bunch of folks probably care about.  E.g. a message for a lab order or result probably goes to the lab, but also the infection control system, the data warehouse, maybe a bed monitor so patients can track the status of their labs, etc.</p>
+
+
+
+<a name="253251217"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253251217" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253251217">(Sep 14 2021 at 13:35)</a>:</h4>
+<p>There is usually one primary recipient (lab) but a ton of secondaries (infection control).  But if your job is infection control, you don't really consider yourself as a secondary.</p>
+
+
+
+<a name="253251886"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253251886" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253251886">(Sep 14 2021 at 13:39)</a>:</h4>
+<p>one vision is that each of those groups of target end points is given a URI. the intermediary is the one registered for receipt of that URI, and knows that the role is to change multi-cast (URI) into unicast multiple sends of the copies. Not clear that in this case the origial URI must be changed, but it could be.</p>
+
+
+
+<a name="253251962"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253251962" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Moehrke <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253251962">(Sep 14 2021 at 13:40)</a>:</h4>
+<p>the URI space is infinite.. so plenty of URI to support this.</p>
+
+
+
+<a name="253262424"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253262424" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253262424">(Sep 14 2021 at 14:38)</a>:</h4>
+<p>The wrinkle is that some national messaging frameworks (I'm thinking Denmark MedCom and the Norway e-prescribing stuff I think), require (or are considering requiring) the EHR to specify the ultimate destination, not the intermediary.</p>
+<p>I.e. I think we (as an industry) are trying to implement two different messaging models using the same FHIR Messaging framework.</p>
+
+
+
+<a name="253290609"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253290609" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Kevin Mayfield <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253290609">(Sep 14 2021 at 17:32)</a>:</h4>
+<p>In the English Prescribing system. destination.endpoint isn't needed. It's always the prescription manager endpoint. <br>
+From the Prescription Manager we swap over to FHIR Workflow and rest.</p>
+
+
+
+<a name="253296012"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253296012" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253296012">(Sep 14 2021 at 18:06)</a>:</h4>
+<p>In the US e-prescribing, the (direct) destination is normally a network (like Surescripts), however we also send along the specific pharamcy (e.g. Walgreens on 1st Street in Verona WI) we want Surescripts to send the prescription to.</p>
+
+
+
+<a name="253331540"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253331540" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253331540">(Sep 14 2021 at 22:08)</a>:</h4>
+<p>The intention is that you specify either the URL or some other URI that uniquely identifies the recipient.  We had no use-case for Identifier so didn't specify that as an option.  Also, URI seemed more consistent with "the FHIR way".  If you'd really like an identifier, that could submit a change request for it.</p>
+<p>Not sure about making either optional.   A message needs to have a sender and a receiver and every messaging system I've ever encountered has had a computable means of identifying both.  (Really hard to route things without it.)  What's the use-case for making them optional?</p>
+
+
+
+<a name="253335826"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253335826" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eirik Myklebost <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253335826">(Sep 14 2021 at 22:49)</a>:</h4>
+<p>If I were to create an issue for change for source.endpoint and destination.endpoint, what do you think about the following alternatives?:</p>
+<ol>
+<li>Change the datatype from URL to URI (why is it not URI in the first place?)</li>
+<li>Change the datatype from URL to a choice between URI and Identifier.</li>
+</ol>
+<p>In both of these alternatives the endpoints will remain required (card. 1...1), I also believe this is a reasonable requirement in a message. The exception would be when messaging is used in an Event Oriented Architecture where events are broadcasted without knowing who is interested, but this scenario is already achievable by having 0 destinations.</p>
+
+
+
+<a name="253360718"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253360718" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253360718">(Sep 15 2021 at 04:28)</a>:</h4>
+<p>URL to URI I'd support.  URL to choice with identifier, I'd need to understand why Identifier was necessary and URI couldn't work.  (Changing to URI would be non-breaking, while changing to a choice would be breaking.)</p>
+
+
+
+<a name="253365242"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253365242" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Thomas Tveit Rosenlund <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253365242">(Sep 15 2021 at 05:41)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191764">Cooper Thompson</span> <a href="#narrow/stream/179263-fhir-messages/topic/Use.20of.20endpoints/near/253262424">said</a>:</p>
+<blockquote>
+<p>The wrinkle is that some national messaging frameworks (I'm thinking Denmark MedCom and the Norway e-prescribing stuff I think), require (or are considering requiring) the EHR to specify the ultimate destination, not the intermediary.</p>
+<p>I.e. I think we (as an industry) are trying to implement two different messaging models using the same FHIR Messaging framework.</p>
+</blockquote>
+<p>In Norway we usually have three layers of messagingHeaders for our mainstream messaging infrastructure.</p>
+<ol>
+<li>On the business level we have a message header that identifies the sender and recevier as business entities e.g. using HER identifiers and other business identifiers. The actual endpoint address is usually not know by the systems generating the actual business messages.</li>
+<li>Most messages use a SOAP MEssageHeader (ebMS 2.0) for non-rep and encryption of the payload, eb:From and eb:To  still contain no acutal endpoint adresses.</li>
+<li>On the transport layer (usually SMTP but other protocols are implemented as well) an actual endpoint adress is provided.</li>
+</ol>
+<p>This means that in Norway a better mapping would be for the destination and source elements to be mandatory, but endpoints should be optional as only the transport level MessageHeaders would contain an actual endpoint address.</p>
+
+
+
+<a name="253368963"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253368963" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Kevin Mayfield <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253368963">(Sep 15 2021 at 06:34)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> Re: Also, URI seemed more consistent with "the FHIR way". </p>
+<p>Sounds similar to Reference. You can use a uri/reference or an identifier. We've chosen identifier for our national system</p>
+
+
+
+<a name="253369766"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/253369766" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Kevin Mayfield <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#253369766">(Sep 15 2021 at 06:45)</a>:</h4>
+<p><a href="https://jira.hl7.org/browse/FHIR-33690">https://jira.hl7.org/browse/FHIR-33690</a></p>
+
+
+
+<a name="254027892"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/254027892" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eirik Myklebost <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#254027892">(Sep 20 2021 at 10:28)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191687">Kevin Mayfield</span> <a href="#narrow/stream/179263-fhir-messages/topic/Use.20of.20endpoints/near/253369766">said</a>:</p>
+<blockquote>
+<p><a href="https://jira.hl7.org/browse/FHIR-33690">https://jira.hl7.org/browse/FHIR-33690</a></p>
+</blockquote>
+<p>This example uses References instead of URI/Identifier to identify the recipient, why cannot the endpoints contain the business-id of the sender/recipient as URIs? Is your interpretation that the endpoints MUST contain a protocol-specific URL?</p>
+
+
+
+<a name="254490948"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179263-fhir-messages/topic/Use%20of%20endpoints/near/254490948" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Kevin Mayfield <a href="https://fhir.github.io/chat-archive/stream/179263-fhir-messages/topic/Use.20of.20endpoints.html#254490948">(Sep 23 2021 at 07:09)</a>:</h4>
+<p>I don’t think we have a use at the moment for reference or uri.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

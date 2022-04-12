@@ -1,0 +1,140 @@
+---
+layout: page
+title: "FHIR Chat  · Generic way of encoding average measurements · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html">Generic way of encoding average measurements</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="245546976"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245546976" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245546976">(Jul 10 2021 at 12:15)</a>:</h4>
+<p>I am looking at data from a service that aggregates measurement from wearable devices, e.g. heart rate data &amp; want to map it into FHIR Observation instances. The service allows pulling data for different time intervals (e.g. 24 hours) and the returned result is then an average(or sum, as appropriate)  over this interval. For a few cases, there are indeed LOINC codes for such averages e.g. <a href="https://loinc.org/41924-2/">Heart rate 24 hour mean</a>. But not every combination is covered, e.g. I will also have resting heart rate 24h average and here LOINC only offers a point-in-time code, as far as I can tell (<a href="https://loinc.org/40443-4/">40443-4</a>).</p>
+<p>Hence my question: is there are generic way of creating Observation instances representing quantity X averaged over time interval T ? I am thinking of cases where there is code of a point-in-time measurements of X, but no code for the T-average, cf. the case of resting heart rate. I can think of two general ways of approaching this, but am not sure if either one is acceptable:</p>
+<ol>
+<li>Using the point-in-time code in <code>Observation.code</code> and then using another field (eg. <code>Observation.method</code> or an extension) to indicate that this is an average over a specific time interval.</li>
+<li>Using post-coordinates SNOMED expressions. For instance, using 444981005 (Resting hear rate) and combining it with the  temporal context attribute (408731000) set to some appropriate value (alas, my SNOMED-skills do not quite suffice for actually saying how this would work in detail).</li>
+</ol>
+<p>Are there standard approaches in either of these direction (or a third one)?</p>
+
+
+
+<a name="245560126"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245560126" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245560126">(Jul 10 2021 at 16:38)</a>:</h4>
+<p>Best is to have a single code, but in theory you could have a generic code that simply says "averaged systolic blood pressure" and capture the period as an Observation.component.  I doubt you'll get a LOINC code issued for "averaged systolic blood pressure" because they prefer that sort of stuff to be coordinated, but you could define such a thing in a code system of your own.  That said, you could also define a pre-coordinated code of your own - and that would make it easier to map to a 'standard' LOINC code if one ever comes along.</p>
+
+
+
+<a name="245585175"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245585175" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245585175">(Jul 11 2021 at 03:23)</a>:</h4>
+<p><span class="user-mention" data-user-id="194703">@Morten Ernebjerg</span> <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> <br>
+I would say that this LOINC code comes pretty close to what Lloyd theorized about for "average systolic BP" :</p>
+<blockquote>
+<p>96608-5  Systolic blood pressure unspecified time mean<br>
+<strong>Fully-Specified Name</strong><br>
+Component: Intravascular systolic<br>
+Property: Pres<br>
+Time: XXX^mean<br>
+System: Arterial system<br>
+Scale: Qn<br>
+Method:</p>
+</blockquote>
+<p>There are also pre-coordinated codes for the specific 1, 8, 10, 12 and 24 hour time intervals.</p>
+
+
+
+<a name="245612305"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245612305" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245612305">(Jul 11 2021 at 15:25)</a>:</h4>
+<p>OK, sounds like I will have to live with custom codes for the cases where I cannot find the exact LOINC matches.</p>
+<p>I was wondering if it would still be allowable/desirable to combine a custom code with one or more additional codes from LOINC in the <code>Observation.code.coding</code>-array. I.e. take the case of "resting heart rate - 24 hour mean". I could define and add a custom code with that exact meaning. But could I now <em>additionally</em> also add LOINC 40443-4 (Heart rate --resting) and/or LOINC 41924-2 (Heart rate 24 hour mean)? My initial feeling is that it would it be dangerous because systems that known only LOINC might misclassify the Observation &amp; a 24 mean can be quite different from a point measurement. But both of these LOINC codes clearly semantically overlap with my custom code , so I'm not quite sure where they fall in terms of the "slightly different granularity"-zone allowed by FHIR for different codes in a single CodeableConcept. </p>
+<blockquote>
+<p>I doubt you'll get a LOINC code issued for "averaged systolic blood pressure" because they prefer that sort of stuff to be coordinated, </p>
+</blockquote>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> I only know post-coordination from the SNOMED &amp; ICD contexts (compound codes/expressions) - how does it work in the context of LOINC?</p>
+
+
+
+<a name="245612715"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245612715" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245612715">(Jul 11 2021 at 15:36)</a>:</h4>
+<p>This wouldn't be post coordination, it'd be a qualifier code sent as a separate Observation.component.  (Similar to how you might send a susceptibility and the drug it's susceptible to as a component</p>
+
+
+
+<a name="245612722"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245612722" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245612722">(Jul 11 2021 at 15:36)</a>:</h4>
+<p>When you think about applying multiple Codings, I think the key is you want to make sure that each one is accurate in its own right -- different levels of granularity are okay, but It would be inaccurate to assign a "resting heart rate" code to a measurement that actually represents a 24-hour average (which presumably combines measurements at rest and during activity)</p>
+
+
+
+<a name="245612827"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245612827" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245612827">(Jul 11 2021 at 15:39)</a>:</h4>
+<p><span class="user-mention" data-user-id="194703">@Morten Ernebjerg</span> LOINC doesn't have any provision for post-coordination of codes.  You would need to use the most specific LOINC code that applies, and then handle any remaining details using information model constructs (i.e. FHIR elements).  Maybe we could try to work through one or more examples and see if/how this could work?  As far as including multiple codes, the additional codes would all have to be generalizations of the entire meaning - not just different parts of it.  I don't think you're going to find any useful "correct" way to do that with the "leaf" level LOINC codes.  You might be able to use some of the LOINC part (LP) codes from the multi-axial hierarchy, but I don't expect that it would help you to do that.  [I don't think that anything that I've just said is contradictory with what Lloyd and Josh just said, but I was writing it before I saw their posts.]</p>
+
+
+
+<a name="245613104"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245613104" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245613104">(Jul 11 2021 at 15:47)</a>:</h4>
+<p>I will say that there are some questions and concerns and recent discussions within OO about the use of Observation.component for "qualifiers" as Lloyd has described.  That definitely wasn't originally intended for 'component' (it was excluded through STU3), but the idea was added in R4 and has been the source of some confusion about what can and can't (or should and shouldn't) be done with it.  On the Friday OO Lab/LIVD calls we are working through a recommended approach for microbiologiy results reporting, and I don't think that using 'component' is likely what will be recommended for representing susceptibility test results.</p>
+
+
+
+<a name="245613384"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245613384" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245613384">(Jul 11 2021 at 15:54)</a>:</h4>
+<p>OK, thanks - that confirms my suspicion that additional LOINC codes would not be good. And thanks for clarifying the notion of post-coordination with LOINC! - I thought I'd missed some major part of LOINC logic <span aria-label="smile" class="emoji emoji-1f642" role="img" title="smile">:smile:</span> </p>
+<p><span class="user-mention" data-user-id="191405">@Rob Hausam</span> Post-coordination example using non-code FHIR elements sounds like an interesting idea. In fact, given that SNOMED at ICD-11 provide ways of encoding things that are also explicitly represented as FHIR element (e.g. <code>Observation/Condition.bodySite</code>), the general question of how to divide information between a (complex) code and other FHIR elements seems very relevant to me. It is certainly something I have wondered about! I suppose that there are no universally valid rules for this, but it might be interesting to discuss the various approaches somewhere in the spec.</p>
+
+
+
+<a name="245613755"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245613755" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245613755">(Jul 11 2021 at 16:02)</a>:</h4>
+<p><span class="user-mention" data-user-id="194703">@Morten Ernebjerg</span>  Yes.  This is the classic Terminfo issue - which we are still discussing. <span aria-label="smile" class="emoji emoji-1f642" role="img" title="smile">:smile:</span>  The SNOMED on FHIR group is attempting to address this, and there should be something about it in the SNOMED on FHIR (whatever name we give it) IG - when that is finally published.  The issue is most relevant to the use of SNOMED CT, but it isn't limited only to that - and it arises in a somewhat different way, but it certainly also applies for LOINC, as we've just said.  I think it's reasonable to consider what we might/could say about it more in the base FHIR spec.</p>
+
+
+
+<a name="245620836"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245620836" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245620836">(Jul 11 2021 at 18:37)</a>:</h4>
+<p><span class="user-mention" data-user-id="191405">@Rob Hausam</span> Interesting, good to know.</p>
+
+
+
+<a name="245633807"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245633807" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Alper <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245633807">(Jul 11 2021 at 23:53)</a>:</h4>
+<p><span class="user-mention" data-user-id="194703">@Morten Ernebjerg</span> Let me know if you want to review the Evidence Resource in R5 which provides structured ways to specify statistics such as averages.</p>
+
+
+
+<a name="245649644"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245649644" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245649644">(Jul 12 2021 at 06:31)</a>:</h4>
+<p><span class="user-mention" data-user-id="192085">@Brian Alper</span> Thanks for the tip! I did indeed not have Evidence on my radar and had a look. It seems it does not quite fit my use case, though, as I am not in the context of a study and do not have a population (or rather, a population of one) and treat the the value as a simple value rather than evidence for particular underlying phenomenon.</p>
+
+
+
+<a name="245662801"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245662801" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Alper <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245662801">(Jul 12 2021 at 09:23)</a>:</h4>
+<p><span class="user-mention" data-user-id="194703">@Morten Ernebjerg</span> Here is a simple use of Evidence to cover a population of one:</p>
+<p>variableDefinition<br>
+..variableRole = population<br>
+..observed = Group (member = Patient, quantity = 1)<br>
+variableDefinition<br>
+..variableRole = measuredVariable<br>
+..observed = EvidenceVariable (characteristic = LOINC code)<br>
+statistic<br>
+..statisticType = <a href="http://build.fhir.org/valueset-statistic-type.html">http://build.fhir.org/valueset-statistic-type.html</a> / C53319 / Mean<br>
+..quantity = the result<br>
+..numberOfEvents = the number of measurements that are averaged</p>
+<p>But if you only want to show the value this may be more than you need.  The value of the Evidence Resource is if you want to add additional information like a 95% confidence interval or standard deviation to go along with the value.  But it does have the structure to code the "average" as a statistic type.</p>
+
+
+
+<a name="245703344"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Generic%20way%20of%20encoding%20average%20measurements/near/245703344" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Generic.20way.20of.20encoding.20average.20measurements.html#245703344">(Jul 12 2021 at 15:32)</a>:</h4>
+<p>Nice! Like you say I think it does not fit the current use case, but it could definitely be useful for us if we generate aggregate data ourselves.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

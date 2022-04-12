@@ -1,0 +1,63 @@
+---
+layout: page
+title: "FHIR Chat  · Issue with MedicationAdminstration conversion R4 -&gt; STU3 · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20MedicationAdminstration.20conversion.20R4.20-.3E.20STU3.html">Issue with MedicationAdminstration conversion R4 -&gt; STU3</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="178948283"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Issue%20with%20MedicationAdminstration%20conversion%20R4%20-%3E%20STU3/near/178948283" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Juuso Oksanen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20MedicationAdminstration.20conversion.20R4.20-.3E.20STU3.html#178948283">(Oct 24 2019 at 12:54)</a>:</h4>
+<p>There seems to be an issue with MedicationAdministration.dosage.rate[x] when converting from R4 to STU3.</p>
+<p>The conversion itself doesn't throw an exception but after trying to encode the resource to string the parser throws an exception:</p>
+<p>ca.uhn.fhir.parser.DataFormatException: rate has type org.hl7.fhir.dstu3.model.Quantity but this is not a valid type for this element - Expected one of: [class org.hl7.fhir.dstu3.model.Ratio, class org.hl7.fhir.dstu3.model.SimpleQuantity]<br>
+    at ca.uhn.fhir.parser.BaseParser.throwExceptionForUnknownChildType(BaseParser.java:968)<br>
+    at ca.uhn.fhir.parser.BaseParser.getChildNameAndDef(BaseParser.java:429)<br>
+    at ca.uhn.fhir.parser.JsonParser.encodeCompositeElementChildrenToStreamWriter(JsonParser.java:421)<br>
+    at ca.uhn.fhir.parser.JsonParser.encodeCompositeElementToStreamWriter(JsonParser.java:577)<br>
+    at ca.uhn.fhir.parser.JsonParser.encodeChildElementToStreamWriter(JsonParser.java:281)<br>
+    at ca.uhn.fhir.parser.JsonParser.encodeCompositeElementChildrenToStreamWriter(JsonParser.java:487)<br>
+    at ca.uhn.fhir.parser.JsonParser.encodeCompositeElementToStreamWriter(JsonParser.java:577)<br>
+    at ca.uhn.fhir.parser.JsonParser.encodeResourceToJsonStreamWriter(JsonParser.java:731)<br>
+    at ca.uhn.fhir.parser.JsonParser.encodeResourceToJsonStreamWriter(JsonParser.java:615)<br>
+    at ca.uhn.fhir.parser.JsonParser.doEncodeResourceToJsonLikeWriter(JsonParser.java:163)<br>
+    at ca.uhn.fhir.parser.JsonParser.doEncodeResourceToWriter(JsonParser.java:170)<br>
+    at ca.uhn.fhir.parser.BaseParser.encodeResourceToWriter(BaseParser.java:367)<br>
+    at ca.uhn.fhir.parser.BaseParser.encodeResourceToWriter(BaseParser.java:351)<br>
+    at ca.uhn.fhir.parser.BaseParser.encodeResourceToString(BaseParser.java:340)</p>
+<p>As far as I know, shouldn't the MedicationAdministration.dosage.rate[x] be either SimpleQuantity or Ratio? For some reason after converting the resource, the type of rate is Quantity.</p>
+<p>Also after parsing the R4-version of the MedicationAdministration resource, both the rate and dose were Quantity but this is considered valid it would seem.</p>
+<p>The version we are running is 4.0.3.</p>
+<p>I managed to replicate this behavior with a unit test, since the original issue was spotted when RestfulServer sends the resource back as response to the user after the OutgoingResponse-hooks.</p>
+<p>I also looked up the code in the VersionConvertor30_40 and I found out that MedicationAdministration.dosage.rate[x] doesn't even have an option for converting the rate to SimpleQuantity, it will always convert it Quantity. (check: VersionConvertor30_40:convertMedicationAdmistrationDosageComponent():13934 and VersionConvertor30_40:convertType():2910)</p>
+<p>I can add more context by means of a unit test and some resource data if it is necessary.</p>
+<p>This does look kind of weird to me.</p>
+
+
+
+<a name="178975882"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Issue%20with%20MedicationAdminstration%20conversion%20R4%20-%3E%20STU3/near/178975882" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20MedicationAdminstration.20conversion.20R4.20-.3E.20STU3.html#178975882">(Oct 24 2019 at 17:26)</a>:</h4>
+<p>sure please submit the unit test as a PR or an issue, and I'll look at the underlying problem</p>
+
+
+
+<a name="178984536"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Issue%20with%20MedicationAdminstration%20conversion%20R4%20-%3E%20STU3/near/178984536" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20MedicationAdminstration.20conversion.20R4.20-.3E.20STU3.html#178984536">(Oct 24 2019 at 18:50)</a>:</h4>
+<p><span class="user-mention" data-user-id="191319">@James Agnew</span> this is actually an issue in your parser framework - SimpleQuantity is not a real class, it's just a profile, so the underlying type is actually a Quantity</p>
+
+
+
+<a name="179052877"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Issue%20with%20MedicationAdminstration%20conversion%20R4%20-%3E%20STU3/near/179052877" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Juuso Oksanen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Issue.20with.20MedicationAdminstration.20conversion.20R4.20-.3E.20STU3.html#179052877">(Oct 25 2019 at 14:13)</a>:</h4>
+<p>Created an issue regarding this:<br>
+<a href="https://github.com/jamesagnew/hapi-fhir/issues/1564" target="_blank" title="https://github.com/jamesagnew/hapi-fhir/issues/1564">https://github.com/jamesagnew/hapi-fhir/issues/1564</a></p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

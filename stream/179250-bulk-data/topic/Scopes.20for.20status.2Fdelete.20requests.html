@@ -1,0 +1,204 @@
+---
+layout: page
+title: "FHIR Chat  · Scopes for status/delete requests · bulk data"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/index.html">bulk data</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html">Scopes for status/delete requests</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="239772173"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/239772173" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dennis Patterson <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#239772173">(May 21 2021 at 15:49)</a>:</h4>
+<p>During $export, scopes communicate the set of resources that can be exported.  A bulk client will validate against _type parameters or otherwise limit what is exported.</p>
+<p>During download, if <code>requiresAccessToken</code> is true,  scopes can limit access to specific files depending on what resource they represent.  The app already had access to initiate export, but scopes can be used again here to ensure the specific token allows access to the resource being accessed.</p>
+<p>This topic is more around the role of scopes in status/delete requests.  If an export request was successfully kicked off, there is no corresponding scope granting access to check the job's status.  From a workflow perspective, I'd expect the bulk client to use the same token from the export request to check the status of the job.  The underlying system knows whether that bulk client is the owner of that job.  The FHIR scopes don't seem to bear relevance because the request isn't accessing any FHIR resources.</p>
+<p>Once the initial token expired from the export request, the bulk client will request another token to continue checking status.  Since scopes are required, I'd assume best practice is to use the same set, but am I correct that they don't seem to have relevance for this stage of the workflow?</p>
+
+
+
+<a name="239773121"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/239773121" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#239773121">(May 21 2021 at 15:55)</a>:</h4>
+<p>Indeed we don't have explicit scopes for managing an export request. We could define something like <code>$export.manageJobs</code> (but in practice, I don't think it's a huge problem to say that a client with system level read scopes is authorized to create a job that exports data within its scopes, and to manage the jobs it kicks off -- this is directly analogous to how synchronous requests work; a client can query data and can break a connection at any time)</p>
+
+
+
+<a name="239776777"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/239776777" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Randall <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#239776777">(May 21 2021 at 16:19)</a>:</h4>
+<blockquote>
+<p>"From a workflow perspective, I'd expect the bulk client to use the same token from the export request to check the status of the job."</p>
+</blockquote>
+<p>This is an interesting idea, but the duration of polling might far exceed the lifetime of the security token, unless you are suggesting that the specific security token used to initiate the export _MUST_ be used to access the resource regardless of expiry (I think that would need to be called out in the spec for interoperability purposes, if that's the case.)</p>
+<blockquote>
+<p>"We could define something like $export.manageJobs"</p>
+</blockquote>
+<p>I think the broader concern is that the actual protection mechanism for that resource URL is ambiguous in the spec.  It isn't a FHIR resource, nor does the bulk data specification define an explicit protection mechanism for it.  If you read the specification as-is, one might assume that the resource is intended to not be protected.  It could be sufficient to say that the caller must present a token with the scope associated with the resource from which the export was initiated (that wouldn't require declaring any new scope mechanisms, and would eliminate the ambiguity.)  If that's what was expected/intended, it probably should just be formally called out in the spec.</p>
+
+
+
+<a name="239789189"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/239789189" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vladimir Ignatov <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#239789189">(May 21 2021 at 17:54)</a>:</h4>
+<p>My assumption was that clients will use the same access token for everything, and should also be capable of renewing it on the fly when it expires. If someone makes an export with <code>system/*.read</code>, but then re-authenticates with <code>system/Patient.read</code> and attempts to download an Observation file, that should be detected and rejected.</p>
+
+
+
+<a name="239795797"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/239795797" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#239795797">(May 21 2021 at 18:46)</a>:</h4>
+<p><span class="user-mention" data-user-id="191609">@Matt Randall</span> we had two modes of operation in mind (and hence the boolean flag <code>requiresAccessToken</code>, which I agree is struggling to communicate well).</p>
+<ol>
+<li>Client uses the output url itself (which could be something like an S3 signed URL conveying access)  +/- any out of band arrangements. Signaled when <code>requiresAccessToken: false</code></li>
+<li>Client authenticates to the output URLs just the same way as for the kickoff (i.e., a token with relevant SMART system scopes).Signaled when <code>requiresAccessToken: true</code></li>
+</ol>
+
+
+
+<a name="239799281"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/239799281" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Randall <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#239799281">(May 21 2021 at 19:11)</a>:</h4>
+<p><span class="user-mention" data-user-id="191315">@Josh Mandel</span>  - the  <code>requiresAccessToken</code> flag  doesn't make mention of the polling endpoint (I think it is pretty clear cut for the download/file request.)  Are you saying you intended this flag to also apply to the polling endpoint?</p>
+
+
+
+<a name="239803641"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/239803641" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#239803641">(May 21 2021 at 19:46)</a>:</h4>
+<blockquote>
+<p>Are you saying you intended this flag to also apply to the polling endpoint?</p>
+</blockquote>
+<p>No, sorry if I introduced confusion by talking about fetching outputs. Glad you think that part is clear at least :-)</p>
+<p>Re: the status endpoint, my expectation would be that it's protected the same way as the $export operation; you need to have a token that is valid for the resources the request is exporting, and I think it'd be reasonable for servers to also lock down access by client (so client X could only check / cancel status on the requests it initiated).</p>
+
+
+
+<a name="240199429"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/240199429" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Randall <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#240199429">(May 25 2021 at 14:52)</a>:</h4>
+<blockquote>
+<p>it's protected the same way as the $export operation; you need to have a token that is valid for the resources the request is exporting, and I think it'd be reasonable for servers to also lock down access by client (so client X could only check / cancel status on the requests it initiated).</p>
+</blockquote>
+<p>This makes perfect sense to me.  Should this guidance be added to the specification to avoid variability in how this gets implemented?  This type of authorization logic does not exist elsewhere in the SMART App Launch Framework.  I could see other implementers jumping to the conclusion that access tokens should be re-used (potentially even if expired, or perhaps extending the TTL of such tokens for this use case...) given that (if I recall correctly) the Inferno test suite reuses its access token for use with the polling endpoint.</p>
+
+
+
+<a name="240206465"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/240206465" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#240206465">(May 25 2021 at 15:37)</a>:</h4>
+<p>Makes sense to me. <span class="user-mention" data-user-id="191414">@Dan Gottlieb</span> shall we take this up during our ballot reconciliation?</p>
+
+
+
+<a name="240206693"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/240206693" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#240206693">(May 25 2021 at 15:38)</a>:</h4>
+<p>Added <a href="http://jira.hl7.org/browse/FHIR-32772">FHIR-32772</a></p>
+
+
+
+<a name="242222966"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242222966" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Yunwei Wang <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242222966">(Jun 10 2021 at 15:13)</a>:</h4>
+<p>What does "SHALL be protected the same way the Bulk Data Kick-off Request" mean? Does it mean the status endpoint and file endpoint shall require the same access token? or does it mean the status endpoint the file endpoint shall require new/different access tokens using the same back-end authorization workflow?</p>
+
+
+
+<a name="242238525"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242238525" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242238525">(Jun 10 2021 at 17:04)</a>:</h4>
+<p>That sentence continues:</p>
+<blockquote>
+<p>including an access token with scopes that cover all resources being exported. </p>
+</blockquote>
+<p>The idea is it doesn't need to literally be the same access token because that one may have expired :-) just a valid access token with the right Scopes associated with it</p>
+
+
+
+<a name="242238542"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242238542" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242238542">(Jun 10 2021 at 17:04)</a>:</h4>
+<p>Does this make sense? Is there other language you would want to add to clarify this point?</p>
+
+
+
+<a name="242239611"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242239611" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Yunwei Wang <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242239611">(Jun 10 2021 at 17:11)</a>:</h4>
+<p>We have not consider token expired situation. There are two scenarios<br>
+1) If server allows client using the same access token for status and download, and the token expired, should the token auto renewed by server?<br>
+2) If server requires new token for status and download, what's the workflow for client to get a new token?</p>
+
+
+
+<a name="242240211"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242240211" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242240211">(Jun 10 2021 at 17:15)</a>:</h4>
+<p>1) no way! What would an expiration time even mean in that case?</p>
+
+
+
+<a name="242240213"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242240213" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242240213">(Jun 10 2021 at 17:15)</a>:</h4>
+<p>1) no way! What would an expiration time even mean in that case?</p>
+
+
+
+<a name="242240215"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242240215" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242240215">(Jun 10 2021 at 17:15)</a>:</h4>
+<p>2) client gets a token the same way in all cases, by authenticating to the /token endpoint and requesting it</p>
+
+
+
+<a name="242240866"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242240866" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Yunwei Wang <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242240866">(Jun 10 2021 at 17:20)</a>:</h4>
+<p>Then Should token response <a href="http://build.fhir.org/ig/HL7/bulk-data/authorization.html#issuing-access-tokens">http://build.fhir.org/ig/HL7/bulk-data/authorization.html#issuing-access-tokens</a> include refresh token in it?</p>
+
+
+
+<a name="242241339"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242241339" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Yunwei Wang <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242241339">(Jun 10 2021 at 17:23)</a>:</h4>
+<p>2) Server need a way to communicate such requirement, e.g. file download need a different token, to the client. So requiresAccessToken should be code type with value: no, existing-token-allowed, new-token-required</p>
+
+
+
+<a name="242242007"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242242007" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242242007">(Jun 10 2021 at 17:28)</a>:</h4>
+<p>No, there's no refresh token required when there's no user in the loop. A backend service can simply request an access token when it needs one.</p>
+
+
+
+<a name="242242229"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242242229" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Yunwei Wang <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242242229">(Jun 10 2021 at 17:30)</a>:</h4>
+<p>that backs to my first question. if the access token is expired at, for example status check, what client should do if it cannot refresh this token?</p>
+
+
+
+<a name="242242250"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242242250" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242242250">(Jun 10 2021 at 17:30)</a>:</h4>
+<p>Re (2) the only thing we try to standardize with the requiresAccessToken property is "is this output file protected using SMART Backend Services OAuth, or something else". There's no meaningful distinction between an "existing" vs "new" access token associated with a given client and set of scopes. The client id, scopes, and expiration  tell the whole story.</p>
+
+
+
+<a name="242242474"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242242474" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242242474">(Jun 10 2021 at 17:32)</a>:</h4>
+<p>The client is a SMART Backend Services client. It's authorized to obtain access tokens with system/ scopes, so all it needs to do is request a token (authenticating to the token endpoint). Whenever a token expires, the client can request a new one just the same way it requested the original.</p>
+
+
+
+<a name="242242954"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242242954" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Yunwei Wang <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242242954">(Jun 10 2021 at 17:35)</a>:</h4>
+<p>Then I assume that server should continue current export process (instead of starting a new process) with new access token. That make sense.</p>
+
+
+
+<a name="242243270"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242243270" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242243270">(Jun 10 2021 at 17:37)</a>:</h4>
+<p>I'm confused. The server starts an export whenever an authorized client issues a kickoff request. It continues the export until it's done, or until an authorized client issues a DELETE request against an active export status URL</p>
+
+
+
+<a name="242244977"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242244977" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Yunwei Wang <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242244977">(Jun 10 2021 at 17:50)</a>:</h4>
+<p>For some reason I got the impression that export "session" is associated with a token. So if token expires, the export session expires. It makes sense that the export links to client identifier.</p>
+
+
+
+<a name="242245100"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Scopes%20for%20status/delete%20requests/near/242245100" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Scopes.20for.20status.2Fdelete.20requests.html#242245100">(Jun 10 2021 at 17:51)</a>:</h4>
+<p>That is definitely not right. If there's any language in the specification that you can identify as contributing to this misapprehension, it would be great to clean that up.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,92 @@
+[
+    {
+        "content": "<p>I'm trying to do a FHIR core build after being away for awhile.  I keep getting a NullPointer when it is trying to produce schemas.  To make sure it wasn't something I did, I just cloned a fresh repository and ran it and am getting the same error.  I had Melva do a build on her machine and it got past this point:</p>\n<div class=\"codehilite\"><pre><span></span><code>     [java] Generate RDF                                                               0.458  50sec 1121MB\n     [java] Produce Schemas                                                            2.605  53sec  592MB\n     [java] This was a Full Build                                                      0.015  53sec  596MB\n     [java] java.lang.NullPointerException\n     [java]     at org.hl7.fhir.definitions.generators.xsd.XSDBaseGenerator.genIncludedCode(XSDBaseGenerator.java:560)\n     [java]     at org.hl7.fhir.definitions.generators.xsd.XSDBaseGenerator.generateEnum(XSDBaseGenerator.java:533)\n     [java]     at org.hl7.fhir.definitions.generators.xsd.XSDBaseGenerator.genType(XSDBaseGenerator.java:451)\n     [java]     at org.hl7.fhir.definitions.generators.xsd.XSDBaseGenerator.generate(XSDBaseGenerator.java:128)\n     [java]     at org.hl7.fhir.definitions.generators.xsd.SchemaGenerator.generate(SchemaGenerator.java:74)\n     [java]     at org.hl7.fhir.tools.publisher.Publisher.produceSpecification(Publisher.java:2125)\n     [java]     at org.hl7.fhir.tools.publisher.Publisher.execute(Publisher.java:628)\n     [java]     at org.hl7.fhir.tools.publisher.Publisher.main(Publisher.java:488)\n     [java] FHIR build failure @ Mon, Nov 16, 2020 12:46-0700                          1.328  54sec  596MB\n     [java] Error: null\n</code></pre></div>",
+        "id": 216921627,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1605556070
+    },
+    {
+        "content": "<p>In the code at that spot, it's trying to output some code system:</p>\n<div class=\"codehilite\"><pre><span></span><code>    write(&quot;      &lt;xs:enumeration value=\\&quot;&quot; + Utilities.escapeXml(cc.getCode()) + &quot;\\&quot;&gt;\\r\\n&quot;);\n    write(&quot;        &lt;xs:annotation&gt;\\r\\n&quot;);\n    write(&quot;          &lt;xs:documentation xml:lang=\\&quot;en\\&quot;&gt;&quot; + Utilities.escapeXml(cc.getDisplay()) + &quot;&lt;/xs:documentation&gt;\\r\\n&quot;); // todo: do we need to look the definition up?\n    CodeSystem cs = workerContext.fetchCodeSystem(cc.getSystem());\n    if (cs != null &amp;&amp; cc.hasCode()) {\n      ConceptDefinitionComponent c = getCodeDefinition(cc.getCode(), cs.getConcept());\n      for (ConceptDefinitionDesignationComponent l : c.getDesignation())\n        if (l.hasLanguage())\n          write(&quot;          &lt;xs:documentation xml:lang=\\&quot;&quot;+l.getLanguage()+&quot;\\&quot;&gt;&quot;+Utilities.escapeXml(l.getValue())+&quot;&lt;/xs:documentation&gt;\\r\\n&quot;);\n    }\n</code></pre></div>",
+        "id": 216921896,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1605556204
+    },
+    {
+        "content": "<p>adding some debug code and the error occurs when it's trying to write out http://unitsofmeasure.org#s</p>",
+        "id": 216922585,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1605556535
+    },
+    {
+        "content": "<p>I added a null check around the for statement above as a workaround</p>",
+        "id": 216923825,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1605557046
+    },
+    {
+        "content": "<p>Did you run clean before trying to build?</p>",
+        "id": 216926370,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1605558057
+    },
+    {
+        "content": "<p>yep.  and as I said, I also created a clean new repository clone</p>",
+        "id": 216926684,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1605558187
+    },
+    {
+        "content": "<p>http://unitsofmeasure.org#s ? or http://unitsofmeasure.org#vs</p>",
+        "id": 216932110,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1605560819
+    },
+    {
+        "content": "<p>i spit out code system and code and that was spit out just before the NPE</p>",
+        "id": 216932236,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1605560867
+    },
+    {
+        "content": "<p>ah</p>",
+        "id": 216934221,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1605561806
+    },
+    {
+        "content": "<p>oh, this is a downstream consequence of UTG fake declarations...</p>",
+        "id": 216941426,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1605565509
+    },
+    {
+        "content": "<p>I'm still getting this NPE when I try to build FHIR locally.  I'm not sure why others aren't seeing this.</p>",
+        "id": 220631724,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1608585580
+    },
+    {
+        "content": "<p>I had to add this line in XSDBaseGenerator to get around the NPE:</p>\n<div class=\"codehilite\"><pre><span></span><code>      ConceptDefinitionComponent c = getCodeDefinition(cc.getCode(), cs.getConcept());\n      if (c != null)\n      for (ConceptDefinitionDesignationComponent l : c.getDesignation())\n</code></pre></div>\n<p>(line 559-560)</p>",
+        "id": 220632463,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1608585995
+    },
+    {
+        "content": "<p>what code does this trigger for&gt;?</p>",
+        "id": 220752909,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1608686007
+    },
+    {
+        "content": "<p>because there's an underlying problem if this happens</p>",
+        "id": 220752916,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1608686020
+    },
+    {
+        "content": "<p>I'm assuming the same one as before (http://unitsofmeasure.org#s)  but I'll put my debugging code back in to double-check</p>",
+        "id": 220812596,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1608746793
+    }
+]

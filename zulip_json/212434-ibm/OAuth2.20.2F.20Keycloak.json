@@ -1,0 +1,86 @@
+[
+    {
+        "content": "<p>Hi,<br>\nas described in <a href=\"https://github.com/IBM/FHIR/issues/1703\">this Issue</a>, i'm trying to use Keycloak as Authentification provider. <br>\nIt works via browser, but via CLI or Postman, (providing previously generated Bearer-Token) it only returns </p>\n<div class=\"codehilite\" data-code-language=\"HTML\"><pre><span></span><code><span class=\"p\">&lt;</span><span class=\"nt\">html</span> <span class=\"na\">xmlns</span><span class=\"o\">=</span><span class=\"s\">\"http://www.w3.org/1999/xhtml\"</span><span class=\"p\">&gt;</span>\n\n<span class=\"p\">&lt;</span><span class=\"nt\">head</span><span class=\"p\">&gt;</span>\n    <span class=\"p\">&lt;</span><span class=\"nt\">script</span> <span class=\"na\">type</span><span class=\"o\">=</span><span class=\"s\">\"text/javascript\"</span> <span class=\"na\">language</span><span class=\"o\">=</span><span class=\"s\">\"javascript\"</span><span class=\"p\">&gt;</span>\n        <span class=\"kd\">var</span> <span class=\"nx\">loc</span><span class=\"o\">=</span><span class=\"nb\">window</span><span class=\"p\">.</span><span class=\"nx\">location</span><span class=\"p\">.</span><span class=\"nx\">href</span><span class=\"p\">;</span><span class=\"nb\">document</span><span class=\"p\">.</span><span class=\"nx\">cookie</span><span class=\"o\">=</span><span class=\"s2\">\"WASReqURLOidcn221075362=\"</span><span class=\"o\">+</span><span class=\"nx\">loc</span><span class=\"o\">+</span><span class=\"s2\">\"; path=/;\"</span>\n    <span class=\"p\">&lt;/</span><span class=\"nt\">script</span><span class=\"p\">&gt;</span>\n    <span class=\"p\">&lt;</span><span class=\"nt\">script</span> <span class=\"na\">type</span><span class=\"o\">=</span><span class=\"s\">\"text/javascript\"</span> <span class=\"na\">language</span><span class=\"o\">=</span><span class=\"s\">\"javascript\"</span><span class=\"p\">&gt;</span>\n        <span class=\"nb\">window</span><span class=\"p\">.</span><span class=\"nx\">location</span><span class=\"p\">.</span><span class=\"nx\">replace</span><span class=\"p\">(</span><span class=\"s2\">\"https:// MYURL :8443/auth/realms/fhir/protocol/openid-connect/auth?response_type=code&amp;client_id=fhir_service&amp;state=001605193369358RtvBAm8no&amp;redirect_uri=https%3A%2F%2F MYURL %3A9443%2Foidcclient%2Fredirect%2Ffhir_service&amp;scope=openid+profile\"</span><span class=\"p\">)</span>\n    <span class=\"p\">&lt;/</span><span class=\"nt\">script</span><span class=\"p\">&gt;</span>\n    <span class=\"p\">&lt;</span><span class=\"nt\">title</span><span class=\"p\">&gt;</span>Redirect To OP<span class=\"p\">&lt;/</span><span class=\"nt\">title</span><span class=\"p\">&gt;</span>\n<span class=\"p\">&lt;/</span><span class=\"nt\">head</span><span class=\"p\">&gt;</span>\n\n<span class=\"p\">&lt;</span><span class=\"nt\">body</span><span class=\"p\">&gt;&lt;/</span><span class=\"nt\">body</span><span class=\"p\">&gt;</span>\n\n<span class=\"p\">&lt;/</span><span class=\"nt\">html</span><span class=\"p\">&gt;</span>\n</code></pre></div>\n<p>Maybe it's no bug, but instead some type of misconfiguration at FHIR, Keycloak or Postman?</p>\n<p>Thanks a lot!<br>\nCornelius</p>",
+        "id": 216480297,
+        "sender_full_name": "Cornelius Erbelding",
+        "timestamp": 1605193699
+    },
+    {
+        "content": "<p>Thanks Cornelius, your timing is good because I've been meaning to document how to do this for a while...</p>",
+        "id": 216502848,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1605203194
+    },
+    {
+        "content": "<p>and thanks for linking your report to those open issues, it helped me identify #1672 as a duplicate of <a href=\"https://github.com/IBM/FHIR/issues/1546\">https://github.com/IBM/FHIR/issues/1546</a> :-)</p>",
+        "id": 216502929,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1605203242
+    },
+    {
+        "content": "<p>so what I've settled in on for our deployment is using the <code>mpJwt</code> liberty feature instead of the <code>openidConnectClient</code> one</p>",
+        "id": 216503132,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1605203336
+    },
+    {
+        "content": "<p>here's a sample config snippet that you could try dropping into <code>fhir-server/configDropins/overrides</code>:</p>\n<div class=\"codehilite\"><pre><span></span><code>&lt;server&gt;\n    &lt;featureManager&gt;\n        &lt;!-- mpJwt-1.1 is already enabled in the default server.xml, but it doesn&#39;t hurt to repeat it here --&gt;\n        &lt;feature&gt;mpJwt-1.1&lt;/feature&gt;\n    &lt;/featureManager&gt;\n\n    &lt;!-- Override the application-bnd binding of the main webapp --&gt;\n    &lt;webApplication contextRoot=&quot;fhir-server/api/v4&quot; id=&quot;fhir-server-webapp&quot; location=&quot;fhir-server.war&quot; name=&quot;fhir-server-webapp&quot;&gt;\n        &lt;application-bnd id=&quot;bind&quot;&gt;\n            &lt;security-role id=&quot;users&quot; name=&quot;FHIRUsers&quot;&gt;\n                &lt;group id=&quot;usersGroup&quot; access-id=&quot;group:https://host/auth/realms/${env.KEYCLOAK_REALM}/fhirUser&quot;/&gt;\n            &lt;/security-role&gt;\n        &lt;/application-bnd&gt;\n    &lt;/webApplication&gt;\n\n    &lt;!-- The MP JWT configuration that injects the caller&#39;s JWT into a\n         ResourceScoped bean for inspection. --&gt;\n    &lt;mpJwt id=&quot;jwtConsumer&quot;\n           jwksUri=&quot;http://host/auth/realms/${env.KEYCLOAK_REALM}/protocol/openid-connect/certs&quot;\n           audiences=&quot;https://host/fhir-server/api/v4&quot;\n           userNameAttribute=&quot;sub&quot;\n           groupNameAttribute=&quot;group&quot;\n           issuer=&quot;https://host/auth/realms/${env.KEYCLOAK_REALM}&quot;\n           signatureAlgorithm=&quot;RS256&quot;\n           authFilterRef=&quot;filter&quot;/&gt;\n\n    &lt;authFilter id=&quot;filter&quot;&gt;\n        &lt;requestUrl urlPattern=&quot;/fhir-server&quot; /&gt;\n    &lt;/authFilter&gt;\n&lt;/server&gt;\n</code></pre></div>",
+        "id": 216503401,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1605203466
+    },
+    {
+        "content": "<p>note that here we're actually using an additional claim called <code>group</code> to assign the user to our FHIRUsers security-role</p>",
+        "id": 216503586,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1605203551
+    },
+    {
+        "content": "<p>hopefully that helps (until i can get to providing better doc)</p>",
+        "id": 216503677,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1605203610
+    },
+    {
+        "content": "<p>also, i'm guessing there is a way to do this with the liberty openidConnect features as well; I think I just ended up down this path because I wanted to get the JWT injected into our JAX-RS stuff for something</p>",
+        "id": 216503848,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1605203693
+    },
+    {
+        "content": "<p>Dear <span class=\"user-mention\" data-user-id=\"191676\">@Lee Surprenant</span> , thanks for your help. <br>\nAs far as I can see, this would be the <a href=\"https://github.com/IBM/FHIR/blob/master/fhir-server/liberty-config/configDropins/disabled/keycloakRP.xml\"><code>keycloakRP.xml</code></a> Dropin from the  Smart-FHIR component, right? <br>\nI'm assuming, the <a href=\"https://github.com/IBM/FHIR/blob/master/fhir-server/liberty-config/configDropins/disabled/oauthResourceServer.xml\"><code>\noauthResourceServer.xml </code></a> dropin should be disabled / replaced by the one above.</p>\n<p>I will try this solution and get back to you as soon as there is something to report.</p>",
+        "id": 216572094,
+        "sender_full_name": "Cornelius Erbelding",
+        "timestamp": 1605249118
+    },
+    {
+        "content": "<p>That’s right,  But for this to work you’ll need to make sure your users in keycloak belong to a group called “fhirUser”</p>",
+        "id": 216599620,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1605267936
+    },
+    {
+        "content": "<p>And configure keycloak with an audience mapper which sets the aud claim to match what the FHIR server expects</p>",
+        "id": 216599822,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1605268064
+    },
+    {
+        "content": "<p>I managed to get it running. <br>\nI wrote all necessary configurations into the <a href=\"https://github.com/IBM/FHIR/issues/1703\">GitHub Issue #1703</a> for all other users facing the same problem.</p>\n<p>Sadly, after enabling the token-based authorization, Browser-Access (with the desired redirect to Keycloak-Login) doesn't work anymore. <br>\nNormally, the option <code>inboundPropagation=\"supported\"</code> should issue a redirect to Keycloak-Login-UI if no token or invalid token is supplied. (while <code>inboundPropagation=\"required\"</code> ignores missing/invalid tokens)</p>",
+        "id": 216995621,
+        "sender_full_name": "Cornelius Erbelding",
+        "timestamp": 1605615787
+    },
+    {
+        "content": "<p>awesome.  you don't mind if we nab some of that content for the documentation (<a href=\"https://github.com/IBM/FHIR/issues/1546\">https://github.com/IBM/FHIR/issues/1546</a>) do you?</p>\n<p>Are you sure that <code>inboundPropagation=\"required\"</code> ignores missing/invalid tokens?  I really thought it errored out in those cases (but agree that it doesn't redirect).</p>",
+        "id": 216996211,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1605616231
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191676\">Lee Surprenant</span> <a href=\"#narrow/stream/212434-ibm/topic/OAuth2.20.2F.20Keycloak/near/216996211\">said</a>:</p>\n<blockquote>\n<p>awesome.  you don't mind if we nab some of that content for the documentation (<a href=\"https://github.com/IBM/FHIR/issues/1546\">https://github.com/IBM/FHIR/issues/1546</a>) do you?</p>\n</blockquote>\n<p>No problem. Since I had to do the documentation for our project anyway, I thought I can do something good for other users and you and provide the whole thing.</p>\n<p><span class=\"user-mention silent\" data-user-id=\"191676\">Lee Surprenant</span> <a href=\"#narrow/stream/212434-ibm/topic/OAuth2.20.2F.20Keycloak/near/216996211\">said</a>:</p>\n<blockquote>\n<p>Are you sure that <code>inboundPropagation=\"required\"</code> ignores missing/invalid tokens?  I really thought it errored out in those cases (but agree that it doesn't redirect).</p>\n</blockquote>\n<p>You're right, it leads to an error. As written at point 12 of the <a href=\"https://www.ibm.com/support/knowledgecenter/SSEQTP_liberty/com.ibm.websphere.wlp.doc/ae/twlp_config_oidc_rp.html\">OpenID Configuration Guide</a>:</p>\n<blockquote>\n<p>Optional: You can configure an OpenID Connect Client to optionally accept a valid OAuth 2.0 bearer access token as an authentication token without redirecting the request to an OpenID Connect provider. If a request contains a valid OAuth 2.0 bearer access token, then the Liberty OpenID Connect Client will automatically validate the access token, and create an authenticated subject based on the token validation result. If the request does not contain an access token or the access token is invalid, then the Liberty OpenID Connect Client continues to redirect the user to an OpenID Connect provider. This function enables the Liberty server to serve both the browser client and non-browser client like a RESTful client. You can add inboundPropagation=\"supported\" to the configuration to enable this function.</p>\n</blockquote>",
+        "id": 217000428,
+        "sender_full_name": "Cornelius Erbelding",
+        "timestamp": 1605619046
+    }
+]

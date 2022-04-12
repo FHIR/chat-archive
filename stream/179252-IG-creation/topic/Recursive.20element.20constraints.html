@@ -1,0 +1,126 @@
+---
+layout: page
+title: "FHIR Chat  · Recursive element constraints · IG creation"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/index.html">IG creation</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Recursive.20element.20constraints.html">Recursive element constraints</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="278060461"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Recursive%20element%20constraints/near/278060461" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Recursive.20element.20constraints.html#278060461">(Apr 06 2022 at 17:45)</a>:</h4>
+<p>I am trying to understand the new guidance on making restrictions on recursive elements.  I am profiling Composition and have some restrictions on Composition.section, a different set of restrictions on Composition.section.section, and I would like those last restrictions to apply recursively to section.section.section, etc.</p>
+<p>Here is what my differential looks like:</p>
+<div class="codehilite"><pre><span></span><code>      {
+        &quot;id&quot;: &quot;Composition.section.section&quot;,
+        &quot;path&quot;: &quot;Composition.section.section&quot;,
+        &quot;type&quot;: [
+          {
+            &quot;code&quot;: &quot;BackboneElement&quot;,
+            &quot;profile&quot;: [
+              &quot;http://hl7.org/fhir/us/spl/StructureDefinition/ProductSubmissionDocument&quot;
+            ],
+            &quot;_profile&quot;: [
+              {
+                &quot;extension&quot;: [
+                  {
+                    &quot;url&quot;: &quot;http://hl7.org/fhir/StructureDefinition/elementdefinition-profile-element&quot;,
+                    &quot;valueString&quot;: &quot;Composition.section.section&quot;
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        &quot;mustSupport&quot;: true
+      },
+</code></pre></div>
+<p>But that gets me the following error:</p>
+<div class="codehilite"><pre><span></span><code>Caused by: org.hl7.fhir.exceptions.DefinitionException: Type mismatch processing profile http://hl7.org/fhir/us/spl/StructureDefinition/ProductSubmissionDocument at path Composition.section.section: The element type is BackboneElement, but the profile http://hl7.org/fhir/us/spl/StructureDefinition/ProductSubmissionDocument is for a different type Composition
+</code></pre></div>
+<p>If I change the differential to have just Composition.section in the extension:</p>
+<div class="codehilite"><pre><span></span><code>            &quot;_profile&quot;: [
+              {
+                &quot;extension&quot;: [
+                  {
+                    &quot;url&quot;: &quot;http://hl7.org/fhir/StructureDefinition/elementdefinition-profile-element&quot;,
+                    &quot;valueString&quot;: &quot;Composition.section&quot;
+                  }
+                ]
+              }
+            ]
+</code></pre></div>
+<p>that doesn't throw an error, but it reports that the snapshot generation failed and it applies the Composition constraints on Composition.section.section,  i.e. it requires status, type, author, etc. that are on Composition.  That sort of makes sense since I seem to be saying "apply the ProductSubmissionDocument profile to Composition.section".</p>
+<p>So what is the proper way to say "apply all of the constraints on Composition.section.section to the recursive ...section element?</p>
+
+
+
+<a name="278060854"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Recursive%20element%20constraints/near/278060854" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Recursive.20element.20constraints.html#278060854">(Apr 06 2022 at 17:48)</a>:</h4>
+<p>NOTE: To make this simpler, I even tried just loosening my constraints on Composition.section and tried to say that the applied to Composition.section.section, etc.</p>
+<div class="codehilite"><pre><span></span><code>      {
+        &quot;id&quot;: &quot;Composition.section&quot;,
+        &quot;path&quot;: &quot;Composition.section&quot;,
+        &quot;slicing&quot;: {
+          &quot;discriminator&quot;: [
+            {
+              &quot;type&quot;: &quot;value&quot;,
+              &quot;path&quot;: &quot;code&quot;
+            }
+          ],
+          &quot;rules&quot;: &quot;open&quot;,
+          &quot;description&quot;: &quot;Slice based on the different sections that are needed in a SPL document.&quot;
+        },
+        &quot;type&quot;: [
+          {
+            &quot;code&quot;: &quot;BackboneElement&quot;,
+            &quot;profile&quot;: [
+              &quot;http://hl7.org/fhir/us/spl/StructureDefinition/ProductSubmissionDocument&quot;
+            ],
+            &quot;_profile&quot;: [
+              {
+                &quot;extension&quot;: [
+                  {
+                    &quot;url&quot;: &quot;http://hl7.org/fhir/StructureDefinition/elementdefinition-profile-element&quot;,
+                    &quot;valueString&quot;: &quot;Composition.section&quot;
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        &quot;mustSupport&quot;: true
+      },
+</code></pre></div>
+<p>This got me a different error:</p>
+<div class="codehilite"><pre><span></span><code>Caused by: org.hl7.fhir.exceptions.DefinitionException: Unable to find element Composition.section in http://hl7.org/fhir/us/spl/StructureDefinition/ProductSubmissionDocument
+    at org.hl7.fhir.r5.conformance.ProfileUtilities.processPaths(ProfileUtilities.java:1214)
+    at org.hl7.fhir.r5.conformance.ProfileUtilities.processPaths(ProfileUtilities.java:1485)
+    at org.hl7.fhir.r5.conformance.ProfileUtilities.processPaths(ProfileUtilities.java:1109)
+    at org.hl7.fhir.r5.conformance.ProfileUtilities.generateSnapshot(ProfileUtilities.java:669)
+    at org.hl7.fhir.r5.conformance.ProfileUtilities.processPaths(ProfileUtilities.java:1203)
+    at org.hl7.fhir.r5.conformance.ProfileUtilities.processPaths(ProfileUtilities.java:1548)
+    at org.hl7.fhir.r5.conformance.ProfileUtilities.generateSnapshot(ProfileUtilities.java:669)
+    at org.hl7.fhir.igtools.publisher.Publisher.generateSnapshot(Publisher.java:5459)
+</code></pre></div>
+
+
+
+<a name="278360920"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Recursive%20element%20constraints/near/278360920" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jean Duteau <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Recursive.20element.20constraints.html#278360920">(Apr 08 2022 at 20:54)</a>:</h4>
+<p>Anyone?  I hate to do this but <span class="user-mention" data-user-id="191316">@Grahame Grieve</span>, do you have any guidance?</p>
+
+
+
+<a name="278494559"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Recursive%20element%20constraints/near/278494559" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Recursive.20element.20constraints.html#278494559">(Apr 10 2022 at 23:06)</a>:</h4>
+<p>on my todo list</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,320 @@
+---
+layout: page
+title: "FHIR Chat  · Locale-specific SNOMEDs and validation · terminology"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/index.html">terminology</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html">Locale-specific SNOMEDs and validation</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="247586139"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247586139" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Max Masnick <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247586139">(Jul 29 2021 at 13:55)</a>:</h4>
+<p>We have an implementer of the SMART Health Cards IG who is trying to use a Canada-specific SNOMED code for identifying a COVID vaccine.</p>
+<p>The profile in question is here: <a href="http://build.fhir.org/ig/HL7/fhir-shc-vaccination-ig/branches/dev/StructureDefinition-shc-vaccination-dm.html">http://build.fhir.org/ig/HL7/fhir-shc-vaccination-ig/branches/dev/StructureDefinition-shc-vaccination-dm.html</a></p>
+<p>This profile slices <code>coding</code> based on code system. There's a SNOMED slice with a required binding to <a href="http://build.fhir.org/ig/HL7/fhir-shc-vaccination-ig/branches/dev/ValueSet-vaccine-snomed.html">descendents of SCT#787859002</a> (this is the code for "vaccine product").</p>
+<p>Canada's version of SNOMED defines <a href="https://browser.ihtsdotools.org/?perspective=full&amp;conceptId1=28531000087107&amp;edition=MAIN/SNOMEDCT-CA/2021-03-31&amp;release=&amp;languages=en,fr">28531000087107</a> as a descendent of 787859002. This is the code they want to use.</p>
+<p>The problem is that the Validator doesn't recognize this as a valid descendent of 787859002, presumably because the value set is based on standard int'l SNOMED.</p>
+<p>UK SNOMED has the same sort of situation. There may be other locale-specific versions of SNOMED as well that we haven't run into yet.</p>
+<p><strong>My question:</strong> is there a way we can say "descendents of 787859002 including any locale-specific codes" in the value set? Or is there another option that would lead to successful validation (like using a different terminology server)?</p>
+
+
+
+<a name="247595851"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247595851" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247595851">(Jul 29 2021 at 15:00)</a>:</h4>
+<p><span class="user-mention" data-user-id="322501">@Max Masnick</span>  This is rather tough.  Theoretically, for SNOMED CT value sets that do not specify a version (if a SNOMED CT version is specified it <strong>must</strong> also include an edition), the terminology server <strong>should</strong> be able to include all of these codes (at least the ones that it is aware of) from any national edition as being valid members of the value set (in $validate-code or $expand), but in practice probably no servers are actually able to do that.  That's because both the IGs and the terminology servers all assume some SNOMED CT edition (either by declaration in the IG or by an explicit request or default on the server).  SNOMED International itself doesn't publish, and doesn't even actually have, the complete set of all SNOMED CT content (although moving in that direction has been discussed).  At present it is a distributed resource.  <span class="user-mention" data-user-id="191316">@Grahame Grieve</span>, I think because of issues like this, a while back worked on producing a "combined" SNOMED CT "edition" (an unofficial one) that includes all of the content for all of at least the "major" SNOMED CT editions (e.g., International, US, Canada, UK, Australia, etc.).  The SNOMED CT "combined" edition is actually available on <a href="http://tx.fhir.org">tx.fhir.org</a>.  But there are issues if you actually want to use it. because (1) the version date when it was last updated on the server is 2017-03-06 (so it's very far out of date), and (2) I'm not even sure exactly how you would specify that "edition" in your value set definition, since there is no official SNOMED CT version url that would represent it (Grahame probably defined something that can be used for that, but I don't recall at the moment if that's the case or any details of it).  So I don't think there is any easy solution at the moment, but it may be something that we should consider looking at again.</p>
+
+
+
+<a name="247611460"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247611460" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247611460">(Jul 29 2021 at 17:04)</a>:</h4>
+<p>Wouldn't this be a question of what context is passed as part of the 'expand' operation used in the validator?  That seems like something we ought to be able to make configurable...</p>
+
+
+
+<a name="247617092"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247617092" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247617092">(Jul 29 2021 at 17:43)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>  Hmm.  I think I agree conceptually - but in that case, I think the context would be "everything"?  Which, I think still leaves us where we were, since we don't have a way to effectively express that context?  But possibly I missed part of what you are thinking.</p>
+
+
+
+<a name="247620190"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247620190" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Max Masnick <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247620190">(Jul 29 2021 at 18:07)</a>:</h4>
+<p>Thanks! If I'm reading this right, there are two separate issues here:</p>
+<ol>
+<li>Making <a href="http://tx.fhir.org">tx.fhir.org</a> (or whatever terminology server is used for validation) aware of the entire universe of SNOMED CT codes including the national editions (and for our use case in the COVID-19 vaccine space, this has to be pretty recently updated)</li>
+<li>Having the validator ask for the correct scope when requesting the value set expansion</li>
+</ol>
+
+
+
+<a name="247620470"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247620470" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247620470">(Jul 29 2021 at 18:09)</a>:</h4>
+<p>Sorry, response had wrong context - removed</p>
+
+
+
+<a name="247645560"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247645560" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Jordan <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247645560">(Jul 29 2021 at 21:45)</a>:</h4>
+<p><span class="user-mention" data-user-id="322501">@Max Masnick</span> Attempting to use a SNOMED Concept from a national drug extension in a SMART Health card is a bad idea. QR character limits prevent the use of descriptions and, as the Code System for ALL released SNOMED CT concepts has to be <a href="http://snomed.info/sct">http://snomed.info/sct</a>, any associated lookup or validation will use the default edition and version of SNOMED CT on the requesting server (wherever that may be from the card reader perspective). If you are going to use SNOMED CT Vaccine codes, my advice is to use only the concepts in the International Edition. </p>
+<p>UPDATE Actually 28531000087107 | Vaccine product against Severe acute respiratory syndrome coronavirus 2 (medicinal product) | will be in the July 31 release of the International Edition. Prior to that it was a pre-release concept in terms of the International Edition. Please accept my apologies - this is obviously NOT a national drug extension.</p>
+<p>To <span class="user-mention" data-user-id="191405">@Rob Hausam</span> 's point - I'm not sure that what is on <a href="http://tx.fhir.org">tx.fhir.org</a> is a combined SCT edition, but rather a collection of some of the major editions that contain an en-xx Language Reference Set. IMHO, creating a Universal Edition, bearing in mind ever-shortening release cycles, is a wicked problem for SNOMED International to solve.</p>
+
+
+
+<a name="247646085"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247646085" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247646085">(Jul 29 2021 at 21:51)</a>:</h4>
+<p>If the Coding includes the snomed version (either a full version, or even just the edition style with no date), then the validator would know where to start looking.<br>
+That is, with a binding to descendents of SCT#787859002 but not specified version, and a Coding that says</p>
+<div class="codehilite" data-code-language="JSON"><pre><span></span><code><span class="p">{</span>
+  <span class="nt">"code"</span><span class="p">:</span> <span class="s2">"28531000087107"</span><span class="p">,</span>
+  <span class="nt">"system"</span><span class="p">:</span> <span class="s2">"http://snomed/.info/sct"</span><span class="p">,</span>
+  <span class="nt">"version"</span><span class="p">:</span> <span class="s2">"http://snomed.info/sct/20621000087109/version/20210331"</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>then I would expect a $validate-code (or $expand) tobe issued using the specified version</p>
+
+
+
+<a name="247646178"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247646178" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247646178">(Jul 29 2021 at 21:52)</a>:</h4>
+<p>Combined editions are not really feasible since, while you can aggregate all codes, they may have conflicting properties (eg active status, and hierarchy)</p>
+
+
+
+<a name="247649180"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247649180" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Jordan <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247649180">(Jul 29 2021 at 22:26)</a>:</h4>
+<p>That's best practice in general but, unfortunately, there is no space for including code system versions in QR codes.</p>
+
+
+
+<a name="247653513"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247653513" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247653513">(Jul 29 2021 at 23:17)</a>:</h4>
+<p>QR codes in what context?  I would hope there's room in a SMART Health Card QR code?</p>
+
+
+
+<a name="247656113"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247656113" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Jordan <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247656113">(Jul 29 2021 at 23:53)</a>:</h4>
+<p>Not in the one that I saw demonstrated by Apple. This had a Patient and 2 Immunization Resources. The later contained a code system and code in the vaccineCode (codeableconcept) element - no description or version.</p>
+
+
+
+<a name="247658501"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247658501" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Max Masnick <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247658501">(Jul 30 2021 at 00:30)</a>:</h4>
+<p>I think we need to be able to support the various national editions of SNOMED to meet our implementers' needs.</p>
+<p>I agree that adding in <code>"version": "http://snomed.info/sct/20621000087109/version/20210331"</code> to every resource is not a good choice given the payload constraints mentioned above.</p>
+<p>Also, looking at the <a href="https://www.hl7.org/fhir/datatypes-definitions.html#Coding.version">documentation for <code>Coding.version</code></a> it seems like this should be populated when a code's meaning is inconsistent across versions, which I don't think is the issue here -- instead, it's that the SNOMED CT code system is essentially partitioned across different "editions" and the FHIR Validator doesn't know which partition to do a lookup in.</p>
+
+
+
+<a name="247666046"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247666046" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247666046">(Jul 30 2021 at 03:05)</a>:</h4>
+<p>Really, it's a validation issue.  Profiles that claim to be international in scope <em>should</em> accept codes from all known SNOMED editions.  It's a question of getting the terminology servers to do that automatically - without having to create a fake 'combined' version.  The different SNOMED subsets are just that - subsets.  When you validate a SNOMED code, it should be validated against <em>all</em> subsets unless the value set constrains to only one.</p>
+
+
+
+<a name="247666048"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247666048" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247666048">(Jul 30 2021 at 03:05)</a>:</h4>
+<p>We shouldn't have to do anything to the instances at all.</p>
+
+
+
+<a name="247666778"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247666778" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247666778">(Jul 30 2021 at 03:24)</a>:</h4>
+<p><span class="user-mention" data-user-id="322501">@Max Masnick</span> Yes, the support <strong>should</strong> work for this - but in practice at present, on any terminology server that I'm aware of, it actually doesn't get all the way there.  And I agree with LLoyd's points.  One question is, how is the validator handling this?  At least if the bindings are extensible or preferred (not required), you shouldn't be getting actual errors because of this.  And given that this is a known situation (which isn't very likely to be resolved anytime soon), if you are getting warnings from the validator because of this while doing conformance testing for an implementation, then I think those warnings should be noted and will just need to be accepted (or, if it's in the IG publication process, suppressed).  Is that what you are seeing and will that work for you (at least for now)?</p>
+
+
+
+<a name="247668484"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247668484" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Jordan <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247668484">(Jul 30 2021 at 04:10)</a>:</h4>
+<p>SNOMED Editions are not sub-sets, partitions or fragments. Together with versions, they are complete Code Systems. There are also licensing considerations, I simply do not have a license to hold anything other than the International and NZ Editions on my Terminology Server. AFAIA, Grahame has had to obtain licenses for each separate edition that is hosted on <a href="http://tx.fhr.org">tx.fhr.org</a>. The expectation that any given FHIR Terminology Server will provide a positive response to a $validate-code request relating to any given SNOMED CT code is an unrealistic one. At best, it might be able to identify the source of an SCTID that it does not belong to an Edition that it holds if it that SCTID contains a namespace identifier.</p>
+
+
+
+<a name="247676835"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247676835" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247676835">(Jul 30 2021 at 07:12)</a>:</h4>
+<p>Yes, agree with most of that, <span class="user-mention" data-user-id="191364">@Peter Jordan</span>.  But SNOMED CT actually is logically a single code system - that's why we only have a single canonical url for it, and all editions are specified as different versions.  There certainly is separate licensing and the rest, as you say.  And all of that illustrates why this isn't so straightforward for servers and users to manage.</p>
+
+
+
+<a name="247709865"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247709865" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Max Masnick <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247709865">(Jul 30 2021 at 13:46)</a>:</h4>
+<p>Our value set bindings are required -- this is important because Verifiers will need to know a priori what code systems to expect or risk rejecting a truly valid SHC. (Same goes for wallet apps -- they SHOULD display human-readable versions of the info contained within the SHC, so they need to know which code systems will appear.)</p>
+
+
+
+<a name="247710024"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247710024" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Max Masnick <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247710024">(Jul 30 2021 at 13:47)</a>:</h4>
+<p>Thanks to everyone above for explaining how this works -- I really appreciate.</p>
+
+
+
+<a name="247732745"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247732745" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247732745">(Jul 30 2021 at 16:42)</a>:</h4>
+<p><span class="user-mention" data-user-id="322501">@Max Masnick</span> Since you are using required bindings (I understand the reason for that), I think there is something that I don't believe has been mentioned yet that may solve your immediate need (if you haven't already done this).  As said before, there probably aren't any servers that will support any kind of "all edition" version of the SNOMED CT code system, but you should be able to create a <strong>value set</strong> yourself that effectively does this (and should work fine for $validate-code and $expand).  If you define your value set with multiple 'include' instances for descendent-of SCT#787859002, with each include specifiying the SNOMED CT 'system' and <strong>also</strong> the 'version' url for one of the SNOMED CT editions that you are interested in (the terminology server will also need to be aware of all of the editions that you specify), that should work and give you the behavior that you want.  Currently <a href="http://tx.fhir.org">tx.fhir.org</a> is supporting the International Edition (which is also included in the national editions, but it occasionally might be a previous version) and the national editions for the US (20210301), Canada (20200331) and Australia (20210630).  We're also looking at adding the UK and Swedish editions, but still have some issues to work on with adding both of those.  If you need either of those or any other editions that I didn't mention, let me know.  You can also see that the Canadian edition is currently out of date, which will be important to you, but that can be updated quickly - probably by today or tomorrow.  I'm hoping this may work for you - let me know if you think it will or won't.</p>
+
+
+
+<a name="247734691"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/247734691" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Max Masnick <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#247734691">(Jul 30 2021 at 16:57)</a>:</h4>
+<p><span class="user-mention" data-user-id="191405">@Rob Hausam</span> this should work for us! The two national editions we've considered so far are Canada and the UK.</p>
+<p>I'll see if I can get the value set to work with whatever is currently in <a href="http://tx.fhir.org">tx.fhir.org</a> for Canada as a starting point on our end.</p>
+
+
+
+<a name="248238076"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/248238076" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Max Masnick <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#248238076">(Aug 03 2021 at 15:35)</a>:</h4>
+<p><span class="user-mention" data-user-id="191405">@Rob Hausam</span> this value set isn't expanding with <a href="http://tx.fhir.org">tx.fhir.org</a> -- any ideas what's wrong?</p>
+<div class="codehilite"><pre><span></span><code>{
+  &quot;resourceType&quot;: &quot;ValueSet&quot;,
+  &quot;status&quot;: &quot;active&quot;,
+  &quot;name&quot;: &quot;VaccineSNOMED&quot;,
+  &quot;id&quot;: &quot;vaccine-snomed&quot;,
+  &quot;title&quot;: &quot;Vaccine: SNOMED CT&quot;,
+  &quot;description&quot;: &quot;&quot;,
+  &quot;version&quot;: &quot;0.6.0&quot;,
+  &quot;url&quot;: &quot;http://hl7.org/fhir/uv/shc-vaccination/ValueSet/vaccine-snomed&quot;,
+  &quot;copyright&quot;: &quot;&quot;,
+  &quot;compose&quot;: {
+    &quot;include&quot;: [
+      {
+        &quot;system&quot;: &quot;http://snomed.info/sct&quot;,
+        &quot;filter&quot;: [
+          {
+            &quot;property&quot;: &quot;concept&quot;,
+            &quot;op&quot;: &quot;descendent-of&quot;,
+            &quot;value&quot;: &quot;787859002&quot;
+          }
+        ]
+      },
+      {
+        &quot;system&quot;: &quot;http://snomed.info/sct&quot;,
+        &quot;version&quot;: &quot;http://snomed.info/sct/20611000087101/version/20210331&quot;,
+        &quot;filter&quot;: [
+          {
+            &quot;property&quot;: &quot;concept&quot;,
+            &quot;op&quot;: &quot;descendent-of&quot;,
+            &quot;value&quot;: &quot;787859002&quot;
+          }
+        ]
+      }
+    ]
+  }
+}
+</code></pre></div>
+
+
+
+<a name="248238221"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/248238221" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Max Masnick <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#248238221">(Aug 03 2021 at 15:36)</a>:</h4>
+<p>(That should be Canada SNOMED)</p>
+
+
+
+<a name="248254401"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/248254401" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#248254401">(Aug 03 2021 at 17:44)</a>:</h4>
+<p><span class="user-mention" data-user-id="322501">@Max Masnick</span>  The reason that didn't work is that the 20210331 version of the Canadian edition isn't supported.  If you change the version data to one that is supported, like 20200331, then it works.  But you may want to define the value set by specifying the <strong>edition</strong> but not the <strong>version</strong> (e.g., <code>http://snomed.info/sct/20611000087101</code>), so that the latest contents of International edition (the default) and the Canadian Edition will be returned in the value set expansion.  I think that's what you will want - so you get the latest available content (that is known to the server) and you don't have to update your value set each time a new version of any of the SNOMED CT international or national editions is released.  And with all that said, I hadn't gotten the Canadian edition update done yet, but I'm doing it now and I'll let you know when it's complete.</p>
+
+
+
+<a name="248271642"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/248271642" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#248271642">(Aug 03 2021 at 19:55)</a>:</h4>
+<p>The SNOMED CT Canadian Edition has now been updated to the 20210331 (latest) version.</p>
+
+
+
+<a name="248275474"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/248275474" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#248275474">(Aug 03 2021 at 20:23)</a>:</h4>
+<p><span class="user-mention" data-user-id="322501">@Max Masnick</span> Are you seeing the codes that you expect now?  I'm seeing quite a few codes showing up from the Canadian Edition (for some reason they aren't being rendered with display text - that's not ideal, but at least they's showing up).</p>
+
+
+
+<a name="249677906"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/249677906" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#249677906">(Aug 17 2021 at 04:38)</a>:</h4>
+<p>I did define a URL for the combined value set, but I never published it because (a) it is not generated in a reliable way - it's a research thing, and (b) it's not policy that it should exist</p>
+
+
+
+<a name="249795331"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/249795331" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Max Masnick <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#249795331">(Aug 18 2021 at 00:26)</a>:</h4>
+<p><span class="user-mention" data-user-id="191405">@Rob Hausam</span> sorry I never followed up -- what you suggested for loading in Canada SNOMED worked, though the display text for the codes is missing <a href="http://hl7.org/fhir/uv/shc-vaccination/2021Sep/ValueSet-vaccine-snomed.html">http://hl7.org/fhir/uv/shc-vaccination/2021Sep/ValueSet-vaccine-snomed.html</a></p>
+<p>There's a bit of weirdness with the way the IG publisher handles this, like <a href="/user_uploads/10155/ytPj_bbh3UZuaEjSEi7kehZW/image.png">image.png</a> </p>
+<div class="message_inline_image"><a href="/user_uploads/10155/ytPj_bbh3UZuaEjSEi7kehZW/image.png" title="image.png"><img src="/user_uploads/10155/ytPj_bbh3UZuaEjSEi7kehZW/image.png"></a></div><p>(We are including int'l, Australian, and Canadian.)</p>
+<p>It would be great if there was a way to say "include all descendants of <code>787859002</code> regardless of edition" someday :)</p>
+
+
+
+<a name="249797304"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/249797304" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#249797304">(Aug 18 2021 at 01:06)</a>:</h4>
+<p><span class="user-mention" data-user-id="322501">@Max Masnick</span> I agree it looks a little bit odd, but the main thing is that it's working.  Did you want to also explicitly include the US Edition (or not)?  I should be getting support added for the Swedish edition soon, and I also expect to add the UK edition fairly soon (there's still some things to work out for that).  And then earlier today there was some discussion about looking into whether we could include the Danish Edition.  And yes, the "someday" for "any edition" still would be nice.</p>
+
+
+
+<a name="249838914"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/249838914" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Max Masnick <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#249838914">(Aug 18 2021 at 12:05)</a>:</h4>
+<p>I would love to include all of these -- our IG is being balloted now, so presumably we can add them before publishing the STU1 release.</p>
+
+
+
+<a name="249843092"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/249843092" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#249843092">(Aug 18 2021 at 12:45)</a>:</h4>
+<p><span class="user-mention" data-user-id="322501">@Max Masnick</span>  Yes, it seems like that should be an update that you can made for the STU1 publication.</p>
+
+
+
+<a name="249933549"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/249933549" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#249933549">(Aug 19 2021 at 02:09)</a>:</h4>
+<p>The specification of "include all descendants of 787859002 regardless of edition" is probably relatively safe since a natural implementation is to take the union after evaluating across each edition, but things start to get tricky once you have a ValueSet that adds in exclusion criteria.<br>
+For example, "include all descendants of 787859002, except all descendants of 836377006,  regardless of edition"; what should happen if a concept is excluded in one edition, but not another?</p>
+
+
+
+<a name="249933911"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/249933911" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#249933911">(Aug 19 2021 at 02:16)</a>:</h4>
+<p>it won't be evaluated in more than one edition at once</p>
+
+
+
+<a name="249934085"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/249934085" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#249934085">(Aug 19 2021 at 02:20)</a>:</h4>
+<p>So the semantics is a simple "expand for each known edition and take the union of the results"?<br>
+That seems like the simplest and most generally useful approach to me.</p>
+
+
+
+<a name="249934107"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/249934107" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#249934107">(Aug 19 2021 at 02:21)</a>:</h4>
+<p>well, I won't be doing that, unless I really have to. I just think that almost everyone will run that in a particular context</p>
+
+
+
+<a name="249934283"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/249934283" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#249934283">(Aug 19 2021 at 02:25)</a>:</h4>
+<p>Yes - agree that most cases will choose a particular edition.</p>
+
+
+
+<a name="249938273"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/249938273" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#249938273">(Aug 19 2021 at 03:39)</a>:</h4>
+<p>Yes, we wouldn't do that unless there was a specific mechanism to say "all editions"</p>
+
+
+
+<a name="249947369"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/249947369" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Jordan <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#249947369">(Aug 19 2021 at 06:44)</a>:</h4>
+<p>"All editions" would still leave you with the problem of which version to use as editions have different release cycles so, at any given point in time, may be based on different versions of the International Edition (IE). For example, the NZ Edition is released in April and October each year, so the current version is still based on the 20210131 version of the IE, whereas other editions are now based on the 20210731 version.</p>
+
+
+
+<a name="249958426"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Locale-specific%20SNOMEDs%20and%20validation/near/249958426" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Locale-specific.20SNOMEDs.20and.20validation.html#249958426">(Aug 19 2021 at 08:47)</a>:</h4>
+<p>Indeed, in such a situation you may get concepts that are inactive in the international edition but still active in the New Zealand edition (or vice versa)</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,80 @@
+[
+    {
+        "content": "<p>Just updated to 5.1 and getting this error.</p>\n<p>Caused by: java.lang.StackOverflowError</p>\n<p>I'm investigating at the moment but seems to get stuck on UK Profiles. Extract from the loop </p>\n<p>2020-08-14 10:51:55.124  WARN 25744 --- [o-auto-1-exec-7] .v.s.SnapshotGeneratingValidationSupport : Detected circular dependency, already generating snapshot for: <a href=\"https://fhir.nhs.uk/R4/StructureDefinition/UKCore-CarePlan\">https://fhir.nhs.uk/R4/StructureDefinition/UKCore-CarePlan</a><br>\n2020-08-14 10:51:55.133  INFO 25744 --- [o-auto-1-exec-7] .v.v.VersionSpecificWorkerContextWrapper : Generating snapshot for StructureDefinition: <a href=\"https://fhir.nhs.uk/R4/StructureDefinition/UKCore-ServiceRequest\">https://fhir.nhs.uk/R4/StructureDefinition/UKCore-ServiceRequest</a><br>\n2020-08-14 10:51:55.137  INFO 25744 --- [o-auto-1-exec-7] .v.v.VersionSpecificWorkerContextWrapper : Generating snapshot for StructureDefinition: <a href=\"https://fhir.nhs.uk/R4/StructureDefinition/UKCore-ServiceRequest\">https://fhir.nhs.uk/R4/StructureDefinition/UKCore-ServiceRequest</a><br>\n2020-08-14 10:51:55.137  WARN 25744 --- [o-auto-1-exec-7] .v.s.SnapshotGeneratingValidationSupport : Detected circular dependency, already generating snapshot for: <a href=\"https://fhir.nhs.uk/R4/StructureDefinition/UKCore-ServiceRequest\">https://fhir.nhs.uk/R4/StructureDefinition/UKCore-ServiceRequest</a><br>\n2020-08-14 10:51:55.138  INFO 25744 --- [o-auto-1-exec-7] .v.v.VersionSpecificWorkerContextWrapper : Generating snapshot for StructureDefinition: <a href=\"https://fhir.nhs.uk/R4/StructureDefinition/UKCore-CarePlan\">https://fhir.nhs.uk/R4/StructureDefinition/UKCore-CarePlan</a><br>\n2020-08-14 10:51:55.141  INFO 25744 --- [o-auto-1-exec-7] .v.v.VersionSpecificWorkerContextWrapper : Generating snapshot for StructureDefinition: <a href=\"https://fhir.nhs.uk/R4/StructureDefinition/UKCore-CarePlan\">https://fhir.nhs.uk/R4/StructureDefinition/UKCore-CarePlan</a></p>\n<p>Is this known about?</p>",
+        "id": 206914500,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1597399475
+    },
+    {
+        "content": "<p>Seems to be a bug around.</p>\n<p>SnapshotGeneratingValidationSupport</p>\n<p>UK-CarePlan mentions UK-ServiceRequest twice.<br>\nSimilarly UK-Service mentions UK-CarePlan twice. </p>\n<p>So what I believe happens. </p>\n<p>Line 10: generateSnapshot is called on UK-CarePlan, <br>\nthis calls generateSnapeshot on UK-ServiceRequest <br>\nwhich then calls generateSnapshot on UK-CarePlan, this is stopped because it is already doing UK-CarePlan <br>\nbut it removes the semaphore on this line<br>\n<a href=\"https://github.com/jamesagnew/hapi-fhir/blob/6a8e09addf30ed03c84263faff35a7ad4fe23517/hapi-fhir-validation/src/main/java/org/hl7/fhir/common/hapi/validation/support/SnapshotGeneratingValidationSupport.java#L137\">https://github.com/jamesagnew/hapi-fhir/blob/6a8e09addf30ed03c84263faff35a7ad4fe23517/hapi-fhir-validation/src/main/java/org/hl7/fhir/common/hapi/validation/support/SnapshotGeneratingValidationSupport.java#L137</a><br>\nso when it is called again for the second mention of UK-CarePlan it tries to genearate the snapShot and GOTO 10</p>\n<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> ?? Does this sound correct?? Thanks</p>",
+        "id": 206936568,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1597416430
+    },
+    {
+        "content": "<p>What does \"mentions\" mean in this context?</p>\n<p>I thought the snapshot generator would only recurse into the base definition (though I could be wrong), which would mean that these two profiles have each other as the base?</p>",
+        "id": 206939173,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1597417810
+    },
+    {
+        "content": "<p>I mean the derived profile has a constraint on a reference which goes to another  derived profile. </p>\n<p><a href=\"/user_uploads/10155/wL013KnWFsQftVmnDk1t7bwV/image.png\">image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/wL013KnWFsQftVmnDk1t7bwV/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/wL013KnWFsQftVmnDk1t7bwV/image.png\"></a></div>",
+        "id": 207118321,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1597653059
+    },
+    {
+        "content": "<p>It looks like I can get it working by stopping the semaphore removal <a href=\"https://github.com/NHSDigital/fhir-validation-service/blob/master/src/main/java/uk/mayfieldis/hapifhir/support/SnapshotGeneratingValidationSupport.java#L113\">https://github.com/NHSDigital/fhir-validation-service/blob/master/src/main/java/uk/mayfieldis/hapifhir/support/SnapshotGeneratingValidationSupport.java#L113</a></p>",
+        "id": 207118403,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1597653138
+    },
+    {
+        "content": "<p>Still investigating though.</p>",
+        "id": 207118422,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1597653160
+    },
+    {
+        "content": "<p>Ignore solution, now gets into a loop.</p>",
+        "id": 207119771,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1597654164
+    },
+    {
+        "content": "<p>I'm not a profiling expert by any means so there may be something basic I'm missing.. but it feels pretty fraught with peril to have 2 profiles depending on each other like that.</p>",
+        "id": 207138160,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1597668300
+    },
+    {
+        "content": "<p>it is still not 100% clear how the profiles are depending on each other, but if i am right these profiles aren't deriving from each other, but referencing each other via <code>targetProfile</code></p>",
+        "id": 207153214,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1597676025
+    },
+    {
+        "content": "<p>The SnapshotGenerator starts snapshotting the first profile, finding the <code>targetResource</code>referenced second profile,  starting the snapshot generation on the 2nd one, which includes the first profile via <code>targetProfile</code>which sending the process into a loop.</p>",
+        "id": 207153556,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1597676184
+    },
+    {
+        "content": "<p>Does this happen with the standalone validator?</p>",
+        "id": 207185520,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1597691750
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> no, tested with fresh standalone with no problems.</p>\n<p><span class=\"user-mention\" data-user-id=\"191451\">@Patrick Werner</span>  my wording was slightly misleading. The circular targetProfiles are base UK profiles (the project I'm working on uses derivations of these, these are seem to be fine).  <br>\nSo I believe it's legitimate that Profile A has sibling profile B as targets and B has A as targets.</p>",
+        "id": 207230221,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1597735418
+    },
+    {
+        "content": "<p>Update: Still get the issue but have worked around it by using (base) profiles which include snapshots. <br>\nThe derived profiles (no snapshot) then work correctly.</p>",
+        "id": 208681721,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1598964418
+    }
+]

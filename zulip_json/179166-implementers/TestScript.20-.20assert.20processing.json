@@ -1,0 +1,140 @@
+[
+    {
+        "content": "<p>The FHIR Testing spec describes that subsequent test asserts are not evaluated when a prior assert within the same test evaluates to a failure. (<a href=\"https://www.hl7.org/fhir/testing.html#assert\">https://www.hl7.org/fhir/testing.html#assert</a>)   Why is that?</p>\n<p>From a user perspective, it would be more informative if you would know all the error messages of the subsequent test asserts. This way you can fix those errors as well before you set up the next test round.</p>",
+        "id": 198160558,
+        "sender_full_name": "Ardon Toonstra",
+        "timestamp": 1589957711
+    },
+    {
+        "content": "<p>How do we know if the subsequent assert depends on the previous and can therefore be evaluated?</p>",
+        "id": 198161556,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1589958596
+    },
+    {
+        "content": "<p>Then that subsequent assert will fail as well, and hopefully, the test platform will be smart enough to give a clear error message?</p>",
+        "id": 198166948,
+        "sender_full_name": "Ardon Toonstra",
+        "timestamp": 1589962455
+    },
+    {
+        "content": "<p>But I get the point. The next depended asserts may fail with a lot of unrelated error making it look like a total mess for the end user.</p>",
+        "id": 198169269,
+        "sender_full_name": "Ardon Toonstra",
+        "timestamp": 1589964123
+    },
+    {
+        "content": "<p>I've actually been thinking about this issue for a couple of days now. I believe the easiest approach would be a new assert boolean element that would instruct the test engine to either 1) Stop test processing on assert error or, 2) Continue test processing on assert error. This would give the TestScript author the needed control over a grouping of asserts and their behavior.</p>\n<p>Something like this:</p>\n<div class=\"codehilite\"><pre><span></span><code>&lt;action&gt;\n    &lt;assert&gt;\n        &lt;description value=&quot;Confirm that the returned HTTP status is 201(Created).&quot;/&gt;\n        &lt;direction value=&quot;response&quot;/&gt;\n        &lt;responseCode value=&quot;201&quot;/&gt;\n        &lt;stopTestOnError value=&quot;false&quot;/&gt;&lt;!-- [NEW ELEMENT] Allow next assert to evaluate if current assert fails --&gt;\n        &lt;warningOnly value=&quot;false&quot;/&gt;\n    &lt;/assert&gt;\n&lt;/action&gt;\n</code></pre></div>\n\n\n<p>Thoughts?  Comments?</p>",
+        "id": 198476992,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1590171920
+    },
+    {
+        "content": "<p>Why not use the severity \"error / warning / info\" codes?</p>",
+        "id": 198477943,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1590172391
+    },
+    {
+        "content": "<p>Currently, the test only stops on error.</p>",
+        "id": 198478098,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1590172472
+    },
+    {
+        "content": "<p>i mean instead of a boolean</p>",
+        "id": 198478119,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1590172486
+    },
+    {
+        "content": "<p>(not sure if that is what you mean too)</p>",
+        "id": 198478135,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1590172500
+    },
+    {
+        "content": "<p>So, the new element would be \"stopTest\" or \"stopTestOn\" with a coded value of either \"info\", \"warning\" or \"error\". That would provide a bit more control.</p>",
+        "id": 198478316,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1590172587
+    },
+    {
+        "content": "<p>Actually I was thinking of this wrong but I think you just corrected it :)</p>",
+        "id": 198478378,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1590172630
+    },
+    {
+        "content": "<p>Yes, if the element means \"threshold\" - then it would be error or warning, and that would determine if the script stops depending on whether the assertion returns errors or warnings</p>",
+        "id": 198478505,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1590172698
+    },
+    {
+        "content": "<p>I suppose you could add \"fatal\" for any exceptions.<br>\nI'm hoping to play around with this concept internally over the next couple of weeks. I was thinking the boolean would be easier and still provide the needed functionality. The coded value as a threshold does sound interesting though.</p>",
+        "id": 198478945,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1590172808
+    },
+    {
+        "content": "<p>cool</p>",
+        "id": 198479234,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1590172946
+    },
+    {
+        "content": "<p>Sounds like a good HL7 FHIR JIRA enhancement request. I'll try to get one created next week - long holiday weekend for me coming up.</p>",
+        "id": 198479797,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1590173239
+    },
+    {
+        "content": "<p>I'd support adding a boolean element as it's more deterministic and there may not always be an exact match between response codes sent by an implementation and the requirements of a tester. Certainly, there is a requirement for continued execution of a test script after some failures, a common one might be regex checks on the (computer-friendly) name property of resources.</p>",
+        "id": 198499412,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1590184587
+    },
+    {
+        "content": "<p>Great! I think I would support the boolean element more as well based on the arguments given bij Peter Jordan. Either way, I think this is a great addition to the assert definition as we will use it for sure in our TestScripts.</p>",
+        "id": 198813985,
+        "sender_full_name": "Ardon Toonstra",
+        "timestamp": 1590523256
+    },
+    {
+        "content": "<p>For what it worth, in our TestScript runner we run all assertions after a failed operation. The assumption here being that asserts don't change state of the system. Therefore, subsequent failed asserts fail not because of the previous assert failed, but because of the operation itself. In other words, order of asserts block after an operation _shouldn't matter_, so semantically they are evaluated as a whole.</p>\n<p>This allows writing asserts in a block without thinking too hard which one of those is more useful for troubleshooting. For example, if we assert both status code and output, sometimes it could be status code that is more useful, sometimes it would be output. In our runner, you'll get something like \"status code is 400 AND your output is OperationOutcome instead of Patient you expected\".</p>\n<p>I think that adding an explicit flag will make TestScripts even more confusing. Even as they are now, they are not easy to write (we use them extensively for API testing).</p>",
+        "id": 198838151,
+        "sender_full_name": "Ivan Dubrov",
+        "timestamp": 1590539117
+    },
+    {
+        "content": "<p><a href=\"https://jira.hl7.org/browse/FHIR-27772\">FHIR-27772</a> created to track this issue.</p>",
+        "id": 199754125,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1591280615
+    },
+    {
+        "content": "<p>Picking up this thread again and looking for additional feedback.</p>\n<p>Per the FHIR-I WG discussion on this topic, a suggestion is to have assertions be able to point to other assertions that are 'dependencies'.  Expectation is that all assertions would run, but you'd skip assertions that have declared dependencies if one or more of the dependencies had failed.</p>",
+        "id": 212354599,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1601930852
+    },
+    {
+        "content": "<p>In order to support this 'dependency' between asserts the current default behavior of a FHIR Test Engine would need to change. Currently, this behavior is to stop test execution on the first failed assert evaluation. The new behavior would then have to be to evaluate all asserts regardless of failure status except where dependencies exist.</p>\n<p>Looking for pros and cons of this approach versus the introduction of the 'assert.stopTestOnFail' boolean.</p>",
+        "id": 212355504,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1601931335
+    },
+    {
+        "content": "<p>Primary pro is that when you have different tests with different dependencies you don't either have to run a bunch you know will fail (which causes wasted time/resources) or skip all tests after a failure - when some of them might still succeed.  The cost is that you need to determine dependencies (i.e. what tests have no hope of working if a previous test failed).</p>",
+        "id": 212359089,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1601933228
+    },
+    {
+        "content": "<p>I've come up with two TestScript examples for a test with asserts that follow each idea.</p>\n<div class=\"spoiler-block\"><div class=\"spoiler-header\">\n\n<p>TestScript example using stopTestOnFail</p>\n</div><div class=\"spoiler-content\" aria-hidden=\"true\">\n\n<p>&lt;test&gt;<br>\n  &lt;action&gt;<br>\n    &lt;operation&gt;<br>\n      &lt;type&gt;<br>\n        &lt;system value=\"http://terminology.hl7.org/CodeSystem/testscript-operation-codes\"/&gt;<br>\n        &lt;code value=\"search\"/&gt;<br>\n      &lt;/type&gt;<br>\n      &lt;resource value=\"AllergyIntolerance\"/&gt;<br>\n      &lt;accept value=\"json\"/&gt;<br>\n      &lt;encodeRequestUrl value=\"true\"/&gt;<br>\n      &lt;params value=\"?identifier=ABC123\"/&gt;<br>\n    &lt;/operation&gt;<br>\n  &lt;/action&gt;<br>\n  &lt;action&gt;<br>\n    &lt;assert&gt;<br>\n      &lt;response value=\"okay\"/&gt;&lt;!-- Verify Response Code is 200(OK) --&gt;<br>\n      &lt;stopTestOnFail value=\"true\"/&gt;<br>\n      &lt;warningOnly value=\"false\"/&gt;<br>\n    &lt;/assert&gt;<br>\n  &lt;/action&gt;<br>\n  &lt;action&gt;<br>\n    &lt;assert&gt;<br>\n      &lt;contentType value=\"json\"/&gt;&lt;!-- Verify Content-Type is FHIR JSON --&gt;<br>\n      &lt;stopTestOnFail value=\"true\"/&gt;<br>\n      &lt;warningOnly value=\"false\"/&gt;<br>\n    &lt;/assert&gt;<br>\n  &lt;/action&gt;<br>\n  &lt;action&gt;<br>\n    &lt;assert&gt;<br>\n      &lt;resource value=\"Bundle\"/&gt;&lt;!-- Verify Response payload is a Bundle --&gt;<br>\n      &lt;stopTestOnFail value=\"false\"/&gt;<br>\n      &lt;warningOnly value=\"false\"/&gt;<br>\n    &lt;/assert&gt;<br>\n  &lt;/action&gt;<br>\n  &lt;action&gt;<br>\n    &lt;assert&gt;<br>\n      &lt;validateProfileId value=\"bundle-profile\"/&gt;&lt;!-- Validate Response payload as a Bundle --&gt;<br>\n      &lt;stopTestOnFail value=\"false\"/&gt;<br>\n      &lt;warningOnly value=\"false\"/&gt;<br>\n    &lt;/assert&gt;<br>\n  &lt;/action&gt;<br>\n&lt;/test&gt;</p>\n</div></div>\n\n<div class=\"spoiler-block\"><div class=\"spoiler-header\">\n\n<p>TestScript example using assert dependencies</p>\n</div><div class=\"spoiler-content\" aria-hidden=\"true\">\n\n<p>&lt;test&gt;<br>\n  &lt;action&gt;<br>\n    &lt;operation&gt;<br>\n      &lt;type&gt;<br>\n        &lt;system value=\"http://terminology.hl7.org/CodeSystem/testscript-operation-codes\"/&gt;<br>\n        &lt;code value=\"search\"/&gt;<br>\n      &lt;/type&gt;<br>\n      &lt;resource value=\"AllergyIntolerance\"/&gt;<br>\n      &lt;accept value=\"json\"/&gt;<br>\n      &lt;encodeRequestUrl value=\"true\"/&gt;<br>\n      &lt;params value=\"?identifier=ABC123\"/&gt;<br>\n    &lt;/operation&gt;<br>\n  &lt;/action&gt;<br>\n  &lt;action&gt;<br>\n    &lt;assert id=\"searchOk\"&gt;<br>\n      &lt;response value=\"okay\"/&gt;&lt;!-- Verify Response Code is 200(OK) --&gt;<br>\n      &lt;warningOnly value=\"false\"/&gt;<br>\n    &lt;/assert&gt;<br>\n  &lt;/action&gt;<br>\n  &lt;action&gt;<br>\n    &lt;assert id=\"searchContentType\"&gt;<br>\n      &lt;contentType value=\"json\"/&gt;&lt;!-- Verify Content-Type is FHIR JSON --&gt;<br>\n      &lt;dependentOnAssert value=\"searchOk\"/&gt;<br>\n      &lt;warningOnly value=\"false\"/&gt;<br>\n    &lt;/assert&gt;<br>\n  &lt;/action&gt;<br>\n  &lt;action&gt;<br>\n    &lt;assert&gt;<br>\n      &lt;resource value=\"Bundle\"/&gt;&lt;!-- Verify Response payload is a Bundle --&gt;<br>\n      &lt;dependentOnAssert value=\"searchOk\"/&gt;<br>\n      &lt;warningOnly value=\"false\"/&gt;<br>\n    &lt;/assert&gt;<br>\n  &lt;/action&gt;<br>\n  &lt;action&gt;<br>\n    &lt;assert&gt;<br>\n      &lt;validateProfileId value=\"bundle-profile\"/&gt;&lt;!-- Validate Response payload as a Bundle --&gt;<br>\n      &lt;dependentOnAssert value=\"searchOk\"/&gt;<br>\n      &lt;warningOnly value=\"false\"/&gt;<br>\n    &lt;/assert&gt;<br>\n  &lt;/action&gt;<br>\n&lt;/test&gt;</p>\n</div></div>\n\n<p><strong>In the first example, the use of the 'stopTestOnFail' boolean is shown.</strong></p>\n<p><em>Some Pros</em></p>\n<ul>\n<li>Each assert explicitly and succinctly controls its own behavior</li>\n<li>Ordering of asserts is not affected, i.e. the TestScript author is free to organize the asserts in any order</li>\n<li>On the first failed assert where stopTestOnFail=true, all remaining asserts are skipped</li>\n</ul>\n<p><em>Some Cons</em></p>\n<ul>\n<li>Each assert must declare the 'stopTestOnFail' boolean, FHIR does not allow default values on boolean elements</li>\n</ul>\n<p><strong>In the second example, the declaration of assert id values and the use of a new 'dependentOnAssert' element is shown.</strong></p>\n<p><em>Some Pros</em></p>\n<ul>\n<li>Dependency declarations provide additional documentation of related asserts</li>\n</ul>\n<p><em>Some Cons</em></p>\n<ul>\n<li>Ordering becomes more restrictive where those failed asserts that must stop the test execution need to be declared first. Relationships between dependent asserts requires more work of the TestScript author.</li>\n<li>Asserts that are a dependency must define unique id values. In a lengthy TestScripts with numerous tests this may become cumbersome</li>\n<li>The FHIR Test Engine would still need to process all remaining asserts to determine if there are any dependencies</li>\n</ul>",
+        "id": 212363539,
+        "sender_full_name": "Richard Ettema",
+        "timestamp": 1601936356
+    }
+]

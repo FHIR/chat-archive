@@ -1,0 +1,92 @@
+[
+    {
+        "content": "<p>I am looking at data from a service that aggregates measurement from wearable devices, e.g. heart rate data &amp; want to map it into FHIR Observation instances. The service allows pulling data for different time intervals (e.g. 24 hours) and the returned result is then an average(or sum, as appropriate)  over this interval. For a few cases, there are indeed LOINC codes for such averages e.g. <a href=\"https://loinc.org/41924-2/\">Heart rate 24 hour mean</a>. But not every combination is covered, e.g. I will also have resting heart rate 24h average and here LOINC only offers a point-in-time code, as far as I can tell (<a href=\"https://loinc.org/40443-4/\">40443-4</a>).</p>\n<p>Hence my question: is there are generic way of creating Observation instances representing quantity X averaged over time interval T ? I am thinking of cases where there is code of a point-in-time measurements of X, but no code for the T-average, cf. the case of resting heart rate. I can think of two general ways of approaching this, but am not sure if either one is acceptable:</p>\n<ol>\n<li>Using the point-in-time code in <code>Observation.code</code> and then using another field (eg. <code>Observation.method</code> or an extension) to indicate that this is an average over a specific time interval.</li>\n<li>Using post-coordinates SNOMED expressions. For instance, using 444981005 (Resting hear rate) and combining it with the  temporal context attribute (408731000) set to some appropriate value (alas, my SNOMED-skills do not quite suffice for actually saying how this would work in detail).</li>\n</ol>\n<p>Are there standard approaches in either of these direction (or a third one)?</p>",
+        "id": 245546976,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1625919336
+    },
+    {
+        "content": "<p>Best is to have a single code, but in theory you could have a generic code that simply says \"averaged systolic blood pressure\" and capture the period as an Observation.component.  I doubt you'll get a LOINC code issued for \"averaged systolic blood pressure\" because they prefer that sort of stuff to be coordinated, but you could define such a thing in a code system of your own.  That said, you could also define a pre-coordinated code of your own - and that would make it easier to map to a 'standard' LOINC code if one ever comes along.</p>",
+        "id": 245560126,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1625935103
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span> <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> <br>\nI would say that this LOINC code comes pretty close to what Lloyd theorized about for \"average systolic BP\" :</p>\n<blockquote>\n<p>96608-5  Systolic blood pressure unspecified time mean<br>\n<strong>Fully-Specified Name</strong><br>\nComponent: Intravascular systolic<br>\nProperty: Pres<br>\nTime: XXX^mean<br>\nSystem: Arterial system<br>\nScale: Qn<br>\nMethod:</p>\n</blockquote>\n<p>There are also pre-coordinated codes for the specific 1, 8, 10, 12 and 24 hour time intervals.</p>",
+        "id": 245585175,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1625973821
+    },
+    {
+        "content": "<p>OK, sounds like I will have to live with custom codes for the cases where I cannot find the exact LOINC matches.</p>\n<p>I was wondering if it would still be allowable/desirable to combine a custom code with one or more additional codes from LOINC in the <code>Observation.code.coding</code>-array. I.e. take the case of \"resting heart rate - 24 hour mean\". I could define and add a custom code with that exact meaning. But could I now <em>additionally</em> also add LOINC 40443-4 (Heart rate --resting) and/or LOINC 41924-2 (Heart rate 24 hour mean)? My initial feeling is that it would it be dangerous because systems that known only LOINC might misclassify the Observation &amp; a 24 mean can be quite different from a point measurement. But both of these LOINC codes clearly semantically overlap with my custom code , so I'm not quite sure where they fall in terms of the \"slightly different granularity\"-zone allowed by FHIR for different codes in a single CodeableConcept. </p>\n<blockquote>\n<p>I doubt you'll get a LOINC code issued for \"averaged systolic blood pressure\" because they prefer that sort of stuff to be coordinated, </p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> I only know post-coordination from the SNOMED &amp; ICD contexts (compound codes/expressions) - how does it work in the context of LOINC?</p>",
+        "id": 245612305,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1626017134
+    },
+    {
+        "content": "<p>This wouldn't be post coordination, it'd be a qualifier code sent as a separate Observation.component.  (Similar to how you might send a susceptibility and the drug it's susceptible to as a component</p>",
+        "id": 245612715,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1626017770
+    },
+    {
+        "content": "<p>When you think about applying multiple Codings, I think the key is you want to make sure that each one is accurate in its own right -- different levels of granularity are okay, but It would be inaccurate to assign a \"resting heart rate\" code to a measurement that actually represents a 24-hour average (which presumably combines measurements at rest and during activity)</p>",
+        "id": 245612722,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1626017793
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span> LOINC doesn't have any provision for post-coordination of codes.  You would need to use the most specific LOINC code that applies, and then handle any remaining details using information model constructs (i.e. FHIR elements).  Maybe we could try to work through one or more examples and see if/how this could work?  As far as including multiple codes, the additional codes would all have to be generalizations of the entire meaning - not just different parts of it.  I don't think you're going to find any useful \"correct\" way to do that with the \"leaf\" level LOINC codes.  You might be able to use some of the LOINC part (LP) codes from the multi-axial hierarchy, but I don't expect that it would help you to do that.  [I don't think that anything that I've just said is contradictory with what Lloyd and Josh just said, but I was writing it before I saw their posts.]</p>",
+        "id": 245612827,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1626017986
+    },
+    {
+        "content": "<p>I will say that there are some questions and concerns and recent discussions within OO about the use of Observation.component for \"qualifiers\" as Lloyd has described.  That definitely wasn't originally intended for 'component' (it was excluded through STU3), but the idea was added in R4 and has been the source of some confusion about what can and can't (or should and shouldn't) be done with it.  On the Friday OO Lab/LIVD calls we are working through a recommended approach for microbiologiy results reporting, and I don't think that using 'component' is likely what will be recommended for representing susceptibility test results.</p>",
+        "id": 245613104,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1626018454
+    },
+    {
+        "content": "<p>OK, thanks - that confirms my suspicion that additional LOINC codes would not be good. And thanks for clarifying the notion of post-coordination with LOINC! - I thought I'd missed some major part of LOINC logic <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span> </p>\n<p><span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> Post-coordination example using non-code FHIR elements sounds like an interesting idea. In fact, given that SNOMED at ICD-11 provide ways of encoding things that are also explicitly represented as FHIR element (e.g. <code>Observation/Condition.bodySite</code>), the general question of how to divide information between a (complex) code and other FHIR elements seems very relevant to me. It is certainly something I have wondered about! I suppose that there are no universally valid rules for this, but it might be interesting to discuss the various approaches somewhere in the spec.</p>",
+        "id": 245613384,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1626018869
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span>  Yes.  This is the classic Terminfo issue - which we are still discussing. <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span>  The SNOMED on FHIR group is attempting to address this, and there should be something about it in the SNOMED on FHIR (whatever name we give it) IG - when that is finally published.  The issue is most relevant to the use of SNOMED CT, but it isn't limited only to that - and it arises in a somewhat different way, but it certainly also applies for LOINC, as we've just said.  I think it's reasonable to consider what we might/could say about it more in the base FHIR spec.</p>",
+        "id": 245613755,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1626019378
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> Interesting, good to know.</p>",
+        "id": 245620836,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1626028645
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span> Let me know if you want to review the Evidence Resource in R5 which provides structured ways to specify statistics such as averages.</p>",
+        "id": 245633807,
+        "sender_full_name": "Brian Alper",
+        "timestamp": 1626047587
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192085\">@Brian Alper</span> Thanks for the tip! I did indeed not have Evidence on my radar and had a look. It seems it does not quite fit my use case, though, as I am not in the context of a study and do not have a population (or rather, a population of one) and treat the the value as a simple value rather than evidence for particular underlying phenomenon.</p>",
+        "id": 245649644,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1626071514
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span> Here is a simple use of Evidence to cover a population of one:</p>\n<p>variableDefinition<br>\n..variableRole = population<br>\n..observed = Group (member = Patient, quantity = 1)<br>\nvariableDefinition<br>\n..variableRole = measuredVariable<br>\n..observed = EvidenceVariable (characteristic = LOINC code)<br>\nstatistic<br>\n..statisticType = <a href=\"http://build.fhir.org/valueset-statistic-type.html\">http://build.fhir.org/valueset-statistic-type.html</a> / C53319 / Mean<br>\n..quantity = the result<br>\n..numberOfEvents = the number of measurements that are averaged</p>\n<p>But if you only want to show the value this may be more than you need.  The value of the Evidence Resource is if you want to add additional information like a 95% confidence interval or standard deviation to go along with the value.  But it does have the structure to code the \"average\" as a statistic type.</p>",
+        "id": 245662801,
+        "sender_full_name": "Brian Alper",
+        "timestamp": 1626081822
+    },
+    {
+        "content": "<p>Nice! Like you say I think it does not fit the current use case, but it could definitely be useful for us if we generate aggregate data ourselves.</p>",
+        "id": 245703344,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1626103953
+    }
+]

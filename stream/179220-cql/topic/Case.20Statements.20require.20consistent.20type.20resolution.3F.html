@@ -1,0 +1,85 @@
+---
+layout: page
+title: "FHIR Chat  · Case Statements require consistent type resolution? · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Case.20Statements.20require.20consistent.20type.20resolution.3F.html">Case Statements require consistent type resolution?</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="243671490"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Case%20Statements%20require%20consistent%20type%20resolution%3F/near/243671490" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Case.20Statements.20require.20consistent.20type.20resolution.3F.html#243671490">(Jun 23 2021 at 15:46)</a>:</h4>
+<p>I'm trying to work with the choice data in fhir resources, and would really like to handle with dates or periods across the resources where there is a choice. I have this function.</p>
+<div class="codehilite"><pre><span></span><code>define function msConvertEffective(medStatement FHIR.MedicationStatement):
+  case
+    when (medStatement.effective as FHIR.dateTime) is not null then (medStatement.effective as FHIR.dateTime).value
+    when (medStatement.effective as FHIR.Period) is not null then ToInterval((medStatement.effective as FHIR.Period))
+    else null
+  end
+</code></pre></div>
+<p>But it creates this error message.</p>
+<div class="codehilite"><pre><span></span><code>&gt;&gt; Error [20:3] Expected an expression of type &#39;System.DateTime&#39;, but found an expression of type &#39;Interval of System.DateTime&#39;.
+</code></pre></div>
+<p>And when I switch the order of the two case statements, I find that</p>
+<div class="codehilite"><pre><span></span><code>Error [20:3] Expected an expression of type &#39;Interval of System.DateTime&#39;, but found an expression of type &#39;System.DateTime&#39;.
+</code></pre></div>
+<p>So it seems that whatever the first type resolution is in a switch case statement, all other types must match. I would rather not use the if else statements as they read poorly, and these could scale out to all choice fields in the future rather easily. I'm also unsure as to how I could convert this to work with lists, and not just individual resources.</p>
+
+
+
+<a name="243832316"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Case%20Statements%20require%20consistent%20type%20resolution%3F/near/243832316" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Case.20Statements.20require.20consistent.20type.20resolution.3F.html#243832316">(Jun 24 2021 at 19:07)</a>:</h4>
+<p>Hi Michael!</p>
+<p>In principle you should be able to do that. In practice the cql-translator isn't quite smart enough to do type inference all the way through conditionals. A work-around is to cast the first <code>then</code> statement to the type you want. Here's an example (also handles a List):</p>
+<div class="codehilite" data-code-language="cql"><pre><span></span><code>  define function msConvertEffective(medStatments List&lt;FHIR.MedicationStatement&gt;):
+    medStatments S
+      return
+        case
+          when (S.effective as FHIR.dateTime) is not null then ((S.effective as FHIR.dateTime).value as Choice&lt;DateTime, Interval&lt;DateTime&gt;&gt;)
+          when (S.effective as FHIR.Period) is not null then FHIRHelpers.ToInterval((S.effective as FHIR.Period))
+          else null
+        end
+</code></pre></div>
+
+
+
+<a name="243851848"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Case%20Statements%20require%20consistent%20type%20resolution%3F/near/243851848" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Case.20Statements.20require.20consistent.20type.20resolution.3F.html#243851848">(Jun 24 2021 at 21:55)</a>:</h4>
+<p>thanks JP this is illuminating a lot for me.<br>
+What is  this line called here? It acts like an unwrapper/iterator.</p>
+<div class="codehilite"><pre><span></span><code> medStatments S
+</code></pre></div>
+
+
+
+<a name="243852952"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Case%20Statements%20require%20consistent%20type%20resolution%3F/near/243852952" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Case.20Statements.20require.20consistent.20type.20resolution.3F.html#243852952">(Jun 24 2021 at 22:07)</a>:</h4>
+<p>That's the syntax for a query in CQL:</p>
+<p><code>&lt;query source&gt; &lt;alias&gt;</code><br>
+<code>medStatments S</code></p>
+<p><a href="https://cql.hl7.org/02-authorsguide.html#queries">https://cql.hl7.org/02-authorsguide.html#queries</a></p>
+<p>Any list can be a query source. You typically see this construct when doing retrieves:</p>
+<div class="codehilite" data-code-language="cql"><pre><span></span><code>[Encounter: "Inpatient"] E
+  where duration in days of E.period &gt;= 120
+</code></pre></div>
+
+
+
+<a name="243852975"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Case%20Statements%20require%20consistent%20type%20resolution%3F/near/243852975" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Case.20Statements.20require.20consistent.20type.20resolution.3F.html#243852975">(Jun 24 2021 at 22:07)</a>:</h4>
+<p>It's not an iterator or unwrapper per se since CQL is declarative (like SQL) as opposed to imperative (like Java, C, etc) but the outcome in this use case is the same. You're basically saying "for each thing in this List, perform this transformation".</p>
+
+
+
+<a name="244150712"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Case%20Statements%20require%20consistent%20type%20resolution%3F/near/244150712" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Case.20Statements.20require.20consistent.20type.20resolution.3F.html#244150712">(Jun 28 2021 at 14:15)</a>:</h4>
+<p>Ah ok,  so all statements should generally start with a query source, and a query does not always have to be a retrieval, but could be an existing definition or a parameter in a function. Thank you!</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

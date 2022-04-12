@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p>Hi everybody, I am learning how to use  FSH and GoFSH (<a href=\"https://github.com/FHIR/GoFSH\">https://github.com/FHIR/GoFSH</a>) with the goal of continuing work on our Phenopackets IG using FSH tooling. However, when I use the gofsh tool on the current repository, gofsh states that one of the elements is duplicated (it is not, as far as I can see) but does not provide any further help at spotting the bug. Instead, gofsh gets stuck at this point: </p>\n<p>error Encountered value set with a duplicate name, KaryotypicSex, which GoFSH cannot make unique. Fix the source file to resolve this error or update the resulting FSH definition.<br>\ninfo  Processed 10 of 16 ValueSets...<br>\ninfo  Processed 15 of 16 ValueSets...<br>\ninfo  Processed 16 ValueSets<br>\ninfo  Processing Instances...<br>\n(killed after 30 min of no progress).</p>\n<p>Is there any way of making gofsh more verbose or debugging this kind of error? thanks! Peter</p>",
+        "id": 240258496,
+        "sender_full_name": "Peter Robinson",
+        "timestamp": 1621981842
+    },
+    {
+        "content": "<p>you might ask on <a class=\"stream\" data-stream-id=\"215610\" href=\"/#narrow/stream/215610-shorthand\">#shorthand</a></p>",
+        "id": 240261296,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1621983837
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"361275\">@Peter Robinson</span>.  You can turn on debugging by passing the following arguments to GoFSH: <code>-l debug</code> (or <code>--log-level debug</code>), but I'm not sure it will provide much more information in this particular case.  Is your IG available publicly on GitHub so that we can take a look?</p>",
+        "id": 240318401,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1622033289
+    },
+    {
+        "content": "<p>Thanks -- gofsh is not outputting any log at all as far as I can see. Our IG is here <a href=\"https://github.com/phenopackets/core-ig\">https://github.com/phenopackets/core-ig</a> <br>\nI will also join the shorthand channel -- didn't see that before!</p>",
+        "id": 240323590,
+        "sender_full_name": "Peter Robinson",
+        "timestamp": 1622035555
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"361275\">@Peter Robinson</span> -- I've looked into this and there are a few things going on here.</p>\n<p>The most notable thing is that if you run GoFSH on the whole GitHub repo, it encounters many XML files that are not actually FHIR definitions -- and while it handles some of them correctly (by ignoring them), it appears it is trying to process some of them as if they are instances of FHIR data.</p>\n<p>If you point GoFSH at just <code>ig-root/input</code>, it does a lot better, but still trips up on things like the <code>_attic</code> folder (which contains historic versions of resources), the <code>base-spec</code> folder (which contains actual FHIR core resources), and the <code>_templates</code> folder (which contains incomplete FHIR definitions that I think you must use to generate other definitions).</p>\n<p>If you delete the <code>_attic</code>, <code>base-spec</code>, and <code>_templates</code> folders in <code>ig-root/input</code>, and then run GoFSH on <code>ig-root/input</code>, it does much better.  There are still a few issues, but it's pretty close.  One issue that seems to be a problem is that one of your profiles contains differential elements with no <code>id</code> properties.  This is actually a violation of the FHIR R4 spec (as <a href=\"http://hl7.org/fhir/R4/structuredefinition.html#invs\">sdf-17</a> indicates that all differential elements must have an id and that id must be distinct).</p>\n<p>So... I think that if you delete those problematic subfolders and fix up some of the issues in the actual XML definitions, you'll be in pretty good shape if you run GoFSH like this:</p>\n<div class=\"codehilite\"><pre><span></span><code>gofsh -t xml-only ./ig-root/input\n</code></pre></div>",
+        "id": 240342091,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1622042532
+    },
+    {
+        "content": "<p>Another approach, which actually might be better would be that if you can build your IG using the IG Publisher, then you can just run GoFSH on the <code>output</code> folder that the IG Publisher creates.  That would probably give you the best results.  I would have done that myself, but I could not get the IG Publisher to successfully run on this IG.</p>",
+        "id": 240342461,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1622042652
+    },
+    {
+        "content": "<p>Thanks so much, Chris, this is extremely helpful! I wish I will have an opportunity to invite you to a beer sometime, but for now THANKS!</p>",
+        "id": 240342768,
+        "sender_full_name": "Peter Robinson",
+        "timestamp": 1622042769
+    },
+    {
+        "content": "<p>Ha.  No problem.  Glad to see you are considering using FSH.  We've found it to be very useful ourselves!</p>",
+        "id": 240343553,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1622043029
+    },
+    {
+        "content": "<p>That solved my problem, thanks again. One thing that is not mentioned in the GoFSH documentation is whether it is recommended to essentially completely replace the current IG with the FSH version and if there are any best practices for doing so. There seems to be an obvious answer but since it is not even discussed in <a href=\"https://fshschool.org/\">https://fshschool.org/</a> I wonder if I am misunderstanding something. It is the case that I should use gofsh just once and henceforth work with the FSH files, correct?</p>",
+        "id": 240548777,
+        "sender_full_name": "Peter Robinson",
+        "timestamp": 1622161795
+    },
+    {
+        "content": "<p>Yes, that's right -- we expect you would run GoFSH once and then maintain your definitions using FSH after that.  Since GoFSH just creates the FSH files and a basic config, however, you'll need to do the work of integrating them back into your original IG (with the rest of the content).</p>\n<p>At a minimum, you will need to remove the old XML resource definitions in <code>input/*</code> and add the new FSH definitions to <code>input/fsh</code>.  If you do just this, and leave your <code>input/pheno-core-ig.xml</code> in place, then you should be able to run SUSHI and it will extract the necessary config info from that <code>input/pheno-core-ig.xml</code> file (so you <em>don't</em> need the <code>sushi-config.yaml</code> file).</p>\n<p>If you prefer, you also have the option to use a root-level <code>sushi-config.yaml</code> file instead of <code>input/pheno-core-ig.xml</code>.  If you want to do this, however, you will need to make sure it reflects all the same config as the original <code>input/pheno-core-ig.xml</code> (but you likely won't have to enumerate all the resources like you currently do in the IG XML file).</p>",
+        "id": 240598969,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1622206149
+    },
+    {
+        "content": "<p>O-fish-ally error free!<br>\nIt worked! Thanks so much, it is hard to state how happy I am! As a bioinformatician/clinician coming to FHIR, it was difficult going, but the SUSHI/FSH project will really empower us to achieve our goals. Plus, I love the fish jokes! Thanks again <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span></p>",
+        "id": 240661834,
+        "sender_full_name": "Peter Robinson",
+        "timestamp": 1622236777
+    },
+    {
+        "content": "<p>Awesome.  So glad to hear, this <span class=\"user-mention\" data-user-id=\"361275\">@Peter Robinson</span>!  You know where to find us if you need us!</p>",
+        "id": 240951746,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1622558394
+    }
+]

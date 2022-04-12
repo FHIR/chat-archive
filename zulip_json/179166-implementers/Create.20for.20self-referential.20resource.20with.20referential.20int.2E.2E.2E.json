@@ -1,0 +1,140 @@
+[
+    {
+        "content": "<p>I've got a chicken and egg problem. I have a resource that references another resource in an extension sort of like this (actual resource and extension changed to protect the innocent):</p>\n<p>&lt;Practitioner&gt;<br>\n   &lt;id value=\"employee1\"/&gt;<br>\n  &lt;extension url=\"<a href=\"http://example.org/fhir/reports-to\">http://example.org/fhir/reports-to</a>\"&gt;<br>\n      &lt;valueReference value=\"employee2\"/&gt;<br>\n   &lt;/extension&gt;<br>\n&lt;/Practitioner&gt;</p>\n<p>This works fine, except the for CEO it would be self-referential:</p>\n<p>&lt;Practitioner&gt;<br>\n   &lt;id value=\"ceo\"/&gt;<br>\n  &lt;extension url=\"<a href=\"http://example.org/fhir/reports-to\">http://example.org/fhir/reports-to</a>\"&gt;<br>\n      &lt;valueReference value=\"Practitioner/ceo\"/&gt;<br>\n   &lt;/extension&gt;<br>\n&lt;/Practitioner&gt;</p>\n<p>When I PUT (corrected, was POST)  the self-referential resource to HAPI with referential integrity turned on I get an error saying that Practioner/ceo does not exist so the create operation fails. </p>\n<p>I'm pretty sure this is a HAPI bug, but wanted to see what others think before I bug James.</p>",
+        "id": 261956808,
+        "sender_full_name": "Rick Geimer",
+        "timestamp": 1637254874
+    },
+    {
+        "content": "<p>I would expect the valueReference to say either <code>Practitioner/ceo</code> or <code>#</code> rather than <code>ceo</code>, because a bare resource ID is not iself a valid reference (but I don't know whether any of these is <em>expected</em> to work in HAPI -- it's a fun edge case at any rate, though maybe the right answer here is <code>chair</code> :-))</p>",
+        "id": 261959947,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637256137
+    },
+    {
+        "content": "<p>I don't think you can POST that with ref integrity. A create POST has no way to rewrite references to the created resource. You could do this inside a transaction bundle, making the self reference point to the fullUrl of the entry.</p>\n<p>For example, the Google implementation will accept this and do what you want, with referential integrity enabled:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;resourceType&quot;: &quot;Bundle&quot;,\n  &quot;type&quot;: &quot;transaction&quot;,\n  &quot;entry&quot;: [\n    {\n      &quot;request&quot;: {\n        &quot;method&quot;: &quot;POST&quot;,\n        &quot;url&quot;: &quot;Patient&quot;\n      },\n      &quot;fullUrl&quot;: &quot;Patient/me&quot;,\n      &quot;resource&quot;: {\n        &quot;resourceType&quot;: &quot;Patient&quot;,\n        &quot;link&quot;: [\n          {\n            &quot;other&quot;: {\n              &quot;reference&quot;: &quot;Patient/me&quot;\n            },\n            &quot;type&quot;: &quot;seealso&quot;\n          }\n        ]\n      }\n    }\n  ]\n}\n</code></pre></div>",
+        "id": 261962075,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1637257052
+    },
+    {
+        "content": "<p>The created resource looks like this, so it did put the uuid into the reference:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;id&quot;: &quot;9a7f77f0-134e-42a7-a9a4-69ef627f5320&quot;,\n  &quot;link&quot;: [\n    {\n      &quot;other&quot;: {\n        &quot;reference&quot;: &quot;Patient/9a7f77f0-134e-42a7-a9a4-69ef627f5320&quot;\n      },\n      &quot;type&quot;: &quot;seealso&quot;\n    }\n  ],\n  &quot;meta&quot;: {\n    &quot;lastUpdated&quot;: &quot;2021-11-18T17:35:45.905271+00:00&quot;,\n    &quot;versionId&quot;: &quot;MTYzNzI1Njk0NTkwNTI3MTAwMA&quot;\n  },\n  &quot;resourceType&quot;: &quot;Patient&quot;\n}\n</code></pre></div>",
+        "id": 261962368,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1637257162
+    },
+    {
+        "content": "<p>I tried posting the above bundle to <a href=\"http://hapi.fhir.org\">hapi.fhir.org</a> and got a java.lang.StackOverflowError so....who knows</p>",
+        "id": 261962957,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1637257387
+    },
+    {
+        "content": "<p>Why are you including the reference at all?  The ceo just doesn't have a \"reports-to\"...</p>",
+        "id": 261965384,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1637258346
+    },
+    {
+        "content": "<p>Sorry, <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>  I meant Practitioner/ceo. Fortunately I still had a few minutes to edit it, so fixed the example above.</p>",
+        "id": 261966743,
+        "sender_full_name": "Rick Geimer",
+        "timestamp": 1637258898
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> this is a contrived example for a different self-referential use case. I'm just trying to see if create on a self-referential resource is suppose to work in FHIR at all. If not then it should likely be documented somewhere.</p>",
+        "id": 261966964,
+        "sender_full_name": "Rick Geimer",
+        "timestamp": 1637259013
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span> interesting solution using the transaction Bundle. Thanks!  That's a potential workaround. Another we found is to make it an identifier reference.</p>",
+        "id": 261967230,
+        "sender_full_name": "Rick Geimer",
+        "timestamp": 1637259151
+    },
+    {
+        "content": "<p>Paul's right that POST here shouldn't work -- but if you can use <code>PUT</code> (specifying the id of the resource) that <em>could</em> work (I don't know whether it <em>does</em>).</p>",
+        "id": 261967431,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637259274
+    },
+    {
+        "content": "<p>Thanks Josh, I'm relaying the issue from someone else, I assumed they used POST but you are correct that shouldn't work because you can't supply an id on POST. Will see if they tried create on PUT.</p>",
+        "id": 261967697,
+        "sender_full_name": "Rick Geimer",
+        "timestamp": 1637259414
+    },
+    {
+        "content": "<p>They used PUT to create the resource, so my comments about POST above are a red-herring. Create on PUT with referential integrity on is not working in HAPI, so again just trying to see if that is a valid thing to do in FHIR, even if not recommended. </p>\n<p>Basically the use case involves a profile that requires [1..1] all resources of a given type to have an extension with a reference to the managing resource instance, and having a separate profile just for the top level resource is not desirable, hence the self-reference.</p>",
+        "id": 261968323,
+        "sender_full_name": "Rick Geimer",
+        "timestamp": 1637259728
+    },
+    {
+        "content": "<p>Worth asking on <a class=\"stream\" data-stream-id=\"179167\" href=\"/#narrow/stream/179167-hapi\">#hapi</a>  with a specific failing example</p>",
+        "id": 261969102,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637260079
+    },
+    {
+        "content": "<p>Will do if we agree that it SHOULD work per the FHIR spec. Will also try Josh's suggestion about using \"#\" in the reference.  <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> , thoughts here?</p>",
+        "id": 261969278,
+        "sender_full_name": "Rick Geimer",
+        "timestamp": 1637260151
+    },
+    {
+        "content": "<p>The PUT version works on google but does not appear to work on HAPI.</p>\n<p>I don't see how \"#\" is a valid option, it only applies inside a contained resource to point to the container. Are there implementations that treat it as a general-purpose self-reference?</p>",
+        "id": 261972439,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1637261609
+    },
+    {
+        "content": "<p>I think vaguely in a general theoretical sense a resource should be able to refer to itself, but it's certainly a weird edge case, and i don't think that the specification anticipates that you can do a naked POST that works like that</p>",
+        "id": 261973599,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1637262116
+    },
+    {
+        "content": "<p>Agree that POST will not work, so the question is about create on PUT. <br>\nSo I'll take \"vaguely in a general theoretical sense a resource should be able to refer to itself\" to mean that HAPI should not outright reject it. <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> ?</p>",
+        "id": 261974023,
+        "sender_full_name": "Rick Geimer",
+        "timestamp": 1637262307
+    },
+    {
+        "content": "<p>And &lt;reference value=\"#\"/&gt;  doesn't see to work when I call $validate<br>\n&lt;diagnostics value=\"Unable to resolve resource '#'\"/&gt;</p>",
+        "id": 261975078,
+        "sender_full_name": "Rick Geimer",
+        "timestamp": 1637262633
+    },
+    {
+        "content": "<blockquote>\n<p>&lt;reference value=\"#\"/&gt; doesn't see to work when I call $validate ==&gt; &lt;diagnostics value=\"Unable to resolve resource '#'\"/&gt;</p>\n</blockquote>\n<p>good</p>",
+        "id": 262001417,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1637274800
+    },
+    {
+        "content": "<p>Do we have a 'real' use-case where self-referencing is necessary/useful?</p>",
+        "id": 262025596,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1637295877
+    },
+    {
+        "content": "<p>Sounds like Rick has one but it's so bad he's embarrassed about it</p>",
+        "id": 262025713,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1637295969
+    },
+    {
+        "content": "<p>Checking to see if I can discuss the actual use case publicly.</p>",
+        "id": 262127045,
+        "sender_full_name": "Rick Geimer",
+        "timestamp": 1637354594
+    },
+    {
+        "content": "<p>If you try validating that reference to # in the dotnet validator it used to get a stack overflow (not sure if it still does as I have a check for it) specifically where resource was being posted without Id, as the resource itself was resolving and therefore try validate itself again.</p>",
+        "id": 262134945,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1637358697
+    }
+]

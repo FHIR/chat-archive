@@ -1,0 +1,68 @@
+[
+    {
+        "content": "<p>Without returning the entire resource I was looking at finding a structured way of returning resource id's / resource URLs upon a successful create/update. I thought about putting it  in the location part of an OperationOutcome, likes this:</p>\n<p>{<br>\n    \"resourceType\": \"OperationOutcome\",<br>\n    \"issue\": [<br>\n        {<br>\n            \"severity\": \"information\",<br>\n            \"code\": \"informational\",<br>\n            \"diagnostics\": \"Successfully created resource \\\"Observation/855807/_history/1\\\" in 48ms\"<br>\n            \"location\": [<br>\n              \"Observation/855807/_history/1\\\"<br>\n            ]<br>\n        }<br>\n    ]<br>\n}</p>\n<p>But location is supposed to be an XPath, so this seems to violate the intent of location? Is there any nice/simple way of achieving this?</p>",
+        "id": 153935250,
+        "sender_full_name": "Michael Christensen",
+        "timestamp": 1517830607
+    },
+    {
+        "content": "<p>\"finding a structured way of returning resource id's / resource URLs upon a successful create/update\" - why? what ids?</p>",
+        "id": 153935338,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1517859138
+    },
+    {
+        "content": "<p>The URL for the version should come back in the location header on both operations - and from that you can extract both the resource id and the version.  (Though on an update, you should already know the resource id going in...)</p>",
+        "id": 153935340,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1517859994
+    },
+    {
+        "content": "<p>Wouldn't adding the HTTP header Prefer: return=minimal work? (<a href=\"http://build.fhir.org/http.html#2.21.0.5.2\" target=\"_blank\" title=\"http://build.fhir.org/http.html#2.21.0.5.2\">http://build.fhir.org/http.html#2.21.0.5.2</a>)</p>",
+        "id": 153935369,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1517868596
+    },
+    {
+        "content": "<p>Ok, probably should have explained about the context. Appart from supporting REST-based http communication I am building (FHIR based) services that use Apache Kafka as underlying messaging system (but could be any messaging system). So, I may get an incoming message that tells me to create or update a resource (with resource content as payload of the message). When I'm done with this I would like to tell the world, via Kafka, that/if the request succeeded. The listeners on such a message could typically be interested in knowing what resource was created and where to potentially retrieve the content from. Therefore, I was looking at sending out a message with an OperationOutcome as payload and to have this OperationOutcome contain a url for the version of the resource created/updated. From the description of OperationOutcome it wasn't obvious to me how/if this was legal.</p>\n<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> If I do a POST of an observation resource to <a href=\"http://fhirtest.uhn.ca/baseDstu3/Observation\" target=\"_blank\" title=\"http://fhirtest.uhn.ca/baseDstu3/Observation\">http://fhirtest.uhn.ca/baseDstu3/Observation</a> I get:</p>\n<p>{<br>\n    \"resourceType\": \"OperationOutcome\",<br>\n    \"text\": {<br>\n        \"status\": \"generated\",<br>\n        \"div\": \"&lt;div xmlns=\\\"http://www.w3.org/1999/xhtml\\\"&gt;&lt;h1&gt;Operation Outcome&lt;/h1&gt;&lt;table border=\\\"0\\\"&gt;&lt;tr&gt;&lt;td style=\\\"font-weight: bold;\\\"&gt;INFORMATION&lt;/td&gt;&lt;td&gt;[]&lt;/td&gt;&lt;td&gt;&lt;pre&gt;Successfully created resource \\\"Observation/15241/_history/1\\\" in 3ms&lt;/pre&gt;&lt;/td&gt;\\n\\t\\t\\t\\t\\t\\n\\t\\t\\t\\t\\n\\t\\t\\t&lt;/tr&gt;\\n\\t\\t\\t&lt;tr&gt;\\n\\t\\t\\t\\t&lt;td style=\\\"font-weight: bold;\\\"&gt;INFORMATION&lt;/td&gt;\\n\\t\\t\\t\\t&lt;td&gt;[]&lt;/td&gt;\\n\\t\\t\\t\\t\\n\\t\\t\\t\\t\\t\\n\\t\\t\\t\\t\\t\\n\\t\\t\\t\\t\\t\\t&lt;td&gt;&lt;pre&gt;No issues detected during validation&lt;/pre&gt;&lt;/td&gt;\\n\\t\\t\\t\\t\\t\\n\\t\\t\\t\\t\\n\\t\\t\\t&lt;/tr&gt;\\n\\t\\t&lt;/table&gt;\\n\\t&lt;/div&gt;\"<br>\n    },<br>\n    \"issue\": [<br>\n        {<br>\n            \"severity\": \"information\",<br>\n            \"code\": \"informational\",<br>\n            \"diagnostics\": \"Successfully created resource \\\"Observation/15241/_history/1\\\" in 3ms\"<br>\n        },<br>\n        {<br>\n            \"severity\": \"information\",<br>\n            \"code\": \"informational\",<br>\n            \"diagnostics\": \"No issues detected during validation\"<br>\n        }<br>\n    ]<br>\n}</p>\n<p>Are you saying that there ought to be a URL for the version created in a location part of the OperationOutcome?</p>",
+        "id": 153935517,
+        "sender_full_name": "Michael Christensen",
+        "timestamp": 1517921925
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191521\">@Michael Christensen</span> - check the HTTP header 'location'. See also <a href=\"https://www.hl7.org/fhir/http.html#create\" target=\"_blank\" title=\"https://www.hl7.org/fhir/http.html#create\">https://www.hl7.org/fhir/http.html#create</a></p>",
+        "id": 153935526,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1517925009
+    },
+    {
+        "content": "<p>You could patch the <a href=\"https://github.com/jamesagnew/hapi-fhir/blob/master/hapi-fhir-jpaserver-base/src/main/java/ca/uhn/fhir/jpa/dao/dstu3/FhirResourceDaoDstu3.java\" target=\"_blank\" title=\"https://github.com/jamesagnew/hapi-fhir/blob/master/hapi-fhir-jpaserver-base/src/main/java/ca/uhn/fhir/jpa/dao/dstu3/FhirResourceDaoDstu3.java\">FhirResourceDaoDstu3</a> (or r4) in the createOperationOutcome and add a value to the location attribute ... given that you use the HAPI FHIR impl.</p>",
+        "id": 153935540,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1517926288
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191427\">@Jens Villadsen</span> Ah, that \"Location\", now I see that <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> meant. Thanks. I will probably just do the same in my Kafka messaging as I am designing these messages with a header and body structure as well.</p>",
+        "id": 153935542,
+        "sender_full_name": "Michael Christensen",
+        "timestamp": 1517927867
+    },
+    {
+        "content": "<p>If you are using messaging, why not use FHIR messaging? <a href=\"http://build.fhir.org/messaging.html\" target=\"_blank\" title=\"http://build.fhir.org/messaging.html\">http://build.fhir.org/messaging.html</a></p>",
+        "id": 153935547,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1517932977
+    },
+    {
+        "content": "<p>And if all you're doing is asking for a bunch of creates &amp; updates, you might also look at Batch and Transaction, which have a bit less overhead than messaging - and which don't require site-to-site negotiation about message contents, event codes, etc.</p>",
+        "id": 153935562,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1517943213
+    },
+    {
+        "content": "<p>Working on a microservice based infrastructure, very loosely coupled services, event sourcing style messaging. Involves more than just creates and updates and also quite a bit of non-FHIR content. I have had a look at FHIR messaging a while back, but will look again. Thanks.</p>",
+        "id": 153935736,
+        "sender_full_name": "Michael Christensen",
+        "timestamp": 1517996653
+    }
+]

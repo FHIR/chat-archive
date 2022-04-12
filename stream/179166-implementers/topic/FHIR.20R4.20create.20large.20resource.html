@@ -1,0 +1,82 @@
+---
+layout: page
+title: "FHIR Chat  · FHIR R4 create large resource · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20R4.20create.20large.20resource.html">FHIR R4 create large resource</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="248342474"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20R4%20create%20large%20resource/near/248342474" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Pavel Pilar <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20R4.20create.20large.20resource.html#248342474">(Aug 04 2021 at 12:25)</a>:</h4>
+<p>Hello,<br>
+we are struggling with large payloads in FHIR resource update. One of our codesystems has roughly 200MB in size and although we updated settings on ES side as well as FHIR server and DB side, we still cannot create the resource.<br>
+Currently it fails between ES, FHIR server and DB probably on another timeout.</p>
+<p>[Hibernate Search: Elasticsearch transport thread-2] ERROR o.h.s.exception.impl.LogErrorHandler [LogErrorHandler.java:71] HSEARCH000058: Exception occurred org.hibernate.search.exception.SearchException: HSEARCH400007: Elasticsearch request failed.<br>
+Request: PUT /ca.uhn.fhir.jpa.model.entity.resourcetable/ca.uhn.fhir.jpa.model.entity.ResourceTable/3102 with parameters {}<br>
+Response: null<br>
+...<br>
+at org.apache.http.impl.nio.reactor.AbstractMultiworkerIOReactor$Worker.run(AbstractMultiworkerIOReactor.java:588)<br>
+at java.lang.Thread.run(Thread.java:748)<br>
+Caused by: java.io.IOException: Connection reset by peer</p>
+<p>We are using hapi fhir r4 5.1 version and the FHIR client update method to create a resource. Our solution is deployed in AWS. We are using RDS for the database.</p>
+<p>Are there any guidelines for creating such a large resource (CodeSystem) in FHIR server?<br>
+Thanks</p>
+
+
+
+<a name="248375890"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20R4%20create%20large%20resource/near/248375890" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Kiel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20R4.20create.20large.20resource.html#248375890">(Aug 04 2021 at 16:47)</a>:</h4>
+<p>Such big resources are rather unusual in FHIR. You may need a terminology server that has special support for this CodeSystem in order to not needing it in literal form. What CodeSystem is it?</p>
+<p>Nevertheless, although I can't help you with HAPI, I would be pleased if you give <a href="https://github.com/samply/blaze">Blaze</a> a try. Blaze uses an embedded RocksDB Database with a focus on performance.</p>
+<p>I generated a Codesystem using this Clojure code:</p>
+<div class="codehilite"><pre><span></span><code>(require &#39;[jsonista.core :as j])
+
+  (-&gt;&gt; {:resourceType &quot;CodeSystem&quot;
+        :concept
+        (for [i (range 500000)]
+          {:code (format &quot;code-%d&quot; i)
+           :property
+           (for [i (range 10)]
+             {:code (format &quot;property-code-%d&quot; i)
+              :valueString (format &quot;property-value-%d&quot; i)})})}
+       (j/write-value-as-string)
+       (spit &quot;test.json&quot;))
+</code></pre></div>
+<p>started Blaze with:</p>
+<div class="codehilite"><pre><span></span><code>docker run -p 8080:8080 -v blaze-data:/app/data --rm -e JAVA_TOOL_OPTIONS=-Xmx4g samply/blaze:0.11.0
+</code></pre></div>
+<p>on a Linux desktop machine with 32 GB RAM and quite slow SSD. Uploaded the CodeSystem using:</p>
+<div class="codehilite"><pre><span></span><code>% curl -d @test.json -H &#39;content-type:application/json&#39; http://localhost:8080/fhir/CodeSystem &gt; response.json
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  606M  100  303M  100  303M  4684k  4684k  0:01:06  0:01:06 --:--:-- 56.4M
+</code></pre></div>
+<p>from my Mac over LAN. As you can see, my CodeSystem is 303 MB in size and the upload incl. complete download from the response took about 1 minute.</p>
+
+
+
+<a name="248390319"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20R4%20create%20large%20resource/near/248390319" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Silva <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20R4.20create.20large.20resource.html#248390319">(Aug 04 2021 at 18:40)</a>:</h4>
+<p><span class="user-mention" data-user-id="421061">@Pavel Pilar</span> - Are you trying to upload SNOMED or LOINC ?   We had trouble trying to load these LARGE CodeSystems to HAPI (earlier version though).   I seem to remember <span class="user-mention" data-user-id="191319">@James Agnew</span> mentioning that there is (or will be) support for some of these large CodeSystems already being loaded (or loaded in some way to get around their large size and network timeouts).    Probably good to ask this question in the <a class="stream" data-stream-id="179167" href="/#narrow/stream/179167-hapi">#hapi</a>  channel.</p>
+
+
+
+<a name="248417037"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20R4%20create%20large%20resource/near/248417037" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Jordan <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20R4.20create.20large.20resource.html#248417037">(Aug 04 2021 at 22:26)</a>:</h4>
+<p><span class="user-mention" data-user-id="298707">@John Silva</span> - most of the FHIR Terminology Servers don't place all the concepts from large Code Systems (e.g. SNOMED CT and LOINC) in CodeSystem resources - i.e. they set the value of CodeSystem.content to <code>not-present</code>.  In these cases, the content is provided via ValueSets and, even then, some of the Servers impose restrictions on the number of concepts that can be returned from any given request, even allowing for paging. My approach is to persist SNOMED CT, LOINC, and others in a database and use 'standard' multi-layered architecture to service requests; others might use the file system or even place the entire code system in memory.</p>
+
+
+
+<a name="248446155"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20R4%20create%20large%20resource/near/248446155" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Pavel Pilar <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20R4.20create.20large.20resource.html#248446155">(Aug 05 2021 at 07:28)</a>:</h4>
+<p><span class="user-mention" data-user-id="298707">@John Silva</span> - We are trying to upload part of HMDB. About 120000 concepts. Thanks <span class="user-mention" data-user-id="197470">@Alexander Kiel</span> for hints with Blaze, I'll give it a try. I'll also ask question on <a class="stream" data-stream-id="179167" href="/#narrow/stream/179167-hapi">#hapi</a> channel.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

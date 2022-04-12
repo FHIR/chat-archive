@@ -1,0 +1,92 @@
+[
+    {
+        "content": "<p>...why does my R4 Azure API for FHIR return instead a general query for the resource and ignore the invalid query parameter? Should the response not be a rejection for invalid query variable? </p>\n<p>My situation in a bit more detail:</p>\n<ol>\n<li>The mistaken query variable: I was trying to send a GET req for \" [Base URL]/QuestionnaireResponse?<strong>reference=####</strong> \", when in actuality I should have been querying for \" [Base URL]/QuestionnaireResponse?identifier=#### \"</li>\n<li>When I sent this incorrect URI to the backend, instead I was returned a 200 but for a general query on the resource (as if I sent a GET to  \" [Base URL]/QuestionnaireResponse\" which effectively gave me all of the available resources. I understand how this would be a super useful feature in most scenarios, but for mine it would be preferred to only return the query I sent or otherwise a 404/500 response. </li>\n</ol>\n<p>I guess my main two questions are: Is this standard for Azure API for FHIR? &amp;&amp; Are there additional variables I can add to my query URI to perhaps ensure my desired return flow? </p>\n<p>Thanks as always for the great insight all. Look forward to hearing from the community</p>",
+        "id": 199525440,
+        "sender_full_name": "Michael Cox",
+        "timestamp": 1591118774
+    },
+    {
+        "content": "<p>Ignoring unsupported search parameters is the standard (and recommended) server behavior because it's more efficient.  If it failed, the client would have to reformulate the query to exclude the unsupported parameter (and write and test the complex code to handle that), then re-query and filter the data locally.  The default mode of just filter with what you can means the only code the client needs to write is to filter the data locally.  The server always declares what parameters it paid attention to.</p>",
+        "id": 199526802,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1591119409
+    },
+    {
+        "content": "<p>In my experience most developers have found this behaviour confusing and frustrating, so we added a configuration option to the Google FHIR store to enforce strict handling by default.</p>",
+        "id": 199528246,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1591120085
+    },
+    {
+        "content": "<p>It sort of depends on whether you're developing a client for a single server or for a variety.  The API is optimized for those who are developing for a variety.</p>",
+        "id": 199528531,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1591120231
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> Thank you for the valuable insight. <br>\n<span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span> thanks for your perspective as well, this discussion was helpful.</p>",
+        "id": 199530721,
+        "sender_full_name": "Michael Cox",
+        "timestamp": 1591121254
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"308460\">@Michael Cox</span>  You can add this to indicate client's preference. Again, depends on if server supports that. <br>\n<code>Prefer: handling=strict: Client requests that the server return an error for any unknown or unsupported parameter</code></p>",
+        "id": 199535688,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1591123503
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191506\">@Yunwei Wang</span> Ah interesting. Sorry, is that a header or something in the param you are describing?</p>",
+        "id": 199536904,
+        "sender_full_name": "Michael Cox",
+        "timestamp": 1591124078
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span> -- in my opinion, it's not only \"confusing and frustrating\" for a server to ignore unsupported query parameters; I believe it's dangerous (at least in the healthcare domain).  If a server can't properly provide what a client asked for, it should be very clear about that.  But... I've argued for this before and haven't won yet. ;-)</p>",
+        "id": 199538527,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1591124799
+    },
+    {
+        "content": "<p>R4 added the pref so a client could describe the behavior, as mentioned above. It still gets interesting on if you fail for \"known unsupported\" vs. others you don't know about (that may be added by network or things between)... Also apps can query the params as described in the conformance statement vs. discovering late/after sending the req</p>",
+        "id": 199545657,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1591128338
+    },
+    {
+        "content": "<p>could be done at the same time it discovers if the resource/action is supported at all by the server.</p>",
+        "id": 199545822,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1591128393
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191469\">Chris Moesel</span> <a href=\"#narrow/stream/179166-implementers/topic/When.20an.20invalid.20query.20parameter.20variable.20is.20attempted.2E.2E.2E/near/199538527\">said</a>:</p>\n<blockquote>\n<p><span class=\"user-mention silent\" data-user-id=\"197072\">Paul Church</span> -- in my opinion, it's not only \"confusing and frustrating\" for a server to ignore unsupported query parameters; I believe it's dangerous (at least in the healthcare domain).  If a server can't properly provide what a client asked for, it should be very clear about that.  But... I've argued for this before and haven't won yet. ;-)</p>\n</blockquote>\n<p>The theory is that a server ignoring a query parameter will ONLY have the affect of returning MORE results than the client is expecting. Meaning that query parameters only constrain the results, not expand the results.</p>",
+        "id": 199546380,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1591128620
+    },
+    {
+        "content": "<p>Understood.  It's just that more results isn't necessarily safer.  Consider <code>/Condition?verification-status=confirmed</code> for a server that doesn't support searches via <code>verification-status</code> -- you might get some Conditions that are <code>refuted</code> or <code>entered-in-error</code>.  Quite the opposite of what the client wanted!</p>\n<p>I do appreciate that there are provisions for clients to pro-actively say they don't want it this way, or to check conformance for what is supported; I just feel like we should have defaulted to the safer approach rather than requiring \"opt in\" to the safer approach.  Unfortunately, I don't think every developer reads enough of the spec to understand that servers can silently ignore their spec-valid search parameters and that they (the client) need to defend against that.  But... I think that's all normative now, so I'll try to stay quiet. ;-)</p>",
+        "id": 199549280,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1591129916
+    },
+    {
+        "content": "<p>There are lots of situations in RESTful spaces where additional parameters end up in the URL for transport reasons.  Failing based on the presence of those would be quite problematic.</p>",
+        "id": 199549655,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1591130068
+    },
+    {
+        "content": "<p>The spec is quite clear that implementers SHALL check the self link of query responses and handle the situation of data not being filtered as much as they might wish.</p>",
+        "id": 199549690,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1591130100
+    },
+    {
+        "content": "<p>I have a server that only rejects if you don't have specific search params in specific contexts.</p>",
+        "id": 202062949,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1593159206
+    }
+]

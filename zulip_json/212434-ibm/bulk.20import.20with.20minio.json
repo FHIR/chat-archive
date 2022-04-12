@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p>Hey guys, is there an example of bulk import with minio somewhere in the codebase ? I get an error \"Error while processing the $import request\" (which is not very helpful). I'm running the server in docker using this bulkdata config:</p>\n<div class=\"codehilite\"><pre><span></span><code>        &quot;bulkdata&quot;: {\n            &quot;applicationName&quot;: &quot;fhir-bulkimportexport-webapp&quot;,\n            &quot;moduleName&quot;: &quot;fhir-bulkimportexport.war&quot;,\n            &quot;validBaseUrlsDisabled&quot;: true,\n            &quot;implementation_type&quot;: &quot;cos&quot;,\n            &quot;jobParameters&quot;: {\n                &quot;cos.bucket.name&quot;: &quot;fhirbulkdata&quot;,\n                &quot;cos.location&quot;: &quot;us&quot;,\n                &quot;cos.endpoint.internal&quot;: &quot;http://minio:9000&quot;,\n                &quot;cos.endpoint.external&quot;: &quot;http://minio:9000&quot;,\n                &quot;cos.credential.ibm&quot;: &quot;N&quot;,\n                &quot;cos.api.key&quot;: &quot;minio&quot;,\n                &quot;cos.srvinst.id&quot;: &quot;change-password&quot;\n            }\n        }\n</code></pre></div>\n<p>And my HTTP request looks as follows:</p>\n<div class=\"codehilite\"><pre><span></span><code>curl -k -v -X POST -u &quot;fhiruser:change-password&quot; -H &#39;Content-Type: application/fhir+json&#39; &#39;https://localhost:9443/fhir-server/api/v4/$import&#39; -d &#39;{\n    &quot;resourceType&quot;: &quot;Parameters&quot;,\n    &quot;id&quot;: &quot;30321130-5032-49fb-be54-9b8b82b2445a&quot;,\n    &quot;parameter&quot;: [\n        {\n            &quot;name&quot;: &quot;inputFormat&quot;,\n            &quot;valueString&quot;: &quot;application/fhir+ndjson&quot;\n        },\n        {\n            &quot;name&quot;: &quot;inputSource&quot;,\n            &quot;valueUri&quot;: &quot;https://localhost:9443/whatever&quot;\n        },\n        {\n            &quot;name&quot;: &quot;input&quot;,\n            &quot;part&quot;: [\n                {\n                    &quot;name&quot;: &quot;type&quot;,\n                    &quot;valueString&quot;: &quot;Patient&quot;\n                },\n                {\n                    &quot;name&quot;: &quot;url&quot;,\n                    &quot;valueUrl&quot;: &quot;http://minio:9000/fhirbulkdata/test-import.ndjson&quot;\n                }\n            ]\n        },\n        {\n            &quot;name&quot;: &quot;storageDetail&quot;,\n            &quot;valueString&quot;: &quot;aws-s3&quot;\n        }\n    ]\n}&#39;\n</code></pre></div>",
+        "id": 221643786,
+        "sender_full_name": "Simon Vadée",
+        "timestamp": 1609852140
+    },
+    {
+        "content": "<p>is it because minio is using http instead of https (does not have a self-signed certificate?)</p>",
+        "id": 221643907,
+        "sender_full_name": "Simon Vadée",
+        "timestamp": 1609852203
+    },
+    {
+        "content": "<p>Hi Simon, I assume that error message is in the OperationOutcome from either the <code>$import</code> request or the <code>$bulkdata-status</code> request...which one?</p>",
+        "id": 221644855,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1609852912
+    },
+    {
+        "content": "<p>from the $import one</p>",
+        "id": 221645634,
+        "sender_full_name": "Simon Vadée",
+        "timestamp": 1609853422
+    },
+    {
+        "content": "<p>ok, then it seems like its not even able to submit the job</p>",
+        "id": 221645656,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1609853446
+    },
+    {
+        "content": "<p>can you check the server logs (messages.log) for more information?</p>",
+        "id": 221645677,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1609853469
+    },
+    {
+        "content": "<p>wrt examples, I believe our CI executes both $import and $export operations against minIO on each run.  the specific tests are at <code>fhir-server-test/src/test/java/com/ibm/fhir/server/test/bulkdata</code> but the more interesting bit is the setup which uses docker-compose to create the minio cluster and a configured fhir server that uses it</p>",
+        "id": 221645895,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1609853638
+    },
+    {
+        "content": "<p>that test automation is at <code>build/docker</code> and the source for the fhir-server-config that uses it is at <a href=\"https://github.com/IBM/FHIR/blob/master/fhir-server/liberty-config/config/default/fhir-server-config-db2.json#L129-L140\">https://github.com/IBM/FHIR/blob/master/fhir-server/liberty-config/config/default/fhir-server-config-db2.json#L129-L140</a></p>",
+        "id": 221646098,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1609853771
+    },
+    {
+        "content": "<p>I can't find messages.log anywhere (I run on 4.5.3)</p>",
+        "id": 221646942,
+        "sender_full_name": "Simon Vadée",
+        "timestamp": 1609854305
+    },
+    {
+        "content": "<p>yes that's what I'm looking at! there are very few differences with my local setup (i'll try using the exact same config)</p>",
+        "id": 221647099,
+        "sender_full_name": "Simon Vadée",
+        "timestamp": 1609854384
+    },
+    {
+        "content": "<p>found the log file, here's the stacktrace:</p>\n<div class=\"codehilite\"><pre><span></span><code>[1/5/21 14:11:57:956 UTC] 0000002d com.ibm.fhir.server.resources.FHIRResource                   E Error while processing the $import request\ncom.ibm.fhir.exception.FHIROperationException: Error while processing the $import request  [probeId=ac-16-0-3-33dd54ae-3003-4db0-9277-cc41e4ad14d6]\n    at com.ibm.fhir.operation.bulkdata.processor.impl.CosExportImpl.importBulkData(CosExportImpl.java:196)\n    at com.ibm.fhir.operation.bulkdata.ImportOperation.doInvoke(ImportOperation.java:66)\n    at com.ibm.fhir.server.operation.spi.AbstractOperation.invoke(AbstractOperation.java:54)\n    at com.ibm.fhir.server.util.FHIRRestHelper.doInvoke(FHIRRestHelper.java:1038)\n    at com.ibm.fhir.server.resources.Operation.invoke(Operation.java:127)\n    at com.ibm.fhir.server.resources.Operation$Proxy$_$$_WeldClientProxy.invoke(Unknown Source)\n    at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)\n    at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)\n    at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)\n    at java.lang.reflect.Method.invoke(Method.java:498)\n    at com.ibm.ws.jaxrs20.cdi.component.JaxRsFactoryImplicitBeanCDICustomizer.serviceInvoke(JaxRsFactoryImplicitBeanCDICustomizer.java:339)\n    at com.ibm.ws.jaxrs20.server.LibertyJaxRsServerFactoryBean.performInvocation(LibertyJaxRsServerFactoryBean.java:641)\n    at com.ibm.ws.jaxrs20.server.LibertyJaxRsInvoker.performInvocation(LibertyJaxRsInvoker.java:160)\n    at org.apache.cxf.service.invoker.AbstractInvoker.invoke(AbstractInvoker.java:96)\n    at com.ibm.ws.jaxrs20.server.LibertyJaxRsInvoker.invoke(LibertyJaxRsInvoker.java:273)\n    at org.apache.cxf.jaxrs.JAXRSInvoker.invoke(JAXRSInvoker.java:210)\n    at com.ibm.ws.jaxrs20.server.LibertyJaxRsInvoker.invoke(LibertyJaxRsInvoker.java:444)\n    at org.apache.cxf.jaxrs.JAXRSInvoker.invoke(JAXRSInvoker.java:112)\n    at org.apache.cxf.interceptor.ServiceInvokerInterceptor$1.run(ServiceInvokerInterceptor.java:61)\n    at org.apache.cxf.interceptor.ServiceInvokerInterceptor.handleMessage(ServiceInvokerInterceptor.java:99)\n    at org.apache.cxf.phase.PhaseInterceptorChain.doIntercept(PhaseInterceptorChain.java:318)\n    at org.apache.cxf.transport.ChainInitiationObserver.onMessage(ChainInitiationObserver.java:123)\n    at org.apache.cxf.transport.http.AbstractHTTPDestination.invoke(AbstractHTTPDestination.java:273)\n    at com.ibm.ws.jaxrs20.endpoint.AbstractJaxRsWebEndpoint.invoke(AbstractJaxRsWebEndpoint.java:136)\n    at com.ibm.websphere.jaxrs.server.IBMRestServlet.handleRequest(IBMRestServlet.java:146)\n    at com.ibm.websphere.jaxrs.server.IBMRestServlet.doPost(IBMRestServlet.java:104)\n    at javax.servlet.http.HttpServlet.service(HttpServlet.java:706)\n    at com.ibm.websphere.jaxrs.server.IBMRestServlet.service(IBMRestServlet.java:96)\n    at com.ibm.ws.webcontainer.servlet.ServletWrapper.service(ServletWrapper.java:1230)\n    at com.ibm.ws.webcontainer.servlet.ServletWrapper.handleRequest(ServletWrapper.java:729)\n    at com.ibm.ws.webcontainer.servlet.ServletWrapper.handleRequest(ServletWrapper.java:426)\n    at com.ibm.ws.webcontainer.filter.WebAppFilterChain.invokeTarget(WebAppFilterChain.java:182)\n    at com.ibm.ws.webcontainer.filter.WebAppFilterChain.doFilter(WebAppFilterChain.java:93)\n    at com.ibm.fhir.server.filter.rest.FHIRRestServletFilter.doFilter(FHIRRestServletFilter.java:139)\n    at javax.servlet.http.HttpFilter.doFilter(HttpFilter.java:127)\n    at com.ibm.ws.webcontainer.filter.FilterInstanceWrapper.doFilter(FilterInstanceWrapper.java:201)\n    at com.ibm.ws.webcontainer.filter.WebAppFilterChain.doFilter(WebAppFilterChain.java:90)\n    at com.ibm.fhir.server.filter.rest.FHIRRestAuthorizationServletFilter.doFilter(FHIRRestAuthorizationServletFilter.java:86)\n    at com.ibm.ws.webcontainer.filter.FilterInstanceWrapper.doFilter(FilterInstanceWrapper.java:201)\n    at com.ibm.ws.webcontainer.filter.WebAppFilterChain.doFilter(WebAppFilterChain.java:90)\n    at com.ibm.ws.webcontainer.filter.WebAppFilterManager.doFilter(WebAppFilterManager.java:1001)\n    at com.ibm.ws.webcontainer.filter.WebAppFilterManager.invokeFilters(WebAppFilterManager.java:1139)\n    at com.ibm.ws.webcontainer.filter.WebAppFilterManager.invokeFilters(WebAppFilterManager.java:1010)\n    at com.ibm.ws.webcontainer.servlet.CacheServletWrapper.handleRequest(CacheServletWrapper.java:75)\n    at com.ibm.ws.webcontainer40.servlet.CacheServletWrapper40.handleRequest(CacheServletWrapper40.java:83)\n    at com.ibm.ws.webcontainer.WebContainer.handleRequest(WebContainer.java:936)\n    at com.ibm.ws.webcontainer.osgi.DynamicVirtualHost$2.run(DynamicVirtualHost.java:279)\n    at com.ibm.ws.http.dispatcher.internal.channel.HttpDispatcherLink$TaskWrapper.run(HttpDispatcherLink.java:1134)\n    at com.ibm.ws.http.dispatcher.internal.channel.HttpDispatcherLink.wrapHandlerAndExecute(HttpDispatcherLink.java:415)\n    at com.ibm.ws.http.dispatcher.internal.channel.HttpDispatcherLink.ready(HttpDispatcherLink.java:374)\n    at com.ibm.ws.http.channel.internal.inbound.HttpInboundLink.handleDiscrimination(HttpInboundLink.java:577)\n    at com.ibm.ws.http.channel.internal.inbound.HttpInboundLink.handleNewRequest(HttpInboundLink.java:511)\n    at com.ibm.ws.http.channel.internal.inbound.HttpInboundLink.processRequest(HttpInboundLink.java:359)\n    at com.ibm.ws.http.channel.internal.inbound.HttpInboundLink.ready(HttpInboundLink.java:326)\n    at com.ibm.ws.http.channel.h2internal.H2HttpInboundLinkWrap.ready(H2HttpInboundLinkWrap.java:98)\n    at com.ibm.ws.http.channel.h2internal.H2StreamProcessor$Http2Ready.run(H2StreamProcessor.java:1787)\n    at com.ibm.ws.threading.internal.ExecutorServiceImpl$RunnableWrapper.run(ExecutorServiceImpl.java:239)\n    at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)\n    at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)\n    at java.lang.Thread.run(Thread.java:823)\nCaused by: java.lang.NullPointerException\n    at org.eclipse.osgi.internal.loader.BundleLoader.findResource(BundleLoader.java:611)\n    at org.eclipse.osgi.internal.loader.ModuleClassLoader.getResource(ModuleClassLoader.java:216)\n    at com.ibm.ws.classloading.internal.GatewayClassLoader.findResource(GatewayClassLoader.java:134)\n    at com.ibm.ws.classloading.internal.GatewayClassLoader.getResource(GatewayClassLoader.java:116)\n    at java.lang.ClassLoader.getResource(ClassLoader.java:595)\n    at com.ibm.fhir.operation.bulkdata.client.BulkDataClient.loadKeyStoreFile(BulkDataClient.java:130)\n    at com.ibm.fhir.operation.bulkdata.client.BulkDataClient.getWebTarget(BulkDataClient.java:113)\n    at com.ibm.fhir.operation.bulkdata.client.BulkDataClient.submitImport(BulkDataClient.java:609)\n    at com.ibm.fhir.operation.bulkdata.processor.impl.CosExportImpl.importBulkData(CosExportImpl.java:180)\n    ... 59 more\n</code></pre></div>",
+        "id": 221649857,
+        "sender_full_name": "Simon Vadée",
+        "timestamp": 1609856062
+    },
+    {
+        "content": "<p>ok looks like I need to setup a truststore</p>",
+        "id": 221650513,
+        "sender_full_name": "Simon Vadée",
+        "timestamp": 1609856430
+    }
+]

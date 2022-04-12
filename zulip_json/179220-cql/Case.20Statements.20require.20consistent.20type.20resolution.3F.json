@@ -1,0 +1,38 @@
+[
+    {
+        "content": "<p>I'm trying to work with the choice data in fhir resources, and would really like to handle with dates or periods across the resources where there is a choice. I have this function.</p>\n<div class=\"codehilite\"><pre><span></span><code>define function msConvertEffective(medStatement FHIR.MedicationStatement):\n  case\n    when (medStatement.effective as FHIR.dateTime) is not null then (medStatement.effective as FHIR.dateTime).value\n    when (medStatement.effective as FHIR.Period) is not null then ToInterval((medStatement.effective as FHIR.Period))\n    else null\n  end\n</code></pre></div>\n<p>But it creates this error message.</p>\n<div class=\"codehilite\"><pre><span></span><code>&gt;&gt; Error [20:3] Expected an expression of type &#39;System.DateTime&#39;, but found an expression of type &#39;Interval of System.DateTime&#39;.\n</code></pre></div>\n<p>And when I switch the order of the two case statements, I find that</p>\n<div class=\"codehilite\"><pre><span></span><code>Error [20:3] Expected an expression of type &#39;Interval of System.DateTime&#39;, but found an expression of type &#39;System.DateTime&#39;.\n</code></pre></div>\n<p>So it seems that whatever the first type resolution is in a switch case statement, all other types must match. I would rather not use the if else statements as they read poorly, and these could scale out to all choice fields in the future rather easily. I'm also unsure as to how I could convert this to work with lists, and not just individual resources.</p>",
+        "id": 243671490,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1624463163
+    },
+    {
+        "content": "<p>Hi Michael!</p>\n<p>In principle you should be able to do that. In practice the cql-translator isn't quite smart enough to do type inference all the way through conditionals. A work-around is to cast the first <code>then</code> statement to the type you want. Here's an example (also handles a List):</p>\n<div class=\"codehilite\" data-code-language=\"cql\"><pre><span></span><code>  define function msConvertEffective(medStatments List&lt;FHIR.MedicationStatement&gt;):\n    medStatments S\n      return\n        case\n          when (S.effective as FHIR.dateTime) is not null then ((S.effective as FHIR.dateTime).value as Choice&lt;DateTime, Interval&lt;DateTime&gt;&gt;)\n          when (S.effective as FHIR.Period) is not null then FHIRHelpers.ToInterval((S.effective as FHIR.Period))\n          else null\n        end\n</code></pre></div>",
+        "id": 243832316,
+        "sender_full_name": "JP",
+        "timestamp": 1624561661
+    },
+    {
+        "content": "<p>thanks JP this is illuminating a lot for me.<br>\nWhat is  this line called here? It acts like an unwrapper/iterator.</p>\n<div class=\"codehilite\"><pre><span></span><code> medStatments S\n</code></pre></div>",
+        "id": 243851848,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1624571755
+    },
+    {
+        "content": "<p>That's the syntax for a query in CQL:</p>\n<p><code>&lt;query source&gt; &lt;alias&gt;</code><br>\n<code>medStatments S</code></p>\n<p><a href=\"https://cql.hl7.org/02-authorsguide.html#queries\">https://cql.hl7.org/02-authorsguide.html#queries</a></p>\n<p>Any list can be a query source. You typically see this construct when doing retrieves:</p>\n<div class=\"codehilite\" data-code-language=\"cql\"><pre><span></span><code>[Encounter: \"Inpatient\"] E\n  where duration in days of E.period &gt;= 120\n</code></pre></div>",
+        "id": 243852952,
+        "sender_full_name": "JP",
+        "timestamp": 1624572446
+    },
+    {
+        "content": "<p>It's not an iterator or unwrapper per se since CQL is declarative (like SQL) as opposed to imperative (like Java, C, etc) but the outcome in this use case is the same. You're basically saying \"for each thing in this List, perform this transformation\".</p>",
+        "id": 243852975,
+        "sender_full_name": "JP",
+        "timestamp": 1624572467
+    },
+    {
+        "content": "<p>Ah ok,  so all statements should generally start with a query source, and a query does not always have to be a retrieval, but could be an existing definition or a parameter in a function. Thank you!</p>",
+        "id": 244150712,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1624889740
+    }
+]

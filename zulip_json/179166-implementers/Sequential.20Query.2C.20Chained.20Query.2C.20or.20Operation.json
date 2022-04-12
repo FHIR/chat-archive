@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p>&lt;Apologies for any newbie missteps...&gt;<br>\nIHE Radiology is investigating using FHIR to query for metadata that will be associated with the capture of encounter-based images, and a number of FHIR questions have come up.  I'll split them across a couple of separate topics (most of which will be more brief...).</p>\n<p>An imaging modality (which might be a smartphone app, or a laptop application acting on behalf of an SLR camera, etc) is interacting with what we're calling an Encounter Manager (could be part of the EMR, or a standalone department system, etc).  The modality knows a few details (maybe Patient ID, and/or Admission ID, and/or Department, and/or operator name, etc.) and it wants to be given patient demographics (name, DOB, IDs, gender, ...), encounter info (institution name, department name, admission ID, admission date/time, reason for visit,...) procedure info (accession #, type of imaging, body part, ...).  We're not expecting the encounter manager to necessarily have these resources instantiated; it can create a dataset on the fly if it likes.  In the patient ID case, there might be only one result.  If the query key is for \"dermatology clinic this morning\", there will be multiple results for the operator to select from (worklist-like).</p>\n<p>Should this be handled as:<br>\n- sequential query (query for a patient resource, then query for encounters of the patient, then query for service requests, unless your only key is the admission ID, then query for encounter and use that to get the patient, etc.) <br>\n- chained query (query for a service request with any known patient and/or encounter details populated)<br>\n- operation (which I haven't investigated but might match the \"tell me something and I'll tell you something back\" model here)</p>\n<p>It's currently being written up as a sequential query under the assumption that's simpler for servers and the clients will tolerate handling multiple query patterns and resource navigation.</p>\n<p>Advice and insights welcome. :-)</p>",
+        "id": 159194403,
+        "sender_full_name": "Kevin O'Donnell",
+        "timestamp": 1550872303
+    },
+    {
+        "content": "<p>Sequential query is safest - and least efficient.  Chained queries or batch queries are more efficient but may not be as widely supported.  What makes sense sort of depends on your environment.  If efficiency isn't critical, sticking with individual queries makes the most sense.  If efficiency matters more, then use one of the other mechanisms if you can (based on CapabilityStatement) and perhaps be prepared to fall back to individual queries if need be.</p>",
+        "id": 159196302,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1550873891
+    },
+    {
+        "content": "<p>The breadth of support is what tilted the committee toward Sequential. </p>\n<p>The con to that choice isn't so much efficiency (we're not expecting large return sets and a couple queries should still only take a couple seconds at most I'd imagine) but rather the implementation complexity for the (many) clients.  Instead of \"fill in the slots in the query template and parse the results\" they need logic to recognize different situations, sequence and relate multiple queries appropriately, etc. </p>\n<p>What are operations? And are they appropriate here?</p>",
+        "id": 159199309,
+        "sender_full_name": "Kevin O'Donnell",
+        "timestamp": 1550876750
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"202389\">@Kevin O'Donnell</span>, an operation is a little like a DB stored procedure. You invoke the operation (which may or may not require input data) and you get back a response. The operation may trigger an action on the server, may cause something to happen that isn't defined in the standard RESTful interface,  or it could be an \"alias\" for a complex set of REST operations.</p>\n<p>There are a small number of operations defined in the FHIR standard, but in the IHE case, you could define an operation that a compliant system would to implement. Obviously, this means that for a system to be compliant with your profile, it would need this special behavior; a vanilla FHIR server obviously wouldn't have your special operation.</p>\n<p>In your case, the advantage of an operation is that you could use the operation to push some of the logic onto the server (such as navigating the encounter or organization hierarchies). In your sequential option, that logic would be pushed onto the client. In your chained option, I don't know how the logic of navigating encounter and organization hierarchies would be handled.</p>",
+        "id": 159200615,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1550878104
+    },
+    {
+        "content": "<p>Operations are described here: <a href=\"http://build.fhir.org/operations\" target=\"_blank\" title=\"http://build.fhir.org/operations\">http://build.fhir.org/operations</a>.  If you define a custom operation, you've essentially closed interoperability to the small community you can convince to support the operation.  Operations are a reasonable alternative when you need something to happen that can't be accomplished by simply executing queries (e.g. validating a resource, expanding a valueset), but aren't a great alternative if base query capabilities already support the need.</p>",
+        "id": 159200621,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1550878130
+    },
+    {
+        "content": "<p>So using an operation might let us tune more specifically to the \"here's what I know; give me what you know I want\" situation of our use case, but would sacrifice interoperability.  </p>\n<p>Fair enough.  If at some point we are inclined to swing back from the sequential query to the single operation we can debate the relative merits of a chained query (for potentially on the fly resources) vs an operation.   If it takes us long enough maybe support for chained queries will have expanded. :-)</p>",
+        "id": 159201768,
+        "sender_full_name": "Kevin O'Donnell",
+        "timestamp": 1550879380
+    },
+    {
+        "content": "<p>Actually I should have said \"off the shelf interoperability\". (which is also a good thing)</p>",
+        "id": 159201855,
+        "sender_full_name": "Kevin O'Donnell",
+        "timestamp": 1550879422
+    },
+    {
+        "content": "<p>The $everything operation is an example of that.  It provides a way of executing a whole bunch of queries in a single go - and has support in Argonaut, US Core and other places, so it's reasonable to expect general interoperability around it.</p>",
+        "id": 159202126,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1550879665
+    },
+    {
+        "content": "<p>one way to get wider adoption is to propose an operation of sufficient utility that we can add to the spec. But it's reasonable to limit interop to your own community if your requirements (and implementers) are limited to your own community</p>",
+        "id": 159202226,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1550879766
+    },
+    {
+        "content": "<p>Yeah, what we were tinkering with initially was effectively something like GET ServiceRequest/$everything<br>\nTo Grahames point, if the sequential query isn't too challenging for clients we'll be set, and if there is pushback we can try to frame a value/utility statement for the \"targetted\" operation is see if that rationale holds together under the light of day.  For now we'll try the sequential.</p>",
+        "id": 159203634,
+        "sender_full_name": "Kevin O'Donnell",
+        "timestamp": 1550881216
+    },
+    {
+        "content": "<p>I can see wider applicability for ServiceRequest/$everything</p>",
+        "id": 159208802,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1550888306
+    },
+    {
+        "content": "<p>It does seem like it could be broadly useful.  If we come back to chained, we may try that.</p>",
+        "id": 159472243,
+        "sender_full_name": "Kevin O'Donnell",
+        "timestamp": 1551228444
+    }
+]

@@ -1,0 +1,608 @@
+[
+    {
+        "content": "<p>One of the things I'd like to add to my server between now and the new orleans is the ability to set up server side trigger processing on my server. For now, the range of the things that I anticipate can be adequately captured by these 2 use cases:</p>\n<ul>\n<li>I want someone to be able configure my server to reject an update to a resource if it would create a duplicate identifier on one of the identifiers in the resource</li>\n<li>I want someone to be able to be able to add a Patient to a List if either an Encounter or an observation meets certain criteria</li>\n</ul>\n<p>As far as options, I could approach this in one of a few ways:</p>\n<ul>\n<li>I could use the CDS stuff in FHIR - EventDefinition and CQL mainly - so that you could register a trigger that either rejects an update or changes some other resource - but I don't think that CQL has bindings for that</li>\n<li>I could extend graphQL / GraphDefinition / FHIRPath internally so that you'd write some predicate or perform some operation - but I think that the second case is really something beyond them</li>\n<li>I could define an API that other servers could implement, some variant of cds-hooks maybe - and then allow users to configure the server (by FHIR or some other way) so that custom logic on the service makes these decisions</li>\n</ul>\n<p>Any other options? Just to be clear: I'm prototyping here, looking for understanding what approach has legs for these kinds of problems within the FHIR eco-system.</p>\n<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> <span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span> <span class=\"user-mention\" data-user-id=\"191757\">@Christiaan Knaap</span> your opinions request (and everyone else, of course)</p>",
+        "id": 153926607,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1513825385
+    },
+    {
+        "content": "<p>Is the idea that some up-front configuration step happens, and then subsequent requests will behave differently than they otherwise would have? For example 1, I guess it would change the behavior of future POST operations; for example 2, what's the expectedly API call to perform the \"add patient\"? I'm having trouble understanding this business about Lists.</p>",
+        "id": 153926612,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1513828342
+    },
+    {
+        "content": "<p>well, you might say 'any patient that is admitted to a ward goes onto the list of patients I manage' - this is how most systems work...\\</p>",
+        "id": 153926613,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1513828816
+    },
+    {
+        "content": "<p>or 'any patient with a lab K over 6.5 goes onto the list of patients for the clinical chemist to review'</p>",
+        "id": 153926614,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1513828843
+    },
+    {
+        "content": "<p>For example 1, a PlanDefinition could describe this, the trigger would attach to the add of a resource, the action condition would check for the existing identifier, and the action sentence would use a \"remove\" to remove the newly created resource. It's a bit of a stretch, and I can see wanting to add better action types to support that type of thing.</p>",
+        "id": 153926615,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1513828865
+    },
+    {
+        "content": "<p>and yes, subsequent requests happen differently</p>",
+        "id": 153926616,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1513828867
+    },
+    {
+        "content": "<p>Same for example 2, a PlanDefinition with a trigger on the add, the action.condition specifying the criteria, and an action that, say, updates the List resource.</p>",
+        "id": 153926617,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1513828921
+    },
+    {
+        "content": "<p>My default approaches here would be 1) register a JS snippet to be run when a POST occurs. The snippet can call some limited library of functions to modify the system as needed, or 2) Register an external subscription that triggers when a result arrives, and let the external system call back to make modifications as needed</p>",
+        "id": 153926618,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1513829418
+    },
+    {
+        "content": "<p>so 1/ is not interoperable unless we define a JS api - and still technically hard <br>\n2/ is hard because of network dependencies inside your transaction handling; particularly the idea that you can escalate the transaction scope</p>",
+        "id": 153926619,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1513829569
+    },
+    {
+        "content": "<p>I want this to be interoperable - so that you can define trigger behaviour consistently across servers. Do other people think that makes sense?</p>",
+        "id": 153926620,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1513829773
+    },
+    {
+        "content": "<p>I do :)</p>",
+        "id": 153926621,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1513829807
+    },
+    {
+        "content": "<p>I suppose I should look around and find how this was solved elsewhere... but I don't know where to lok</p>",
+        "id": 153926643,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1513856302
+    },
+    {
+        "content": "<p>Seems similar to the kinds of rules that go into a Privacy Consent. I think you are trying to solve it in a broader way, which I applaud. The problem in the Privacy Consent space is not well done. Yes we have a FHIR Consent resource, but it fails when the rules become deeper than first order complexity. The other problem is that the Privacy Consents have more implementers using OAuth, which doesn't fit your use-case well (nor privacy consent beyond first order complexity)...  So I don't have much for you, but do want these use-cases to be considered as possibly needing to be included in your scope.</p>",
+        "id": 153926654,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1513861923
+    },
+    {
+        "content": "<p>This is all stuff that people generally do in HAPI using interceptors.. not really a reusable solution across platforms, but it's definitely stuff that is commonly done.</p>",
+        "id": 153926678,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1513880268
+    },
+    {
+        "content": "<p>Kubernetes has a related feature called \"custom controllers\"  -- overview at <a href=\"https://resources.coreos.com/youtube-coreos-fest-2017/writing-a-custom-controller-extending-the-functionality-of-your-cluster\" target=\"_blank\" title=\"https://resources.coreos.com/youtube-coreos-fest-2017/writing-a-custom-controller-extending-the-functionality-of-your-cluster\">https://resources.coreos.com/youtube-coreos-fest-2017/writing-a-custom-controller-extending-the-functionality-of-your-cluster</a></p>",
+        "id": 153926679,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1513881185
+    },
+    {
+        "content": "<p>I think we risk heading toward an end-state here of inventing a new turing-complete programming language... all within FHIR... to handle this -- which probably isn't where we want to go. It'd be nice to reuse existing languages or APIs</p>",
+        "id": 153926680,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1513881240
+    },
+    {
+        "content": "<p>so there's an existing language... js.... but we'd be doing API or language otherwise, no?</p>",
+        "id": 153926700,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1513884202
+    },
+    {
+        "content": "<p>Well, developing an API and developing a language are rather different prospects.</p>",
+        "id": 153926736,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1513899433
+    },
+    {
+        "content": "<p>My server has this capability using the Microsoft Workflow Foundation, and not something that I would expect to be interoperable between servers.<br>\nBut very interested in what's being proposed.<br>\nI've used it to date to implement rejecting updates under some conditions, and also a custom operation that generates a PDF for the resource it's called on.</p>",
+        "id": 153926737,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1513900480
+    },
+    {
+        "content": "<p>This kind of an API does open up more security risks.  HL7 does not need to solve all security risks, but does need to communicate the ones we think of in a \"Security Considerations\" section. That section can be nothing other than an itemization of risks that the implementer and deployment need to address.</p>",
+        "id": 153926817,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1513950580
+    },
+    {
+        "content": "<p>ok, well, <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> what kind of a JS API would you propose?</p>",
+        "id": 153926907,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1513983187
+    },
+    {
+        "content": "<p>Something that pretty closely followed (a subset of) the REST API.</p>\n<p>So developers register functions like </p>\n<div class=\"codehilite\"><pre><span></span>POST Encounter/$trigger-create\n{\n  &quot;onMethod&quot;: [&quot;PUT&quot;, &quot;POST&quot;],\n  &quot;runFunction&quot;: &quot;&lt;see below&gt;&quot;\n}\n</pre></div>\n\n\n<p>--&gt; returns a trigger id that can be used to suspend/resume/delete trigger activity through additional operations.</p>\n<p>The function body would look something like the following...</p>\n<p><strong>\"Duplicate Identifier\" Use Case</strong><br>\nWhat we want here is, \"reject incoming Encounters when we already have an Encounter with the same identifier.\"</p>\n<div class=\"codehilite\"><pre><span></span><span class=\"nx\">async</span> <span class=\"kd\">function</span> <span class=\"nx\">trigger</span><span class=\"p\">(</span><span class=\"nx\">resource</span><span class=\"p\">,</span> <span class=\"nx\">method</span><span class=\"p\">,</span> <span class=\"nx\">headers</span><span class=\"p\">,</span> <span class=\"nx\">fhir</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n  <span class=\"kr\">const</span> <span class=\"nx\">identifiersToCheck</span> <span class=\"o\">=</span> <span class=\"nx\">resource</span><span class=\"p\">.</span><span class=\"nx\">identifier</span>\n    <span class=\"p\">.</span><span class=\"nx\">map</span><span class=\"p\">(</span><span class=\"nx\">i</span> <span class=\"p\">=&gt;</span> <span class=\"sb\">`</span><span class=\"si\">${</span><span class=\"nx\">i</span><span class=\"p\">.</span><span class=\"nx\">system</span><span class=\"si\">}</span><span class=\"sb\">|</span><span class=\"si\">${</span><span class=\"nx\">i</span><span class=\"p\">.</span><span class=\"nx\">value</span><span class=\"si\">}</span><span class=\"sb\">`</span><span class=\"p\">)</span>\n    <span class=\"p\">.</span><span class=\"nx\">join</span><span class=\"p\">(</span><span class=\"s1\">&#39;,&#39;</span><span class=\"p\">);</span>\n\n  <span class=\"kd\">let</span> <span class=\"nx\">matchesBundle</span> <span class=\"o\">=</span> <span class=\"nx\">await</span> <span class=\"nx\">fhir</span><span class=\"p\">.</span><span class=\"nx\">get</span><span class=\"p\">(</span><span class=\"sb\">`Encouter?identifier=</span><span class=\"si\">${</span><span class=\"nb\">encodeURIComponent</span><span class=\"p\">(</span><span class=\"nx\">identifiersToCheck</span><span class=\"p\">)</span><span class=\"si\">}</span><span class=\"sb\">`</span><span class=\"p\">);</span>\n  <span class=\"k\">if</span> <span class=\"p\">(</span><span class=\"nx\">matchesBundle</span><span class=\"p\">.</span><span class=\"nx\">total</span> <span class=\"o\">&gt;</span> <span class=\"mi\">0</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n    <span class=\"k\">throw</span> <span class=\"s2\">&quot;Duplicate identifier&quot;</span><span class=\"p\">;</span>\n  <span class=\"p\">}</span>\n<span class=\"p\">}</span>\n</pre></div>\n\n\n<p><strong>\"Special Patient List\" Use Case</strong><br>\nWhat we want here is, \"look at incoming Encounters; if you see any happening in a direct sub-location of <code>my-special-location</code>, then add the patient to a list called <code>my-special-list</code>.\"</p>\n<div class=\"codehilite\"><pre><span></span><span class=\"nx\">async</span> <span class=\"kd\">function</span> <span class=\"nx\">trigger</span><span class=\"p\">(</span><span class=\"nx\">resource</span><span class=\"p\">,</span> <span class=\"nx\">method</span><span class=\"p\">,</span> <span class=\"nx\">headers</span><span class=\"p\">,</span> <span class=\"nx\">fhir</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n  <span class=\"kr\">const</span> <span class=\"nx\">myListUrl</span> <span class=\"o\">=</span> <span class=\"s1\">&#39;List/my-special-list&#39;</span><span class=\"p\">;</span>\n  <span class=\"kr\">const</span> <span class=\"nx\">myLocationUrl</span> <span class=\"o\">=</span> <span class=\"s1\">&#39;Location/my-special-location&#39;</span><span class=\"p\">;</span>\n  <span class=\"kr\">const</span> <span class=\"nx\">encouterLocation</span> <span class=\"o\">=</span> <span class=\"nx\">await</span> <span class=\"nx\">fhir</span><span class=\"p\">.</span><span class=\"nx\">get</span><span class=\"p\">(</span><span class=\"sb\">`Location/</span><span class=\"si\">${</span><span class=\"nx\">resource</span><span class=\"p\">.</span><span class=\"nx\">location</span><span class=\"p\">.</span><span class=\"nx\">reference</span><span class=\"si\">}</span><span class=\"sb\">`</span><span class=\"p\">);</span>\n  <span class=\"k\">if</span> <span class=\"p\">(</span><span class=\"nx\">encouterLocation</span><span class=\"p\">.</span><span class=\"nx\">partOf</span><span class=\"p\">.</span><span class=\"nx\">reference</span> <span class=\"o\">!==</span> <span class=\"nx\">myLocationUrl</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n    <span class=\"k\">return</span><span class=\"p\">;</span>\n  <span class=\"p\">}</span>\n  <span class=\"kd\">let</span> <span class=\"nx\">list</span> <span class=\"o\">=</span> <span class=\"nx\">await</span> <span class=\"nx\">fhir</span><span class=\"p\">.</span><span class=\"nx\">get</span><span class=\"p\">(</span><span class=\"nx\">myListUrl</span><span class=\"p\">);</span>\n  <span class=\"k\">if</span> <span class=\"p\">((</span><span class=\"nx\">list</span><span class=\"p\">.</span><span class=\"nx\">entry</span> <span class=\"o\">||</span> <span class=\"p\">[])</span>\n    <span class=\"p\">.</span><span class=\"nx\">filter</span><span class=\"p\">(</span><span class=\"nx\">entry</span> <span class=\"p\">=&gt;</span> <span class=\"nx\">entry</span><span class=\"p\">.</span><span class=\"nx\">item</span><span class=\"p\">.</span><span class=\"nx\">reference</span> <span class=\"o\">===</span> <span class=\"nx\">resource</span><span class=\"p\">.</span><span class=\"nx\">subject</span><span class=\"p\">.</span><span class=\"nx\">reference</span><span class=\"p\">)</span>\n    <span class=\"p\">.</span><span class=\"nx\">length</span> <span class=\"o\">==</span> <span class=\"mi\">0</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n      <span class=\"nx\">list</span><span class=\"p\">.</span><span class=\"nx\">entry</span><span class=\"p\">.</span><span class=\"nx\">push</span><span class=\"p\">({</span><span class=\"s1\">&#39;item&#39;</span><span class=\"o\">:</span> <span class=\"nx\">resource</span><span class=\"p\">.</span><span class=\"nx\">subject</span><span class=\"p\">});</span>\n  <span class=\"p\">}</span>\n  <span class=\"nx\">await</span> <span class=\"nx\">fhir</span><span class=\"p\">.</span><span class=\"nx\">put</span><span class=\"p\">(</span><span class=\"nx\">myListUrl</span><span class=\"p\">,</span> <span class=\"nx\">list</span><span class=\"p\">);</span>\n<span class=\"p\">}</span>\n</pre></div>",
+        "id": 153926909,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1513985514
+    },
+    {
+        "content": "<p>This assumes, more or less, that the <code>fhir</code> object supports <code>get</code>, <code>put</code>, <code>post</code>, and <code>delete</code> methods that take JSON content and return Promise&lt;JSON&gt;.</p>",
+        "id": 153926910,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1513985830
+    },
+    {
+        "content": "<p>The server code would wait for the trigger function's return value (a Promise) and:</p>\n<ul>\n<li>If resolved: complete the transaction</li>\n<li>If rejected:  abort the transaction</li>\n<li>If timed out: abort the transaction</li>\n</ul>",
+        "id": 153926911,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1513985994
+    },
+    {
+        "content": "<p>(For another analogy, AWS Lambda functions are used in various places in the platform where there's an existing workflow that needs way to adjust behavior with arbitrary logic -- <a href=\"http://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html\" target=\"_blank\" title=\"http://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html\">see here</a> for examples o functions called during authentication workflows.</p>",
+        "id": 153926912,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1513986319
+    },
+    {
+        "content": "<p>And if the fancy ecmascript syntax scares you, it's <a href=\"https://babeljs.io/repl/#?babili=false&amp;browsers=&amp;build=&amp;builtIns=false&amp;code_lz=IYZwngdgxgBAZgV2gFwJYHsI2QJ1Qc3wFMcAKHIkdBHKIgGhgFsjkALdAE0baOE5IhGcNqhwBKGAG8AUDBhRMIZDAA26KMDSYYAXhjAA7sFQqRYgHTFkpAAYAZDVowQA9ABIpFKjToX1mtoQFhRwJETQRAC-tuIA3HIwqHAwpAHOmBYADsA4yADyKQCEuvoA5ExgALQgWURQqMCqVelBZZIUyDQQCfKqrGqoynoGxqbwojhWrKRl9kPIrpU1dQ1NLQvtvYPKFhG4YNkIIGykUmWmRExlAFww3tS0RBYgCABGAFb1KlHxiUYmMyTI42OYLJbVWr1RrNVSbRhw5R_KIyIA&amp;debug=false&amp;circleciRepo=&amp;evaluate=false&amp;lineWrap=true&amp;prettier=false&amp;targets=&amp;version=1\" target=\"_blank\" title=\"https://babeljs.io/repl/#?babili=false&amp;browsers=&amp;build=&amp;builtIns=false&amp;code_lz=IYZwngdgxgBAZgV2gFwJYHsI2QJ1Qc3wFMcAKHIkdBHKIgGhgFsjkALdAE0baOE5IhGcNqhwBKGAG8AUDBhRMIZDAA26KMDSYYAXhjAA7sFQqRYgHTFkpAAYAZDVowQA9ABIpFKjToX1mtoQFhRwJETQRAC-tuIA3HIwqHAwpAHOmBYADsA4yADyKQCEuvoA5ExgALQgWURQqMCqVelBZZIUyDQQCfKqrGqoynoGxqbwojhWrKRl9kPIrpU1dQ1NLQvtvYPKFhG4YNkIIGykUmWmRExlAFww3tS0RBYgCABGAFb1KlHxiUYmMyTI42OYLJbVWr1RrNVSbRhw5R_KIyIA&amp;debug=false&amp;circleciRepo=&amp;evaluate=false&amp;lineWrap=true&amp;prettier=false&amp;targets=&amp;version=1\">convertable automatically</a> to oldschool JS (ES3). But we could just as easily say that you've got to write ES3... I just wanted to show a clean example.</p>",
+        "id": 153926913,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1513986765
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> <span class=\"user-mention\" data-user-id=\"191757\">@Christiaan Knaap</span> any comments about this? <span class=\"user-mention\" data-user-id=\"191414\">@Dan Gottlieb</span> does this overlap with your JS sandbox? is it consistent if it does?</p>",
+        "id": 153926915,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1514003457
+    },
+    {
+        "content": "<p>In Vonk I chose the approach of Vonk FHIR Components: setup your own (ASP.NET Core) processing pipeline with components of Vonk, interleaved with any of your own processing - where you have both the raw Http request and a representation of it in terms of FHIR at your disposal. I think the HAPI Interceptors allow you to do similar things.<br>\nAmong others one important reason for this approach instead of more loosely coupled 'plugins' is that I haven't worked out a complete means to express at what position(s) in the pipeline process plugins should act. Before a search? Or before any read operation? After the results are retrieved, after they are bundled? Should it happen synchronously (as in your first use case) or async after finishing the request (probably a fit for your second use case)? And on write operations things may even be more complex.<br>\nAnd yes, this ties the customer to the Vonk programming model. But imho FHIR is more about interoperability of health data, than about interoperability of health-data-processing-source-code.</p>",
+        "id": 153926917,
+        "sender_full_name": "Christiaan Knaap",
+        "timestamp": 1514014544
+    },
+    {
+        "content": "<p>Now reading outside the @Mentions narrow...<br>\nA JS trigger approach would force me to make the Vonk API usable from JS. I don't think that will happen very soon. <br>\nBesides that I find that people tend to choose a server not only for it's core capabilities but also for it's development environment. So if they choose HAPI it's partly because they are comfortable with Java, and likewise for Vonk / .Net. I even know a hospital that chose your server <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> because it's in Delphi! Why would you then go writing plugins in JS?</p>\n<p>Reading through Josh's example about the duplicate id I immediately think 'and what if you prefer to solve this with a unique constraint in the database?' (Which would be a lot easier to manage in transactions). More generally put: a generic framework for this kind of plugins / triggers is already hard to come up with and even harder to implement as efficiently as you would be able to in the native language or storage layer of the server.</p>\n<p>But maybe I'm just old fashioned in my reluctance to accept JS as the one-language-that-solves-all-problems...</p>",
+        "id": 153926918,
+        "sender_full_name": "Christiaan Knaap",
+        "timestamp": 1514016019
+    },
+    {
+        "content": "<p>I'm not much in the camp that JS solves all problems. But I think that you are saying that 'changing business rules requires one to recompile the server'... and I don't think that's a good answer. I'm exploring whether there's interest in standardising this as an adjunct to the spec</p>",
+        "id": 153926920,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1514026072
+    },
+    {
+        "content": "<p>and I also don't think that database constraints being to handle the problem</p>",
+        "id": 153926921,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1514026173
+    },
+    {
+        "content": "<p>And to be clear, I'm not saying that I think the thing I wrote up is a good idea to peruse -- just that if the goal is to augment a FHIR server to enable expressive runtime modifications to its behavior, then using a programming language is a powerful place to start (rather than trying to encode logic in, like, a new FHIR AST resource). If you go this route, interpreted languages are a natural fit. And if you want to pick one with broad support, js is hard to ignore. (But we could have a lisp, or lua, or...)</p>",
+        "id": 153926923,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1514031115
+    },
+    {
+        "content": "<p>Also <span class=\"user-mention\" data-user-id=\"191757\">@Christiaan Knaap</span>  raises the important point that we'd probably want more than just synchronous, in-transaction triggers (which was where my examples focused).</p>",
+        "id": 153926924,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1514031332
+    },
+    {
+        "content": "<p>for async... can we use AuditEvent? It should already be used to record that requests to/from the server have happened. If it needs improvements, lets make them. It likely needs profiling to assure all servers use it the same way. Then you have an audit log, and a mechanism for triggering (subscription).</p>",
+        "id": 153926925,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1514035962
+    },
+    {
+        "content": "<p>For the async use case, you can also just subscribe to new encounters and then call back to update your list via regular rest API.</p>",
+        "id": 153926927,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1514039688
+    },
+    {
+        "content": "<p>But either these requires keeping a second server online.</p>",
+        "id": 153926928,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1514039728
+    },
+    {
+        "content": "<p>A couple of thoughts-</p>\n<p>I agree with Christian, something like this would be difficult and probably wouldn't happen in the short term. Most people pick a server based on its platform today, and interceptors have been well received by HAPI's users for this kind of thing.  That said, we actually did have someone ask us about the possibility of implementing side-effects in JavaScript the other day as a long term roadmap item. I hadn't given it much thought in terms of how it would look.</p>\n<p>Josh's syntax looks neat but damn if that wouldn't be a challenge to specify, standardize, and make consistent. I definitely agree with the notion that a programming language is a better place to start than an AST or something like that. (It occurs to me as I type this that it would be neat to be able to submit patches as javascript too, but that's another story :))</p>\n<p>I kind of think this should be bundled into Subscription somehow. I.e. add EventType definitions for simple POST/PUT/DELETE if we need to, and add a JavaScript delivery channel, along with maybe a property specifying that deliver should be synchronous?</p>",
+        "id": 153926929,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1514042940
+    },
+    {
+        "content": "<p>Leaving aside the issue of trying to standardize, and leaving aside js... Do you think there is an opportunity to do a simpler platform-specific thing that supports dynamic behavior changes without recompiling and restarting -- perhaps in a hapi- or vonk-specific way? <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span>  @<strong>Christiaan Knapp</strong></p>",
+        "id": 153926930,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1514045764
+    },
+    {
+        "content": "<p>I can't imagine a serious record keeping system where the answer for changing business rules is to recompile.</p>",
+        "id": 153926932,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1514060192
+    },
+    {
+        "content": "<p>as for subscription.... I process subscriptions post-transaction. I figured everyone does that?</p>",
+        "id": 153926933,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1514061156
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> , sqlonfhir has this capabiltiy and is already in use.</p>",
+        "id": 153926984,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1514071121
+    },
+    {
+        "content": "<p>Sweet -- can you comment on how it works? How do developers register the #a new trigger? What capabilities does a trigger have? Any docs you can point us to?</p>",
+        "id": 153926987,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1514071625
+    },
+    {
+        "content": "<p>It uses the Microsoft Workflow Foundation component as the script execution engine, which really compiles on the fly to actual .net objects, and has full access to the server's internal models.<br>\nYou can also just put c# code inside it too.<br>\nThe routines are called with each invocation, to permit changing the results of each call.<br>\n<a href=\"http://sqlonfhir-ci2.azurewebsites.net/FhirServerHome/Workflows\" target=\"_blank\" title=\"http://sqlonfhir-ci2.azurewebsites.net/FhirServerHome/Workflows\">http://sqlonfhir-ci2.azurewebsites.net/FhirServerHome/Workflows</a><br>\nShows the parameters to the engine.<br>\n(There is a seperate REST API to load/unload these from the server)</p>",
+        "id": 153926990,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1514072816
+    },
+    {
+        "content": "<p>It can also wire in custom operations into the server.</p>",
+        "id": 153926991,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1514072916
+    },
+    {
+        "content": "<p>i.e. $random-stuff = some new code</p>",
+        "id": 153926992,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1514072947
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span>  &lt;Sequence &gt;\n    &lt;If &gt;\n      &lt;If.Condition&gt;\n        &lt;InArgument x:TypeArguments=&quot;x:Boolean&quot;&gt;\n          &lt;mca:CSharpValue x:TypeArguments=&quot;x:Boolean&quot;&gt;&quot;$generatePDF&quot; == Operation&lt;/mca:CSharpValue&gt;\n        &lt;/InArgument&gt;\n      &lt;/If.Condition&gt;\n      &lt;If.Then&gt;\n        &lt;Assign &gt;\n          &lt;Assign.To&gt;\n            &lt;OutArgument x:TypeArguments=&quot;hfm:Resource&quot;&gt;\n              &lt;mca:CSharpReference x:TypeArguments=&quot;hfm:Resource&quot;&gt;Output&lt;/mca:CSharpReference&gt;\n            &lt;/OutArgument&gt;\n          &lt;/Assign.To&gt;\n          &lt;Assign.Value&gt;\n            &lt;InArgument x:TypeArguments=&quot;hfm:Resource&quot;&gt;\n              &lt;mca:CSharpValue x:TypeArguments=&quot;hfm:Resource&quot;&gt;Fhir.Utilities.CustomOperations.GeneratePDF(OperationParameters, Output as Hl7.Fhir.Model.QuestionnaireResponse, @&quot;C:\\Templates\\PDFs\\output-certificate.pdf&quot;)&lt;/mca:CSharpValue&gt;\n            &lt;/InArgument&gt;\n          &lt;/Assign.Value&gt;\n        &lt;/Assign&gt;\n      &lt;/If.Then&gt;\n    &lt;/If&gt;\n  &lt;/Sequence&gt;\n</pre></div>",
+        "id": 153926993,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1514073224
+    },
+    {
+        "content": "<p>Its very verbose, but you can just have a simple bit of .net code in there too<br>\n(this example is using some code in another assembly that is on the server)</p>",
+        "id": 153926994,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1514073276
+    },
+    {
+        "content": "<p>Oh, fascinating!</p>",
+        "id": 153926995,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1514075330
+    },
+    {
+        "content": "<p>And this code can query/modify existing resources in the server, synchronously?</p>",
+        "id": 153926996,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1514075393
+    },
+    {
+        "content": "<p>Yup, full access to the servers object model and storage.<br>\nFor async stuff, you could use this to queue processsing.</p>",
+        "id": 153926997,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1514076462
+    },
+    {
+        "content": "<p>For Vonk we will probably add a means for this without recompilation. But it is not on top of the roadmap yet.<br>\nWWF is a nice model but afaik not available for .NET Core, so that rules it out for us.<br>\nAlso I still have to see the first actual request for Vonk to allow dynamic extensibility. <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> : Anyone demanded that of HAPI?</p>",
+        "id": 153927013,
+        "sender_full_name": "Christiaan Knaap",
+        "timestamp": 1514116416
+    },
+    {
+        "content": "<p>Gives me something to philosophize on during the holidays though.</p>",
+        "id": 153927014,
+        "sender_full_name": "Christiaan Knaap",
+        "timestamp": 1514116519
+    },
+    {
+        "content": "<p>The Meteor.js has a very splendid <code>matb33:collection-hooks</code> package, which creates isomorphic triggers on both server and client to handle all these things.  (We're definitely in the 'javascript solves all problems' camp.)</p>\n<p><a href=\"https://github.com/matb33/meteor-collection-hooks\" target=\"_blank\" title=\"https://github.com/matb33/meteor-collection-hooks\">https://github.com/matb33/meteor-collection-hooks</a></p>\n<p>Once an incoming REST call comes in along a FHIR endpoint, we normalize to JSON and put the incoming data into a resource type cursor.  If it's on the server, the cursor is connected to a Mongo DB by default for caching/persistence; and if it's on the client, it's attached to a minimongo instance to persist through browser refreshes.  The collection hooks are attached to the cursors, and provide a common API across all resource types:</p>\n<div class=\"codehilite\"><pre><span></span><span class=\"nx\">Mongo</span><span class=\"p\">.</span><span class=\"nx\">collections</span><span class=\"p\">[</span><span class=\"nx\">resourceType</span><span class=\"p\">].</span><span class=\"nx\">before</span><span class=\"p\">.</span><span class=\"nx\">insert</span><span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">doc</span><span class=\"p\">)</span>\n<span class=\"nx\">Mongo</span><span class=\"p\">.</span><span class=\"nx\">collections</span><span class=\"p\">[</span><span class=\"nx\">resourceType</span><span class=\"p\">].</span><span class=\"nx\">before</span><span class=\"p\">.</span><span class=\"nx\">update</span><span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">doc</span><span class=\"p\">,</span> <span class=\"nx\">fieldNames</span><span class=\"p\">,</span> <span class=\"nx\">modifier</span><span class=\"p\">,</span> <span class=\"nx\">options</span><span class=\"p\">)</span>\n<span class=\"nx\">Mongo</span><span class=\"p\">.</span><span class=\"nx\">collections</span><span class=\"p\">[</span><span class=\"nx\">resourceType</span><span class=\"p\">].</span><span class=\"nx\">before</span><span class=\"p\">.</span><span class=\"nx\">remove</span><span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">doc</span><span class=\"p\">)</span>\n<span class=\"nx\">Mongo</span><span class=\"p\">.</span><span class=\"nx\">collections</span><span class=\"p\">[</span><span class=\"nx\">resourceType</span><span class=\"p\">].</span><span class=\"nx\">before</span><span class=\"p\">.</span><span class=\"nx\">upsert</span><span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">selector</span><span class=\"p\">,</span> <span class=\"nx\">modifier</span><span class=\"p\">,</span> <span class=\"nx\">options</span><span class=\"p\">)</span>\n<span class=\"nx\">Mongo</span><span class=\"p\">.</span><span class=\"nx\">collections</span><span class=\"p\">[</span><span class=\"nx\">resourceType</span><span class=\"p\">].</span><span class=\"nx\">before</span><span class=\"p\">.</span><span class=\"nx\">find</span><span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">selector</span><span class=\"p\">,</span> <span class=\"nx\">options</span><span class=\"p\">)</span>\n<span class=\"nx\">Mongo</span><span class=\"p\">.</span><span class=\"nx\">collections</span><span class=\"p\">[</span><span class=\"nx\">resourceType</span><span class=\"p\">].</span><span class=\"nx\">before</span><span class=\"p\">.</span><span class=\"nx\">findOne</span><span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">selector</span><span class=\"p\">,</span> <span class=\"nx\">options</span><span class=\"p\">)</span>\n<span class=\"nx\">Mongo</span><span class=\"p\">.</span><span class=\"nx\">collections</span><span class=\"p\">[</span><span class=\"nx\">resourceType</span><span class=\"p\">].</span><span class=\"nx\">after</span><span class=\"p\">.</span><span class=\"nx\">insert</span><span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">doc</span><span class=\"p\">)</span>\n<span class=\"nx\">Mongo</span><span class=\"p\">.</span><span class=\"nx\">collections</span><span class=\"p\">[</span><span class=\"nx\">resourceType</span><span class=\"p\">].</span><span class=\"nx\">after</span><span class=\"p\">.</span><span class=\"nx\">update</span><span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">doc</span><span class=\"p\">,</span> <span class=\"nx\">fieldNames</span><span class=\"p\">,</span> <span class=\"nx\">modifier</span><span class=\"p\">,</span> <span class=\"nx\">options</span><span class=\"p\">)</span>\n<span class=\"nx\">Mongo</span><span class=\"p\">.</span><span class=\"nx\">collections</span><span class=\"p\">[</span><span class=\"nx\">resourceType</span><span class=\"p\">].</span><span class=\"nx\">after</span><span class=\"p\">.</span><span class=\"nx\">remove</span><span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">doc</span><span class=\"p\">)</span>\n<span class=\"nx\">Mongo</span><span class=\"p\">.</span><span class=\"nx\">collections</span><span class=\"p\">[</span><span class=\"nx\">resourceType</span><span class=\"p\">].</span><span class=\"nx\">after</span><span class=\"p\">.</span><span class=\"nx\">find</span><span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">selector</span><span class=\"p\">,</span> <span class=\"nx\">options</span><span class=\"p\">,</span> <span class=\"nx\">cursor</span><span class=\"p\">)</span>\n<span class=\"nx\">Mongo</span><span class=\"p\">.</span><span class=\"nx\">collections</span><span class=\"p\">[</span><span class=\"nx\">resourceType</span><span class=\"p\">].</span><span class=\"nx\">after</span><span class=\"p\">.</span><span class=\"nx\">findOne</span><span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">selector</span><span class=\"p\">,</span> <span class=\"nx\">options</span><span class=\"p\">,</span> <span class=\"nx\">doc</span><span class=\"p\">)</span>\n</pre></div>\n\n\n<p>Here's how the associated code looks like in practice (which can be run on both the server and web browser):</p>\n<div class=\"codehilite\"><pre><span></span><span class=\"kr\">import</span> <span class=\"p\">{</span> <span class=\"nx\">has</span><span class=\"p\">,</span> <span class=\"nx\">get</span> <span class=\"p\">}</span> <span class=\"nx\">from</span> <span class=\"s1\">&#39;lodash&#39;</span><span class=\"p\">;</span>\n\n<span class=\"c1\">// duplicate error</span>\n<span class=\"nx\">Encounters</span><span class=\"p\">.</span><span class=\"nx\">before</span><span class=\"p\">.</span><span class=\"nx\">insert</span><span class=\"p\">(</span><span class=\"kd\">function</span> <span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">doc</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n  <span class=\"nx\">doc</span><span class=\"p\">.</span><span class=\"nx\">createdAt</span> <span class=\"o\">=</span> <span class=\"nb\">Date</span><span class=\"p\">.</span><span class=\"nx\">now</span><span class=\"p\">();</span>\n  <span class=\"k\">if</span><span class=\"p\">(</span><span class=\"nx\">Encounters</span><span class=\"p\">.</span><span class=\"nx\">findOne</span><span class=\"p\">(</span><span class=\"s1\">&#39;identifier.$.value&#39;</span><span class=\"o\">:</span> <span class=\"nx\">get</span><span class=\"p\">(</span><span class=\"nx\">doc</span><span class=\"p\">,</span> <span class=\"s1\">&#39;identifier.0.value&#39;</span><span class=\"p\">))){</span>\n    <span class=\"k\">throw</span> <span class=\"s2\">&quot;Duplicate error&quot;</span><span class=\"p\">;</span>\n  <span class=\"p\">}</span>\n<span class=\"p\">});</span>\n\n<span class=\"c1\">// add to patient list if observation is above a threshold</span>\n<span class=\"kd\">var</span> <span class=\"nx\">observationThreshold</span> <span class=\"o\">=</span> <span class=\"mf\">0.5</span><span class=\"p\">;</span>\n<span class=\"kd\">var</span> <span class=\"nx\">list</span> <span class=\"o\">=</span> <span class=\"nx\">getMyList</span><span class=\"p\">();</span>\n<span class=\"nx\">Observations</span><span class=\"p\">.</span><span class=\"nx\">before</span><span class=\"p\">.</span><span class=\"nx\">insert</span><span class=\"p\">(</span><span class=\"kd\">function</span> <span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">doc</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n  <span class=\"k\">if</span><span class=\"p\">(</span><span class=\"nx\">get</span><span class=\"p\">(</span><span class=\"nx\">doc</span><span class=\"p\">,</span> <span class=\"s1\">&#39;category.text&#39;</span><span class=\"p\">)</span> <span class=\"o\">==</span> <span class=\"s2\">&quot;Foo&quot;</span><span class=\"p\">){</span>\n    <span class=\"k\">if</span><span class=\"p\">(</span><span class=\"nx\">get</span><span class=\"p\">(</span><span class=\"nx\">doc</span><span class=\"p\">,</span> <span class=\"s1\">&#39;valueQuantity&#39;</span><span class=\"p\">)</span> <span class=\"o\">&gt;</span> <span class=\"nx\">observationThreshold</span><span class=\"p\">){</span>\n      <span class=\"nx\">Lists</span><span class=\"p\">.</span><span class=\"nx\">update</span><span class=\"p\">({</span><span class=\"nx\">_id</span><span class=\"o\">:</span> <span class=\"nx\">getMyList</span><span class=\"p\">()},</span> <span class=\"p\">{</span><span class=\"nx\">$addToSet</span><span class=\"o\">:</span> <span class=\"p\">{</span>\n        <span class=\"s1\">&#39;item&#39;</span><span class=\"o\">:</span> <span class=\"nx\">doc</span><span class=\"p\">.</span><span class=\"nx\">subject</span>\n      <span class=\"p\">}});</span>\n    <span class=\"p\">}</span>\n  <span class=\"p\">}</span>\n<span class=\"p\">});</span>\n\n<span class=\"c1\">// if you want dynamic runtime triggers (with versioning)</span>\n<span class=\"c1\">// so we don&#39;t have to recompile code</span>\n<span class=\"nx\">Observations</span><span class=\"p\">.</span><span class=\"nx\">before</span><span class=\"p\">.</span><span class=\"nx\">insert</span><span class=\"p\">(</span><span class=\"kd\">function</span> <span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">doc</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n  <span class=\"kd\">var</span> <span class=\"nx\">trigger</span> <span class=\"o\">=</span> <span class=\"nx\">DynamicTriggers</span><span class=\"p\">.</span><span class=\"nx\">findOne</span><span class=\"p\">({</span>\n    <span class=\"s1\">&#39;type&#39;</span><span class=\"o\">:</span> <span class=\"s1\">&#39;observation&#39;</span><span class=\"p\">,</span>\n    <span class=\"s1\">&#39;method&#39;</span><span class=\"o\">:</span> <span class=\"s1\">&#39;before.insert&#39;</span><span class=\"p\">,</span>\n    <span class=\"s1\">&#39;version&#39;</span><span class=\"o\">:</span> <span class=\"nx\">getLatest</span><span class=\"p\">()</span>\n  <span class=\"p\">});</span>\n  <span class=\"nx\">trigger</span><span class=\"p\">.</span><span class=\"nx\">run</span><span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">doc</span><span class=\"p\">);</span>\n<span class=\"p\">});</span>\n</pre></div>",
+        "id": 153927017,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1514145587
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191757\">@Christiaan Knaap</span> \"dynamic extensibility\" isn't really quite the right words, I think. \"Configuring business rules and workflow\" is more how I'd describe it</p>",
+        "id": 153927021,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1514193527
+    },
+    {
+        "content": "<p>Oh, I definitely agree on the notion that this would be useful. Truthfully I kind of like Josh's proposal, though I think it should be bundled into Subscription.</p>\n<p>I just don't know how hard it would be to implement (no harm in trying).</p>",
+        "id": 153927023,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1514225609
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> I don't think this concept overlaps with either our client side js sandboxing experiments or our js FHIR proxy server implementation. That said, I like the idea of a standard method to register triggers that run in a runtime language implementation on the FHIR server. Do we need to settle on a single language though? </p>\n<p>Why not just have a standard approach to registering the triggers and a way to for servers to indicate which language(s) they support (maybe in the capability statement)? It would reduce portability of the trigger functions, but there are bound to be portability issues regardless given different js implementations, degrees of sandboxing, runtime restrictions, etc. Then, servers will have the flexibility to support common embedded languages like lua and js, as well as java, .net, a custom XML language, etc and can even host more than one runtime. Users could specify a language as part of the operation Josh sketched out and servers could error if they don't support it: </p>\n<div class=\"codehilite\"><pre><span></span>POST Encounter/$trigger-create {\n    &quot;onMethod&quot;: [&quot;PUT&quot;, &quot;POST&quot;],\n    &quot;language&quot;: &quot;javascript&quot;,\n    &quot;runFunction&quot;: &quot;&lt;see below&gt;&quot;\n}\n</pre></div>",
+        "id": 153927029,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1514303504
+    },
+    {
+        "content": "<blockquote>\n<p>Truthfully I kind of like Josh's proposal, though I think it should be bundled into Subscription.</p>\n<p>I just don't know how hard it would be to implement (no harm in trying).</p>\n</blockquote>\n<p>Agreed on bundling with Subscription.  That's exactly how our system is implemented; with the client side cursor subscribing to the server side cursor, and the triggers firing when either of the cursors are updated.  The pub/sub comes through the Distributed Data Protocol (DDP), which is a somewhat esoteric Meteor.js based websocket layer that was loosely modeled after PubSubHubBub.  If you follow this server-side-triggers with subscriptions line of reasoning to it's logical conclusion, one eventually wants to harmonize the server/client APIs, which is where the isomorphism comes from; then one wants to name the cursors after the Resource; and then hoist onto websockets to optimize network traffic; and so forth.  And we did this all before the Subscription resource was even formalized.  But the config object we pass around is trivially described by the Subscription resource.</p>",
+        "id": 153927030,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1514303806
+    },
+    {
+        "content": "<p>Here's an example of what we're moving towards on the server:</p>\n<div class=\"codehilite\"><pre><span></span><span class=\"nx\">Meteor</span><span class=\"p\">.</span><span class=\"nx\">publish</span><span class=\"p\">(</span><span class=\"s2\">&quot;FhirSubscriptions&quot;</span><span class=\"p\">,</span> <span class=\"kd\">function</span> <span class=\"p\">(</span><span class=\"nx\">payload</span><span class=\"p\">){</span>\n  <span class=\"c1\">// make sure the user is logged in</span>\n  <span class=\"c1\">// for an oauth implementation, we might want to replace with an auth token</span>\n  <span class=\"k\">if</span> <span class=\"p\">(</span><span class=\"k\">this</span><span class=\"p\">.</span><span class=\"nx\">userId</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n    <span class=\"nx\">Mongo</span><span class=\"p\">.</span><span class=\"nx\">collections</span><span class=\"p\">[</span><span class=\"nx\">payload</span><span class=\"p\">.</span><span class=\"nx\">resourceType</span><span class=\"p\">].</span><span class=\"nx\">after</span><span class=\"p\">.</span><span class=\"nx\">update</span><span class=\"p\">(</span><span class=\"kd\">function</span> <span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">doc</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n      <span class=\"nx\">payload</span><span class=\"p\">.</span><span class=\"nx\">trigger</span><span class=\"p\">.</span><span class=\"nx\">after</span><span class=\"p\">.</span><span class=\"nx\">update</span><span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">doc</span><span class=\"p\">);</span>\n    <span class=\"p\">});</span>\n    <span class=\"k\">return</span> <span class=\"nx\">Mongo</span><span class=\"p\">.</span><span class=\"nx\">collections</span><span class=\"p\">[</span><span class=\"nx\">payload</span><span class=\"p\">.</span><span class=\"nx\">resourceType</span><span class=\"p\">].</span><span class=\"nx\">find</span><span class=\"p\">(</span><span class=\"nx\">payload</span><span class=\"p\">.</span><span class=\"nx\">query</span><span class=\"p\">,</span> <span class=\"nx\">payload</span><span class=\"p\">.</span><span class=\"nx\">options</span><span class=\"p\">);</span>\n  <span class=\"p\">}</span> <span class=\"k\">else</span> <span class=\"p\">{</span>\n    <span class=\"k\">return</span> <span class=\"p\">[];</span>\n  <span class=\"p\">}</span>\n<span class=\"p\">});</span>\n</pre></div>\n\n\n<p>Which lets us then write things like this:</p>\n<div class=\"codehilite\"><pre><span></span><span class=\"nx\">Meteor</span><span class=\"p\">.</span><span class=\"nx\">subscribe</span><span class=\"p\">(</span><span class=\"s2\">&quot;FhirSubscriptions&quot;</span><span class=\"p\">,</span> <span class=\"nx\">subscription</span><span class=\"p\">.</span><span class=\"nx\">channel</span><span class=\"p\">.</span><span class=\"nx\">payload</span><span class=\"p\">);</span>\n</pre></div>\n\n\n<p>And more robustly:</p>\n<div class=\"codehilite\"><pre><span></span><span class=\"kd\">var</span> <span class=\"nx\">exampleSubscription</span> <span class=\"o\">=</span> <span class=\"p\">{</span>\n  <span class=\"s2\">&quot;resourceType&quot;</span><span class=\"o\">:</span> <span class=\"s2\">&quot;Subscription&quot;</span><span class=\"p\">,</span>\n  <span class=\"s2\">&quot;status&quot;</span><span class=\"o\">:</span> <span class=\"s2\">&quot;active&quot;</span><span class=\"p\">,</span>\n  <span class=\"s2\">&quot;channel&quot;</span><span class=\"o\">:</span> <span class=\"p\">{</span>\n    <span class=\"s2\">&quot;type&quot;</span><span class=\"o\">:</span> <span class=\"s2\">&quot;websocket&quot;</span><span class=\"p\">,</span>\n    <span class=\"s2\">&quot;endpoint&quot;</span><span class=\"o\">:</span> <span class=\"nx\">Meteor</span><span class=\"p\">.</span><span class=\"nx\">absoluteUrl</span><span class=\"p\">(),</span>\n    <span class=\"s2\">&quot;payload&quot;</span><span class=\"o\">:</span> <span class=\"p\">{</span>\n      <span class=\"s2\">&quot;resourceType&quot;</span><span class=\"o\">:</span> <span class=\"s2\">&quot;Patient&quot;</span><span class=\"p\">,</span>\n      <span class=\"s2\">&quot;query&quot;</span><span class=\"o\">:</span> <span class=\"p\">{</span>\n        <span class=\"s2\">&quot;name.$.family&quot;</span><span class=\"o\">:</span> <span class=\"nx\">getSearchInput</span><span class=\"p\">()</span>\n      <span class=\"p\">},</span>\n      <span class=\"s2\">&quot;options&quot;</span><span class=\"o\">:</span> <span class=\"p\">{</span>\n        <span class=\"s2\">&quot;sort&quot;</span><span class=\"o\">:</span> <span class=\"p\">{</span> <span class=\"s2\">&quot;name.$.text&quot;</span><span class=\"o\">:</span> <span class=\"nx\">getSortPreference</span><span class=\"p\">()</span> <span class=\"p\">}</span>\n      <span class=\"p\">},</span>\n      <span class=\"s2\">&quot;trigger&quot;</span><span class=\"o\">:</span> <span class=\"p\">{</span>\n        <span class=\"s2\">&quot;after&quot;</span><span class=\"o\">:</span> <span class=\"p\">{</span>\n          <span class=\"s2\">&quot;update&quot;</span><span class=\"o\">:</span> <span class=\"kd\">function</span><span class=\"p\">(</span><span class=\"nx\">userId</span><span class=\"p\">,</span> <span class=\"nx\">doc</span><span class=\"p\">){</span>\n            <span class=\"nx\">HipaaLogger</span><span class=\"p\">.</span><span class=\"nx\">logEvent</span><span class=\"p\">({</span>\n              <span class=\"nx\">resourceType</span><span class=\"o\">:</span> <span class=\"s2\">&quot;AuditEvent&quot;</span><span class=\"p\">,</span>\n              <span class=\"nx\">action</span><span class=\"o\">:</span> <span class=\"s2\">&quot;Updated doc via server-side trigger passed in via subscription from the client.&quot;</span><span class=\"p\">,</span>\n              <span class=\"nx\">outcome</span><span class=\"o\">:</span> <span class=\"s2\">&quot;Success&quot;</span><span class=\"p\">,</span>\n              <span class=\"nx\">agent</span><span class=\"o\">:</span> <span class=\"p\">[{</span>\n                <span class=\"nx\">role</span><span class=\"o\">:</span> <span class=\"p\">{</span>\n                  <span class=\"nx\">text</span><span class=\"o\">:</span> <span class=\"s1\">&#39;Practitioner&#39;</span>\n                <span class=\"p\">},</span>\n                <span class=\"nx\">userId</span><span class=\"o\">:</span> <span class=\"nx\">Meteor</span><span class=\"p\">.</span><span class=\"nx\">userId</span><span class=\"p\">(),</span>\n                <span class=\"nx\">name</span><span class=\"o\">:</span> <span class=\"nx\">Meteor</span><span class=\"p\">.</span><span class=\"nx\">user</span><span class=\"p\">({</span><span class=\"nx\">_id</span><span class=\"o\">:</span> <span class=\"nx\">userId</span><span class=\"p\">}).</span><span class=\"nx\">fullName</span><span class=\"p\">(),</span>\n              <span class=\"p\">}],</span>\n              <span class=\"nx\">source</span><span class=\"o\">:</span> <span class=\"p\">{},</span>\n              <span class=\"nx\">entity</span><span class=\"o\">:</span> <span class=\"p\">[{</span>\n                <span class=\"nx\">identifier</span><span class=\"o\">:</span> <span class=\"p\">{</span>\n                  <span class=\"nx\">value</span><span class=\"o\">:</span> <span class=\"nx\">doc</span><span class=\"p\">.</span><span class=\"nx\">id</span><span class=\"p\">()</span>\n                <span class=\"p\">},</span>\n                <span class=\"nx\">name</span><span class=\"o\">:</span> <span class=\"s2\">&quot;Patient&quot;</span><span class=\"p\">,</span>\n              <span class=\"p\">}]</span>\n            <span class=\"p\">});</span>\n          <span class=\"p\">}</span>\n        <span class=\"p\">}</span>\n      <span class=\"p\">}</span>\n    <span class=\"p\">}</span>\n  <span class=\"p\">}</span>\n<span class=\"p\">};</span>\n<span class=\"nx\">Subscriptions</span><span class=\"p\">.</span><span class=\"nx\">insert</span><span class=\"p\">(</span><span class=\"nx\">exampleSubscription</span><span class=\"p\">);</span>\n\n<span class=\"nx\">Subscriptions</span><span class=\"p\">.</span><span class=\"nx\">find</span><span class=\"p\">().</span><span class=\"nx\">forEach</span><span class=\"p\">(</span><span class=\"kd\">function</span><span class=\"p\">(</span><span class=\"nx\">subscription</span><span class=\"p\">){</span>\n  <span class=\"k\">if</span><span class=\"p\">(</span><span class=\"nx\">subscription</span><span class=\"p\">.</span><span class=\"nx\">active</span><span class=\"p\">){</span>\n    <span class=\"nx\">Meteor</span><span class=\"p\">.</span><span class=\"nx\">subscribe</span><span class=\"p\">(</span><span class=\"s2\">&quot;FhirSubscriptions&quot;</span><span class=\"p\">,</span> <span class=\"nx\">subscription</span><span class=\"p\">.</span><span class=\"nx\">channel</span><span class=\"p\">.</span><span class=\"nx\">payload</span><span class=\"p\">);</span>\n  <span class=\"p\">}</span>\n<span class=\"p\">});</span>\n</pre></div>",
+        "id": 153927031,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1514303917
+    },
+    {
+        "content": "<p>So, from the client side, if we wanted to add triggers to a subscription that included a trigger, we'd probably add it into the payload, like so:  (Simplified to illustrate the schema). </p>\n<div class=\"codehilite\"><pre><span></span>{\n  &quot;resourceType&quot;: &quot;Subscription&quot;,\n  &quot;status&quot;: &quot;active&quot;,\n  &quot;channel&quot;: {\n    &quot;type&quot;: &quot;websocket&quot;,\n    &quot;endpoint&quot;: &quot;http://localhost:3000&quot;,\n    &quot;payload&quot;: {\n      &quot;resourceType&quot;: &quot;&quot;,\n      &quot;query&quot;: {},\n      &quot;options&quot;: {\n        &quot;sort&quot;: {},\n        &quot;limit&quot;: {}\n      },\n      &quot;trigger&quot;: {\n        &quot;after&quot;: {\n          &quot;find&quot;: {},\n          &quot;findOne&quot;: {},\n          &quot;insert&quot;: {},\n          &quot;update&quot;: {},\n          &quot;delete&quot;: {}\n        },\n        &quot;before&quot;: {\n          &quot;find&quot;: {},\n          &quot;findOne&quot;: {},\n          &quot;insert&quot;: {},\n          &quot;update&quot;: {},\n          &quot;delete&quot;: {}\n        }\n      }\n    }\n  }\n}\n</pre></div>\n\n\n<p>Send that over the wire to our publication method, and it has everything needed to set up the subscription with server side triggers.</p>",
+        "id": 153927032,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1514303990
+    },
+    {
+        "content": "<p>Dan what other languages would be relevant?</p>",
+        "id": 153927044,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1514326801
+    },
+    {
+        "content": "<p>For me, subscription is a problem; I do all the subscription processing post-commit. Business rules are in commit. I think this is a big distinction</p>",
+        "id": 153927045,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1514326860
+    },
+    {
+        "content": "<p>So you are looking for a server side hook that can make changes that are not Versioned... (shutters the security geek inside)</p>",
+        "id": 153927046,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1514327469
+    },
+    {
+        "content": "<p>You could do stuff like regenerate the narrative of a generated narrative to be more consistent, resolve identifiers to references, include the display portions of references . Or check for violations of rules, and throw exceptions (preventing commit).</p>",
+        "id": 153927053,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1514344406
+    },
+    {
+        "content": "<blockquote>\n<p>For me, subscription is a problem; I do all the subscription processing post-commit. Business rules are in commit. I think this is a big distinction</p>\n</blockquote>\n<p>+1</p>",
+        "id": 153927061,
+        "sender_full_name": "Christiaan Knaap",
+        "timestamp": 1514360290
+    },
+    {
+        "content": "<p>I think there are a bunch of embedded language runtimes that could make sense depending on whether the server implementer is optimizing for performance, memory usage, sandboxing functionality, ease of integration with the core server language, developer comfort, etc. For example, redis embeds lua instead of js since it has a smaller memory footprint, nginx created a custom subset of js for performance, and R Studio built out the whole Shiny ecosystem so developers don't have to learn js in addition to R...</p>",
+        "id": 153927068,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1514383980
+    },
+    {
+        "content": "<p>Also, I could see some server implementors building a DSL for trigger functions to have more control over third party code running on their system, or wanting to use the same language as the core server implementation so they can more easily debug triggers (eg <a href=\"http://www.remobjects.com/ps.aspx\" target=\"_blank\" title=\"http://www.remobjects.com/ps.aspx\">http://www.remobjects.com/ps.aspx</a> :)</p>",
+        "id": 153927069,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1514383994
+    },
+    {
+        "content": "<blockquote>\n<p>You could do stuff like regenerate the narrative of a generated narrative to be more consistent, resolve identifiers to references, include the display portions of references . Or check for violations of rules, and throw exceptions (preventing commit).</p>\n</blockquote>\n<p>Exactly.  These are mostly <code>before</code> hooks, as one generally wants to optimize the generated narrative before putting it into cache.   <code>after</code> hooks tend to be logging, auditing, and data pipelining.</p>",
+        "id": 153927070,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1514386656
+    },
+    {
+        "content": "<p>so, <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>, it tuns out that in my server, there is 3 different points in the pipeline for server side decision making logic of this type:</p>\n<ul>\n<li>when the request is fully parsed, and before any decisions (security) are made (and before transaction is entered). can modify absolutely anything</li>\n<li>deep down inside the transaction, when before and after are being compared. Can blow up the transaction, but not modify anything</li>\n<li>post transaction, when subscriptions are posted</li>\n</ul>",
+        "id": 153927411,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1514887289
+    },
+    {
+        "content": "<p>I suspect that most server architectures will lead to the same general set of 3 options</p>",
+        "id": 153927412,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1514887313
+    },
+    {
+        "content": "<p>Those first 2 are the same in my server, base security is checked first.<br>\nBut i don't disagree with the list.</p>",
+        "id": 153927465,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1514925406
+    },
+    {
+        "content": "<p>ok, <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> , getting back to this. I have an implementation of this now. I did things a little differently to what you originally proposed. the first difference is that I didn't see the need to do a whole lot of persistence work when we already have EventDefinition - so I just re-used EventDefinition: you post EventDefinition resources to the server, and set them active or not with a tag.</p>",
+        "id": 153927877,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515351404
+    },
+    {
+        "content": "<p>so here's an example resource:</p>\n<div class=\"codehilite\"><pre><span></span><span class=\"nt\">&lt;EventDefinition</span> <span class=\"na\">xmlns=</span><span class=\"s\">&quot;http://hl7.org/fhir&quot;</span><span class=\"nt\">&gt;</span>\n  <span class=\"nt\">&lt;id</span> <span class=\"na\">value=</span><span class=\"s\">&quot;1&quot;</span><span class=\"nt\">/&gt;</span>\n  <span class=\"nt\">&lt;meta&gt;</span>\n    <span class=\"nt\">&lt;tag&gt;</span>\n      <span class=\"nt\">&lt;system</span> <span class=\"na\">value=</span><span class=\"s\">&quot;http://www.healthintersections.com.au&quot;</span><span class=\"nt\">/&gt;</span>\n      <span class=\"nt\">&lt;code</span> <span class=\"na\">value=</span><span class=\"s\">&quot;active&quot;</span><span class=\"nt\">/&gt;</span>\n    <span class=\"nt\">&lt;/tag&gt;</span>\n  <span class=\"nt\">&lt;/meta&gt;</span>\n  <span class=\"nt\">&lt;url</span> <span class=\"na\">value=</span><span class=\"s\">&quot;http://www.healthintersections.com.au/fhir/EventDefinition/test&quot;</span><span class=\"nt\">/&gt;</span>\n  <span class=\"nt\">&lt;name</span> <span class=\"na\">value=</span><span class=\"s\">&quot;test&quot;</span><span class=\"nt\">/&gt;</span>\n  <span class=\"nt\">&lt;status</span> <span class=\"na\">value=</span><span class=\"s\">&quot;draft&quot;</span><span class=\"nt\">/&gt;</span>\n  <span class=\"nt\">&lt;trigger&gt;</span>\n    <span class=\"nt\">&lt;type</span> <span class=\"na\">value=</span><span class=\"s\">&quot;data-changed&quot;</span><span class=\"nt\">/&gt;</span>\n    <span class=\"nt\">&lt;data&gt;</span>\n      <span class=\"nt\">&lt;type</span> <span class=\"na\">value=</span><span class=\"s\">&quot;Patient&quot;</span><span class=\"nt\">/&gt;</span>\n    <span class=\"nt\">&lt;/data&gt;</span>\n    <span class=\"nt\">&lt;condition&gt;</span>\n      <span class=\"nt\">&lt;language</span> <span class=\"na\">value=</span><span class=\"s\">&quot;application/javascript&quot;</span><span class=\"nt\">/&gt;</span>\n      <span class=\"nt\">&lt;expression</span> <span class=\"na\">value=</span><span class=\"s\">&quot;...&quot;</span><span class=\"nt\">/&gt;</span>\n    <span class=\"nt\">&lt;/condition&gt;</span>\n  <span class=\"nt\">&lt;/trigger&gt;</span>\n<span class=\"nt\">&lt;/EventDefinition&gt;</span>\n</pre></div>",
+        "id": 153927878,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515351415
+    },
+    {
+        "content": "<p>this shows the example tag, the trigger the resource type that you want to run this trigger on, and the javascript you want to run. The trigger code must be one of the following:</p>",
+        "id": 153927879,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515351514
+    },
+    {
+        "content": "<ul>\n<li>data-changed - called for create, update, patch, delete </li>\n<li>data-added - called for create</li>\n<li>data-modified - called for update/patch</li>\n<li>data-removed - called for delete</li>\n</ul>",
+        "id": 153927880,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515351568
+    },
+    {
+        "content": "<p>the javascript function has the signature </p>\n<div class=\"codehilite\"><pre><span></span><span class=\"kd\">function</span> <span class=\"nx\">dataChanged</span><span class=\"p\">(</span><span class=\"nx\">session</span><span class=\"p\">,</span> <span class=\"nx\">previous</span><span class=\"p\">,</span> <span class=\"nx\">current</span><span class=\"p\">}</span>\n</pre></div>",
+        "id": 153927881,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515351609
+    },
+    {
+        "content": "<p>Here's an example function that does what I originally proposed:</p>\n<div class=\"codehilite\"><pre><span></span><span class=\"kd\">function</span> <span class=\"nx\">isMasterUrn</span><span class=\"p\">(</span><span class=\"nx\">id</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n    <span class=\"k\">return</span> <span class=\"nx\">id</span><span class=\"p\">.</span><span class=\"nx\">system</span> <span class=\"o\">===</span> <span class=\"s1\">&#39;http://acme.org/fhir/NamingSystem/urn&#39;</span><span class=\"p\">;</span>\n<span class=\"p\">}</span>\n\n<span class=\"kd\">function</span> <span class=\"nx\">dataChanged</span><span class=\"p\">(</span><span class=\"nx\">session</span><span class=\"p\">,</span> <span class=\"nx\">previous</span><span class=\"p\">,</span> <span class=\"nx\">current</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n  <span class=\"k\">if</span> <span class=\"p\">(</span><span class=\"nx\">current</span> <span class=\"o\">!=</span> <span class=\"kc\">null</span><span class=\"p\">)</span> <span class=\"p\">{</span>\n    <span class=\"nx\">id</span> <span class=\"o\">=</span> <span class=\"nx\">current</span><span class=\"p\">.</span><span class=\"nx\">identifier</span><span class=\"p\">.</span><span class=\"nx\">find</span><span class=\"p\">(</span><span class=\"nx\">isMasterUrn</span><span class=\"p\">);</span>\n    <span class=\"k\">if</span> <span class=\"p\">(</span><span class=\"nx\">id</span> <span class=\"o\">==</span> <span class=\"kc\">null</span><span class=\"p\">)</span>\n      <span class=\"k\">throw</span><span class=\"p\">(</span><span class=\"s1\">&#39;No URN provided&#39;</span><span class=\"p\">);</span>\n    <span class=\"nx\">bnd</span> <span class=\"o\">=</span> <span class=\"nx\">fhir</span><span class=\"p\">.</span><span class=\"nx\">search</span><span class=\"p\">(</span><span class=\"s1\">&#39;Patient&#39;</span><span class=\"p\">,</span> <span class=\"s1\">&#39;identifier=http://acme.org/fhir/NamingSystem/urn|&#39;</span><span class=\"o\">+</span><span class=\"nx\">id</span><span class=\"p\">.</span><span class=\"nx\">value</span><span class=\"p\">);</span>\n    <span class=\"k\">if</span> <span class=\"p\">((</span><span class=\"nx\">bnd</span><span class=\"p\">.</span><span class=\"nx\">entry</span><span class=\"p\">.</span><span class=\"nx\">length</span> <span class=\"o\">&gt;</span> <span class=\"mi\">0</span><span class=\"p\">)</span> <span class=\"o\">&amp;&amp;</span> <span class=\"p\">(</span><span class=\"nx\">bnd</span><span class=\"p\">.</span><span class=\"nx\">entry</span><span class=\"p\">[</span><span class=\"mi\">0</span><span class=\"p\">].</span><span class=\"nx\">resource</span><span class=\"p\">.</span><span class=\"nx\">id</span> <span class=\"o\">!=</span> <span class=\"nx\">current</span><span class=\"p\">.</span><span class=\"nx\">id</span><span class=\"p\">))</span>\n      <span class=\"k\">throw</span><span class=\"p\">(</span><span class=\"s1\">&#39;Duplicate URN &#39;</span><span class=\"o\">+</span><span class=\"nx\">id</span><span class=\"p\">.</span><span class=\"nx\">value</span><span class=\"p\">);</span>\n  <span class=\"p\">}</span>\n<span class=\"p\">}</span>\n</pre></div>",
+        "id": 153927882,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515351682
+    },
+    {
+        "content": "<p>You'll not that I chose to implement a higher level wrapper for the FHIR operations - fhir.search instead of fhir.get -  makes it easier to invoke the operations</p>",
+        "id": 153927883,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515351814
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> I'm really not using EventDefinition quite correctly here - I'm (mis)using condition as a rule against the other filter information. But I couldn't see another convenient way?</p>",
+        "id": 153927884,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515351945
+    },
+    {
+        "content": "<p>... now I have to figure out how to set this up on <a href=\"http://test.fhir.org\" target=\"_blank\" title=\"http://test.fhir.org\">test.fhir.org</a>....</p>",
+        "id": 153927885,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515351983
+    },
+    {
+        "content": "<p>What about before-update, after-update etc. Just like we have in SQL triggers, covering the ones that execute before commit, and after(async)</p>",
+        "id": 153927897,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1515360746
+    },
+    {
+        "content": "<p>still working on that. it feels like it will be a lot harder to get consistency there</p>",
+        "id": 153927898,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515360912
+    },
+    {
+        "content": "<p>here. btw, is my Session Object:</p>\n<ul>\n<li>String provider {'', 'Custom', 'Facebook', 'Google', 'HL7'} - who authenticated the user (null for anonymous)</li>\n<li>String id - internal id for the session (database primary key)</li>\n<li>String userKey - internal id for the user (anonymous has it's own key)</li>\n<li>String userName - displayable description of the user</li>\n<li>String userEvidence {'Anonymous', 'Internal' ,'Login', 'External AOuth', 'JWT Bearer Token'} - on what grounds the user is identified</li>\n<li>String systemName - name that describes the client (depends on how authenticated; might just be IP address</li>\n<li>String systemEvidence {'Unknown', 'This Server', 'by OAuth', 'By OWin', 'By Certificate', 'By JWT'} - how the client name was established ('unknown' = the client was not identifier, IP only. \"This server' = an internally sourced request)</li>\n<li>String sessionName - net description of the session (user + system)</li>\n<li>String email - user email, if known</li>\n<li>String expires - UTC date that the session expires, in FHIR format</li>\n<li>String created - UTC data session was created, in FHIR format</li>\n<li>bool canRead({String} resourceName) - true if session provides read access to resourceName (includes OAuth scopes)</li>\n<li>bool canWrite({String} resourceName) - true if session provides write access to resourceName (includes OAuth scopes)</li>\n<li>String[] compartments - list of compartments this session has access to (empty= no compartment based restriction)</li>\n<li>String[] scopes - list of scopes user agreed to (or empty, if not using OAuth)</li>\n<li>bool isAnonymous - true if user is anonymous (derived from userEvidence)</li>\n</ul>",
+        "id": 153927899,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515361872
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 153927955,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1515425490
+    },
+    {
+        "content": "<p>It looks like you've set this up as a synchronous js app?  It might be worth keeping it async so it can be used more readily with existing js-based environments.</p>",
+        "id": 153927956,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1515425672
+    },
+    {
+        "content": "<p>Also, in your session model <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> I'm not sure I understand the \"evidence\" concept, or how user evidence VS system evidence are used separately.</p>",
+        "id": 153927960,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1515425909
+    },
+    {
+        "content": "<p>I don't understand the use of asynchronous in this context.</p>",
+        "id": 153928020,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515440973
+    },
+    {
+        "content": "<p>Session model: it's about authenticating the client and the user. You may have an authenticated client, but not know the user (backend services) or you may have authenticated the client without knowing the use (unusual use of OAuth) or you may have firmly authenticated both</p>",
+        "id": 153928021,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515441067
+    },
+    {
+        "content": "<p>it's not clear how useful this is to a script, that's for sure. But I have that information and it's easy to expose.</p>",
+        "id": 153928022,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515441111
+    },
+    {
+        "content": "<p>Asynchronous is just the normal mode for interacting with the JavaScript interpreter in most contexts. This includes the browser and node js. If we defined a synchronous API instead, this would be very hard to implement in those environments.</p>",
+        "id": 153928030,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1515442636
+    },
+    {
+        "content": "<p>If you're going to pick one, asynchronous is the more flexible pattern is all.</p>",
+        "id": 153928031,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1515442670
+    },
+    {
+        "content": "<p>I'm inside a transaction. I <em>have</em> to wait for the script to execute. how can it be meaningfullly asynchronous?</p>",
+        "id": 153928046,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515449676
+    },
+    {
+        "content": "<p>Inside the transaction I agree it has to be syncronous as it needs to be able to effect the outcome of the transaction. For the post transaction, being async would be fine.</p>",
+        "id": 153928054,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1515452727
+    },
+    {
+        "content": "<p>I'd still have to wait post-transaction at the moment... I'll think about that</p>",
+        "id": 153928055,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515452807
+    },
+    {
+        "content": "<p>I'm coding up the infrastructure to be able to do the post transaction processing at the moment.</p>",
+        "id": 153928056,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1515452861
+    },
+    {
+        "content": "<p>I'll have previous and current versions available, but I haven't thought deeply about about the balance between driving actions from the script vs using the script as a filter on the subscription</p>",
+        "id": 153928057,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515452975
+    },
+    {
+        "content": "<p>For what it's worth I'm not arguing for Meaningful asynchronicity. I'm just saying that it makes sense for the API itself to be asynchronous. Mostly from the perspective of being generalizable at fitting with existing Frameworks. <span class=\"user-mention\" data-user-id=\"191678\">@Abigail Watson</span>  <span class=\"user-mention\" data-user-id=\"191318\">@nicola (RIO/SS)</span>  <span class=\"user-mention\" data-user-id=\"191414\">@Dan Gottlieb</span>  would like to get your perspective on this.</p>",
+        "id": 153928065,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1515455960
+    },
+    {
+        "content": "<p>When it comes to acting as a filter vs driving behavior... both of these are important and rather different use cases. They can also work nicely together <span class=\"emoji emoji-1f642\" title=\"simple smile\">:simple_smile:</span></p>",
+        "id": 153928066,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1515456039
+    },
+    {
+        "content": "<p>with regard to async.... I'm still not sure why it makes sense to be asynchronous. Under what circumstances would asynchronicity be meaningful for this operation?</p>",
+        "id": 153928068,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515459762
+    },
+    {
+        "content": "<p>the problem with this approach - that you customization moves to code realm - many complex systems went this way embedding js, lua or python and everybody, who work with this approach - hate it <span class=\"emoji emoji-1f609\" title=\"wink\">:wink:</span> Most well known system is browser. So industry moved to fast deploy and micro-services instead.</p>",
+        "id": 153928109,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1515493858
+    },
+    {
+        "content": "<p>So josh suggested this first, but that's a serious challenge for me - and I expect for others. The key thing about this is that it runs inside my transaction context, and it would be a massive rewrite to be able to call out to another server within the transaction core, and then have it call back into the context of the transaction core.</p>",
+        "id": 153928166,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1515534208
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>  - two phase commit <span class=\"emoji emoji-1f609\" title=\"wink\">:wink:</span></p>",
+        "id": 153928173,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1515535014
+    }
+]

@@ -1,0 +1,68 @@
+[
+    {
+        "content": "<p>How should we support the creation of resource with fhir operations ($)?</p>\n<p>Is the against the specification to use the fhir-operation on the base resource? </p>\n<p>E.g. (just a made-up example to illustrate) :<br>\n../Patient/$createSimplePatientUseAddressFromNationalSystem  - with some basic values as parameters<br>\n../Patient/$createPatientAlsoInformNationalSystem - with some other basic values as parameters</p>\n<p>The spec says (From <a href=\"https://www.hl7.org/fhir/operations.html#executing\" target=\"_blank\" title=\"https://www.hl7.org/fhir/operations.html#executing\">https://www.hl7.org/fhir/operations.html#executing</a>):<br>\n \"A Resource type (e.g. <a href=\"http://fhir.someserver.org/fhir/Patient\" target=\"_blank\" title=\"http://fhir.someserver.org/fhir/Patient\">http://fhir.someserver.org/fhir/Patient</a>): These are operations that operate across all instances of a given resource type\"):</p>\n<p>I may seem like a bit far-stretched interpretation of \"operate across all instances\" to include \"create a new resource instance\"?</p>\n<p>My specific scenario:<br>\nWe develop a booking system having mainly appointments (quite naturally), but also referalrequests to support the case an expected visit by a Patient to the emergency ward. <br>\nWe also support a queue flow for specific departments and have a queueItem-resource to model this.<br>\nWhen the patient arrives at such a department the queueItem resource is created. <br>\nWe have decided to use fhir-operations at QueueItem to support the state-transitions after the arrival .<br>\n(like ../QueueItem/theQueueId/$callPatient with needed information in parameters).<br>\nThe use of Fhir-operations seemed more accurate (and client friendly) than using a PATCH to set a status (or to PUT the full resource); also, the operations may perform changes of the appointment.<br>\nThe queueItem is created as part of the patient arrival - to keep a symmetric/logical solution, the choice for the patient arrival support would be:<br>\n    POST ../QueueItem/$callPatient <br>\nwith parameters including (amongst other) the id of the appointment/referalrequest.</p>",
+        "id": 153967166,
+        "sender_full_name": "Allan Bro Hansen",
+        "timestamp": 1528231366
+    },
+    {
+        "content": "<p>You can define operations to do all sorts of things - your challenge is that no other systems are going to support them unless you pay them enough money to make it worth their while to do the development and ongoing maintenance of that custom interface.  So, while a custom operation might be more \"efficient\" than just doing a standard HTTP POST create or PUT update, you're actually imposing a lot of cost on the community by going that route.  Also, QueueItem isn't a FHIR resource, so your interface wouldn't technically be using FHIR operations either.  It'd be a custom interface that happened to pass FHIR resources around as part of it.</p>",
+        "id": 153967171,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1528231753
+    },
+    {
+        "content": "<p>Rather than QueueItem, have you looked at Task?  It's intended to manage \"lists of things to be done\", including requesting state transitions.  For example, Task is the proper way to say \"Can you please cancel prescription XYZ?\"</p>",
+        "id": 153967172,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1528231812
+    },
+    {
+        "content": "<p>Thanks for a quick reply<br>\n1) Are you saying that \"technical\" an FHIR concepts (like $operations) do not apply to a custom resource? (custom resources are still resources, right, so I would say we are using FHIR operation on a custom resource.<br>\n2) Task does not seem to fit the \"resource handling flow and information concerning the patient arrived in the waiting room (giving a ticket) and being called to the examination room)\". (That is based on a 5 min read - we are on stu2 which is without the task resource)<br>\n3) Our FHIR interface envolves by client demands - this is a client asking (and paying) for a easy way to e.g. call the patient. <br>\n4) (my question) I know I can do all with operations - but it may seam that for  /Patient/$soSomeThing , it would be wrong to let $soSomeThing create a new Patient instance.</p>",
+        "id": 153967192,
+        "sender_full_name": "Allan Bro Hansen",
+        "timestamp": 1528234748
+    },
+    {
+        "content": "<p>1. 'Custom' resources are not FHIR compliant.  That doesn't mean you can't go off and create any kind of resource you like - but doing that is outside of FHIR and won't work with FHIR reference implementations, FHIR test servers, etc.<br>\n2. Task is all about workflow execution.  Tasks can have hierarchies of sub-tasks.  So if you're wanting to generate a set of steps triggered by patient arrival and monitor who's assigned to do each and where you're at in the process, Task is your resource.<br>\n3. Make sure to understand what your client expects to get in the end.  If you implement a bunch of custom operations that no other system supports and your client is expecting to interoperate with a bunch of systems because \"they have a FHIR interface\", then you're not meeting your client's needs.  If your client controls both sides of the interface and doesn't need to talk to anyone else and just wants something that is FHIR-ish where they don't expect to leverage any of the publicly available tools and resources, then custom resources and custom operations may be fine.<br>\n4. It's not \"wrong\" to use Patient/$doSomething to create a resource, it's just a bit weird - and not something other systems will support out of the box.  When approaching a FHIR interface, it's generally best to ask the question \"How does almost everyone else do this?\" followed by \"Is there any reason we <em>need</em> to do it differently?\"  If you're implementing a standard interface, you'll never be as efficient as if you build something custom-tuned for your architecture, requirements and environment.  So \"not as efficient\" isn't a strong need unless you're starting to get into orders of magnitudes of difference.  Also, always keep in mind the costs of those who will be integrating with you in addition to your own direct costs.  In the end, you'll end up paying for others' costs too - or if no one pays the costs, then you'll find you have no one to integrate with.</p>",
+        "id": 153967193,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1528238910
+    },
+    {
+        "content": "<p>(In DSTU2, the equivalent of Task is a combination of Order and OrderResponse, though they're a bit broken, so you'll probably need to use extensions and a few work-arounds to get them to meet your needs.)</p>",
+        "id": 153967198,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1528240080
+    },
+    {
+        "content": "<p>Thanks<br>\n1) Okay - we still try to follow all FHIR guidelines for our custom ressources - so I think we are still \"inside FHIR\" but of course test servers will not have them, just like they don't have all our extensions of FHIR's built-in ressources.<br>\n2) Okay - maybe a task with subtasks could work -  but it would mean a conceptuel change of our 10 years old QueueItem concept.<br>\n3) I understand - I still think custom operation are fine as add-ons to meet clients demands. Specially in respect to state transitions.<br>\n4) Yes \"the weirdness\"  goes for all kind of interfaces.Our interface evolves by client demands (and an fhir operation is not my first \"offer\").</p>",
+        "id": 153967269,
+        "sender_full_name": "Allan Bro Hansen",
+        "timestamp": 1528264911
+    },
+    {
+        "content": "<p>1. Right now, any use of 'custom' resources is non-conformant.  We're exploring options to support custom resources, but the current state is \"outside FHIR\"<br>\n2. You'll need to map your internal objects to FHIR objects.  The FHIR objects won't necessarily have the same names and may not work identically.  That mapping exercise is part of what it means to use a standard<br>\n3. Custom operations aren't prohibited.  Just be aware that most systems won't support them and expect to do state transitions with a simple update of the resource instance<br>\n4. So long as the client is aware that custom operations won't likely be supported by anyone else and they're fine with that lack of interoperability, then I guess proceed.  (Though the question then is - what is their reason for wanting to use FHIR?)</p>",
+        "id": 153967282,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1528268197
+    },
+    {
+        "content": "<p>I have a really good hammer....</p>",
+        "id": 153967284,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1528268388
+    },
+    {
+        "content": "<p>Sometimes you clean your house by taking one room at a time - instead of just swinging a big hammer :-)</p>",
+        "id": 153967286,
+        "sender_full_name": "Allan Bro Hansen",
+        "timestamp": 1528269952
+    },
+    {
+        "content": "<p>I don't necessarily think that this customer actually pays much attention this kind of extended use of FHIR. It is however a step in the right direction just to have them accept the use of FHIR. <span class=\"user-mention\" data-user-id=\"192120\">@Allan Bro Hansen</span> I fully agree with you - baby steps is the way forward most of the time. You could sell it as continuous improvement ;)</p>",
+        "id": 153968035,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1528465291
+    }
+]

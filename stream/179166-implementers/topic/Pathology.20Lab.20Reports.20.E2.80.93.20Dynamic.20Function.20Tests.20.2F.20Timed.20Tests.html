@@ -1,0 +1,466 @@
+---
+layout: page
+title: "FHIR Chat  · Pathology Lab Reports – Dynamic Function Tests / Timed Tests · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html">Pathology Lab Reports – Dynamic Function Tests / Timed Tests</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="225016461"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225016461" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Phil Brennan <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225016461">(Feb 03 2021 at 13:44)</a>:</h4>
+<p>I am looking at options for supporting a type of pathology lab test known as a Dynamic Function Test (also sometimes referred to as a Timed Test).  This is where a series of specimens are collected at defined relative time points before and after an intervention to assess the response to that intervention.  The same type of test is performed against each collected specimen and the results are reported as a set.  A simple example of a Dynamic Function Test is a glucose tolerance test, as illustrated in this example test report fragment:</p>
+<p><a href="/user_uploads/10155/4N6LuA7DJEs8PkHw6LsNbU2m/GTT_Report.png">GTT_Report.png</a> </p>
+<div class="message_inline_image"><a href="/user_uploads/10155/4N6LuA7DJEs8PkHw6LsNbU2m/GTT_Report.png" title="GTT_Report.png"><img src="/user_uploads/10155/4N6LuA7DJEs8PkHw6LsNbU2m/GTT_Report.png"></a></div><p>For a Glucose Tolerance Test an initial glucose level is measured (at O Min) and the patient is then asked to drink a glucose drink.  Further specimens are then taken and the level of glucose measured.   Other lab tests that are commonly used as part of a Dynamic Function Test include Growth Hormone, Cortisol and Thyrotropin Releasing Hormone tests.</p>
+<p>To group the results I am planning to use a parent Observation with a set of child Observations (similar to the method you would use for grouping a set of individual test results that form part of a test panel or battery such as a Full Blood Count).  The value set for observation relationship types (<a href="http://hl7.org/fhir/STU3/valueset-observation-relationshiptypes.html">http://hl7.org/fhir/STU3/valueset-observation-relationshiptypes.html</a>) includes an entry for ‘sequel-to’.  This looks like the best option for linking the parent and child Observations (the specification mentions that ‘sequel-to’ can be used for timed tests such as a Glucose Tolerance Test).  Each Observation would reference the associated Specimen.  The Observations would be linked to an instance of a DiagnosticReport.</p>
+<p>The question is how best to support the relative time interval associated with each Observation (e.g. 0 Min, 1 Hr, 2 Hr).  One option would be to encode the time interval as part of the observed entity (i.e. test name).  So we would have separate Observation.code descriptions (and codes) such as “0 minute glucose level”, “60 minute glucose level” etc.  Obviously this approach isn’t particularly flexible.</p>
+<p>Another option would be to carry the relative time interval as part of each Observation.  However I can’t see an obvious way of doing this.  We are planning to use Observation.effective with a data type of dateTime to record the actual time of the observation (e.g. 2021-02-07T13:28) but there does not seem to be a data type that supports the concept of a relative time interval.  Our work is currently based on STU3.  I’m aware that R4 has introduced an additional data type of Timing for Observation.effective but that doesn’t seem to meet the requirement.</p>
+<p>Any ideas/suggestions would be very welcome.</p>
+
+
+
+<a name="225039705"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225039705" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Abel Enthoven <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225039705">(Feb 03 2021 at 16:23)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="261160">@Phil Brennan</span> would it be an option to use Observation.component for this? The observation would then have 2 components: 1 for the value and 1 for the relative time.  The time could then be a Quantity with UCUM unit 'min' (for minutes) or 'h' (for hour), combined with a code identifying the type of component. This is similar to the way you would record a blood pressure for example</p>
+
+
+
+<a name="225049683"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225049683" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225049683">(Feb 03 2021 at 17:27)</a>:</h4>
+<p>Observation.component would not be legitimate as it's different specimens taken at different times.  Typically I'd expect the linkage between the grouping Observation and the children to be with hasMember.  The "sequel to" could be used to link the children.  I.e. the second could point to the first and the third could point to the second.</p>
+
+
+
+<a name="225141864"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225141864" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Abel Enthoven <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225141864">(Feb 04 2021 at 10:26)</a>:</h4>
+<p>I was referring to an Observation with 2 components (value and relative time) <strong>per</strong> specimen <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> , thought that was the question. The hasMember relationship is indeed preferable for the group as a whole</p>
+
+
+
+<a name="225173017"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225173017" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225173017">(Feb 04 2021 at 15:18)</a>:</h4>
+<p>If the Observation.code didn't tell you the measurement time offset, you could convey this with a component.  The value for the glucose level would still go in Observation.value though, not in a component.</p>
+
+
+
+<a name="225174119"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225174119" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eric Haas <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225174119">(Feb 04 2021 at 15:25)</a>:</h4>
+<p>Why is the code not good enough?</p>
+
+
+
+<a name="225174244"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225174244" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eric Haas <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225174244">(Feb 04 2021 at 15:26)</a>:</h4>
+<p>As I understand it there are standard protocols for these tests and thus loinc codes</p>
+
+
+
+<a name="225175872"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225175872" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225175872">(Feb 04 2021 at 15:37)</a>:</h4>
+<p>If you're using LOINC, code should be good enough.  I wasn't making that presumption and was indicating when Abel's approach could work (with a bit of modification).</p>
+
+
+
+<a name="225187218"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225187218" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Phil Brennan <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225187218">(Feb 04 2021 at 16:45)</a>:</h4>
+<p>Many thanks everyone for your input and suggestions.  We are using SNOMED instead of LOINC but could follow a similar approach and encode the time interval as part of the test.  So we would have separate SNOMED term descriptions/codes such as ‘30 minute serum glucose level’, ‘60 minute serum glucose level’ etc.</p>
+<p>We have used this type of pre-coordinated approach before but to allow greater flexibility we are considering carrying the time interval element outside of the test name and in FHIR.</p>
+<p><span class="user-mention" data-user-id="221719">@Abel Enthoven</span>  the idea of using a component to carry the time interval looks interesting, thanks for that.  Also thanks <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>  for clarifying use of ‘has-member’ and ‘sequel-to’.</p>
+
+
+
+<a name="225208053"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225208053" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eric Haas <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225208053">(Feb 04 2021 at 19:16)</a>:</h4>
+<p>why the pre-coordinated approach less flexible exactly?</p>
+
+
+
+<a name="225564067"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225564067" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Phil Brennan <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225564067">(Feb 08 2021 at 15:55)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="191401">@Eric Haas</span>.  Apologies for the delay in replying.  The pre-coordinated approach is less flexible in that if a lab has a requirement to use a time interval that has not already been defined as part of an existing test result name, this would necessitate the creation of a new test description/code e.g. ‘300 minute serum glucose level’.  Carrying the time interval elsewhere in FHIR would mean we could use a more generic test name of ‘serum glucose level’.  This situation is more complicated for us because we are developing a nationally defined set of SNOMED CT based test names and codes.  Any additions or changes to those test names would be managed and distributed at a national level rather than locally.</p>
+
+
+
+<a name="225572533"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225572533" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225572533">(Feb 08 2021 at 16:49)</a>:</h4>
+<p>Note that the tradeoff is you can no longer query and trend based on the specific code.  If you have a different code per time-interval, you can trend  the 60 minute measures for the last 3 years.  If time-interval is a component, then you're going to get a whole lot of glucose levels that aren't comparable</p>
+
+
+
+<a name="225625037"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225625037" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lin Zhang <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225625037">(Feb 08 2021 at 23:29)</a>:</h4>
+<p>Using SCT for encoding lab tests is not a good practice.</p>
+
+
+
+<a name="225627194"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225627194" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225627194">(Feb 08 2021 at 23:56)</a>:</h4>
+<p>It depends on the country somewhat.  In the UK it's mandated.  In the US, LOINC is mandated, at least for systems bound by US Core.  Some countries might not use either.</p>
+
+
+
+<a name="225629956"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225629956" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lin Zhang <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225629956">(Feb 09 2021 at 00:30)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> Got it.  Thanks.</p>
+
+
+
+<a name="225717444"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225717444" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Phil Brennan <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225717444">(Feb 09 2021 at 16:36)</a>:</h4>
+<p>Thanks <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> and <span class="user-mention" data-user-id="192103">@Lin Zhang</span>.  I’m working on a UK based project so yes, SNOMED is the mandated coding scheme for terminology.  Even though we are not using LOINC, it’s interesting to note how it supports Dynamic Function Tests / Timed Tests.  In LOINC, the time interval is defined in the Challenge subpart within the Component/Analyte e.g. LOINC 51597-3 — Glucose [Moles/volume] in Serum or Plasma --1 hour post 75 g glucose PO.  This is like the proposed pre-coordinated approach using SNOMED that I outlined above.</p>
+<p>Lloyd, thanks for highlighting the downside of using the component as an option for carrying the time interval (rather than embedding it in the test name).  I think that would be a problem for us.  As well as being able to query on lab test usage, a key requirement is for any consuming system to be able to easily process and render the fully qualified test results for each time interval, for example 60 min: glucose 9.4 mmol/L, 120 min: glucose 9.1 mmol/L etc.</p>
+<p>I’m guessing we would have the same issue if we carried the time interval component elsewhere in FHIR?  For example, it could be argued that the time interval is actually an attribute of Specimen – something like ‘planned collection time’ (supported via a local extension) with a suitable value and unit of measure e.g. 60 min, 120 min etc.</p>
+<p>Either way, it’s starting to sound like a post-coordinated approach would be more difficult to implement than the pre-coordinated method of embedding the time interval in the test name.</p>
+
+
+
+<a name="225719758"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225719758" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225719758">(Feb 09 2021 at 16:51)</a>:</h4>
+<p>There's an extension that allows expressing a time as an offset from another time.  If you had a custom search criteria on that - or for that matter, if you used a search criteria on your component offset value, you might be able to filter.  However, it would be harder and probably not as well-supported.  You also wouldn't be able to do combined code + value searches which are often helpful when chaining.  So there are certainly some benefits to post-coordinating - at least for 'typical' offsets.</p>
+
+
+
+<a name="225774785"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/225774785" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lin Zhang <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#225774785">(Feb 09 2021 at 23:44)</a>:</h4>
+<p>Alternatively, post-coordinating would need a formal language such as the SNOMED CT Query Language and the CodeSystem as a formal ontology.</p>
+
+
+
+<a name="226963100"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/226963100" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robin Bosman <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#226963100">(Feb 19 2021 at 13:33)</a>:</h4>
+<p>We are actually also investigating this in Belgium and asking ourselves similar questions. To express laboratory tests in Belgium we use LOINC codes. For the moment I am looking into the use of extensions when 'attributes'  (for example in dynamic function tests) need to be added to LOINC codes. Something like this:<br>
+"code" : {<br>
+          "extension" : [<br>
+            {<br>
+              "url" : "<a href="https://www.ehealth.fgov.be/standards/fhir/StructureDefinition/be-ext-relative-time">https://www.ehealth.fgov.be/standards/fhir/StructureDefinition/be-ext-relative-time</a>",<br>
+              "valueQuantity" : {<br>
+                "value" : 50,<br>
+                "unit" : "m",<br>
+                "system" : "<a href="http://unitsofmeasure.org">http://unitsofmeasure.org</a>",<br>
+                "code" : "m"<br>
+              }<br>
+            }<br>
+          ],<br>
+          "coding" : [<br>
+            {<br>
+              "system" : "<a href="http://loinc.org">http://loinc.org</a>",<br>
+              [...]</p>
+
+
+
+<a name="226964415"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/226964415" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lin Zhang <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#226964415">(Feb 19 2021 at 13:44)</a>:</h4>
+<p>Both pre- and post-coordination representaions have their own pros and cons.  And any terminlogy is unable to address all the coding requirements at any time.</p>
+
+
+
+<a name="227234772"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/227234772" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robin Bosman <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#227234772">(Feb 22 2021 at 08:46)</a>:</h4>
+<p>Our approach is that in the big majority of cases we will use LOINC codes that have the specific time interval in their LOINC code. <br>
+However: we do want a national strategy how to deal with the few tests that remain that do not have their time interval in their code. Following the example given by <span class="user-mention" data-user-id="261160">@Phil Brennan</span> and the comments made in this thread: the timeOffset extension does not seem to be the right approach as this is an extension on .component and a dynamic function test should not be structured in .component, right?</p>
+
+
+
+<a name="227279594"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/227279594" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#227279594">(Feb 22 2021 at 15:04)</a>:</h4>
+<p>The time offset would be a qualifier of the type of information being observed.  As such, using Observation.component is completely appropriate.  When you're qualifying the observation made or the result, Observation.component is a better way to convey the information than an extension because more systems will handle it.  The disadvantages of having it in component (harder to query), wouldn't be any different for an extension.</p>
+
+
+
+<a name="227910272"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/227910272" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robin Bosman <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#227910272">(Feb 26 2021 at 10:46)</a>:</h4>
+<p>Tx Lloyd, but if we would understand Observation.component as a way to use a qualifier on the type of information I feel that goes against the way it is actually now defined in the base resource. The Observation.component element is defined as "[...] component observations [...]  Examples include systolic and diastolic component observations[...]" For me, that seems to be something entirely different from using Observation.component to qualify what is expressed in Observation.code. I do agree it makes sense to structure qualifiers like this but do we not introduce a risk here if sometimes Observation.component really is about actual observations (with the value in Observation.component.value[x] and  sometimes it is only about qualifying Observation.code. <br>
+Maybe I am making it too complicated?</p>
+
+
+
+<a name="227932388"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/227932388" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#227932388">(Feb 26 2021 at 14:09)</a>:</h4>
+<p>It is different, but Observation.component is used for both purposes.  The description does briefly mention its ability for component to be used for qualifiers, but doesn't provide as much description/example as should probably be there.  <span class="user-mention" data-user-id="191401">@Eric Haas</span></p>
+
+
+
+<a name="228018866"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/228018866" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eric Haas <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#228018866">(Feb 27 2021 at 00:45)</a>:</h4>
+<p>Using the q word was discouraged in earlier edits since it is a loaded term.  maybe now lots more implementaton experience using components that way we can justify adding this language  in?</p>
+<p><span class="user-mention" data-user-id="191405">@Rob Hausam</span> ?</p>
+
+
+
+<a name="228031474"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/228031474" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#228031474">(Feb 27 2021 at 04:18)</a>:</h4>
+<p>I've copied the relevant text describing Observation.component and the reference to "qualifying information" (see italicized text):</p>
+<blockquote>
+<p>10.1.5.3.2 Observation.component <br>
+Observation.component is used for any supporting result that cannot reasonably be interpreted and used outside the scope of the Observation it is a component of. Component observations may make up the separate and individual parts of the observation <em>or may provide qualifying information to Observation.code</em> and may only be able to be understood in relation to the Observation.code (for example, see the $stats operation). Therefore all code-value and component.code-component.value pairs need to be taken into account to correctly understand the meaning of the observation. Components should only be used when there is only one method, one observation, one performer, one device, and one time. Some use cases for using this structure include:</p>
+<ol>
+<li>Observations that are commonly produced and interpreted together. For example, systolic and diastolic blood pressure are represented as a single Blood pressure panel.</li>
+<li>Assessment tool results that are commonly produced and interpreted together. For example, a newborn Apgar score that is a single Observation with five components.</li>
+<li>Representing multiple answers to a question (relationship and boundaries between Observation and Questionnaire/QuestionnaireResponse). For example, reporting the types of alcohol consumed by a patient</li>
+</ol>
+</blockquote>
+<p>I think we have some potentially confusing and insufficient language here.  The italicized text is the only place (I believe) where we say anything about using Observation.component as a "qualifier" for the base Observation.code.  And if that is understood as we typically use the term "qualifier" in the terminology sense, that would contradict the text that follows which says "Components should only be used when there is only one method, one observation, one performer, one device, and one time", as that rule would not be true of a component observation which had the intent of "qualifying" (i.e. refining) the meaning of Observation.code and therefore also the interpretation of its associated Observation.value.  So probably the use of the word "qualifying" may have been a less than optimal choice, as qualification or refinement in the terminology sense is probably not really what we meant, as I think the cited example of the $stats operation bears out.  Notably with the $stats operation, there is no Observation.value.  In that case, the Observation.code represents a base observation "type", but it is not an actual observation instance itself, and the "type" represented by Observation.code is further qualified/refined by Observation.component.code.  The resulting component observation can only be understood in relation to Observation.code, and the <strong>only</strong> values for the observations in the operation result are represented in Observation.component.value.  I think if we understand and use the idea of "qualifying" of a base observation by a component observation in this way, and <strong>only</strong> in this way, then it is a safe and in some cases useful thing to do.  But the presence or absence of any component observation should <strong>never</strong> be considered to have any effect whatsoever on the interpretation and use of Observation.value (if the Observation.value exists).  If think if we will agree on and stick to those rules, then this should be understandable and it all should work.</p>
+<p>To be clear, understanding the rules in this way would preclude the suggestion that Lloyd made of conveying the measurement time offset using a component, If the offset wasn't included in Observation.code.  But I think it should be the right way to go, for the reasons noted above.  And if we are in or can reach agreement on this, then we should add some text to Observation.component (and possibly elsewhere) that clarifies it.</p>
+
+
+
+<a name="228060591"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/228060591" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#228060591">(Feb 27 2021 at 14:08)</a>:</h4>
+<p><span class="user-mention" data-user-id="191405">@Rob Hausam</span> If I want to capture cuff size for a blood pressure, or that it was post-exertion vs. resting, or that the susceptability test was for organism X, I'd expect <em>all</em> of those things to be captured as Observation.component.  But we don't have any examples that call out that usage.  Certainly the behavior for 'stats' is going to be different.  If I invoke $stats, I'd want average systolic and diastolic, but unless consistent, I wouldn't want 'exertion' or cuff size to show up at all.</p>
+
+
+
+<a name="228068680"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/228068680" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#228068680">(Feb 27 2021 at 16:41)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>  I certainly understand why you and probably all of us would see Observation.component as a convenient way to record information for blood pressure cuff size, post-exertion vs. resting, susceptibility for organism X, and many other similar examples, and why we would like to be able to use it in that way (or we think that we would like that).  But I think at least part of the reason that we don't have examples that call out those uses is because those uses violate our other stated rules on how component observations should be used (whether that's for good or bad reasons, we can decide).  For the moment I'll focus on the blood pressure cuff size example (we can look at the others, too).  Recording the cuff size (if that is done as an observation rather than as an attribute of the device) is an observation that is made on the <strong>device</strong> that is being used to make the measurement on the patient (I think the Observation.focus would refer to the blood pressure cuff device - and there is no Observation.component.focus).  That observation would not be a "supporting result that cannot reasonably be interpreted and used outside the scope of the Observation it is a component of", and it also doesn't meet the rule of "only one method, one observation, one performer, one device, and one time".  Neither of those "rules" are stated using conformance language (they say "is used" and "should only be used", rather than using "MUST" or "SHOULD") - so maybe they're actually only "suggestions" and we don't have to follow them.  But they are fairly strong and clear statements of the intent, and if we are going to allow and recommend using Observation.component for recording blood pressure cuff size and the other examples that were cited (and anything similar), then at the least we should revise that language (the Observation resource is normative, but presumably loosening those "rules" is something that we could consider doing).  My preference at the moment is to retain the original intent of the use of Observation.component and to further clarify the language and conformance expectations around that.</p>
+
+
+
+<a name="228068998"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/228068998" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#228068998">(Feb 27 2021 at 16:46)</a>:</h4>
+<p><span class="user-mention" data-user-id="191405">@Rob Hausam</span> I agree that cuff size is ideally captured as 'device'.  However, there are a lot of systems that won't understand the difference between 'cuff size' and 'exertion level' and 'body position' - to them, they're all just 'qualifiers'.   I think it's fair to say that qualifiers SHOULD NOT be sent in Observation.component if there's a better place to send them, but recognize that some systems may not always do that.  But we <em>do</em> need to indicate that it's not appropriate to use extensions for these sorts of things and provide examples of qualifiers that are appropriate.</p>
+
+
+
+<a name="228069100"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/228069100" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#228069100">(Feb 27 2021 at 16:49)</a>:</h4>
+<p>Certainly "exertion level" or "body position" can't be used outside the context of the observation and they apply "at the same time" as the Observation was made.  You're not going to have a separate Observation that says "patient was exercising" and link it to the blood pressure.  The assertion of exertion level is an intrinsic part of the blood pressure observation and must be captured at the time the blood pressure is captured.</p>
+
+
+
+<a name="228070935"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/228070935" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#228070935">(Feb 27 2021 at 17:20)</a>:</h4>
+<p>It may be that the only reasonable choice to meet all of the needs is to broaden the intended uses of Observation.component to fully embrace the idea of "qualifying observations" as have been described.  If we do that, then obviously the language for Observation.component needs to be changed to reflect that (and given considerable thought and care in doing that).</p>
+
+
+
+<a name="228139852"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/228139852" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eric Haas <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#228139852">(Feb 28 2021 at 16:16)</a>:</h4>
+<p>I think what is happening in wild is not reflected in the spec and I think the spec needs to catch up</p>
+
+
+
+<a name="228155070"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/228155070" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#228155070">(Feb 28 2021 at 20:36)</a>:</h4>
+<p>I agree that seems to be the case.</p>
+
+
+
+<a name="228935311"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/228935311" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robin Bosman <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#228935311">(Mar 05 2021 at 11:08)</a>:</h4>
+<p>Following the different inputs in this thread and referring back to the example given in the first post: is it safe to assume then the best way forward is to consider every line in the glucose tolerance test as a separate Observation instance? This would imply one Observation for the panel with different members and every member would look something like this:<br>
+&lt;Observation&gt;<br>
+[...]<br>
+&lt;code&gt;<br>
+        &lt;coding&gt;<br>
+            &lt;system value="http://loinc.org"/&gt;<br>
+            &lt;code value="53093-1"/&gt;<br>
+            &lt;display value="Glucose^post XXX challenge"/&gt;<br>
+        &lt;/coding&gt;<br>
+    &lt;/code&gt;<br>
+[...]<br>
+&lt;valueQuantity&gt;<br>
+        &lt;value value="5.2"/&gt;<br>
+        &lt;unit value="mmol/l"/&gt;<br>
+        &lt;system value="http://unitsofmeasure.org"/&gt;<br>
+        &lt;code value="mmol/l"/&gt;<br>
+    &lt;/valueQuantity&gt;<br>
+    &lt;component&gt;<br>
+        &lt;code&gt;<br>
+            &lt;coding&gt;<br>
+                &lt;system value="http://snomed.info/sct"/&gt;<br>
+                &lt;code value="118578006"/&gt;<br>
+                &lt;display value="Relative time"/&gt;<br>
+            &lt;/coding&gt;<br>
+        &lt;/code&gt;<br>
+        &lt;valueQuantity&gt;<br>
+            &lt;value value="0"/&gt;<br>
+            &lt;unit value="m"/&gt;<br>
+            &lt;system value="http://unitsofmeasure.org"/&gt;<br>
+            &lt;code value="m"/&gt;<br>
+        &lt;/valueQuantity&gt;<br>
+    &lt;/component&gt;<br>
+&lt;/Observation&gt;</p>
+
+
+
+<a name="229027097"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/229027097" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#229027097">(Mar 05 2021 at 21:23)</a>:</h4>
+<p><span class="user-mention" data-user-id="218656">@Robin Bosman</span> I think that should basically be the idea.  But I don't see anything here that specifies what the challenge is (e.g. 75g glucose).  And I'm sure that we can all figure what what the "Relative time" is supposed to be relative to (i.e. the glucose challenge), but that also isn't stated anywhere explicitly.  It seems like maybe you should add a little more for both of those items?</p>
+
+
+
+<a name="229275386"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/229275386" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robin Bosman <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#229275386">(Mar 08 2021 at 10:16)</a>:</h4>
+<p><span class="user-mention" data-user-id="191405">@Rob Hausam</span>  Thank you Rob, indeed you are right- the example was more to show the general approach to this.</p>
+
+
+
+<a name="247496268"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247496268" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jay Lyle <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247496268">(Jul 28 2021 at 18:15)</a>:</h4>
+<p><span class="user-mention" data-user-id="191405">@Rob Hausam</span> , I think I see things like Lloyd. Qualifiers don't mean anything apart from the observation they qualify. I don't follow your objection about contradicting the "one method" text: the "one method" comment just means you can't have two methods in one Observation because you can't articulate a relationship between them. Are you suggesting that body position has to be an independent Member of the Observation it qualifies? Or that we should create a Qualifier extension?</p>
+<ul>
+<li>panel components (e.g., chem-7): hasMember</li>
+<li>instruments with dependent parts (e.g., Apgar): component (because you shouldn't report them independently; their union composes the value)</li>
+<li>multiple answers (e.g., alcohol types): component (fine, but what goes in the component.code? Repeat obs.code?)</li>
+<li>commonly paired (e.g., BP): text says "component" but this seems divergent from the main guidance. Feh.</li>
+<li>some qualifiers (method, site): designated observation property</li>
+<li>other qualifiers (body position, device type): these seem to be meaningless outside the observation and therefore components. To me.</li>
+</ul>
+
+
+
+<a name="247496499"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247496499" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jay Lyle <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247496499">(Jul 28 2021 at 18:16)</a>:</h4>
+<p>OK, now I see more recent posts and agree.</p>
+
+
+
+<a name="247571170"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247571170" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247571170">(Jul 29 2021 at 11:32)</a>:</h4>
+<p><span class="user-mention" data-user-id="191985">@Jay Lyle</span> <span class="user-mention" data-user-id="191401">@Eric Haas</span> <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>  It seems that carrying this approach foward, using Observation.component and nesting Observations with 'hasMember' will both be general grouping mechanisms that can be used for related observations (for whatever reasons that may be needed).  You <strong>can</strong> and likely would use 'component' when there is no need for an independent existence of the related observations (e.g., for separate retrieval and updating) and also you don't need to specify additional attributes beyond 'dataAbsentReason', 'interpretation' and 'referenceRange' (i.e. no separate values for 'bodySite', 'method', 'specimen', 'device', 'derivedFrom').  It seems like at least the first four of those exclusions may be somewhat arbitrary and potentially problematic based on how general we seem to be looking to make this, but that can be discussed.  And then you can use Observation nesting with 'hasMember' for any other groupings that <strong>do</strong> require either independent existence and/or specifying any of those additional attributes - or you would also be free to use the 'hasMember' nesting for <strong>all</strong> groupings, if that's what you chose to do so (unless that choice is constrained by specific profiles - e.g., Vital Signs and its subprofiles).  Is this where we are wanting to go with the guidance for Observation grouping and specifically the use of Observation.component?</p>
+
+
+
+<a name="247581968"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247581968" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247581968">(Jul 29 2021 at 13:21)</a>:</h4>
+<p>I think a key question is whether the additional Observation is meaningful if independent, not just if it <em>needs</em> to be independent.  The latter is fuzzy, the former is not.  If I communicate the drug without the sensitivity or the sensitivity without the drug, I haven't made a useful statement.  If I communicate a white blood cell count without a hemoglobin, that's still completely useable - at least in some cases.</p>
+
+
+
+<a name="247590694"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247590694" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247590694">(Jul 29 2021 at 14:28)</a>:</h4>
+<p>I agree that if the additional Observation doesn't have any expected utility or meaning independently, that certainly would be an argument for representing it as a component - but I don't think that is in any way absolute.  I think your antimicrobial susceptibility (sensitivity) example is a little mixed up, because communicating the drug without the sensitivity or the sensitivity without the drug isn't ever the issue - those are both always in the same observation or component (i.e. the drug in 'code' and the susceptibility in 'value').  The actual issue is whether it is meaningul to report the drug susceptibility values independently from the organism identification (but of course still being related to it through 'hasMember').  And there the boundary isn't so clear.  For instance, if I'm building an antibiogram I might want to do a query for all instances of susceptibility tests for methicillin with a value of 'resistant' or similarly a mecA gene test with a value of 'positive' or 'present' (those two different tests have essentially the same clinical meaning).  That antibiogram query would also presumably always be stratifying the susceptibility results based on the identified organism, but it may actually be easier to construct or more efficient to perform that query if the organism identification and susceptibility results are available as independent observations (or at least it certainly would be no worse in that case).  That's just one example, and I think that probably in every case you can make similar (and possibly even better) auguments.</p>
+<p>Maybe a somewhat better example of where you may want to use an observation component is the flow rate or FiO2 value for the oxygen being administered to the patient when arterial blood gas measurements are being performed.  That usually seems to be recorded as an observation - although it's almost never actually <strong>measuring</strong> the oxygen being administered, but rather is reporting the setting of the device (e.g., nasal cannula, face mask or ventilator) that is administering the oxygen.  But putting that aspect aside, the flow rate or FiO2 observation for recording the device settings is being done at the time and specifically for the purpose of the arterial blood gas measurement itself, and it's unlikely (but still not impossible) that it would have other clinical uses (like trending in a flow chart chart), so it is at least clearly a candidate for being represented as an observation component.</p>
+<p>But with either example the boundary still has an aspect of "fuzziness", and basing the decision of whether to use an observation component or an independent observation by determining "whether the additional Observation is meaningful if independent" probably doesn't help nearly as much as it might seem to at first.  Making that determination is always still going to be dependent on the particular context of use.</p>
+
+
+
+<a name="247609773"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247609773" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247609773">(Jul 29 2021 at 16:50)</a>:</h4>
+<p>The drug is only in the code if there's a pre-coordinated concept for "susceptibility to drug X".  I accept that's the norm.  However, if you're testing susceptibility to something new, then the best you can do is code = "microbial sensitivity" and drug X needs to be communicated as a component value.  In that case, it <em>must</em> be a component, because sending it as a separate observation is useless</p>
+
+
+
+<a name="247610265"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247610265" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247610265">(Jul 29 2021 at 16:54)</a>:</h4>
+<p>The rationale for capturing flow rate on the O2 sat is that O2 sat of 93% on no oxygen and 93% on 5 l/min oxygen mean vastly different things - it's simply not safe to have the saturation level without the flow rate.  Plus, a 'hasMember' relationship wouldn't be appropriate anyhow.</p>
+<p>Similar justification for communicating body position, exertion level, cuff size, etc. for a systolic blood pressure measurement.  They clearly establish context for and qualify the meaning of the value observed.</p>
+
+
+
+<a name="247610282"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247610282" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247610282">(Jul 29 2021 at 16:54)</a>:</h4>
+<p>(And they're not relevant/meaningful on their own)</p>
+
+
+
+<a name="247633856"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247633856" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247633856">(Jul 29 2021 at 20:02)</a>:</h4>
+<p>No, I think not quite.  Yes, having a code for "susceptibility to drug X" is typically what we see (and I believe all that I have ever seen in any actual lab report instances).  A susceptibility test can potentially be done with any antimicrobial drug that any lab has available, including very new and unapproved and investigational drugs, which <strong>might</strong> not have an existing pre-coordinated code (in LOINC or SNOMED CT or whatever standard terminology is being used).  If you find that you need to record susceptibility data in a case where there isn't (yet) an available standard code, that doesn't necessarily mean that all you can do or the best that you can do is send the data as a code of "microbial sensitivity" and "drug X" as a component value.  If you can't request and obtain a new standard code quickly enough (which likely would be the best choice), with extensible (or lesser strength) bindings you can instead create and use your own local code for "susceptibility to 'my investigation drug'" or you could even just record it as the drug name in CodeableConcept.text.  I don't think that is any worse than what you described using a general code for "microbial sensitivity" and the drug as a component, and using the local code or CodeableConcept.text would almost certainly be better since it follows the same general pattern used for all of the other "standard" susceptibility tests.</p>
+<p>I totally agree on the rationale for why you need to capture the O2 flow rate or FiO2 for O2 Sat (or full ABGs)- that's why I used it as an example.  I will agree that our documentation on Observation.hasMember doesn't have explicit language that mentions using it as a "qualifier" (assuming that we even know exactly what that means in all cases).  And we only added that language for Observation.component in R4 (nothing was said about "qualifiers" or "qualifying" previously, for either 'component' or 'hasMember').  But the documentation on 'hasMember' in <a href="http://hl7.org/fhir/observation.html#gr-other">10.1.4.3.3</a> is quite general and says it can be "used for any supporting result that can be interpreted and used on its own and has one or more different values for method, observation, performer, device, time, and/or error conditions".  The description of the 'hasMember' element itself is just "Related resource that belongs to the Observation group" (and the more detailed definition and comments don't specifically mention "qualifiers", but also don't further narrow the use).  The O2 flow rate and FiO2 and other "qualifier" examples that you mentioned and I've seen certainly <strong>can</strong> fit into that, and as I read it are not explicitly precluded.  I think saying that using 'hasMember' in this way "wouldn't be appropriate" is definitely a step too far - unless we change the language to really make that clear.  If that's what we want we need to be much more explicit about it than we have been so far.</p>
+
+
+
+<a name="247637542"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247637542" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247637542">(Jul 29 2021 at 20:33)</a>:</h4>
+<p><span class="user-mention" data-user-id="191405">@Rob Hausam</span> - what you're saying is "If you have qualifiers, you must pre or post-coordinate them into Observation.code.  That's a nice thought, but if it's not how the source system collects data, then it's not going to fly.  We already break out certain qualifying elements (e.g. method, body site) even though those too could theoretically (and in some cases practically) be pre-coordinated into the Observation.code.  We don't force that though.  And we certainly can't realistically introduce distinct elements for all possible qualifications.  </p>
+<p>I don't <em>want</em> Observation.hasMember to be use for qualifiers.  It shouldn't.  Observation.component should be used for qualifiers.  Components are inseparable from the Observation.  members are content that can stand alone.  Qualifiers are things that, by definition, can't stand alone (and often that the Observation can't stand without).</p>
+
+
+
+<a name="247637664"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247637664" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247637664">(Jul 29 2021 at 20:34)</a>:</h4>
+<p>hasMember should essentially be used for grouping observations like panels.  It's not needed for anything else.</p>
+
+
+
+<a name="247641159"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247641159" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247641159">(Jul 29 2021 at 21:05)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> Actually, I'm not at all wanting to say (and I'm pretty sure that I didn't say) that "If you have qualifiers, you <strong>must</strong> pre or post-coordinate them into Observation.code" (emphasis on the "must").  But I would say that in some cases (like the antimicrobial susceptibility example) that <strong>may</strong> be the common pattern that is used, and where that is the pattern you may want to continue to use that pattern, and also there is nothing requiring you to deviate from that pattern in order to represent the data (and it may be best if you don't).</p>
+<p>This statement that you made I think is the key point:</p>
+<blockquote>
+<p>I don't want Observation.hasMember to be use for qualifiers. It shouldn't. Observation.component should be used for qualifiers.</p>
+</blockquote>
+<p>We could go there, as I said.  But we haven't gone there (yet), as I also said.  And if we decide that we really <strong>want</strong> to go there, then we are going to have to be much more explicit and clear about it - and, very importantly, if we actually do make that change then I think we will have to consider it to be a non-compatible change to a normative resource, with all that entails, because it will potentially cause instances that previously were considered to be conformant to no longer be conformant.  So <strong>this</strong> is what we really need to further discuss and determine.</p>
+
+
+
+<a name="247642259"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247642259" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247642259">(Jul 29 2021 at 21:14)</a>:</h4>
+<p>I'm not sure that it is non-compatible.  I don't read the current guidance as saying that qualifying information <em>can't</em> be sent in components.  We could certainly introduce an optional element on component that makes it more clear whether a component is a qualifier or an additional piece of information.  But it makes zero sense to force qualifying information (that would historically have been sent as subsequent OBXs) to now have to be sent as custom extensions with distinct extensions for each type of qualifier.  That seems to be what you're arguing for.  (hasMember is not and never has been viable for qualifiers.)</p>
+
+
+
+<a name="247647477"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247647477" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247647477">(Jul 29 2021 at 22:04)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> I think you're reading into the documentation (on both 'component and 'hasMember') more than what it actually says.  If you look at the documentation on observation grouping and Observation.component prior to R4, I think the most fair reading would be that using Observation.component as a "qualifier" would not be considered as a valid use, according to the criteria stated at that time.  In R4 we inserted the brief phrase that did include that usage, but we didn't really fully explain even what a "qualifier" is or how that relates to the other guidance on 'component' or related observations linked through 'hasMember'.  I agree that the current guidance doesn't say "that qualifying information can't be sent in components".  The incompatibility that I was referring to this time is the other way around - that you want the use of 'hasMember' with "qualifier" observations (however that is determined) to not be allowed.  First, to be able to say anything intelligent and consistent about observation "qualifiers", we have to define, as clearly as we reasonably can, what an observation "qualifier" actually is - and isn't.  And we haven't done that yet.  After we've done that, then we can decide and actually document how we want that to apply with 'hasMember'.  But we can't (or shouldn't) re-interpret the current documentation and read into it something that it doesn't actually say (and seems to not have been in mind when it was originally written).</p>
+
+
+
+<a name="247648141"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247648141" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247648141">(Jul 29 2021 at 22:12)</a>:</h4>
+<p>I think we'd be hard-pressed to find anyone who's sending qualifiers using hasMember - it'd be a very weird (and non-useful) thing to do because it wouldn't allow you to search appropriately.  Sticking body position or cuff size in a completely separate observation from the blood pressure just doesn't make sense.  If OO feels we can't do a "hard no" on that, then a SHOULD NOT with guidance to use .component instead would suffice.</p>
+
+
+
+<a name="247651144"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247651144" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247651144">(Jul 29 2021 at 22:50)</a>:</h4>
+<p>I don't know what OO as a group thinks yet.  And I think that you very well may be right that you won't find instances where "qualifier" observations are being sent using 'hasMember'.  But how do you and how do we in OO actually know if that's the case?  What do you think is the definition (hopefully a reproducibly usable one) of a "qualifier" observation - what it is and isn't?  The sum total of everything that we say about this currently in regard to Observation.component and its use as a "qualifier" is (<em>italics</em> mine):</p>
+<blockquote>
+<p>Component observations may make up the separate and individual parts of the observation <em>or may provide qualifying information to Observation.code</em> and may only be able to be understood in relation to the Observation.code (for example, see the $stats operation).</p>
+</blockquote>
+<p>And as I said before, there is no mention of it one way or the other for 'hasMember'.  This isn't sufficient to support everything that we've been discussing or wishing for here.</p>
+
+
+
+<a name="247652267"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247652267" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247652267">(Jul 29 2021 at 23:04)</a>:</h4>
+<p>There could be two practical steps to take here.  We could (1) come up with a definition of a "qualifying" component observation that we could understand and agree on,  and (2) we could include guidance to <strong>recommend</strong> that when "qualifying" observations are being used they <strong>should</strong> be represented in Observation.component and that it is recommended that they <strong>should not</strong> be represented as separate Observation resource instances linked by 'hasMember'.  And that would be a non-substantive change to the Observation resource.</p>
+
+
+
+<a name="247652702"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247652702" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247652702">(Jul 29 2021 at 23:08)</a>:</h4>
+<p>My attempt at #1:</p>
+<ul>
+<li>an element that further specifies the nature of what was observed and recorded in Observation.value;</li>
+<li>that could reasonably, in at least some code systems, have been pre-coordinated into the Observation.code;</li>
+<li>that is important to the appropriate interpretation of the Observation.code;</li>
+<li>would have no utility/relevance if examined independently of the Observation it qualifies; and</li>
+<li>does not have an existing core element on Observation that covers the semantics expressed;</li>
+</ul>
+<p>I agree to #2.  I also think that having an element on component that differentiates whether the component is a qualifier or a property - at least some systems will want to render them (and possibly capture them) differently and an optional element would support that.</p>
+
+
+
+<a name="247652760"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247652760" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247652760">(Jul 29 2021 at 23:09)</a>:</h4>
+<p>(And in no way suggesting that this isn't something that OO needs to discuss and decide on.  I was just trying to progress the discussion here as much as we could first.)</p>
+
+
+
+<a name="247653725"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/247653725" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#247653725">(Jul 29 2021 at 23:19)</a>:</h4>
+<p>I appreciate this contribution for the definition, and we can discuss that.  It defintiely took some back and forth, but I think we've definitely made progress.  We probably need to get this on a future OO Main or OO on FHIR agenda. <span class="user-mention" data-user-id="191689">@Hans Buitendijk</span> And we need a tracker (I can create one tonight if you want).</p>
+
+
+
+<a name="253909147"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/253909147" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mark Kramer <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#253909147">(Sep 19 2021 at 02:09)</a>:</h4>
+<p>Observation needs an element Observation.circumstance to capture context, separate from Observation.component.</p>
+
+
+
+<a name="253915697"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Pathology%20Lab%20Reports%20%E2%80%93%20Dynamic%20Function%20Tests%20/%20Timed%20Tests/near/253915697" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Pathology.20Lab.20Reports.20.E2.80.93.20Dynamic.20Function.20Tests.20.2F.20Timed.20Tests.html#253915697">(Sep 19 2021 at 04:14)</a>:</h4>
+<p>is there any other model for Observation that has something like that?</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

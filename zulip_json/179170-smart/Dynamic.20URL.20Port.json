@@ -1,0 +1,236 @@
+[
+    {
+        "content": "<p>Question for server implementers: I was going through the app launch sequence with local redirect, and there is a note in the <a href=\"http://hl7.org/fhir/smart-app-launch/#registering-a-smart-app-with-an-ehr\">registration</a> section about using dynamic ports for native apps (described in <a href=\"https://tools.ietf.org/html/rfc8252#section-7.3\">RFC 8252 - Loopback Interface Redirection</a>).</p>\n<p>Have servers implemented this?  If not, what is the expected strategy?</p>",
+        "id": 215359681,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1604342163
+    },
+    {
+        "content": "<p>Gino - sorry for the delayed response. We have not implemented this.</p>",
+        "id": 216390394,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1605124076
+    },
+    {
+        "content": "<p>No worries, thanks for replying!</p>\n<p>I figured as much, though it is disappointing.  It is frustratingly complex for cross-platform applications (e.g., desktop apps for Windows, Linux, and MacOS).</p>",
+        "id": 216391494,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605124639
+    },
+    {
+        "content": "<p>Gino, I started re-reading Window's <a href=\"https://docs.microsoft.com/en-us/windows/uwp/launch-resume/web-to-app-linking\">app URI handlers</a> to determine if they accommodated your need and then realized that you're trying to use a localhost redirect url with a dynamic port, which is pretty different from the app URI handler solution, right? In your case, are you developing a desktop app or a web app running on localhost? If the first, does the app URI handler solution meet your needs? If not, mind educating me?</p>",
+        "id": 216481473,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1605194199
+    },
+    {
+        "content": "<p>Thanks for looking more into this Isaac!  The page you linked to has a simplified process for UWP apps, but does not work for any other types of applications.  In my case, I'm starting from the perspective of a cross-platform .Net Core application.</p>\n<p>In order to register a protocol handler, you need to jump through platform-specific hoops for each OS.  Windows, for example, requires registry modification (which may need elevated permissions) for non-UWP apps.  Linux and MacOS are similarly complicated.</p>\n<p>Adding an http server to a .Net Core app is a package and a few lines of code (maybe 100-ish, mostly boilerplate).  This works across all desktop platforms out of the box.  The issue with a local server is that if another application has already grabbed the port you registered, you can't get it.  Since it's a common problem, the http server supports dynamic port registration as well... but that means the redirect URI needs to have support for it.</p>",
+        "id": 216494635,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605199480
+    },
+    {
+        "content": "<p>I would actually recommend using an app claimed URL if you can... but I know that's not available on all platforms :( There have been vulnerabilities created with the localhost approach before... most recent one that got a lot of attention was Zoom.</p>",
+        "id": 216508986,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1605205988
+    },
+    {
+        "content": "<p>We actually don't currently allow \"localhost\" to be registered in our production environment today</p>",
+        "id": 216509054,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1605206017
+    },
+    {
+        "content": "<p>The RFC only allows for <code>127.0.0.1</code> as the base (both to mitigate name-resolution vulnerabilities and to prevent external traffic from hitting the port).  .Net Core actually enforces this for dynamic registration as well (e.g., I can ask for a dynamic port on 127.0.0.1, but not localhost).</p>",
+        "id": 216510513,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605206702
+    },
+    {
+        "content": "<p>Yes, the method I'm talking about is section 7.2 in native rather than the loopback method (section 7.3)</p>",
+        "id": 216510953,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1605206936
+    },
+    {
+        "content": "<p>Which is also the \"preferred\" method called out in that spec</p>",
+        "id": 216510998,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1605206967
+    },
+    {
+        "content": "<p>Thanks, seeing if there's a good cross-platform option for that process now.  That said, if nobody supports (or even plans on supporting) local dynamic port registration, I don't think we should specifically call it out in the spec.</p>",
+        "id": 216512745,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605207716
+    },
+    {
+        "content": "<p>Hmm.. as far as I can tell, that does not work from .Net Core either (<a href=\"https://docs.microsoft.com/en-us/azure/active-directory/develop/msal-client-application-configuration#redirect-uri-for-public-client-apps\">the client configuration page</a> calls out that .Net Core needs to use <code>localhost</code> for OAuth redirection).</p>\n<p>I'm sure I can sort out a workaround, but it goes back to the same process as the protocol handlers - relatively complex OS-specific code.  Not impossible, but definitely annoying.</p>",
+        "id": 216514428,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605208519
+    },
+    {
+        "content": "<p>Many of our native windows apps have used the first option (custom scheme)...</p>",
+        "id": 216516965,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1605209795
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span> another challenge with that and <em>specifically</em> with SMART is that you can't launch against a dynamic port... so you would need to figure out that challenge. Only standalone apps really have a chance in heck on using that, but I agree that if nobody supports it we may need to push back</p>",
+        "id": 216520854,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1605211811
+    },
+    {
+        "content": "<p>Yep - custom scheme is easy (app config) in Windows UWP apps.  It's straightforward (if not ideal - registry changes, possible permissions issues) in other Windows-only apps.  Without local redirection, cross platform apps (e.g., .Net Core) have to either add platform-specific code (for each OS) or use an externally hosted URL.</p>\n<p>As I've mentioned, not impossible, but extra work and a pitfall given that the functionality is called out in the SMART App Launch spec.</p>",
+        "id": 216520877,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605211826
+    },
+    {
+        "content": "<p>Yep, this is all about standalone apps - assuming those will be getting more and more common as regulations push for patient access.</p>",
+        "id": 216521079,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605211930
+    },
+    {
+        "content": "<p>it's certainly a challenge. the solution I ended up with was to put a server up that handles the redirect for me, and allow applications to register their session id and port with the server. That's not super exciting but it saves from the hassle of needing admin access, which is pretty much yes or no, you'll never get it</p>",
+        "id": 216522203,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1605212472
+    },
+    {
+        "content": "<p>I'd also note that this feels like a somewhat arbitrary hoop to jump through.</p>\n<p>Knowing that protocol handling is an OS config (e.g., registry, info.plist, etc.), a malicious app is just as able to grab those URLs as not.  It's only 'safer' if you require signed apps (e.g., UWP, iOS), but [desktop OSes] can't limit that functionality across the board.  In some ways I'd argue that an app telling you \"I have <code>127.0.0.1:62193</code> right now, redirect to that\" is actually safer, as once the port is locked, nobody else can get it. (and most OSes don't allow capturing packets of loopback).</p>",
+        "id": 216523384,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605212973
+    },
+    {
+        "content": "<p>Grahame, yes.  If you are running your own server already (that allows arbitrary code) that's likely the best option.  For people wanting to write a their first client app, that's a high bar.  I'm tinkering with an idea that will hopefully be able to run on the 'free-tier' of cloud providers without much effort, but it's a bit down the list.</p>",
+        "id": 216524183,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605213248
+    },
+    {
+        "content": "<p>agree it's a high bar indeed. But... if people just want to hack, <a href=\"http://local.healthintersections.com.au\">local.healthintersections.com.au</a> always resolves to 127.0.0.1</p>",
+        "id": 216525118,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1605213610
+    },
+    {
+        "content": "<p>Wouldn't most people write apps either as HTML/JavaScript or native for phones? I would think that writing native Windows or Mac native apps would be pretty unusual?</p>",
+        "id": 216527630,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1605214686
+    },
+    {
+        "content": "<p>Grahame: nice!</p>",
+        "id": 216527697,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605214721
+    },
+    {
+        "content": "<p>Michele: possibly?  maybe?  depends on the use case?  I've received a lot of questions about it, and seen other streams with similar questions (not dynamic port specifically - how to use SMART via a native desktop app).</p>",
+        "id": 216528117,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605214924
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span> your assertion that the localhost method is somehow more secure - do you have doc or more information on why that would be true?</p>",
+        "id": 216528305,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1605215019
+    },
+    {
+        "content": "<p>This isn't something we've been asked to support, and we do have native apps that are standalone that have integrated</p>",
+        "id": 216528378,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1605215051
+    },
+    {
+        "content": "<p>though right now it may be limited to android or ios</p>",
+        "id": 216528405,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1605215073
+    },
+    {
+        "content": "<p>(we do have windows, non-mobile apps that integrate using .Net today as well)</p>",
+        "id": 216528459,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1605215107
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191356\">@Jenni Syed</span> , nothing specific to point to, just following the workflows:</p>\n<p>Using protocol handler (Windows):</p>\n<ul>\n<li>I write an app and register <code>awesomeHealthApp://</code></li>\n<li>Malicious app on my computer looks at the registry and inserts itself (e.g., takes over <code>awesomeHealthApp://</code> and gives my app a phony launch via shell-execute).</li>\n<li>I've been MITM attacked, and have no idea it happened.</li>\n</ul>\n<p>Using dynamic loopback:</p>\n<ul>\n<li>I write an app and grab a port (exclusive)</li>\n<li>I ask for redirection to the port I currently own</li>\n</ul>",
+        "id": 216528893,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605215354
+    },
+    {
+        "content": "<p>I'll also be the first to admit that the Windows platform for this is a bit of a mess (though I also can't fault the OS for this - backwards compatibility is <em>hard</em>).  Even using MSAL to auth against AAD there are different paths for: UWP, .Net Desktop, and everything else.</p>",
+        "id": 216529637,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605215722
+    },
+    {
+        "content": "<p>If the app had the ability to take over your registry entry... won't it also have the ability to kill the process that reserved the port?</p>",
+        "id": 216530126,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1605215973
+    },
+    {
+        "content": "<p>the user might notice that.</p>",
+        "id": 216530212,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1605216013
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> I am not a windows expert... what indication would there be to the user?</p>",
+        "id": 216530325,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1605216098
+    },
+    {
+        "content": "<p>the window they are working with disappears</p>",
+        "id": 216530347,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1605216110
+    },
+    {
+        "content": "<p>The registry entry is in HKCR, so it's not actually tied to any app-specific permission (IIRC).  Killing my app means I restart and get a new port - yes it has the old one, but I am aware this happened and can take appropriate action (note: that app would also have have to kill my app <em>after</em> a login request is launched and <em>before</em> a redirect happened to have any impact at all)</p>\n<p>edit: vs. modifying the registry, which can be done at any time and will not be apparent to the user/app (unless it goes and checks the registry at each launch - which may be a good practice to note)</p>",
+        "id": 216530402,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605216124
+    },
+    {
+        "content": "<p>I'll also note that this isn't a hill I'd like to die on - if it's not supported, <em>it's not supported</em>.  I started this thread because I assumed this was the preferred process (from the spec) and Josh thought it was unlikely to be supported.  I feel that excluding it is odd, but <span aria-label=\"shrug\" class=\"emoji emoji-1f937\" role=\"img\" title=\"shrug\">:shrug:</span></p>",
+        "id": 216530627,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605216247
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span>  Technically, aren't native apps like this public? IE: any app that knows your client id can get a token on the app's behalf since the redirect just requires a localhost port? (I would also need to look at privs required to set this up to see if they would be commonly given to apps on an EHR desktop)</p>",
+        "id": 216531182,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1605216570
+    },
+    {
+        "content": "<p>and yes, custom schemes also have their own issues :)</p>",
+        "id": 216531225,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1605216599
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191356\">@Jenni Syed</span> Probably?  Again, I'd argue no different than using a protocol handler (e.g., if I want to intercept something with a protocol handler on my desktop, it is just as trivial).</p>",
+        "id": 216531804,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605216828
+    },
+    {
+        "content": "<p>For me, it's a spectrum.  Nothing running on my desktop machine is actually confidential - it's just a matter if I feel like investing enough time/effort to make that true.  Entirely secure platforms are a different story.</p>\n<p>edit: preemptive - yes, there are processes that can make software effectively confidential (e.g., hardware encryption, etc.), but I'm assuming that is well beyond the scope of what we're talking about here.</p>",
+        "id": 216532200,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1605216983
+    }
+]

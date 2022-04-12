@@ -1,0 +1,62 @@
+[
+    {
+        "content": "<p>Hey All! We're about to embark on creating a ValueSet service that will allow our FHIR consumers to expand value sets. We have many facilities, and each facility could potentially have a different set of values for a given concept. To represent this, we've added the facility identifier to the end of our System URLs, so for example <a href=\"https://fhir/System/Code/12345\" target=\"_blank\" title=\"https://fhir/System/Code/12345\">https://fhir/System/Code/12345</a> would be the System for an arbitrary concept callled \"Code\" at our facility with id 12345.</p>\n<p>I'm having a hard time figuring out what this means for ValueSet. Does this mean I have one ValueSet, and in it I import each facility's separate System, like this? </p>\n<div class=\"codehilite\"><pre><span></span>    &lt;ValueSet xmlns=&quot;http://hl7.org/fhir&quot;&gt;\n        &lt;url value=&quot;https://fhir/ValueSet/Code&quot;/&gt;\n        &lt;compose&gt;\n            &lt;include&gt;\n                &lt;system value=&quot;https://fhir/System/Code/12345&quot;/&gt;\n            &lt;/include&gt;\n            &lt;include&gt;\n                &lt;system value=&quot;https://fhir/System/Code/23456&quot;/&gt;\n            &lt;/include&gt;\n            ...\n        &lt;/compose&gt;\n    &lt;/ValueSet&gt;\n</pre></div>\n\n\n<p>Or do I have multiple ValueSets, one per facility, and then in that case, how do I tie multiple ValueSets to a single field?</p>\n<p>I'm leaning towards the former, such that our ValueSet would import each facility's System, and then use the \"filter\" query parameter of the $expand action to expand the ValueSet for a given facility. So using the sample above, the codes for facility 12345 would be expanded like this:</p>\n<div class=\"codehilite\"><pre><span></span>    .../ValueSet/$expand?identifier=https://fhir/ValueSet/Code&amp;filter=12345\n</pre></div>\n\n\n<p>Has anyone dealt with a similar issue?</p>",
+        "id": 153894586,
+        "sender_full_name": "Tim Dunnington",
+        "timestamp": 1497988818
+    },
+    {
+        "content": "<p>so firstly, is there an underlying single set of codes across all of them? </p>",
+        "id": 153894604,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1497993791
+    },
+    {
+        "content": "<p>I would want to see<br>\n- a single code system<br>\n- a value set for each of the facilities<br>\n- combination value sets for combinations of the facilities<br>\n- a single value set for the whole code system</p>",
+        "id": 153894605,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1497993844
+    },
+    {
+        "content": "<p>but if each of the facilities can define their own codes, and the codes aren't unique across them all, then you'll need instead:<br>\n- a code system for each facility (with distinct URLs)<br>\n- a value set for each facility<br>\n- combination value sets that include the facility specific value set</p>",
+        "id": 153894606,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1497993906
+    },
+    {
+        "content": "<p>Unfortunately we can't count on the codes being the same. The system allows for differences, and while some code sets have been standardized by our organization, other codesets are not and we need to prepare for it.</p>\n<p>Good news is that I've already got code systems for each facility with a unique url, so good there, and I can create the ValueSets any way I need to as we're just now implementing this service.</p>",
+        "id": 153894615,
+        "sender_full_name": "Tim Dunnington",
+        "timestamp": 1497995063
+    },
+    {
+        "content": "<p>Thanks for your help!</p>",
+        "id": 153894616,
+        "sender_full_name": "Tim Dunnington",
+        "timestamp": 1497995072
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"193462\">@Tim Dunnington</span> While Graham is correct (IMHO ;-), you do have one complication in the approach you've chosen. You note that \"some code sets have been standardized by our organization\" which I assume means your system expects any use of said \"organizationally defined\" to have the same code for the shared idea, right? If so then the common organizational code system needs to identified and used with the same code system identifier in all places. Does that make sense? I would NOT suggest you try to make aech facility code system create the same \"common\" code in each facility-specific code system.</p>",
+        "id": 153894786,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1498064140
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"193462\">@Tim Dunnington</span> when you say \"how do I tie multiple ValueSets to a single field\", do you mean mapping codes from difference facilities? or put codes from different facilities into an organization code list?</p>",
+        "id": 153895075,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1498226069
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"191503\">@Robert McClure</span> , you are correct, if I know for certain that a code set is standard, then we will define only one System for it. The most annoying problem we face, though, is that our EMRs allow users to change chodes and there is no way to prevent that, so while some codes are standardized, they can also be altered and so we cannot always count on them being identical at all facilities.</p>\n<p>Because many/most of our codesets can change at each facility, we download the codesets to our data warehouse nightly. So when we implement our ValueSet service, it will actually be querying the database on-the-fly to find the current codeset for the facility. The EMR prevents the user from removing codes that have been used in the past, so we won't have the problem of a particular code just \"disappearing\" from under our nose.</p>\n<p>The other services in our FHIR infrastructure are presenting data from these same EMRs, so the codesets will match up to the data presented by that facility's EMR. For example, our Encounter service serves up encounter data from the EMR. Any code sets used in that Encounter will match up to the codes in our warehouse for that facility.</p>",
+        "id": 153895115,
+        "sender_full_name": "Tim Dunnington",
+        "timestamp": 1498242146
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191506\">@Yunwei Wang</span> , I meant the latter. Mapping codes will be handled with a ConceptMap service that we are planning to build, but is also dependent on how we handle the ValueSet service so we are tackling ValueSet first. I was simply remarking that in our case we have almost 200 distinct Systems in a single ValueSet, so any field that is using that ValueSet will accept any value from any of those systems. But, in practice the System must match up to the facility in question, so while the ValueSet says \"hey, you can use any one of these 200 Systems\" in fact you can only use one for your Encounter (or Patient or whatever), that being the System that matches your facility. I will be enforcing that business logic in the service itself, but from a Conformance document point of view I was at a loss as to how to handle it.</p>",
+        "id": 153895117,
+        "sender_full_name": "Tim Dunnington",
+        "timestamp": 1498242511
+    }
+]

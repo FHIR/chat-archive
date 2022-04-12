@@ -1,0 +1,212 @@
+[
+    {
+        "content": "<p>Hi folks!</p>\n<p>Over at CMS, we've been working on a pilot project exploring some ways of using the Bulk spec to more closely integrate with EHR systems. As part of the pilot we've run i\u0010nto a use case where we'd like to support exporting a subset of an existing group. For example, exporting all the patients for a given organization that have an appointment in the coming week. </p>\n<p>Internally we've been discussing how best to implement this.<br>\nOne thought was to add a POST method to the $export operation (e.g. POST Group/1/$export) with the user submitting a Group resource which would contain a subset of patient IDs.</p>\n<p>We've also talked about using a query parameter to the defined GET endpoint, as well as forgoing supporting this feature at all, in favor of the traditional FHIR endpoints.</p>\n<p>Any thoughts on a preferred or more FHIR-like approach?</p>\n<p><span class=\"user-mention\" data-user-id=\"222175\">@Rick Hawes</span> can also chime in with some of his thoughts, he's been working on our implementation as well.</p>\n<p>For those who are interested, the code is publicly available here: <a href=\"https://github.com/CMSGov/dpc-app\" target=\"_blank\" title=\"https://github.com/CMSGov/dpc-app\">https://github.com/CMSGov/dpc-app</a></p>",
+        "id": 167227033,
+        "sender_full_name": "Nick Robison",
+        "timestamp": 1559592994
+    },
+    {
+        "content": "<blockquote>\n<p>POST method to the $export operation (e.g. POST Group/1/$export) with the user submitting a Group resource which would contain a subset of patient IDs.</p>\n</blockquote>\n<p>One possibility is to allow the client to define ad-hoc groups (by <code>POST /Group</code>, or if you want to enable some extra requirements like strict subsetting, or client-supplied demographics, maybe a custom operation like <code>POST /Group/:supsesetId/$subset-create</code>, which takes a Bundle of Patients to include in the subset).</p>\n<p>Then once the subset group is defined, treat $export on it like normal.</p>",
+        "id": 167228184,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559593694
+    },
+    {
+        "content": "<p>In the ideal world, does the client want to supply the subset by knowing their resource IDs up front or does it want to identify them through a search?</p>",
+        "id": 167228765,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1559594003
+    },
+    {
+        "content": "<p>I think an ideal world would support both use cases, for our system, we don’t necessarily have the information required in order to create some groupings.</p>",
+        "id": 167230265,
+        "sender_full_name": "Nick Robison",
+        "timestamp": 1559594867
+    },
+    {
+        "content": "<p><code>POST /Group/supersetId/$subset-create?search-query</code> sounds like a reasonable custom operation.</p>\n<p>Is _typeFilter flexible enough to do a <code>GET /Group/supersetId/$export?_typeFilter=Patient%3Fsearch-filter-for-subset</code>? I guess that doesn't filter the non-patient resources in the export...</p>",
+        "id": 167234101,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1559597554
+    },
+    {
+        "content": "<p>I like the idea of the POST operation on the /Group endpoint. So the endpoint would be <code>POST Group/$export</code>, would that be an acceptable solution? If possible, I'd rather not require a two-step process to generate a transitory group (which may be discarded immediately after the operation completes) and then export the data. It would be nice to be able to generate an ad-hoc group within a single operation and not require that temporary data to be persisted.</p>\n<p>My concern with using <code>_typeFilter</code> is two-fold. One, we're not planning on adding that feature until a later release as we'd like to roll out support for complex queries in a safe and performant way. Two, in our use-case we don't necessarily have the information required to return the correct subset of patients. In our example, we don't know which patients are scheduled for an appointment, which means the clients would have to construct a query with a large number of patient ids, which feels a bit odd.</p>",
+        "id": 167285986,
+        "sender_full_name": "Nick Robison",
+        "timestamp": 1559650437
+    },
+    {
+        "content": "<p>If you have a one shot operation two export data on a temporary group, where do you manage information about being able to say which patients in the opposed temporary group matched or did not match, or whether authorization errors were generated?</p>",
+        "id": 167287841,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559651950
+    },
+    {
+        "content": "<p>Also, would clients want to continue getting updates about this same group overtime? If the use case include this kind of functionality, then persisting it would seem to make sense.</p>",
+        "id": 167287973,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559652013
+    },
+    {
+        "content": "<p>For the patient matching, our draft implementation returns an OperationOutcome which lists the patients that either did not match or that the client is not authorized to retrieve data for. I'm sure there are some instances where the client would like to retrieve updates to a patient group over time, but I'm not entirely sure that functionality should be the domain of the server, rather than the client. Wouldn't it make more sense for the client to maintain a list of patients groupings that it's interested in and simply export on the ones it needs data for?</p>",
+        "id": 167288986,
+        "sender_full_name": "Nick Robison",
+        "timestamp": 1559652615
+    },
+    {
+        "content": "<p>I guess it depends how long the list is and how often the client wants updates. Mostly I'm trying to think about building blocks here -- components that would be useful/reusable in a number of limitations.</p>",
+        "id": 167289791,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559653074
+    },
+    {
+        "content": "<p>Currently when you return an operation outcome, you do that synchronously? And also kick off an export job for the patients that were matched and allowed?</p>",
+        "id": 167289877,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559653105
+    },
+    {
+        "content": "<p>We're currently returning the OperationOutcome synchronously, but we're not submitting the job unless all the matching/authorization succeeds. This is part of our 'fail fast' mindset, if we know we can't complete the job as specified, we fail it and let the client handle the errors. This is something we're hoping to get feedback on from early users.</p>",
+        "id": 167291676,
+        "sender_full_name": "Nick Robison",
+        "timestamp": 1559654221
+    },
+    {
+        "content": "<p>Gotcha -- so you're only evaluating matches that you know you can do reasonably quickly for a synchronous response.</p>",
+        "id": 167291977,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559654419
+    },
+    {
+        "content": "<p>But even in a case of a strict subset, you are not expecting a client to know the FHIR IDs of the patients in the subset? In other words the client is not just supplying IDs but a complete patient resource as the input to the subset/match?</p>",
+        "id": 167292094,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559654512
+    },
+    {
+        "content": "<p>I think it's important to think of this as a subset, so that servers can manage expectations</p>",
+        "id": 167292616,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559654881
+    },
+    {
+        "content": "<p>Agreed Grahame -- does that take you in one direction or another with the design?</p>",
+        "id": 167293113,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559655150
+    },
+    {
+        "content": "<p>no. I was catching up on something I meant to say earlier</p>",
+        "id": 167293313,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559655255
+    },
+    {
+        "content": "<p>In our case, we do have a stable identifier that we can use (medicare number), so we're requiring them to submit a group with the given identifier. However, I realize not all systems have that benefit. We're still considering ways to support searching for patients given a set of demographic information, but that's not on our immediate roadmap.</p>\n<p>It seems to be me have two use-cases.<br>\n1. The ability to execute ad-hoc export operations with a temporary grouping of resources that the client has knowledge about.<br>\n2. The ability for the client to define custom groupings of resources that can be continually queried over time.<br>\nI believe the 2nd use case is already handled with existing endpoints, in that we know how to create and persist fairly arbitrary groupings of patient through the existing <code>GROUP</code> endpoint. But it's the second use case that doesn't seem to be supported.</p>",
+        "id": 167294743,
+        "sender_full_name": "Nick Robison",
+        "timestamp": 1559655964
+    },
+    {
+        "content": "<p>But number one also includes the fact that it is a subset of an existing group?</p>",
+        "id": 167294815,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559656013
+    },
+    {
+        "content": "<p>I think you're referring to using a specific system and requiring Patient.identifier - rather than <a href=\"http://Patient.id\" target=\"_blank\" title=\"http://Patient.id\">Patient.id</a> here. I bring this up just because typically when we provide a list of references, the way to do this in FHIR is via id.</p>",
+        "id": 167294981,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559656092
+    },
+    {
+        "content": "<p>In your existing implementation do you use a mixture of query perimeters and body to send along the details for the ad hoc export request?</p>",
+        "id": 167295135,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559656173
+    },
+    {
+        "content": "<p>You're correct, I'm conflating <a href=\"http://Patient.id\" target=\"_blank\" title=\"http://Patient.id\">Patient.id</a> with Patient.identifier, apologies. It seems the <a href=\"http://patient.id\" target=\"_blank\" title=\"http://patient.id\">patient.id</a> would be an implementation detail of the system, are we required to leak that to the clients? I must be misunderstanding the reference resource, are you saying it can only reference the internal ID of the resource, not a common Identifier such as NPI?</p>",
+        "id": 167296565,
+        "sender_full_name": "Nick Robison",
+        "timestamp": 1559656959
+    },
+    {
+        "content": "<p>You  can create a reference by id (the most common case, populating reference.value) or by identifier (populating reference.identifier). Both of these are different from directly including a patient resource in a bundle</p>",
+        "id": 167311574,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559665663
+    },
+    {
+        "content": "<p>Hi folks, I think I did a poor job explaining our problem and solution yesterday, my apologies.</p>\n<p>I've updated our feature PR on Github to give a bit more background and example data. You can view it here: <a href=\"https://github.com/CMSgov/dpc-app/pull/58\" target=\"_blank\" title=\"https://github.com/CMSgov/dpc-app/pull/58\">https://github.com/CMSgov/dpc-app/pull/58</a></p>\n<p>Let me know if anything is unclear or seems off. I've tried to implement some of the feedback and insights from yesterday.</p>",
+        "id": 167385122,
+        "sender_full_name": "Nick Robison",
+        "timestamp": 1559739337
+    },
+    {
+        "content": "<p>Thanks Nick! The context is helpful, and I shared some initial feedback on the PR. Basically: <code>POST /Group/:id/$export</code> is already defined, so it is not something that we can entirely reassign the meaning of.</p>",
+        "id": 167386091,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559740011
+    },
+    {
+        "content": "<p>But there is room to play if the body is a Parameters resource.</p>",
+        "id": 167386122,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559740035
+    },
+    {
+        "content": "<p>I'd look carefully at breaking this into two steps: one define-subset step, which creates a group, and Then one optional extra parameter on $export like <code>limit-to-subset</code> which takes a reference to a group.</p>",
+        "id": 167386280,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559740129
+    },
+    {
+        "content": "<p>But if you want to pass in a group directly, you can do this with the existing $export, if you</p>\n<p>1. Call via POST<br>\n2. Pass a <code>resourceType: Parameters</code> body, including all the existing parameters currently defined<br>\n3. Add an optional extra parameter like <code>limit-to-subset</code> That takes a group by value instead of by reference</p>",
+        "id": 167386439,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559740234
+    },
+    {
+        "content": "<p>Why not just create a group with the normal POST  .../Group operation and use it in the standard way?</p>",
+        "id": 167389526,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1559742252
+    },
+    {
+        "content": "<p>That works fine if you do not care about enforcing the specific subset semantics. Definitely where I would start.</p>",
+        "id": 167389556,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559742279
+    },
+    {
+        "content": "<p>At the authorization level, <span class=\"user-mention\" data-user-id=\"197208\">@Nick Robison</span> you could just ensure that any organization creating a group only included patients they were authorized to include.</p>",
+        "id": 167389623,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559742336
+    },
+    {
+        "content": "<p>I'd check permissions when exporting, not when creating the group - seems safer / easier</p>",
+        "id": 167389764,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1559742417
+    },
+    {
+        "content": "<p>Both are important -- creation time especially if you want to be able to fail early, and export time because authorizations of course can change.</p>",
+        "id": 167390766,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559743066
+    },
+    {
+        "content": "<p>can never check authorization too many times...   :-)</p>",
+        "id": 167391810,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1559743701
+    },
+    {
+        "content": "<p>check early, to fail early.. check late to really be sure no policy or other factors changed between.</p>",
+        "id": 167391863,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1559743742
+    }
+]

@@ -1,0 +1,38 @@
+[
+    {
+        "content": "<p>Hi <span aria-label=\"wave\" class=\"emoji emoji-1f44b\" role=\"img\" title=\"wave\">:wave:</span> I'm moving some validation code from HAPI 4.2 to 5.1. Now when I try to validate an STU3 DocumentReference, I always get the error</p>\n<div class=\"codehilite\"><pre><span></span><code>The value provided (&#39;current&#39;) is not in the value set http://hl7.org/fhir/ValueSet/document-reference-status (http://hl7.org/fhir/ValueSet/document-reference-status), and a code is required from this value set) (error message = Validation failed)\n</code></pre></div>\n<p>even thought I set the status in the resource using the matching enum ( <code>Enumerations.DocumentReferenceStatus</code>). I have added both <code>DefaultProfileValidationSupport</code> and <code>CommonCodeSystemsTerminologyService</code> to my validation chain (see code below). Debugging in, I see that in <code>org.hl7.fhir.common.hapi.validation.support#validateCodeInValueSet</code>, none of the validation supports return <code>true</code> for <code>isValueSetSupported</code>, hence <code>null</code> is returned. This <code>null</code>, in turn, is converted to an error in <code>org.hl7.fhir.common.hapi.validation.validator#convertValidationResult</code>. </p>\n<p>Any idea why this is happening? Here is the (effective) code reproducing what I am doing (in Kotlin, hence no <code>new</code> operators for creation etc. - hope it is still Java-readable <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span> ):</p>\n<div class=\"codehilite\" data-code-language=\"Kotlin\"><pre><span></span><code> <span class=\"k\">val</span> <span class=\"py\">fhirContext</span> <span class=\"p\">=</span> <span class=\"n\">FhirContext</span><span class=\"p\">.</span><span class=\"n\">forDstu3</span><span class=\"p\">()</span>\n <span class=\"k\">val</span> <span class=\"py\">defaultValidationSupport</span> <span class=\"p\">=</span> <span class=\"n\">DefaultProfileValidationSupport</span><span class=\"p\">(</span><span class=\"n\">fhirContext</span><span class=\"p\">)</span>\n <span class=\"k\">val</span> <span class=\"py\">commonCodeSystemValidationSupport</span> <span class=\"p\">=</span> <span class=\"n\">CommonCodeSystemsTerminologyService</span><span class=\"p\">(</span><span class=\"n\">fhirContext</span><span class=\"p\">)</span>\n <span class=\"k\">val</span> <span class=\"py\">validationSupportChain</span> <span class=\"p\">=</span> <span class=\"n\">ValidationSupportChain</span><span class=\"p\">(</span><span class=\"n\">defaultValidationSupport</span><span class=\"p\">,</span> <span class=\"n\">commonCodeSystemValidationSupport</span><span class=\"p\">)</span>\n <span class=\"c1\">// Create a HAPI FhirInstanceValidator and register it to a validator</span>\n <span class=\"k\">val</span> <span class=\"py\">instanceValidatorMod</span> <span class=\"p\">=</span> <span class=\"n\">FhirInstanceValidator</span><span class=\"p\">(</span><span class=\"n\">validationSupportChain</span><span class=\"p\">)</span>\n <span class=\"n\">validator</span> <span class=\"p\">=</span> <span class=\"n\">HapiContext</span><span class=\"p\">.</span><span class=\"n\">stu3Context</span><span class=\"p\">.</span><span class=\"n\">newValidator</span><span class=\"p\">()</span>\n <span class=\"k\">val</span> <span class=\"py\">valResult</span> <span class=\"p\">=</span> <span class=\"n\">validator</span><span class=\"p\">.</span><span class=\"n\">validateWithResult</span><span class=\"p\">(</span><span class=\"n\">resource</span><span class=\"p\">)</span> <span class=\"c1\">// resporce has status set to Enumerations.DocumentReferenceStatus.CURRENT</span>\n</code></pre></div>",
+        "id": 216623184,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1605279779
+    },
+    {
+        "content": "<p>For reference, this is how I construct the STU3 DocumentReference that triggers the above error (again in Kotlin, so no <code>new</code> and direct property assignment instead of getters and setters):</p>\n<div class=\"codehilite\" data-code-language=\"Kotlin\"><pre><span></span><code><span class=\"k\">val</span> <span class=\"py\">resource</span> <span class=\"p\">=</span> <span class=\"n\">DocumentReference</span><span class=\"p\">()</span>\n<span class=\"n\">resource</span><span class=\"p\">.</span><span class=\"n\">status</span> <span class=\"p\">=</span> <span class=\"n\">Enumerations</span><span class=\"p\">.</span><span class=\"n\">DocumentReferenceStatus</span><span class=\"p\">.</span><span class=\"n\">CURRENT</span>\n<span class=\"k\">val</span> <span class=\"py\">coding</span> <span class=\"p\">=</span> <span class=\"n\">Coding</span><span class=\"p\">()</span>\n<span class=\"n\">coding</span><span class=\"p\">.</span><span class=\"n\">system</span> <span class=\"p\">=</span> <span class=\"s\">\"http://loinc.org\"</span>\n<span class=\"n\">coding</span><span class=\"p\">.</span><span class=\"n\">code</span> <span class=\"p\">=</span> <span class=\"s\">\"789-8\"</span>\n<span class=\"n\">resource</span><span class=\"p\">.</span><span class=\"n\">type</span> <span class=\"p\">=</span> <span class=\"n\">CodeableConcept</span><span class=\"p\">(</span><span class=\"n\">coding</span><span class=\"p\">)</span>\n<span class=\"n\">resource</span><span class=\"p\">.</span><span class=\"n\">indexed</span> <span class=\"p\">=</span> <span class=\"n\">Date</span><span class=\"p\">()</span>\n</code></pre></div>",
+        "id": 216877796,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1605536972
+    },
+    {
+        "content": "<p>(additions to my last msg: I forgot to add this but I also set the <code>content</code> element so the resource is overall valid)</p>\n<p>I'm seeing the same for R4. Debugging, I see the same problem: none of the validation supports know <em>http://hl7.org/fhir/ValueSet/document-reference-status</em> (<code>isValueSetSupported()</code> returns <code>false</code> for all supports I added). That, in turn, is interpreted by the validation engine as an invalid code <em>error</em> because it is a required code binding.</p>\n<p>This looks like a bug to me - I would have expected the DefaultProfileValidationSupport to be able to validate this as it says that it supports \"FHIR built-in vocabulary (ValueSet and CodeSystem resources).\"</p>",
+        "id": 217976769,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1606380366
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span> , i think you missed to  add the InMemoryTerminologyServerValidationSupport to the ValidationChain?</p>",
+        "id": 217983569,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1606384951
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191451\">@Patrick Werner</span> Yes, that was it! - thank you, saved my day <span aria-label=\"tada\" class=\"emoji emoji-1f389\" role=\"img\" title=\"tada\">:tada:</span> I think I was throw off by the statement in the documentation about   DefaultProfileValidationSupport supporting \"FHIR built-in vocabulary (ValueSet and CodeSystem resources).\"</p>",
+        "id": 217984887,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1606385831
+    },
+    {
+        "content": "<p>Yeah, this module contains them, applying them is done by the InMemoryTermSupport</p>",
+        "id": 217986181,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1606386814
+    }
+]

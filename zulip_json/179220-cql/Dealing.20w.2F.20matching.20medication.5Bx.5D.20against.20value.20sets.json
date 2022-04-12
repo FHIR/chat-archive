@@ -1,0 +1,68 @@
+[
+    {
+        "content": "<p>I'm writing some CQL that needs to match <code>MedicationOrder</code> against a value set of possible medications.  The tricky bit is that the medication code might be buried in a reference to a <code>Medication</code> resource (rather than inlined in the <code>MedicationOrder</code>).  Here's what I came up with for FHIR DSTU2-based CQL, but I'm curious if anyone has come up w/ anything better:</p>\n<div class=\"codehilite\"><pre><span></span>[MedicationOrder] O\nwhere O.medicationCodeableConcept in &quot;My Med VS&quot;\n  or exists(\n    [Medication: &quot;My Med VS&quot;] M\n    where EndsWith(O.medicationReference.reference.value, &#39;Medication/&#39; + M.id.value)\n  )\n</pre></div>\n\n\n<p>(I do realize that I could also use <code>Match</code> w/ a regex instead of <code>EndsWith</code>, but I'm looking for other approaches that might be more performant or easy to read.)  I don't <em>love</em> this solution because it would be inefficient without optimization (since it pulls <em>all</em> the patient's <code>MedicationOrder</code>s and <em>all</em> the <code>Medication</code>s represented by the value set -- which could be hundreds).</p>",
+        "id": 153955078,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1525119209
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span>  I am shooting from the hip but would this work?</p>\n<div class=\"codehilite\"><pre><span></span>[MedicationOrder: code in &quot;My Med VS] union [MedicationOrder: medication in &quot;My Med VS&quot;]\n</pre></div>",
+        "id": 153955129,
+        "sender_full_name": "Christopher Schuler",
+        "timestamp": 1525129084
+    },
+    {
+        "content": "<p>Thanks for the reply <span class=\"user-mention\" data-user-id=\"191897\">@Christopher Schuler</span>.  I don't <em>think</em> that would work, as neither <code>code</code> nor <code>medication</code> are valid properties for <code>MedicationOrder</code> in the FHIR 1.0.2 data model.  You're definitely right that it <em>could</em> be expressed as a union though:</p>\n<div class=\"codehilite\"><pre><span></span>[MedicationOrder: &quot;My Med VS&quot;]\nunion\n[MedicationOrder] O\n  where exists (\n    [Medication: &quot;My Med VS&quot;] M\n      where EndsWith(O.medicationReference.reference.value, &#39;Medication/&#39; + M.id.value)\n  )\n</pre></div>\n\n\n<p>I'm not sure if that's better or not.  It may be a matter of preference?</p>",
+        "id": 153955138,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1525132818
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> \"code\" and \"medication\" are search parameters defined in the FHIR spec (<a href=\"http://hl7.org/fhir/DSTU2/medicationorder.html#search\" target=\"_blank\" title=\"http://hl7.org/fhir/DSTU2/medicationorder.html#search\">http://hl7.org/fhir/DSTU2/medicationorder.html#search</a>). They should resolve correctly when building a URL to fetch the resource (e.g. {base}/MedicationOrder?code:in=\"My Med VS\"). I am not sure how you're fetching resources though...</p>",
+        "id": 153955141,
+        "sender_full_name": "Christopher Schuler",
+        "timestamp": 1525133335
+    },
+    {
+        "content": "<p>The following is an example url of fetching orders by code:<br>\n<a href=\"http://fhirtest.uhn.ca/baseDstu2/MedicationOrder?code=http://www.nlm.nih.gov/research/umls/rxnorm|313782\" target=\"_blank\" title=\"http://fhirtest.uhn.ca/baseDstu2/MedicationOrder?code=http://www.nlm.nih.gov/research/umls/rxnorm|313782\">http://fhirtest.uhn.ca/baseDstu2/MedicationOrder?code=http://www.nlm.nih.gov/research/umls/rxnorm|313782</a></p>",
+        "id": 153955142,
+        "sender_full_name": "Christopher Schuler",
+        "timestamp": 1525134628
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191897\">@Christopher Schuler</span> - Thanks for the clarification.  I understand that <code>code</code> and <code>medication</code> are search parameters in FHIR, but they're not defined properties in the FHIR 1.0.2 model-info file that CQL uses (see <a href=\"https://github.com/cqframework/clinical_quality_language/blob/master/Src/java/quick/src/main/resources/org/hl7/fhir/fhir-modelinfo-1.0.2.xml#L878-L896\" target=\"_blank\" title=\"https://github.com/cqframework/clinical_quality_language/blob/master/Src/java/quick/src/main/resources/org/hl7/fhir/fhir-modelinfo-1.0.2.xml#L878-L896\">here</a>). That being the case, I don't think I can use them in CQL retrieves or queries (unless I defined my own custom model-info, but I'd rather stick to the published one).</p>",
+        "id": 153955143,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1525137056
+    },
+    {
+        "content": "<p>Hmm. I guess I am not explaining this well. Perhaps an example would help illustrate what I am trying to say. I have an environment that executes STU3 code, but the following concept should work for the DSTU2 model as well. Navigate to <a href=\"http://cql-runner.dataphoria.org\" target=\"_blank\" title=\"http://cql-runner.dataphoria.org\">http://cql-runner.dataphoria.org</a>. Paste the following CQL:</p>\n<div class=\"codehilite\"><pre><span></span>library Example version &#39;1.0&#39;\n\nusing FHIR version &#39;3.0.0&#39;\n\nvalueset &quot;Benzo&quot;: &#39;benzodiazepines&#39;\n\ncontext Patient\n\n// note that code is not a valid STU3 MedicationRequest property\ndefine BenzoMedication:\n  [MedicationRequest: code in &quot;Benzo&quot;]\n</pre></div>\n\n\n<p>Select the config button and input example-rec-11-benzo-trigger-with-opioid as the patientId and press OK.<br>\nSelect the Run button.<br>\nYou should see a MedicationRequest in the results for the BenzoMedication expression.</p>\n<p>Hopefully that shows that what I am suggesting is valid CQL with the published data model.</p>",
+        "id": 153955146,
+        "sender_full_name": "Christopher Schuler",
+        "timestamp": 1525138323
+    },
+    {
+        "content": "<p>Wow.  That's really interesting.  I understand what you're getting at now and why we have a disconnect.</p>\n<p>Are you sure cql-runner is using the <em>published</em> (on GitHub) FHIR 3.0.0 model-info file?  I can't get your CQL to compile using the <code>cql-to-elm</code> on GitHub's <code>clinical_quality_language</code> master branch:</p>\n<div class=\"codehilite\"><pre><span></span>clinical-quality-language <span class=\"o\">(</span>master<span class=\"o\">)</span> $ <span class=\"nb\">cd</span> Src/java/cql-to-elm/\ncql-to-elm <span class=\"o\">(</span>master<span class=\"o\">)</span> $ gradle installDist\n\n&gt; Task :cql-to-elm:compileJava\nNote: Some input files use unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked <span class=\"k\">for</span> details.\n\n\nBUILD SUCCESSFUL in 3s\n<span class=\"m\">23</span> actionable tasks: <span class=\"m\">5</span> executed, <span class=\"m\">18</span> up-to-date\ncql-to-elm <span class=\"o\">(</span>master<span class=\"o\">)</span> $ vi Example.cql\ncql-to-elm <span class=\"o\">(</span>master<span class=\"o\">)</span> $ build/install/cql-to-elm/bin/cql-to-elm --input ./Example.cql\n<span class=\"o\">================================================================================</span>\nTRANSLATE ./Example.cql\nTranslation completed with messages:\nWarning:<span class=\"o\">[</span><span class=\"m\">11</span>:3, <span class=\"m\">11</span>:38<span class=\"o\">]</span> Could not resolve code path code <span class=\"k\">for</span> the <span class=\"nb\">type</span> of the retrieve FHIR.MedicationRequest.\nWarning:<span class=\"o\">[</span><span class=\"m\">11</span>:3, <span class=\"m\">11</span>:38<span class=\"o\">]</span> Could not resolve membership operator <span class=\"k\">for</span> terminology target of the retrieve.\nELM output written to: ./Example.xml\n\ncql-to-elm <span class=\"o\">(</span>master<span class=\"o\">)</span> $\n</pre></div>",
+        "id": 153955148,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1525139320
+    },
+    {
+        "content": "<p>Huh. That's weird. That project uses the cql-to-elm translator (v1.2.18) and I am not using a custom FHIR model-info. I am getting the same errors using the translator from the command line. Maybe the different versions are causing an issue? Dang... I'll have to investigate that.</p>",
+        "id": 153955150,
+        "sender_full_name": "Christopher Schuler",
+        "timestamp": 1525141304
+    },
+    {
+        "content": "<p>But if I remove \"code\" so it is <code>[MedicationRequest: \"Benzo\"]</code>, then I get the following error:<br>\n<code>Warning:[10:3, 10:30] Could not resolve code path medicationCodeableConcept for the type of the retrieve FHIR.MedicationRequest.</code></p>",
+        "id": 153955154,
+        "sender_full_name": "Christopher Schuler",
+        "timestamp": 1525144556
+    },
+    {
+        "content": "<p>Ah.  I think there is a bug in the model-info.  I see that the <code>primaryCodePath</code> is set to <code>medicationCodeableConcept</code>, but when Bryn introduced the ChoiceType support, he changed the <code>medicationCodeableConcept</code> property to <code>medication</code> (with a choice) -- but did not update the <code>primaryCodePath</code>.  I think that must be what's going on there.</p>",
+        "id": 153955219,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1525180273
+    }
+]

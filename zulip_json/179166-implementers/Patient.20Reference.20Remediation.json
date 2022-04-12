@@ -1,0 +1,98 @@
+[
+    {
+        "content": "<p>Hello,</p>\n<p>I was wondering what the community at-large might be doing in order to resolve the potential issue wherein the subject.identifier.value or subject.reference element changes within a resource, such as the case where a master patient ID that was used as the logical ID for the referenced Patient resource was split or reassigned.</p>\n<p>An example would be if we had an Observation resource assigned to a Patient resource with the logical ID '1' that is made available via our FHIR interface that is then later pulled by a different, potentially external, application. Later, we update the Observation resource to point to a Patient resource with the logical ID '2' because the Observation was assigned to the wrong family member and the disclosure was reported.</p>\n<p>Is there any way within the existing FHIR standard where we could track and represent these changes such that the application would be aware that the Observation no longer belonged to the patient with the logical ID of '1'?</p>\n<p>I've seen some discussions regarding using Provenance resources, but those specific use-cases are not defined within the implementation guides associated with the CMS Interoperability Mandate. Likewise, I do not think that necessarily solves the requirement for feedback to the application because it would have to be aware of the Provenance resource's existence.</p>",
+        "id": 222742447,
+        "sender_full_name": "Dale Brown",
+        "timestamp": 1610641772
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"264105\">@Dale Brown</span> in our FHIR Clinical Repo, we keep a history of the versions of all FHIR resources.  So it could at least be determined that for the Observation resource you mention for example that a previous version pointed to the \"non-surviving Patient\" (i.e. in the case of a Merge event).  That doesn't help to track \"why\" the event happened.. we usually have to dig back into the HL7 and other log statements.  I've never done anything with the Provenance resource though.</p>",
+        "id": 222757596,
+        "sender_full_name": "Jon Conley",
+        "timestamp": 1610647593
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"380205\">@Jon Conley</span> I'm not so interested in displaying the \"why\" per say, but rather whether or not there's a way to tell a third-party application, for example, that they need to delete the data that was disassociated from Patient ID 1. I imagine that the application would pick it up for Patient ID 2 as part of the regular incremental update data pull (based off of meta.lastUpdated or otherwise).</p>\n<p>I'm not sure how this could be accomplished at the moment outside of a differential historical data pull.</p>\n<p>We have situations where both Patient IDs \"survive\" and are considered active, but some of the original patient's experience is moved from one ID to the other. So, basically, a partial merge.</p>",
+        "id": 222760004,
+        "sender_full_name": "Dale Brown",
+        "timestamp": 1610648629
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"264105\">@Dale Brown</span> yeah I'm not sure of a way per the FHIR spec, and the main consumers of FHIR data that we are ingesting into our system are internal applications, so for that we are using Kafka to generate events.  The applications subscribe to those events and if they see something like a \"Patient merge\", it indicates which resource was merged and the application goes and re-fetches the resource(s) from the repo</p>",
+        "id": 222772667,
+        "sender_full_name": "Jon Conley",
+        "timestamp": 1610653540
+    },
+    {
+        "content": "<p>If a system queries data, it's pretty much impossible to tell them \"please query again\" unless they've set up a Subscription to monitor the resource in question.  If the data was pushed originally (via a message, create, update, etc.), then presumably you could push the change via the same mechanism.  In theory, you might have an audit log of all systems that had queried the record and, if you had a business relationship with the owners of those systems, you could communicate out-of-band that there was a change that needed to propagate, but no FHIR-based mechanism.</p>",
+        "id": 222784557,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1610658627
+    },
+    {
+        "content": "<p>I believe PA <span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span>  has a guide around detecting merge and unmerge, which may help out here</p>",
+        "id": 222786184,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1610659352
+    },
+    {
+        "content": "<p>It may be more broad than this, but knowing how a \"merge\" is represented would allow someone to monitor/detect. Just detecting at each resource level is likely not enough</p>",
+        "id": 222786377,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1610659442
+    },
+    {
+        "content": "<p>Current documentation is here:<br>\n<a href=\"https://confluence.hl7.org/display/PA/Merge+Operation\">https://confluence.hl7.org/display/PA/Merge+Operation</a></p>",
+        "id": 222789493,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1610661009
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span> <span class=\"user-mention\" data-user-id=\"191356\">@Jenni Syed</span>  That is helpful, thanks. Unfortunately, it doesn't appear that cases for splits or partial merges have been discussed there yet. I did find some posts on this board from last year discussing using the link mechanism for the Patient resource, which works for full merges wherein the Patient ID is sufficiently granular, but when there's a case where both IDs survive, that's not sufficient because it's only <em>some</em> of the attached resources that are being moved.</p>\n<p>So, if Patient ID 1 has Observations A, B, and C, and we split off a Patient ID 2 who is the true owner of Observation B, for example.</p>\n<p>The desired result would be Patient ID 1 with Observations A and C and Patient ID 2 with Observation B. Patient ID 2 may or may not already exist.</p>",
+        "id": 222818430,
+        "sender_full_name": "Dale Brown",
+        "timestamp": 1610684135
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  Our proprietary data structure feeding our FHIR server stores versions of patient profile data based on PCP changes, demographics changes, and plan changes.<br>\nThe IG documentation suggests that we do not have to support versioning as part of FHIR API data, at least not yet. <br>\nDo we need to populate our FHIR repository with all the old versions of our patient data even though versioning isn't required?<br>\nWe also have future eligibility data around renewal time. Hence, the latest eligibility period data may be in the future.</p>",
+        "id": 227999499,
+        "sender_full_name": "John Achoukian",
+        "timestamp": 1614375924
+    },
+    {
+        "content": "<p>There are roughly three levels of version support possible:</p>\n<ul>\n<li>full support (i.e. know when data has changed and can expose any desired version)</li>\n<li>version-aware, no history (know when something's changed, but can only show current version)</li>\n<li>none - have no idea when/if anything has changed (which makes avoiding update collisions challenging)</li>\n</ul>\n<p>In practice, you could have other situations (e.g. can retrieve versions for the last 6 months but nothing earlier, etc.</p>\n<p>In some cases, an IG may mandate a certain level of version support, but the base specification doesn't impose any particular expectations.</p>",
+        "id": 228002343,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1614377049
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> Does the CARIN IG specify a level of version support or does it vary by resource profile?</p>",
+        "id": 228852237,
+        "sender_full_name": "John Achoukian",
+        "timestamp": 1614892785
+    },
+    {
+        "content": "<p>Another Alliance member previously asked similar questions about history, but I did not see a response. Can we get a clarification on the following? <br>\nPayers have to make Patient account history available from Jan 1st 2016 for a members as long as they are continued to be covered by that payer, and after membership termination of coverage payer has to keep the data available for 5 more years. (Please Validate)<br>\nCan you please provide an approach or guidance for the following scenarios? Are we overthinking this?<br>\n1) What if a previously registered member disenrolled over a year ago, will the health plan still be required to support login?<br>\n2) What if a never registered member disenrolled over a year ago, will the health plan still be required to facilitate a registration and login?    <br>\n3) What if a member obtained coverage with the same payer before end of 5 years, they left and came back, (and Payer maintains same account internally), will both sets of data history (e.g. Coverage and EOB) be available to the member or only the most recent?  <br>\n4) What if patient, provider or organization demographics change during the course of a members coverage? Will the historical data pertaining to patient, provider or organization data be required to reflect claims or encounters at the time of the historical events?</p>",
+        "id": 228867603,
+        "sender_full_name": "John Achoukian",
+        "timestamp": 1614899623
+    },
+    {
+        "content": "<p>No specific level of version support is required by CARIN BB - no versioning at all is fine</p>",
+        "id": 228874819,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1614903502
+    },
+    {
+        "content": "<p>If / how to support data for previous members and such is not really a technical question and it is not related to FHIR versioning, it is policy.</p>",
+        "id": 228874927,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1614903595
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"325599\">@John Achoukian</span> Your questions would probably be better directed towards CMS or the authors of the Patient Access API as they are the ones requiring member/patient access. The way I read them: All current AND former members shall have access to retrieve their data back to 2016-01-01. The way my company reads them: All current members.</p>",
+        "id": 228951907,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1614950712
+    }
+]

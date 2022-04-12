@@ -1,0 +1,79 @@
+---
+layout: page
+title: "FHIR Chat  · Building permissive profiles with mustSupport flag · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Building.20permissive.20profiles.20with.20mustSupport.20flag.html">Building permissive profiles with mustSupport flag</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="182347164"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Building%20permissive%20profiles%20with%20mustSupport%20flag/near/182347164" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Yoni De Witte <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Building.20permissive.20profiles.20with.20mustSupport.20flag.html#182347164">(Dec 02 2019 at 13:56)</a>:</h4>
+<p>Dear FIR Community,</p>
+<p>We recently defined a profile to capure clinical data based on the Observation profile. How it works is that on a workflow trigger our backend creates a new resource with some pre-filled elements. A client application reads that resource and presents it to a clinical user who fills in some additional data and the application persists that to our backend by updating the resource. Our FHIR service is only a facade so we don't support every element in the Observation resource. At first we naively defined our own MyObservation profile which modifies types, constraints and cardinality of the Observation profile to exactly match our backend. Inspired by talks on the Amsterdam DevDays, we started thinking about making our profiles more permissive and using the mustSupport flag. Our current interpretation is that when reading a resource, we can include all the elements that our backend supports. Elements that are not supported can be left out as long as the profile does not mark them as required. For all operations that modify the resource, we set mustSupport=true and if needed restrict the profile to indicate what we allow to be persisted.</p>
+<p>Some concrete examples on our MyObservation profile, which is based on the Observation profile:</p>
+<ul>
+<li>Observation.code: This element is pre-filled by the backend. We do NOT set mustSupport to true, because that would indicate that the client application can change the code and update the resource, which we do not allow. If a client would change the code and update the resource, we ignore that element.</li>
+<li>Observation.subject: We always link an observation 1-1 to a patient automatically on the backend. That is compliant so we don't need to modify cardinality to 1..1 and restrict the Subject type to Patient. Again mustSupport=false since we don't allow clients to relink the resource to another patient.</li>
+<li>Observation.bodySite: This element is to be filled in by the client, so we set mustSupport=true and we persist on update.</li>
+<li>Observation.hasMember: This element is to be filled in by the client, so we set mustSupport=true. The members are resources of a proprietary 'Foo' profile, so we need to modify our MyObservation profile to set the allowed target to a single value, being our Foo profile.</li>
+</ul>
+<p>Is this the correct interpretation of permissive profiles and the mustSupport flag?</p>
+<p>Thanks!</p>
+
+
+
+<a name="182348224"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Building%20permissive%20profiles%20with%20mustSupport%20flag/near/182348224" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Building.20permissive.20profiles.20with.20mustSupport.20flag.html#182348224">(Dec 02 2019 at 14:08)</a>:</h4>
+<p>On the first two I'd reject the instance sent by the client, 'not allowed to change', the client is breaking a business rule. Ignoring that may lead to patient safety issues.<br>
+Obs.hasMember: do ALL referenced resources have to conform to Foo, or is it OK to have a Bar, as long as there is at least one Foo ?</p>
+
+
+
+<a name="182348315"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Building%20permissive%20profiles%20with%20mustSupport%20flag/near/182348315" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> René Spronk <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Building.20permissive.20profiles.20with.20mustSupport.20flag.html#182348315">(Dec 02 2019 at 14:09)</a>:</h4>
+<p>To me .code and .subject sounds like they're mustSupport. However, given that definition of 'mustSupport' is up to you (as a project), what do YOU defined mustSupport to be?</p>
+
+
+
+<a name="182353234"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Building%20permissive%20profiles%20with%20mustSupport%20flag/near/182353234" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Yoni De Witte <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Building.20permissive.20profiles.20with.20mustSupport.20flag.html#182353234">(Dec 02 2019 at 15:02)</a>:</h4>
+<p>Yes, all referenced resources have to conform to Foo. If there is a Bar, we can ignore it or return an error.</p>
+<p>We don't yet have mustSupport defined in our project. So we're open to suggestions from the community what that definition should be. I would say that there are 3 categories of elements in our application:<br>
+1) read-only elements which are populated and persisted by the backend<br>
+2) elements which MAY(not SHALL) be populated by a client and are persisted by the backend<br>
+3) elements which are not persisted by the backend</p>
+<p>In the current proposal, we would use the mustSupport-flag to distinguish elements of category 2. The difference between elements of category 1 and 3 is simply that category 3 elements are missing when the resource is read, as they are not persisted.</p>
+
+
+
+<a name="182359025"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Building%20permissive%20profiles%20with%20mustSupport%20flag/near/182359025" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Building.20permissive.20profiles.20with.20mustSupport.20flag.html#182359025">(Dec 02 2019 at 15:55)</a>:</h4>
+<p>Ignoring an element and throwing it away is a bit different than ignoring an element and holding onto something else.  I'd certainly recommend at least including a warning about elements that you ignore but store something else.</p>
+
+
+
+<a name="182369114"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Building%20permissive%20profiles%20with%20mustSupport%20flag/near/182369114" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Building.20permissive.20profiles.20with.20mustSupport.20flag.html#182369114">(Dec 02 2019 at 17:34)</a>:</h4>
+<p>mustSupport = true does not imply that the client has the right to change the value. Only that you think it's not safe if a client ignores the element.</p>
+
+
+
+<a name="182369153"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Building%20permissive%20profiles%20with%20mustSupport%20flag/near/182369153" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Building.20permissive.20profiles.20with.20mustSupport.20flag.html#182369153">(Dec 02 2019 at 17:34)</a>:</h4>
+<p>We've not really had much discussion about specifying rules in a computable form over what can changed or not by the client</p>
+
+
+
+<a name="182373376"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Building%20permissive%20profiles%20with%20mustSupport%20flag/near/182373376" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Building.20permissive.20profiles.20with.20mustSupport.20flag.html#182373376">(Dec 02 2019 at 18:19)</a>:</h4>
+<p>mustSupport isn't about what's "safe", it's about what a system is expected to do/pay attention to.  So if you want to say "I will pay attention to elements A, B and C, but not to anything else", then marking A, B and C as "mustSupport" is appropriate.  And if you're going to ignore submitted data, not marking it as mustSupport is the appropriate way to designate that.  What's a bit unique here is that you're ignoring submitted data - but then asserting your own value for it.  That's not typical/expected behavior, so throwing out a warning message would be good practice.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

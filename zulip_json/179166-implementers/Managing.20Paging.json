@@ -1,0 +1,164 @@
+[
+    {
+        "content": "<p>Someone asked me:</p>\n<blockquote>\n<p>what strategies we would apply for paging resources?<br>\nA search returns back 10 pages. While retrieving pages 2-10, a resource is updated that wasn’t included the original query.<br>\nWe currently go to the database every time we get the next page. What should we be doing to avoid this situation? Should we be caching the snapshot of data and serving those pages when requested. And if so, when does the snapshot become stale and we should requery the database?</p>\n</blockquote>\n<p>I answered:</p>\n<blockquote>\n<p>there's basically 4 possibilities, each with pros and cons. </p>\n<ul>\n<li>you keep a snapshot of the search as it was when the search was performed and the pages walk through this search <br>\n(but you serve up current versions of the actual resources when you walk through the search list, or omit them if deleted)<br>\n  ** variant: you serve up the resources as they were when you did the search </li>\n<li>you rebuild the search each time, and step through it as it is at the time or stepping. This raises the possibility of discontinuities between the pages - resources duplicated or missed (probably worse)</li>\n<li>you put the id of the last match in the page inside the next link, and dig it out and walk the current search until you find it, and start from there. (fails badly if that resource falls out of the search set)</li>\n<li>you don't support paging at all (my personal feeling is anything over a 100 matches... you're looking at a machine and you could consider subscription based alternatives, or history, and so you say, ask for as many as you want up to 100, and we don't do paging)</li>\n</ul>\n<p>My server does the first option: when a search is performed, I select the internal key and the sort key(s) into a search entries table, and then I walk that search entries table looking up the actual resources as I go. I clear out the search entries after 30 mins from last hearing from that search, and return an error if I've done that.</p>\n</blockquote>\n<p>They answered:</p>\n<blockquote>\n<p>It should probably be something that is documented in the FHIR guide – with suggested approaches to “large” paging.</p>\n</blockquote>",
+        "id": 261584919,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1637024676
+    },
+    {
+        "content": "<p>it's not in the base standard because while it's ok to write this very general advice, workdsmithing it in the standard would be a nightmare. </p>\n<p>I'm interested in opinions</p>",
+        "id": 261584951,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1637024717
+    },
+    {
+        "content": "<p>The next page link has a continuation token. The next page of results starts with results greater than the continuation token, in whatever sort order you're using (and there is a default sort order, so an order always exists).</p>\n<p>If additional results have appeared on pages earlier in the sort order, you don't see them. If results have appeared or disappeared from later pages, those pages will contain the latest state when retrieved. There are no discontinuities or duplicates as such, except that since the client is retrieving pages one by one, it is getting the state of each page at a different point in time.</p>\n<p>There is no way to page backwards (except by going back to the start) and no way to skip pages. That's the tradeoff.</p>\n<p>There are basically 3 approaches (or 4 if you count \"don't do paging\") - snapshotting, count/offset, and continuation tokens. They all have different tradeoffs and use cases. I don't think there's any advice universal enough to be written into the standard.</p>",
+        "id": 261591473,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1637030925
+    },
+    {
+        "content": "<p>well, I think he meant to write the four options into the standard as possible implementation strategies</p>",
+        "id": 261591925,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1637031355
+    },
+    {
+        "content": "<p>FHIR search page says that:</p>\n<p>Note: It is at the discretion of the search engine as to how to handle ongoing updates to the resources while the search is proceeding.</p>",
+        "id": 261594137,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1637033921
+    },
+    {
+        "content": "<p>indeed it does. And that wouldn't change. I think that implementer's proposal was to add a box under this, notes to implementers, with some options as possible choices</p>",
+        "id": 261594503,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1637034418
+    },
+    {
+        "content": "<p>Unless there is an option in FHIR that I'm not aware of, entirely possible, there is no mechanism to know what the user wants to happen. \"All records exactly as they are at the time of initial request\" or \"Page set updated dynamically as I go\". Since there isn't a way to know what the user wants, then chances are good the server will do the opposite 50% of the time and servers will vary between providers.<br>\nMy server does the \"you rebuild the search each time\", yes there is the possibility that you get a duplicate (a row was injected into a prior page, thus everything slipped down a rung) or miss a record (a row was deleted, everything moved up). <br>\nI would like keep the state, but I don't care to keep a cache of resource id values in my session state store so it can cross server instances, data center instances. <br>\nIt is my opinion that if a person (actual user in front of a screen) gets a result-set of more than 20 or so, it's unlikely they are going to page through the results. Instead they are going to refine the search. If it's a machine, then it's probably going to churn through all the pages so fast that the likely hood of injecting/deleting a row between first and last is low.</p>",
+        "id": 261638654,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1637068754
+    },
+    {
+        "content": "<p>Regarding the option not to do paging at all: I don't think the most meaningful distinction is whether the consumer involves a set of human eyes. Search allows for some important advantages like being able to look back in time (which subscription can't do) and being able to filter results to the minimum needed for your use case which could be important for bandwidth as well as for compliance reasons (and I don't think history enables this).</p>",
+        "id": 261649942,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637073692
+    },
+    {
+        "content": "<p>what I said was slightly different: once you get out past a set number of matches, you're dealing with a machine and some other strategy becomes appropriate. And I think that's still true even given what you've said - past a number of matches, don't do it by search</p>",
+        "id": 261702648,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1637094729
+    },
+    {
+        "content": "<p>But what other mechanisms do we have <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> that supports 1) lookback, and 2) minimum necessary access? Bulk export with experimental filters?</p>",
+        "id": 261703023,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637094890
+    },
+    {
+        "content": "<p>not sure but how is 1000s of resources minimum necessary access?</p>",
+        "id": 261703856,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1637095308
+    },
+    {
+        "content": "<p>or more specifically: search is not transactionally reliable and never has been</p>",
+        "id": 261703928,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1637095325
+    },
+    {
+        "content": "<p>\"minimum necessary\" obviously depends on context -- but simply put, search can restrict by codes, filter down to elements, etc. It's a helpful toolkit.</p>",
+        "id": 261710472,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637098674
+    },
+    {
+        "content": "<p>perhaps a server should declare a maximum number of responses it will retrun in a single page, and the maximum number of resources a search can span without any reliability around duplicated or skipped resources, or what happens if resources are modified or deleted before the search being performed and the page being accessed</p>",
+        "id": 261729716,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1637109580
+    },
+    {
+        "content": "<p>What is the behavior of SQL databases when using FETCH/OFFSET and similar pagination constructs? Are they acting as a snapshot, or dynamically adjusted?</p>",
+        "id": 261734270,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1637113641
+    },
+    {
+        "content": "<p>since there's no paging construct - and no doubt this is exactly why - this isn't a question that arises</p>",
+        "id": 261735097,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1637114487
+    },
+    {
+        "content": "<blockquote>\n<p>Grahame Grieve: since there's no paging construct - and no doubt this is exactly why - this isn't a question that arises</p>\n</blockquote>\n<p>With standard SQL transaction isolation levels you can choose an isolation mode that gives you the behaviors you want. E.g. with Postgres if you need consistent  views of a db across queries in a transaction, you can start a<code>REPEATABLE READ</code>transaction. Then you can ask for 100 rows with an offset of 0, and 100 rows with an offset of 100, and you get results with snapshot consistency.</p>",
+        "id": 261740800,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637121263
+    },
+    {
+        "content": "<p>(see <a href=\"https://sqlperformance.com/2014/04/t-sql-queries/the-repeatable-read-isolation-level\">https://sqlperformance.com/2014/04/t-sql-queries/the-repeatable-read-isolation-level</a>)</p>",
+        "id": 261740816,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637121300
+    },
+    {
+        "content": "<p>You can also copy your result set off to a \"static\" temporary table such that any updates that happen to the live table don't affect your snapshot. A variation on the \"keep a snapshot of just the ids\".<br>\nThe point here is that there are many different ways to implement paging, static by key, static by content, live re-queries, ...<br>\nAny server is allowed to implement any strategy they want and no matter the strategy, there will be times when that is not the outcome that the user wants at that time.<br>\nAt the same time, it's hard (for me) to imagine a situation where this difference will make a measure-able difference in outcome. (Yes, you get the 7345 observations that existed when the search was initiated vs the 7346 that exist by the time the search is exhausted. What negative scenario happened because of that? If I'm in the Dr's office awaiting treatment, maybe, but what's the likely hood that a new observation is generated while I'm in the office that will affect treatment? [which would argue for non-static responses])</p>",
+        "id": 261782099,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1637155014
+    },
+    {
+        "content": "<p>the real problem is when one resource falls out of the list, and so another one moves from page 10 to page 9 but you had just got page 9 and now you get page 10 and missed a resource</p>",
+        "id": 261833547,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1637176489
+    },
+    {
+        "content": "<p>Having a static result set keeps you from missing a record due to changes between the time the initial page was requested and the last. <br>\nOn the con side, it keeps you from getting new records due to changes between the time the initial page was requested and the last.</p>\n<p>Pick your poison. There is no perfect answer, unless you implement all methodologies and allow the user to choose on a per transaction basis.</p>",
+        "id": 261840197,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1637179283
+    },
+    {
+        "content": "<p>Hi guys, thanks for the feedback.</p>\n<p>Just to clarify what we are doing. We have system that gets updated by users. These updates need to be provided to a number of other systems. They query our endpoint at certain intervals saying give me any changes since a datetime. So therefore it IS a system querying for page 1,2,3...10.</p>\n<p>Based on these conversations, I have decided to look at caching the complete results, page by page, and adding a unique id to the \"self\", \"first\", \"last\", \"next\"  links that we provide. Then when a system queries with this id, we can serve the correct data.<br>\nIf there is no id, then we know it is a new query.<br>\nWe can also set a \"gone stale\" period on the cache, so say 1 hr old, and we delete them.</p>\n<p>Thoughts?</p>",
+        "id": 261888565,
+        "sender_full_name": "Philip Wilford",
+        "timestamp": 1637213991
+    },
+    {
+        "content": "<p>If the multiple systems that want to keep up to date are interested in a full system state, you should consider using _history as Grahame suggested.</p>",
+        "id": 261927390,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637242561
+    },
+    {
+        "content": "<p>And indeed you might look at Subscriptions as well Andy's case.</p>\n<p>And yes, if you want to accomplish this with FHIR <em>search</em>, maintaining snapshot result eets sounds like the right fit for your use case.</p>",
+        "id": 261927667,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1637242686
+    },
+    {
+        "content": "<p>Do i use the _id field to identify the snapshot?</p>\n<div class=\"codehilite\"><pre><span></span><code>  &quot;relation&quot;: &quot;first&quot;,\n  &quot;url&quot;: &quot;http://localhost:64558/SraSubscriberWebApi/2/fhir?_count=7&amp;_type=Organization,HealthcareService,Location,Provenance,PractitionerRole,Practitioner&amp;_lastUpdated=gt2021-10-01&amp;_page=1&amp;**_id=a27da889-79fa-43fc-9ae4-a84cf9016d3e**&quot;\n</code></pre></div>",
+        "id": 262955777,
+        "sender_full_name": "Philip Wilford",
+        "timestamp": 1638144176
+    },
+    {
+        "content": "<p>that's up to you - other than the 'self' link the links are opaque to the client. And the self link, you can add whatever you want to the link as well as the information that the client supplied that you processed</p>",
+        "id": 262958064,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1638147715
+    },
+    {
+        "content": "<p>Thanks G,<br>\nThink we will use \"_resultId\" so that it doesn't confuse with an id of a resource.</p>",
+        "id": 262958134,
+        "sender_full_name": "Philip Wilford",
+        "timestamp": 1638147800
+    }
+]

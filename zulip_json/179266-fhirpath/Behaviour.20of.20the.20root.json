@@ -1,0 +1,122 @@
+[
+    {
+        "content": "<p>I'm implementing FHIRPath and was wondering the exact behaviour of the root path. In particular, why this expression behaves the way it does:</p>\n<div class=\"codehilite\"><pre><span></span><code>type!=&#39;display&#39; or code.empty()\n</code></pre></div>\n<p>Notice <code>code</code> is also a type (full name <a href=\"https://hl7.org/fhir/fhirpath.html#types\">FHIR.code</a>).</p>\n<p>In this case, <code>code</code> is meant to be interpreted as a label - but why is that the case? It's the root of a path, which means it <a href=\"http://hl7.org/fhirpath/#path-selection\">should be interpreted as a type</a>. Or does \"path\" refer only to the entire expression, and not sub-expressions?</p>\n<p>A related question, how would this on its own behave?</p>\n<div class=\"codehilite\"><pre><span></span><code>code.empty()\n</code></pre></div>\n<p>Are there some cases where it would be interpreted as a type, and other cases where it would be interpreted as a label?</p>",
+        "id": 219238022,
+        "sender_full_name": "Felix Chapman",
+        "timestamp": 1607449480
+    },
+    {
+        "content": "<p>Each invariant specifies a 'context'.  That establishes the node in which the expression will be evaluated.</p>",
+        "id": 219242694,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1607451736
+    },
+    {
+        "content": "<p>I see, so in this case the context is <a href=\"https://www.hl7.org/fhir/questionnaire.html#invs\">Questionnaire.item</a>, which has type <code>BackboneElement</code>.</p>\n<p>The spec says this:</p>\n<blockquote>\n<p>When resolving an identifier that is also the root of a FHIRPath expression, it is resolved as a type name first, and if it resolves to a type, it must resolve to the type of the context (or a supertype). Otherwise, it is resolved as a path on the context. If the identifier cannot be resolved, the evaluation will end and signal an error to the calling environment.</p>\n</blockquote>\n<p>Applying to this example: <code>code</code> resolves to a type, so it \"must resolve to the type of the context\". The type of the context is <code>BackboneElement</code>, so it fails. After this point I'm uncertain, should it:</p>\n<ul>\n<li>Resolve to a path on the context?</li>\n<li>End evaluation and signal an error?</li>\n</ul>\n<p>I read it as the latter, because I thought \"Otherwise, it is resolved as a path on the context\" referred to the condition \"if it resolves as a type\". But perhaps it's the former?</p>",
+        "id": 219243643,
+        "sender_full_name": "Felix Chapman",
+        "timestamp": 1607452217
+    },
+    {
+        "content": "<p>That is an interesting question.  In the fhirpath.js library, we assumed that the \"type\" was referring to a resource type (e.g. Patient, Observation), not primitive types.  Otherwise, if you had an Observation in the context, wrote <code>code</code>, it would fail, unless you wrote <code>Observation.code</code>.  I am not sure which behavior is correct.  <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> ?</p>",
+        "id": 219275917,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1607468984
+    },
+    {
+        "content": "<p>It would be the former, the intent being to ensure that paths written against base resource types resolve correctly (e.g. <code>Resource.id = '123'</code>, though I agree the language can be tightened. Please submit a tracker on that?</p>",
+        "id": 219280204,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1607471362
+    },
+    {
+        "content": "<p>Should probably be 'if it resolves to a type and that type is the type of the context (or a supertype).'</p>",
+        "id": 219280282,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1607471418
+    },
+    {
+        "content": "<p>Only in the case that the identifier can't resolve at all should it result in an error.</p>",
+        "id": 219280306,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1607471436
+    },
+    {
+        "content": "<p>there is a corner case where this is a problem, which is where the focus element has a sub-element with the same name as the type.</p>",
+        "id": 219396004,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1607547153
+    },
+    {
+        "content": "<p>I don't think that we have any of these in FHIR, but it might happen elsewhere</p>",
+        "id": 219396029,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1607547169
+    },
+    {
+        "content": "<p>Thanks for the help, the behaviour is clear to me now!</p>\n<p>I've requested a HL7 JIRA account, then I'll submit an issue to clarify that paragraph.</p>",
+        "id": 219853470,
+        "sender_full_name": "Felix Chapman",
+        "timestamp": 1607958252
+    },
+    {
+        "content": "<p><a href=\"https://jira.hl7.org/browse/FHIR-30008\">https://jira.hl7.org/browse/FHIR-30008</a></p>",
+        "id": 220006057,
+        "sender_full_name": "Felix Chapman",
+        "timestamp": 1608050355
+    },
+    {
+        "content": "<p>Agreed, but added a comment.</p>",
+        "id": 220028005,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1608059939
+    },
+    {
+        "content": "<p>Actually, for processing JSON (e.g. fhirpath.js) I am wondering whether that sentence could be a bit clearer about handling primitive types.  If someone passes in a JSON string (not a string of JSON, but just a JSON string value, e.g. '\"hi\"'), then per the <a href=\"https://www.hl7.org/fhir/datatypes.html\">data types page</a> it might be one of several FHIR types:  string, uri, url, canonical, base64Binary, date, dateTime, time, code, oid, id, markdown, or uuid.  One might guess at the intended type (or at least rule out some possibilities) by looking at the content of the string, but there will be ambiguous cases.  Is '\"2014\"' a date, an id, or markdown?  So if that is the context, and someone writes \"markdown\" for the FHIRPath expression, is it valid or not?</p>",
+        "id": 220030772,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1608060986
+    },
+    {
+        "content": "<p>I think the same issue arises for complex types.  If the context is <code>{\"text\": \"George\"}</code> is that a CodeableConcept or a HumanName?  So, if someone writes <code>HumanName.text</code>, should that be permitted because it is possible?</p>",
+        "id": 220031011,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1608061116
+    },
+    {
+        "content": "<p>FHIRPath doesn't really work on untyped content, though we can approximate it if we declare than any untyped primitive content is treated as as string</p>",
+        "id": 220753643,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1608686929
+    },
+    {
+        "content": "<p>\"FHIRPath doesn't really work on untyped content\"<br>\nIn Questionnaire expressions (e.g. calculatedExpresion) the context is QuestionnaireResponse.item (or item.item), which as a fragment of a resource, does not contain the resource type.  Therefore expressions like \"answer.value\" won't work, because the structure will really be something like \"answer.valueCoding\", and there is no type information to translate \"valueCoding\" to \"value\".  Just yesterday I worked around that by using \"answer.children()\".</p>",
+        "id": 220790227,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1608731689
+    },
+    {
+        "content": "<p>valueCoding isn't fhirpath anyways, you would use value.ofType(Coding)</p>",
+        "id": 220797873,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1608737010
+    },
+    {
+        "content": "<p>If you are working in JSON, the fragment passed in for an item would have valueCoding (or other type) not \"value\".  But you are correct that if the choice type could be recognized, the proper FHIRPath syntax would be \"value\".</p>",
+        "id": 220798199,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1608737251
+    },
+    {
+        "content": "<blockquote>\n<p>which as a fragment of a resource, does not contain the resource type</p>\n</blockquote>\n<p>but it is still known, since they are always contained by the resource</p>",
+        "id": 220814407,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1608748001
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179266-fhirpath/topic/Behaviour.20of.20the.20root/near/220814407\">said</a>:</p>\n<blockquote>\n<blockquote>\n<p>which as a fragment of a resource, does not contain the resource type</p>\n</blockquote>\n<p>but it is still known, since they are always contained by the resource</p>\n</blockquote>\n<p>I suppose you mean that \"item\" could have some extra property which points back to its parent node, or to the containing resource.   That extra property would have to be named carefully to avoid conflicting with possible resource element names.</p>",
+        "id": 221680413,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1609869934
+    }
+]

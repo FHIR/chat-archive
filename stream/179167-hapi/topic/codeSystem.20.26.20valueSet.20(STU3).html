@@ -1,0 +1,753 @@
+---
+layout: page
+title: "FHIR Chat  · codeSystem &amp; valueSet (STU3) · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html">codeSystem &amp; valueSet (STU3)</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153836032"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836032" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dave Barnet <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836032">(Jul 01 2016 at 08:17)</a>:</h4>
+<p>I'm trying to implement a set of codes using codeSystem &amp; valueSet, where he codes are in a hierarchy. I noticed that in the definition of codeSystem, you appear to be able to nest concepts, so I set up a codeSystem with some nested concepts, along the lines of <br>
+&lt;concept&gt;<br>
+&lt;code value="MA00"/&gt;<br>
+&lt;display value="Mainstream Housing"/&gt;<br>
+&lt;concept&gt;&lt;code value="MA01"/&gt;&lt;display value="Owner occupier"/&gt;&lt;/concept&gt;<br>
+&lt;concept&gt;&lt;code value="MA02"/&gt;&lt;display value="Settled mainstream housing with family/friends"/&gt;&lt;/concept&gt;<br>
+&lt;/concept&gt;<br>
+&lt;concept&gt;<br>
+&lt;code value="HM00"/&gt;<br>
+&lt;display value="Homeless"/&gt;<br>
+&lt;concept&gt;&lt;code value="HM01"/&gt;&lt;display value="Rough sleeper"/&gt;&lt;/concept&gt;<br>
+&lt;concept&gt;&lt;code value="HM02"/&gt;&lt;display value="Squatting"/&gt;&lt;/concept&gt;<br>
+&lt;/concept&gt;<br>
+I then set up a valueSet to query (include) the codeSystem. However, when I expand the valueSet, the codes appear in a flat list, rather then in a nested list as I expected - they appeared like this<br>
+"contains": [<br>
+{<br>
+"system": "<a href="http://fhir.nhs.net/CodeSystem/AccommodationStatusCode" target="_blank" title="http://fhir.nhs.net/CodeSystem/AccommodationStatusCode">http://fhir.nhs.net/CodeSystem/AccommodationStatusCode</a>",<br>
+"code": "MA00",<br>
+"display": "Mainstream Housing"<br>
+},<br>
+{<br>
+"system": "<a href="http://fhir.nhs.net/CodeSystem/AccommodationStatusCode" target="_blank" title="http://fhir.nhs.net/CodeSystem/AccommodationStatusCode">http://fhir.nhs.net/CodeSystem/AccommodationStatusCode</a>",<br>
+"code": "MA01",<br>
+"display": "Owner occupier"<br>
+},<br>
+{<br>
+"system": "<a href="http://fhir.nhs.net/CodeSystem/AccommodationStatusCode" target="_blank" title="http://fhir.nhs.net/CodeSystem/AccommodationStatusCode">http://fhir.nhs.net/CodeSystem/AccommodationStatusCode</a>",<br>
+"code": "MA02",<br>
+"display": "Settled mainstream housing with family/friends"<br>
+},<br>
+etc...<br>
+Anyone any idea what I'm doing wrong? I need to store and retrieve a list of codes that have a structure (hierarchy) within the codeSystem. <br>
+I've tested this on our (NHS) internal STU3 HAPI server, and on the public <a href="http://fhirtest.uhn.ca/" target="_blank" title="http://fhirtest.uhn.ca/">http://fhirtest.uhn.ca/</a> STU3 HAPI server, and get the same results (as above)</p>
+<p>[*NOTE* this was originally posted on the Implementer's stream, but re-posted here for a view from the hapi folk]</p>
+
+
+
+<a name="153836125"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836125" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836125">(Jul 01 2016 at 23:27)</a>:</h4>
+<p><span class="user-mention" data-user-id="192158">@Dave Barnet</span> You're not doing anything wrong - the $expand operation is free to return the expansion as a flat list or with nesting as it sees fit.  Our terminology server always returns a flat list because the order is significant (ranked by the score from the filter matching) and this is incompatible with also returning hierarchy.<br>
+However, since the structure is in the CodeSystem, you can use $lookup to access it.</p>
+
+
+
+<a name="153836292"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836292" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dave Barnet <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836292">(Jul 04 2016 at 11:18)</a>:</h4>
+<p>As far as I can see, $lookup acts on a single concept defined in a codeSystem.<br>
+I'll try and restate the requirement, this time avoiding the word "hierarchy". I enter concepts into a codeSystem that are nested (codeSystem allows you to do this), I then create a valueSet which includes the codeSystem. How do I retrieve the concepts and still have the nesting maintained? <br>
+If I do a GET (something like [base]/ValueSet/150/$expand - where 150 is the value set that includes the nested codeSystem) I get back a flat list of concepts.</p>
+
+
+
+<a name="153836293"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836293" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836293">(Jul 04 2016 at 12:05)</a>:</h4>
+<p>have you looked at the terribly named $closure resource <span class="user-mention" data-user-id="192158">@Dave Barnet</span> ?</p>
+
+
+
+<a name="153836294"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836294" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836294">(Jul 04 2016 at 12:10)</a>:</h4>
+<p>from what i gather (sorry I'm bit of a FHIR noob) it will do a full hierarchy walk and return all the descendant-ancestor links</p>
+
+
+
+<a name="153836295"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836295" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836295">(Jul 04 2016 at 12:11)</a>:</h4>
+<p>ie if A is a subset of B, and B is a subset of C then it would give [A-B, A-C, B-C]</p>
+
+
+
+<a name="153836296"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836296" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836296">(Jul 04 2016 at 12:15)</a>:</h4>
+<p>my comment on the other thread was just saying that it would be possible possible to prune back to the core links by culling A-C because there are more hi-res links available that transitively imply the A-C link (A-B and B-C)</p>
+
+
+
+<a name="153836297"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836297" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836297">(Jul 04 2016 at 12:18)</a>:</h4>
+<p>so this involves a two step process as far as I can tell, the $lookup to get the list then $closure to get the "ancestor table"</p>
+
+
+
+<a name="153836302"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836302" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dave Barnet <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836302">(Jul 04 2016 at 13:46)</a>:</h4>
+<p>Thanks Erich, I'll see if I can give this a go. It does seem a long-winded way round for getting out information (creating client side tables, and $lookup acts on one concept at a time etc.). What we are trying to achieve is a vocabulary server using codeSystem and valueSet, containing &amp; maintaining our own code systems. It's really conceptually very simple, so I was trying to avoid complexity.</p>
+
+
+
+<a name="153836313"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836313" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836313">(Jul 04 2016 at 22:00)</a>:</h4>
+<p>it's still not clear to me what you are trying to achieve. </p>
+
+
+
+<a name="153836361"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836361" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836361">(Jul 05 2016 at 07:51)</a>:</h4>
+<p>I'm intererested in this too <span class="user-mention" data-user-id="192158">@Dave Barnet</span> and agree there should be a simpler solution. Perhaps someone needs to request a "$hierarchy" service?</p>
+
+
+
+<a name="153836362"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836362" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836362">(Jul 05 2016 at 07:52)</a>:</h4>
+<p>Its extremely possible that I'm leading you up the garden path tho - I am a complete FHIR noob so I wouldn't believe me :-)</p>
+
+
+
+<a name="153836370"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836370" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dave Barnet <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836370">(Jul 05 2016 at 09:11)</a>:</h4>
+<p>I'll try and expand a little on what we are trying to achieve. We are looking for a way to manage some code values for our Data Dictionary. FHIR offers many of the facilities that we would require (such as querying via an API, auditing, distinguishing between code system &amp; value sets etc.). However, there are some challenges to overcome with the code sets we want to manage, which we are working through. Although 90% of the code sets conform to a code/value pair, which are straight forward to incorporate into a codeSystem, there are some code sets that have code/value/notes and some code sets that have structure within them, such as nesting of codes. I've put an example codeSystem of the nesting issue on the Canadian public FHIR server (<a href="http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052" target="_blank" title="http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052">http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052</a>), and an example of a valueSet that includes this codeSystem (<a href="http://fhirtest.uhn.ca/baseDstu3/ValueSet/111111" target="_blank" title="http://fhirtest.uhn.ca/baseDstu3/ValueSet/111111">http://fhirtest.uhn.ca/baseDstu3/ValueSet/111111</a>). The codeSystem has nested codes. When you expand the valueSet (do a GET on <a href="http://fhirtest.uhn.ca/baseDstu3/ValueSet/111111/$expand" target="_blank" title="http://fhirtest.uhn.ca/baseDstu3/ValueSet/111111/$expand">http://fhirtest.uhn.ca/baseDstu3/ValueSet/111111/$expand</a>) all the nesting in the codeSystem is lost, and the codes appear in a flat list.<br>
+It was my hope that if you put nested codes into a codeSystem, you'd get out nested codes when you retrieved them.<br>
+Hope that makes things clearer</p>
+
+
+
+<a name="153836372"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836372" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836372">(Jul 05 2016 at 09:20)</a>:</h4>
+<p>well, I don't think you've thought this all the way through. This looks like a classification. When you get the expansion, I think that you don't want the root codes MA00 and HM00 to be selectable </p>
+
+
+
+<a name="153836373"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836373" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836373">(Jul 05 2016 at 09:23)</a>:</h4>
+<p>hmm. is that the case? </p>
+
+
+
+<a name="153836378"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836378" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836378">(Jul 05 2016 at 09:49)</a>:</h4>
+<p>looking at <a href="http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052" target="_blank" title="http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052">http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052</a> - what is the gap between that and your requirements? </p>
+
+
+
+<a name="153836379"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836379" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836379">(Jul 05 2016 at 09:51)</a>:</h4>
+<p>(I can see it wouldn't cope well with large DAG hierarchies due to duplication, but for small trees it seems to have the core information)</p>
+
+
+
+<a name="153836389"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836389" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dave Barnet <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836389">(Jul 05 2016 at 12:10)</a>:</h4>
+<p>The Data collections in the UK are sometimes at a detailed level, or at a higher level to help those systems that don't collect detailed data. Another example of nesting is for relationships. The Data Dictionary states "Note that ORGANISATIONS may choose to collect the RELATIONSHIP TO PERSON FOR CHILDREN AND YOUNG PEOPLE codes at the high level (shown in bold) or at the more detailed level below each high-level code." The list includes<br>
+*BPX*   Biological Parent <br>
+BPM Biological mother<br>
+BPF         Biological father<br>
+*SPX*   Step-Parent <br>
+SPM Stepmother<br>
+SPF Stepfather<br>
+*GPX*   Grandparent <br>
+GPM Grandmother<br>
+GPF Grandfather<br>
+etc..<br>
+The nesting is certainly required for presentation purposes, and so needs to be maintained in the codeSystem, and served out to the presenting system as a nested list. </p>
+
+
+
+<a name="153836390"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836390" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836390">(Jul 05 2016 at 12:12)</a>:</h4>
+<p><span class="user-mention" data-user-id="192158">@Dave Barnet</span> that makes sense to me for one, but I'm still wondering why <a href="http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052" target="_blank" title="http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052">http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052</a> isn't meeting your requirements?</p>
+
+
+
+<a name="153836394"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836394" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836394">(Jul 05 2016 at 12:31)</a>:</h4>
+<p>So the problem here isn't the spec, it's the open source terminology services. </p>
+
+
+
+<a name="153836395"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836395" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836395">(Jul 05 2016 at 12:31)</a>:</h4>
+<p>have you looked at the definition for ExpansionProfile.excludeNested? </p>
+
+
+
+<a name="153836396"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836396" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836396">(Jul 05 2016 at 12:32)</a>:</h4>
+<p>James, I could enhance the standard value set expander to maintain the heirarchy from the code system if the include statement is simple enough, and if the right flag is set. But that doesn't solve all cases, right? how do you handle merging outside the standard expander? </p>
+
+
+
+<a name="153836397"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836397" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dave Barnet <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836397">(Jul 05 2016 at 12:35)</a>:</h4>
+<p>My colleague Naminder Soorma is having a look at the expansionProfile - I'll let you know how we get on.</p>
+
+
+
+<a name="153836402"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836402" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Naminder Soorma <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836402">(Jul 05 2016 at 12:41)</a>:</h4>
+<p>I am confused how ExpansionProfile works, here is some of the code, can you tell me how ValueSet links to the ExpansionProfile?</p>
+<p>&lt;ExpansionProfile xmlns="<a href="http://hl7.org/fhir" target="_blank" title="http://hl7.org/fhir">http://hl7.org/fhir</a>"&gt; <br>
+ &lt;url value="http://fhir.nhs.net/ExpansionProfile/TestExpansion"/&gt;<br>
+ &lt;identifier&gt;ExpansionProfileNHS&lt;/identifier&gt;<br>
+ &lt;version value="1.0"/&gt;<br>
+ &lt;name value="ExpansionProfileNHS"/&gt;<br>
+ &lt;status value="active"/&gt;<br>
+ &lt;experimental value="false"/&gt;<br>
+  &lt;codeSystem&gt;<br>
+    &lt;include&gt;<br>
+     &lt;codeSystem&gt;<br>
+     &lt;system value="http://fhir.nhs.net/CodeSystem/TestCodeSystem"/&gt;<br>
+     &lt;/codeSystem&gt;<br>
+    &lt;/include&gt;<br>
+   &lt;/codeSystem&gt;<br>
+  &lt;excludeNested value="false"/&gt;<br>
+&lt;/ExpansionProfile&gt;</p>
+
+
+
+<a name="153836403"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836403" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836403">(Jul 05 2016 at 12:43)</a>:</h4>
+<p>ExpansionProfile is a parameter on the $expand operation</p>
+
+
+
+<a name="153836409"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836409" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Naminder Soorma <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836409">(Jul 05 2016 at 12:51)</a>:</h4>
+<p>Hi, do you mean it is an IN Parameter? <a href="http://hl7.org/fhir/2016May/valueset-operations.html#expand" target="_blank" title="http://hl7.org/fhir/2016May/valueset-operations.html#expand">http://hl7.org/fhir/2016May/valueset-operations.html#expand</a></p>
+<p>I couldn't find any reference to it on this page? Could you give me an example please.</p>
+
+
+
+<a name="153836417"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836417" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836417">(Jul 05 2016 at 12:54)</a>:</h4>
+<p>profile parameter. Guess I better update the documentation for that parameter since we now defined the ExpansionProfile</p>
+
+
+
+<a name="153836427"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836427" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836427">(Jul 05 2016 at 13:49)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> Yeah, adding that capability to the ValueSetExpander probably wouldn't help here anyway. I only actually use that to do expansions on "built in" codesystems (i.e. the ones distributed with the spec itself). Anything user supplied or not-present is expanded using a Lucene query. Nonetheless, this would probably be useful at some point... </p>
+<p>I'd love to get our term service enhanced so that you can specify a profile and get the hierarchical expansion, but that's a TBD.. If I get to it first, I'll do the ValueSetExpanderSimple too.</p>
+
+
+
+<a name="153836428"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836428" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836428">(Jul 05 2016 at 13:49)</a>:</h4>
+<p>ok</p>
+
+
+
+<a name="153836429"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836429" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836429">(Jul 05 2016 at 13:49)</a>:</h4>
+<p>I'll probably do it while doing publishing QA in the lead into the ballot publication</p>
+
+
+
+<a name="153836430"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836430" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836430">(Jul 05 2016 at 13:51)</a>:</h4>
+<p>On another note, I love the <code>HM04</code> code from that code system.  I've sure had periods where <code>Sofa surfing (sleeps on different friends floor each night)</code> applied.. don't know that I thought of myself as homeless though. </p>
+<p>I feel like if that was a SCT code it would be "Sleeps on Couch, Sofa, or Chesterfield or similar for a period not exceeding two months where the subject does not permanently reside in the same dwelling (Finding)"</p>
+
+
+
+<a name="153836431"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836431" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Naminder Soorma <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836431">(Jul 05 2016 at 13:57)</a>:</h4>
+<p>James - :) very posh if you got to sleep on a Chesterfield.... <span class="user-mention" data-user-email="grahame@healthintersections.com.au">@Grahame Grieve</span> - So are you talking about the Valueset profile, I tried some code like this:</p>
+<p>&lt;expansion&gt;<br>
+    &lt;extension url="<a href="http://hl7.org/fhir/StructureDefinition/valueset-expansionSource" target="_blank" title="http://hl7.org/fhir/StructureDefinition/valueset-expansionSource">http://hl7.org/fhir/StructureDefinition/valueset-expansionSource</a>"&gt;<br>
+      &lt;valueUri value="http://hl7.org/fhir/ValueSet/example-extensional"/&gt;<br>
+    &lt;/extension&gt;<br>
+    &lt;identifier value="http://fhir.nhs.net/ExpansionProfile/TestExpansion"/&gt;<br>
+    &lt;timestamp value="2016-07-07T10:00:00Z"/&gt;<br>
+  &lt;parameter&gt;  &lt;!-- 0..* Parameter that controlled the expansion process --&gt;<br>
+   &lt;name value="excludeNested"/&gt;&lt;!-- 1..1 Name as assigned by the server --&gt;<br>
+   &lt;valueBoolean value="false"/&gt;<br>
+     &lt;/parameter&gt;<br>
+    &lt;contains&gt;<br>
+      &lt;abstract value="true"/&gt;<br>
+      &lt;display value="Cholesterol codes"/&gt;<br>
+      &lt;contains&gt;<br>
+        &lt;system value="http://fhir.nhs.net/CodeSystem/TestCodeSystem"/&gt;<br>
+        &lt;version value="1"/&gt;<br>
+        &lt;code value="A01Main"/&gt;<br>
+        &lt;display value="Main Code Header"/&gt;<br>
+      &lt;/contains&gt;<br>
+    &lt;/contains&gt;<br>
+  &lt;/expansion&gt;</p>
+
+
+
+<a name="153836432"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836432" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836432">(Jul 05 2016 at 13:57)</a>:</h4>
+<p>where did you try that? </p>
+
+
+
+<a name="153836433"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836433" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Naminder Soorma <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836433">(Jul 05 2016 at 13:58)</a>:</h4>
+<p>&lt;ValueSet xmlns="<a href="http://hl7.org/fhir" target="_blank" title="http://hl7.org/fhir">http://hl7.org/fhir</a>"&gt;<br>
+   &lt;identifier&gt;<br>
+      &lt;system value="http://fhir.nhs.net/valueset/TestValueSet"/&gt;<br>
+      &lt;value value="ValueSetNHS"/&gt;<br>
+   &lt;/identifier&gt;<br>
+   &lt;version value="1"/&gt;<br>
+   &lt;name value="ValueSetNHS"/&gt;<br>
+   &lt;status value="active"/&gt;<br>
+   &lt;experimental value="false"/&gt;<br>
+   &lt;publisher value="NHS Data Dictionary"/&gt;<br>
+   &lt;date value="2016-07-05"/&gt;<br>
+   &lt;description value="Test ValueSet"/&gt;<br>
+   &lt;compose&gt;<br>
+      &lt;include&gt;<br>
+         &lt;system value="http://fhir.nhs.net/CodeSystem/TestCodeSystem"/&gt;<br>
+         &lt;version value="1"/&gt;<br>
+      &lt;/include&gt;<br>
+   &lt;/compose&gt;<br>
+   &lt;expansion&gt;<br>
+    &lt;extension url="<a href="http://hl7.org/fhir/StructureDefinition/valueset-expansionSource" target="_blank" title="http://hl7.org/fhir/StructureDefinition/valueset-expansionSource">http://hl7.org/fhir/StructureDefinition/valueset-expansionSource</a>"&gt;<br>
+      &lt;valueUri value="http://hl7.org/fhir/ValueSet/example-extensional"/&gt;<br>
+    &lt;/extension&gt;<br>
+    &lt;identifier value="http://fhir.nhs.net/ExpansionProfile/TestExpansion"/&gt;<br>
+    &lt;timestamp value="2016-07-07T10:00:00Z"/&gt;<br>
+  &lt;parameter&gt;  &lt;!-- 0..* Parameter that controlled the expansion process --&gt;<br>
+   &lt;name value="excludeNested"/&gt;&lt;!-- 1..1 Name as assigned by the server --&gt;<br>
+   &lt;valueBoolean value="false"/&gt;<br>
+     &lt;/parameter&gt;<br>
+    &lt;contains&gt;<br>
+      &lt;abstract value="true"/&gt;<br>
+      &lt;display value="Cholesterol codes"/&gt;<br>
+      &lt;contains&gt;<br>
+        &lt;system value="http://fhir.nhs.net/CodeSystem/TestCodeSystem"/&gt;<br>
+        &lt;version value="1"/&gt;<br>
+        &lt;code value="A01Main"/&gt;<br>
+        &lt;display value="Main Code Header"/&gt;<br>
+      &lt;/contains&gt;<br>
+    &lt;/contains&gt;<br>
+  &lt;/expansion&gt;<br>
+&lt;/ValueSet&gt;</p>
+
+
+
+<a name="153836434"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836434" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836434">(Jul 05 2016 at 13:59)</a>:</h4>
+<p>I don't know why putting it there will make any difference. What are you trying to do? </p>
+
+
+
+<a name="153836435"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836435" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836435">(Jul 05 2016 at 13:59)</a>:</h4>
+<p>it should be something like GET [base]/ValueSet/[id]/$expand?profile=[uri]</p>
+
+
+
+<a name="153836436"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836436" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Naminder Soorma <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836436">(Jul 05 2016 at 14:02)</a>:</h4>
+<p>I was reading up the following: ValueSet.expansion.parameter <br>
+Definition <br>
+A parameter that controlled the expansion process. These parameters may be used by users of expanded value sets to check whether the expansion is suitable for a particular purpose, or to pick the correct expansion.</p>
+<p>Control 0..* <br>
+Comments <br>
+The server decides which parameters to include here, but at a minimum, the list SHOULD include the date, filter, and profile parameters passed to the $expand operation (if any).</p>
+<p>so based on your code profile=[uri] = the name of the expansion profile?</p>
+
+
+
+<a name="153836437"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836437" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Naminder Soorma <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836437">(Jul 05 2016 at 14:03)</a>:</h4>
+<p>basically that returns the following:<br>
+&lt;ValueSet xmlns="<a href="http://hl7.org/fhir" target="_blank" title="http://hl7.org/fhir">http://hl7.org/fhir</a>"&gt;<br>
+    &lt;expansion&gt;<br>
+        &lt;identifier value="urn:uuid:7064442e-0780-438d-999e-090d3dc9a7c1"/&gt;<br>
+        &lt;timestamp value="2016-07-05T15:02:21+01:00"/&gt;<br>
+        &lt;parameter&gt;<br>
+            &lt;name value="version"/&gt;<br>
+            &lt;valueUri value="http://fhir.nhs.net/CodeSystem/TestCodeSystem?version=1"/&gt;<br>
+        &lt;/parameter&gt;<br>
+        &lt;contains&gt;<br>
+            &lt;system value="http://fhir.nhs.net/CodeSystem/TestCodeSystem"/&gt;<br>
+            &lt;code value="A01Main"/&gt;<br>
+            &lt;display value="Main Code Header"/&gt;<br>
+        &lt;/contains&gt;<br>
+        &lt;contains&gt;<br>
+            &lt;system value="http://fhir.nhs.net/CodeSystem/TestCodeSystem"/&gt;<br>
+            &lt;code value="A01Sub"/&gt;<br>
+            &lt;display value="Sub Code 01"/&gt;<br>
+        &lt;/contains&gt;<br>
+        &lt;contains&gt;<br>
+            &lt;system value="http://fhir.nhs.net/CodeSystem/TestCodeSystem"/&gt;<br>
+            &lt;code value="A02Sub"/&gt;<br>
+            &lt;display value="Sub Code 02"/&gt;<br>
+        &lt;/contains&gt;<br>
+    &lt;/expansion&gt;<br>
+&lt;/ValueSet&gt;</p>
+<p>I want it to return THIS:</p>
+<p>&lt;ValueSet xmlns="<a href="http://hl7.org/fhir" target="_blank" title="http://hl7.org/fhir">http://hl7.org/fhir</a>"&gt;<br>
+    &lt;expansion&gt;<br>
+        &lt;identifier value="urn:uuid:7064442e-0780-438d-999e-090d3dc9a7c1"/&gt;<br>
+        &lt;timestamp value="2016-07-05T15:02:21+01:00"/&gt;<br>
+        &lt;parameter&gt;<br>
+            &lt;name value="version"/&gt;<br>
+            &lt;valueUri value="http://fhir.nhs.net/CodeSystem/TestCodeSystem?version=1"/&gt;<br>
+        &lt;/parameter&gt;<br>
+      &lt;contains&gt;<br>
+            &lt;system value="http://fhir.nhs.net/CodeSystem/TestCodeSystem"/&gt;<br>
+            &lt;code value="A01Main"/&gt;<br>
+            &lt;display value="Main Code Header"/&gt;<br>
+          &lt;contains&gt;<br>
+            &lt;system value="http://fhir.nhs.net/CodeSystem/TestCodeSystem"/&gt;<br>
+            &lt;code value="A01Sub"/&gt;<br>
+            &lt;display value="Sub Code 01"/&gt;<br>
+          &lt;/contains&gt;<br>
+          &lt;contains&gt;<br>
+            &lt;system value="http://fhir.nhs.net/CodeSystem/TestCodeSystem"/&gt;<br>
+            &lt;code value="A02Sub"/&gt;<br>
+            &lt;display value="Sub Code 02"/&gt;<br>
+          &lt;/contains&gt;<br>
+      &lt;/contains&gt;<br>
+    &lt;/expansion&gt;<br>
+&lt;/ValueSet&gt;</p>
+
+
+
+<a name="153836438"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836438" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836438">(Jul 05 2016 at 14:10)</a>:</h4>
+<p>[uri] is the url in the expansion profile. </p>
+
+
+
+<a name="153836441"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836441" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Naminder Soorma <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836441">(Jul 05 2016 at 14:24)</a>:</h4>
+<p>ok, well I have tried that then on the HAPI STU3 server and it returned the result in my previous post.</p>
+
+
+
+<a name="153836442"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836442" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836442">(Jul 05 2016 at 14:25)</a>:</h4>
+<p>Oh yeah, we don't support the profile parameter yet unfortunately. So you may well be doing it right, but HAPI doesn't yet support it. :)</p>
+
+
+
+<a name="153836444"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836444" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert McClure <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836444">(Jul 05 2016 at 14:34)</a>:</h4>
+<p>Folks, When I look at <a href="http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052" target="_blank" title="http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052">http://fhirtest.uhn.ca/baseDstu3/CodeSystem/111052</a> I see nesting that is undefined and simply represented as indentations. That is not how a code system should do this - use additional space as the relationship that links a child to a parent. What I see is a visual metaphore for something that should be computable. In real code systems a hierarchy is a specialized type of relationship where the code system has defined content that uses a named relationship to link concepts AND then says that relationship is hierarchical (transitive is ussually what is meant.) So I don't see that information in the link <span class="user-mention" data-user-id="192158">@Dave Barnet</span> has provided so I suspect the computability of the hierarchy is missing. I am not an expert on what FHIR supports for all this but is the code system shown somehow legally defining a hierarchy in FHIR? </p>
+
+
+
+<a name="153836448"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836448" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dave Barnet <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836448">(Jul 05 2016 at 14:57)</a>:</h4>
+<p>I was going by this definition "CodeSystem.concept.concept<br>
+Definition  <br>
+Defines children of a concept to produce a hierarchy of concepts. The nature of the relationships is variable (is-a/contains/categorizes) and can only be determined by examining the definitions of the concepts" from <a href="http://hl7.org/fhir/2016May/codesystem-definitions.html#CodeSystem.concept.concept" target="_blank" title="http://hl7.org/fhir/2016May/codesystem-definitions.html#CodeSystem.concept.concept">http://hl7.org/fhir/2016May/codesystem-definitions.html#CodeSystem.concept.concept</a>, which implies a basic hierarchy denoted by nesting (I think??)</p>
+
+
+
+<a name="153836459"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836459" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert McClure <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836459">(Jul 05 2016 at 15:41)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> Is <span class="user-mention" data-user-id="192158">@Dave Barnet</span>  correct? It seems this is essentially a shortcut that allows the code system definition to describe a relationship of "childOf" (perhaps implicitly parentOf too?) but I wonder if that shortcut makes other computations more difficult. I assume this is for inline code systems primarily - Dave, is that what you are using this for?</p>
+
+
+
+<a name="153836484"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836484" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836484">(Jul 05 2016 at 19:30)</a>:</h4>
+<p><span class="user-mention" data-user-id="191503">@Robert McClure</span> you were on the call when we discussed this, and you helped draft the text Dave quoted. But you don't seem to remember that in your comments above. The heirarchy is a convenient short cut for a computable relationship, but It was you who pushed back against making it computable </p>
+
+
+
+<a name="153836581"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836581" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836581">(Jul 06 2016 at 07:13)</a>:</h4>
+<p>Perhaps now is a good time to renew my call to revisit the proposed ExpansionProfile Resource?  All those boolean parameters would be much better as optional explicit parameters to $expand</p>
+
+
+
+<a name="153836582"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836582" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Naminder Soorma <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836582">(Jul 06 2016 at 08:23)</a>:</h4>
+<p>Can I ask what the Expansion Profile is trying to achieve that the ValueSet resource does not achieve? I haven't been able to distinguish what it brings extra to the table, that couldn't already be incorporated into the ValueSet.</p>
+
+
+
+<a name="153836585"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836585" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836585">(Jul 06 2016 at 12:49)</a>:</h4>
+<p>the value set resource defines what codes are in the set.  The expansion profile resource defines information about how expansions are done on the system</p>
+
+
+
+<a name="153836586"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836586" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836586">(Jul 06 2016 at 12:50)</a>:</h4>
+<p>Michael - I guess you should create a task so I can ask Vocab to talk about it. or you could send an email to the vocab list</p>
+
+
+
+<a name="153836590"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836590" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836590">(Jul 06 2016 at 13:47)</a>:</h4>
+<p>It is a bit of a curious design I suppose. I'd assume that the intention is more that the server would expose a set of profiles it supports, essentially making ExpansionProfile a conformance resource, and clients would be expected to pick from those. </p>
+
+
+
+<a name="153836592"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836592" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836592">(Jul 06 2016 at 13:58)</a>:</h4>
+<p>well, there's some.. uncertainty.... about whether some of those flags are server profiles or client choices </p>
+
+
+
+<a name="153836593"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836593" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836593">(Jul 06 2016 at 13:59)</a>:</h4>
+<p>Yeah, it would be interesting to hear what the intent is, and whether it is guided by any existing systems or implementer experience.</p>
+<p>If the idea is that these are client choices, the current design is overcomplicated.</p>
+
+
+
+<a name="153836595"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836595" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Naminder Soorma <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836595">(Jul 06 2016 at 14:21)</a>:</h4>
+<p>I can't see why it can't be achieved using the ValueSet.expansion.parameter element as the documentation suggests. </p>
+<p>ValueSet.expansion.parameter <br>
+Definition <br>
+A parameter that controlled the expansion process. These parameters may be used by users of expanded value sets to check whether the expansion is suitable for a particular purpose, or to pick the correct expansion.</p>
+<p>Control 0..* <br>
+Comments <br>
+The server decides which parameters to include here, but at a minimum, the list SHOULD include the date, filter, and profile parameters passed to the $expand operation (if any).</p>
+
+
+
+<a name="153836606"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836606" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert McClure <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836606">(Jul 06 2016 at 16:08)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> Yep, I don't remember but you're taking liberties to say I would "push" to make it not computable - that is very unlikely. Setting revisionist history aside, I don't think it's a good idea. Here is the thing, if this dot notation is unequivocally computable and uniquivocally defines bi-directional relations (i.e: both child of and parent of) then I would assume FHIR terminology services can treat this as a special type of relation that can be reasoned over including transitive closure. IS that whaat you all are doing? <span class="user-mention" data-user-id="191343">@Michael Lawley</span> How do you handle this?</p>
+
+
+
+<a name="153836607"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836607" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert McClure <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836607">(Jul 06 2016 at 16:18)</a>:</h4>
+<p>For those of you unclear (and this is very understandable because it has been unclear to date) as to the difference between a value set definition and a value set exapnsion, I suggest you take a look at the just published Value Set Definition STU here <a href="http://www.hl7.org/implement/standards/product_brief.cfm?product_id=437" target="_blank" title="http://www.hl7.org/implement/standards/product_brief.cfm?product_id=437">http://www.hl7.org/implement/standards/product_brief.cfm?product_id=437</a>. The value set resource was orginally created (I think) to support defining what concepts/codes should be in the expansion you want to use - this is called the expansion code set. An expansion is the resulting expansion code set PLUS any addition information about the concept (or information related to the concept) you need to use. Any number of value set definitions can result in the same expansion code set. The FHIR community is STRONGLY encourage to continue to align with this - as Graham has done (with some grumbling) to date - thank you Graham. You all are the leading edge in implementing this so where changes need to done to the approach we've outlined, let us know and we'll work together.</p>
+
+
+
+<a name="153836642"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836642" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836642">(Jul 06 2016 at 18:37)</a>:</h4>
+<p>I took the liberty to create task #10277 for this.  <span class="user-mention" data-user-id="191343">@Michael Lawley</span>, please go ahead and add or change what you want.  We could potentially bring this up for discussion on the Vocab call tomorrow, if there is available time (can check with Ted).</p>
+
+
+
+<a name="153836645"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836645" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836645">(Jul 06 2016 at 19:19)</a>:</h4>
+<p>thanks for adding the Zulip discussion link to the task, <span class="user-mention" data-user-id="191319">@James Agnew</span> - I was just thinking that I should go back and do that</p>
+
+
+
+<a name="153836690"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836690" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836690">(Jul 06 2016 at 21:33)</a>:</h4>
+<p><span class="user-mention" data-user-id="191503">@Robert McClure</span> We interpret nesting in the CodeSystem as transitive parent/child relationships. Hence this hierarchy will be used when computing the results for the $closure operation, and for populating the parent/child properties in a $lookup.</p>
+
+
+
+<a name="153836691"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836691" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836691">(Jul 06 2016 at 21:34)</a>:</h4>
+<p><span class="user-mention" data-user-id="191405">@Rob Hausam</span> Thanks - I've added some detail in a comment</p>
+
+
+
+<a name="153836696"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836696" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836696">(Jul 06 2016 at 21:38)</a>:</h4>
+<p><span class="user-mention" data-user-id="191905">@Naminder Soorma</span> ValueSet.expansion.parameter is about the server telling the client what it did during the expansion. ExpansionProfile is about letting the client tell the server what it wants - e.g., exclude inactive codes</p>
+
+
+
+<a name="153836701"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836701" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836701">(Jul 06 2016 at 21:45)</a>:</h4>
+<p><span class="user-mention" data-user-id="191503">@Robert McClure</span> I proposed an element to define what the heirarchy meant. As things stand snow, the heirarchy is clear and computable (and how we do things in many contexts) but the implication it carries is unstated. So "if this dot notation is unequivocally computable and uniquivocally defines bi-directional relations (i.e: both child of and parent of) then I would assume FHIR terminology services can treat this as a special type of relation that can be reasoned over" - yes. But " including transitive closure" not so much, because the definition of transitive closure is more specific. </p>
+
+
+
+<a name="153836702"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836702" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836702">(Jul 06 2016 at 21:46)</a>:</h4>
+<p>that was why I proposed an element on code system so you could say that this was safe, but it failed to get through vocab, and I remember that you were the prime source of resistance to the idea </p>
+
+
+
+<a name="153836703"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836703" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836703">(Jul 06 2016 at 21:46)</a>:</h4>
+<p>so now, we are forced to 'assume' that the heirarchy indicates subsumption. </p>
+
+
+
+<a name="153836705"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836705" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836705">(Jul 06 2016 at 21:48)</a>:</h4>
+<p>which is Michael says he does, as do I and Apelon as well</p>
+
+
+
+<a name="153836707"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836707" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836707">(Jul 06 2016 at 21:52)</a>:</h4>
+<p>As do I. :)</p>
+
+
+
+<a name="153836722"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836722" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836722">(Jul 07 2016 at 00:24)</a>:</h4>
+<p>and at the same time I warn people (as in my message to Erich) that the assumption may be faulty :)<br>
+Just as CodeSystem contains a flag to indicate whether it is "compositional", it would be much better to include a flag that indicates whether the hierarchy corresponds to subsumption or not (and to explicitly document that the containing concept is the subsumer).</p>
+
+
+
+<a name="153836724"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836724" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836724">(Jul 07 2016 at 00:53)</a>:</h4>
+<p>that's what I proposed, and vocab knocked it back. </p>
+
+
+
+<a name="153836735"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836735" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836735">(Jul 07 2016 at 05:11)</a>:</h4>
+<p>We can revisit it again - it's probably needed.</p>
+
+
+
+<a name="153836740"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836740" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836740">(Jul 07 2016 at 10:18)</a>:</h4>
+<p>well, I doubt we have time to revisit it prior to ballot. So we can all ballot about it </p>
+
+
+
+<a name="153836785"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836785" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert McClure <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836785">(Jul 07 2016 at 15:36)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> I remember we had a discussion but I don't remember this being the focal issue. If we had captured "transivity" of the assumed relation I am definitely been in favor of identifying that. Let's not dwell on the past... However we can identify that the unstated hierarchy relation is transitive we should do that. But I'd say that we are likely VERY safe in assuming that anything you all make using such a notation will be transitive so this practice simply needs to be documented (I.E.: The FHIR default (un-named) nested hierarchy is always transitive.) </p>
+
+
+
+<a name="153836790"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836790" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836790">(Jul 07 2016 at 16:36)</a>:</h4>
+<p>I agree, <span class="user-mention" data-user-id="191503">@Robert McClure</span> </p>
+
+
+
+<a name="153836809"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836809" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836809">(Jul 07 2016 at 19:45)</a>:</h4>
+<p>transitivity is not the whole question. We can certainly state the transitivity is implied and can be taken for granted. but we can't say that subsumption can be taken for granted</p>
+
+
+
+<a name="153836825"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836825" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert McClure <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836825">(Jul 07 2016 at 20:59)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> Ok, I'm dense. How do you see them as different? Are you saying that subsumption is a more general "grouped by" operation and transitive is limited to "Is-A"? I'm assuming that is not what you mean because if subsumption = "grouped by” then subsumption means having a hierarchy. So help me understand how you separate defining a heriearchy from subsumption in a hierarchy?</p>
+
+
+
+<a name="153836826"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836826" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836826">(Jul 07 2016 at 21:01)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> can we state that both transitivity and subsumption are the implied default - unless stated otherwise?<br>
+I'm not immediately thinking of cases where that wouldn't work - but if there are some, it would be good to bring them forward</p>
+
+
+
+<a name="153836835"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836835" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836835">(Jul 07 2016 at 21:08)</a>:</h4>
+<p><span class="user-mention" data-user-id="191503">@Robert McClure</span> it actually would be the other way around - for example, part-of would be transitive, but it is not subsumption</p>
+
+
+
+<a name="153836837"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836837" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836837">(Jul 07 2016 at 21:09)</a>:</h4>
+<p>yes, the other way around. heirarchy is implicitly transitive, but a given heirarchy is not always subsumptive</p>
+
+
+
+<a name="153836850"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836850" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eric Haas <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836850">(Jul 07 2016 at 22:36)</a>:</h4>
+<p>Great discussion too bad is 'buried'  in hapi-land ( no offense to James - I'm sure everyone is already subscribed)  can it be moved to conformance or implementers? </p>
+
+
+
+<a name="153836869"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153836869" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153836869">(Jul 07 2016 at 23:51)</a>:</h4>
+<p>yeah this ended up as general dsiscussion. Actually, it's really time we had a terminology track - terminology is ending up split between 4 tracks....</p>
+
+
+
+<a name="153837032"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153837032" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153837032">(Jul 09 2016 at 09:34)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> how would that be different from the existing ontology track? (genuine question)</p>
+
+
+
+<a name="153837036"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153837036" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153837036">(Jul 09 2016 at 11:38)</a>:</h4>
+<p>well, within the health community we differentiate between a terminology and an ontology, though the line is blurred. A terminology - and terminology use and services - is a list of codes with definitions. An ontology is a graph of concepts that tries to assign underlying meaning to the content (blurry, as I said)</p>
+
+
+
+<a name="153837037"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153837037" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153837037">(Jul 09 2016 at 11:39)</a>:</h4>
+<p>in FHIR&lt; terminology means code system, value set, + the service API, where as ontology usually means RDF representation + validation + reasoning against external ontologies and services </p>
+
+
+
+<a name="153837041"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153837041" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153837041">(Jul 09 2016 at 11:43)</a>:</h4>
+<p>thanks <span class="user-mention" data-user-id="191316">@Grahame Grieve</span> - I'd be seeing more benefit from converging these streams rather then diverging tbh</p>
+
+
+
+<a name="153837042"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153837042" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153837042">(Jul 09 2016 at 11:44)</a>:</h4>
+<p>at the end of the day its all about giving ideas identifiers to support agregation and filtering, and on which knowledge and relationship can be hung...</p>
+
+
+
+<a name="153837043"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153837043" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153837043">(Jul 09 2016 at 11:44)</a>:</h4>
+<p>well, that's the grounds for the current arrangement, but that only works if everybody buys in. And multiple people have said to me that following terminology is a problem because it appears in multiple places. Remember: all models are wrong. but some are useful</p>
+
+
+
+<a name="153837045"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153837045" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153837045">(Jul 09 2016 at 11:51)</a>:</h4>
+<p>i guess there is always a distinction between the abstract and concrete...</p>
+
+
+
+<a name="153837050"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153837050" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eric Haas <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153837050">(Jul 09 2016 at 14:50)</a>:</h4>
+<p>+1 for separation.   Is simpler that way.</p>
+
+
+
+<a name="153837111"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153837111" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153837111">(Jul 10 2016 at 12:50)</a>:</h4>
+<p>+1 for adding terminology stream<br>
+I think it needs it's own place - seems that pretty much everyone agrees that it's too fragmented currently<br>
+and practically, the discussions in ontology have been, as Grahame said, more about RDF and reasoning, so I would vote for keeping that as is, at least for now</p>
+
+
+
+<a name="153837114"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153837114" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Erich Schulz <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153837114">(Jul 10 2016 at 13:03)</a>:</h4>
+<p>well I'm still looking for an answer to <a href="https://chat.fhir.org/#narrow/near/24886/stream/CQL/topic/subsumption.20in.20CQL" target="_blank" title="https://chat.fhir.org/#narrow/near/24886/stream/CQL/topic/subsumption.20in.20CQL">the blah.blah.blah</a> problem so if splitting helps concentrate the collective brain on that it can only be a good thing... i guess</p>
+
+
+
+<a name="153837658"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153837658" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert McClure <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153837658">(Jul 12 2016 at 15:03)</a>:</h4>
+<p><span class="user-mention" data-user-id="191405">@Rob Hausam</span> One of us in confused. Subsumption is by definition transitive in my book. A-&gt;B, B-&gt;C, transitive says A-&gt;C</p>
+
+
+
+<a name="153837713"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/codeSystem%20%26%20valueSet%20%28STU3%29/near/153837713" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rob Hausam <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/codeSystem.20.26.20valueSet.20(STU3).html#153837713">(Jul 12 2016 at 20:36)</a>:</h4>
+<p>I didn't say otherwise, <span class="user-mention" data-user-id="191503">@Robert McClure</span> - what I did say was that transitive does not necessarily imply subsumption.  I didn't say anything either way about subsumption being transitive, but I agree with you that it is.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

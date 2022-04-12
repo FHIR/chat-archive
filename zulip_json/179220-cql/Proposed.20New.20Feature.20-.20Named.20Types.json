@@ -1,0 +1,62 @@
+[
+    {
+        "content": "<p>Occasionally, when writing algorithms in CQL, one must use types such as (for example):</p>\n<p>Tuple { dt Date, val Decimal }<br>\nList&lt;Tuple { component DomainResource, id String, clinicalDate Date}&gt;.</p>\n<p>When passing these types as parameters to functions or using them in return clauses, one must currently replicate these type definitions, leading to lengthier and less understandable code. To alleviate this difficulty in using these types, we propose to add a new linguistic construct - the named type. A named type creates an alias for a type definition and can be used anywhere a type specifier is needed. For example, we examine the following code which is written in the current version of CQL:</p>\n<div class=\"codehilite\"><pre><span></span><code>using FHIR version &quot;4.0.0&quot;\n\n...\n\ndefine function makeHbAicValueDescriptor( dt Date, val Decimal )\n    returns Tuple { effectiveDate Date, representativeValue Decimal }:\n    Tuple{ effectiveDate: dt, representativeValue: val }\n\ndefine &quot;HbA1c Procedure Values&quot;\n    returns List&lt;Tuple { effectiveDate Date, representativeValue Decimal }&quot;&gt;:\n    [Procedure: HbA1c] P\n        return makeHbAicValueDescriptor(date from P.performed.&quot;end&quot;, getRepresentativeValue(P))\n\ndefine getRepresentativeValue(p Procedure) returns Decimal:\n    ...\n\n\ndefine &quot;HbA1c Observation Values&quot;\n    returns List&lt;Tuple { effectiveDate Date, representativeValue Decimal }&gt;:\n    [Observation: HbA1c] O\n        return makeHbAicValueDescriptor(date from O.effective, O.value.value)\n\ndefine &quot;All HbA1c Values&quot;\n    returns List&lt;Tuple { effectiveDate Date, representativeValue Decimal }&gt;:\n    (&quot;HbA1c Procedure Values&quot; union &quot;HbA1c Observation Values&quot;) &quot;HbA1c Values&quot;\n        sort by effectiveDate\n</code></pre></div>\n<p>This code, in addition to having many repetitions of the Tuple definition, is also less clear because it is hard to tell if the various Tuple types are equivalent. In a version of CQL allowing named types, the code would become:</p>\n<div class=\"codehilite\"><pre><span></span><code>using FHIR version &quot;4.0.0&quot;\n\ntype &quot;HbA1c Value Descriptor&quot;: Tuple { effectiveDate Date, representativeValue Decimal }\n\n...\n\ndefine function makeHbAicValueDescriptor( dt Date, val Decimal )\n    returns &quot;HbAic Value Descriptor&quot;:\n    Tuple{ effectiveDate: dt, representativeValue: val }\n\ndefine &quot;HbA1c Procedure Values&quot; returns List&lt;&quot;HbA1c Value Descriptor&quot;&gt;:\n    [Procedure: HbA1c] P\n        return makeHbAicValueDescriptor(date from P.performed.&quot;end&quot;, getRepresentativeValue(P))\n\ndefine getRepresentativeValue(p Procedure) returns Decimal:\n    ...\n\ndefine &quot;HbA1c Observation Values&quot; returns List&lt;&quot;HbAic Value Descriptor&quot;&gt;:\n    [Observation: HbA1c] O\n        return makeHbAicValueDescriptor(date from O.effective, O.value.value)\n\ndefine &quot;All HbA1c Values&quot; returns List&lt;&quot;HbAic Value Descriptor&quot;&gt;:\n    (&quot;HbA1c Procedure Values&quot; union &quot;HbA1c Observation Values&quot;) &quot;HbA1c Values&quot;\n        sort by effectiveDate\n</code></pre></div>\n<p>This code is not only more succinct, but also makes it clear that the various type specifiers used in the code are equivalent.</p>\n<p>Named types can be added to the CQL grammar in the library production following using clauses (after which all primitive types are defined) and before include clauses:</p>\n<div class=\"codehilite\"><pre><span></span><code>library\n    :\n    libraryDefinition?\n    usingDefinition*\n    namedTypeDefinition*\n    includeDefinition*\n    codesystemDefinition*\n    valuesetDefinition*\n    codeDefinition*\n    conceptDefinition*\n    parameterDefinition*\n    statement*\n    EOF\n    ;\n\nnamedTypeDefinition\n    : accessModifier? &#39;type&#39; typeIdentifier &#39;:&#39; typeSpecifier\n    ;\n\ntypeIdentifier\n    : identifier\n    ;\n</code></pre></div>\n<p>A simple implementation of the named type concept collects the definitions of the named types and then transitively expands the named type specifiers until they are defined in terms of the CQL primitive types and types taken from the models specified in the using clauses. After this the named types in parameters and returns clauses are replaced by their expansions to be processed into ELM. Self reference of named types would be forbidden. What do folks think about this?</p>",
+        "id": 253209289,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1631604631
+    },
+    {
+        "content": "<p>I love this, thank you for putting it together! A couple points for discussion:</p>\n<ol>\n<li>I would think that type equivalence would still be based on the definition of the type for tuple types, I think that's an important aspect of the flexibility of using Tuples</li>\n<li>Should this construct be allowed to rename existing types? i.e. is <code>type A : FHIR.Patient</code> allowed?</li>\n</ol>",
+        "id": 253331716,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1631657404
+    },
+    {
+        "content": "<ol>\n<li>Agreed. Tuples are a great feature and ultimately basing type equivalence on them is probably a good thing.</li>\n<li>Is doing this good practice? Probably not - I don't see a way to use this without making the renamed types less clear. As such, I'm not sure it's necessary, but I've always thought that it's easier to add a feature completely rather than cluttering the code with special case checks. So unless there's a good reason for not allowing renaming existing types,  I'd probably allow it. It shouldn't interfere with type equivalence checking, since one's expanding the types to primitives for checking anyway. But like most edge cases in languages, it should be used sparingly, if at all.</li>\n</ol>",
+        "id": 253342265,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1631663894
+    },
+    {
+        "content": "<p>I'm writing CQL with a lot of tuples with it right now, and I added a \"type\" metadata field for exactly this reason, so I could know exactly what context the tuple is trying to represent.</p>",
+        "id": 253588211,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1631801490
+    },
+    {
+        "content": "<p>In the authors guide on tuples (section 4.3), there's a section that references \"Named tuple types\" but I've never seen how to define a named tuple type in a script before. Maybe someone can jump in here on how to do it? <a href=\"/user_uploads/10155/Jp2rNpE2jSiXWn64K52vnujl/image.png\">image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/Jp2rNpE2jSiXWn64K52vnujl/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/Jp2rNpE2jSiXWn64K52vnujl/image.png\"></a></div>",
+        "id": 253602345,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1631806857
+    },
+    {
+        "content": "<p>Although this is conjecture on my part, I would assume that these are restricted to tuple types defined in the models that are specified in \"using\" statements. In the examples in the CQL specification, these are the only ones I've ever seen used in this manner. And, to be honest, I'm not certain whether or not this feature is even present in the reference implementation.</p>\n<p>This, of course, leads to the next question - what is the form of the models specified in the using statements? Are they simply .xsd files? If so, one could (assuming the feature you have described works) simply define a .xsd file containing the named types the user would want to define and use this model in the CQL code.</p>",
+        "id": 254258374,
+        "sender_full_name": "Frank Adrian",
+        "timestamp": 1632250235
+    },
+    {
+        "content": "<p>Hi Frank. You are correct that the types allowed in that tuple construct are the CQL system-types and the types in whatever data model you're <code>using</code>. Internally, the CQL translator represents the type information for a given model as a <code>ModelInfo</code>. Although <code>ModelInfo</code> is considered an implementation detail of the cql-translator, the schema for that is documented here: <a href=\"https://cql.hl7.org/elm.html\">https://cql.hl7.org/elm.html</a></p>\n<p>Yes,  the cql-translator supports plugging in new data models. That's how the \"profile-informed authoring\" that was demoed at the last connectathon works. The set of built-in <code>ModelInfos</code> is here:</p>\n<p><a href=\"https://github.com/cqframework/clinical_quality_language/tree/master/Src/java/quick/src/main/resources/org/hl7/fhir\">https://github.com/cqframework/clinical_quality_language/tree/master/Src/java/quick/src/main/resources/org/hl7/fhir</a></p>\n<p>There's tooling available for generating <code>ModelInfos</code> from both .xsd files and from FHIR structure definitions:</p>\n<p><a href=\"https://github.com/cqframework/clinical_quality_language/blob/68e6861b38603e6d87d822b938cc1a5ed354d7a7/Src/java/tools/xsd-to-modelinfo/src/main/java/org/cqframework/cql/tools/xsd2modelinfo/Main.java\">https://github.com/cqframework/clinical_quality_language/blob/68e6861b38603e6d87d822b938cc1a5ed354d7a7/Src/java/tools/xsd-to-modelinfo/src/main/java/org/cqframework/cql/tools/xsd2modelinfo/Main.java</a></p>\n<p><a href=\"https://github.com/cqframework/cqf-tooling/blob/002fbccbd76e0f9d4c7a871173829cb80d25e5c9/src/main/java/org/opencds/cqf/tooling/modelinfo/StructureDefinitionToModelInfo.java\">https://github.com/cqframework/cqf-tooling/blob/002fbccbd76e0f9d4c7a871173829cb80d25e5c9/src/main/java/org/opencds/cqf/tooling/modelinfo/StructureDefinitionToModelInfo.java</a></p>",
+        "id": 254259704,
+        "sender_full_name": "JP",
+        "timestamp": 1632250799
+    },
+    {
+        "content": "<p>Can you go into a little more detail here? How could I define a custom modelinfo file, but if I didn't want to change my dataprovider what could I do here? It's nice that we can have some .xsd translation but what if I have some simple data needs that could be easily mapped from something like a FHIR model?</p>",
+        "id": 254272976,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1632256201
+    },
+    {
+        "content": "<p>Are you referring to the cql-engine dataproviders? The cql-translator supports emitting the ELM for models derived from FHIR, such as QICore, in terms of plain ole FHIR. The cql-engine actually runs the FHIR-based ELM, so it's not aware of QICore at all and no changes to the data providers are required. If you're attempting to define a FHIR-based model, you might be able to do something similar. Longer term, the thinking is that there will be some mechanism for the  cql-translator to be IG-aware such that you could define whatever profile you wanted in the IG and author CQL against it. If you're using a non-FHIR-derived datamodel you'll need to create new dataprovider to support it in the cql-engine.</p>",
+        "id": 254388178,
+        "sender_full_name": "JP",
+        "timestamp": 1632325152
+    },
+    {
+        "content": "<p>FYI, I added a tracker to add this capability to the language: <a href=\"https://jira.hl7.org/browse/FHIR-34014\">https://jira.hl7.org/browse/FHIR-34014</a></p>",
+        "id": 254778257,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1632520356
+    }
+]

@@ -1,0 +1,182 @@
+---
+layout: page
+title: "FHIR Chat  · hapi fhir protect agains race conditions · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html">hapi fhir protect agains race conditions</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="240119267"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi%20fhir%20protect%20agains%20race%20conditions/near/240119267" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Pengyu Wang <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html#240119267">(May 24 2021 at 22:10)</a>:</h4>
+<p>Hi, we're running into an issue with HAPI FHIR where multiple resources are created with the same identifier, even though we're doing a condition create  with the header <code>If-None-Exist</code>.  We believe the issue is because of a race condition where we're sending multiple create requests simultaneously, so HAPI is not able to reliably synchronously find the existing resource for a given identifier, and thus ends up creating multiple duplicates.</p>
+<p>We've made changes to the code so it's sending the requests synchronously to prevent this particular issue. But the root cause of the issue is still not solved because there could potentially be multiple processes writing to the HAPI server and we can't guarantee the order of operations.</p>
+<p>What is the best practice for protecting against race conditions? Is it possible to manually enforce uniqueness constraints at the db level in HAPI?</p>
+
+
+
+<a name="240126535"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi%20fhir%20protect%20agains%20race%20conditions/near/240126535" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joel Schneider <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html#240126535">(May 24 2021 at 23:33)</a>:</h4>
+<p>The hapi-fhir documentation describes several mechanisms for control of Search Result Caching.<br>
+<a href="https://hapifhir.io/hapi-fhir/docs/server_jpa/configuration.html">https://hapifhir.io/hapi-fhir/docs/server_jpa/configuration.html</a><br>
+I'd suggest trying the options mentioned there, such as using <code>myDaoConfig.setReuseCachedSearchResultsForMillis(null);</code> or setting a <code>Cache-Control: no-cache</code> HTTP request header.</p>
+
+
+
+<a name="240142040"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi%20fhir%20protect%20agains%20race%20conditions/near/240142040" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Pengyu Wang <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html#240142040">(May 25 2021 at 04:45)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191926">Joel Schneider</span> <a href="#narrow/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions/near/240126535">said</a>:</p>
+<blockquote>
+<p>The hapi-fhir documentation describes several mechanisms for control of Search Result Caching.<br>
+<a href="https://hapifhir.io/hapi-fhir/docs/server_jpa/configuration.html">https://hapifhir.io/hapi-fhir/docs/server_jpa/configuration.html</a><br>
+I'd suggest trying the options mentioned there, such as using <code>myDaoConfig.setReuseCachedSearchResultsForMillis(null);</code> or setting a <code>Cache-Control: no-cache</code> HTTP request header.</p>
+</blockquote>
+<p>Thank you for the reply. But I think you misunderstood the problem. The issue was not caused by hapi-fhir caching the search results. I'm not manually checking the existence of a resource before creating it.</p>
+
+
+
+<a name="240184754"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi%20fhir%20protect%20agains%20race%20conditions/near/240184754" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Craig McClendon <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html#240184754">(May 25 2021 at 13:12)</a>:</h4>
+<p>Not speaking for HAPI, but from my own general experience - this is a hard problem to solve on the server side without severe performance implications such as serializing all persistence operations.</p>
+<p>It's not really any different than if your client was directly searching the database for existing records on multiple threads - each thread could find no record existing and create it and since the Identifier "attribute" doesn't have a unique constraint it would not be caught. </p>
+<p>It is the client that has the real context of what constitutes a duplicate in this case. </p>
+<p>I have a similar client/problem and what I do is use a striped locking mechanism on the identifiers I am using for uniqueness to ensure no two threads process the same resource at the same time without preventing other resources from being processed in parallel.</p>
+
+
+
+<a name="240189877"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi%20fhir%20protect%20agains%20race%20conditions/near/240189877" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Craig McClendon <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html#240189877">(May 25 2021 at 13:49)</a>:</h4>
+<p>... I suppose the server could use a similar striped locking mechanism on the contents of the 'If-None-Exist' header when it is present, but there would still be holes in it such as if a different client creates the resource without the header. It would tighten the window of opportunity, but not eliminate the possibility.</p>
+
+
+
+<a name="240263801"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi%20fhir%20protect%20agains%20race%20conditions/near/240263801" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html#240263801">(May 25 2021 at 23:39)</a>:</h4>
+<p>If you wan't to guard the server against such race conditions there's a feature in HAPI using SearchParameters (yes, search parameters - keep reading). What you can do is that you can create a SearchParameter instance on the server that uses the magic of <a href="https://github.com/hapifhir/hapi-fhir/blob/2ba100576263f07e8733b733d90ca8046ae33da4/hapi-fhir-base/src/main/java/ca/uhn/fhir/util/HapiExtensions.java#L102">https://github.com/hapifhir/hapi-fhir/blob/2ba100576263f07e8733b733d90ca8046ae33da4/hapi-fhir-base/src/main/java/ca/uhn/fhir/util/HapiExtensions.java#L102</a> that basically creates a unique index in the database on whatever datafield you would like. With this enabled, the database will actually guard you against such duplicates. Using that, you are on your own, but it works with a minimal effort. It won't however be portable onto other FHIR solutions but it will work for any HAPI FHIR-based solutions that runs on top of the HAPI FHIR JPA stack</p>
+
+
+
+<a name="243230637"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi%20fhir%20protect%20agains%20race%20conditions/near/243230637" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Pengyu Wang <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html#243230637">(Jun 19 2021 at 05:27)</a>:</h4>
+<p><span class="user-mention" data-user-id="191427">@Jens Villadsen</span>  Thank you for the answer. I found this link (<a href="https://www.smilecdr.com/our-blog/custom-search-parameters-in-hapi-fhir">https://www.smilecdr.com/our-blog/custom-search-parameters-in-hapi-fhir</a>) on how to create a custom search parameter. Am I understanding this correctly that I need to:</p>
+<ol>
+<li>Create an extension with the <code>EXT_SP_UNIQUE</code> url</li>
+<li>Create a SearchParameter and add the extension to it</li>
+<li>Do the above when initializing the server</li>
+</ol>
+<p>I'm using the hapi fhir jpaserver starter and I added the following to <code>JpaRestfulServer.java</code> in the <code>initialize</code> method:</p>
+<div class="codehilite"><pre><span></span><code>    @Override
+    protected void initialize() throws ServletException {
+        super.initialize();
+
+        // Add your own customization here
+        Extension ext = new Extension();
+        ext.setUrl(HapiExtensions.EXT_SP_UNIQUE);
+
+        SearchParameter customSearchParam = new SearchParameter();
+        customSearchParam
+            .addBase(&quot;Appointment&quot;)
+            .setCode(&quot;uniqueIdentifier&quot;)
+            .setType(Enumerations.SearchParamType.TOKEN)
+            .setTitle(&quot;Unique Identifier&quot;)
+            .setStatus(Enumerations.PublicationStatus.ACTIVE)
+            .addExtension(ext);
+
+        IGenericClient client = getFhirContext().newRestfulGenericClient(&quot;http://localhost:3000&quot;);
+        client.create().resource(customSearchParam).execute();
+    }
+</code></pre></div>
+<p>But when I start the server I got the error </p>
+<div class="codehilite"><pre><span></span><code>2021-06-18 22:24:23.716 [main] ERROR o.a.c.c.C.[Tomcat].[localhost].[/] [DirectJDKLog.java:175] Servlet.init() for servlet [jpaRestfulServer] threw exception
+ca.uhn.fhir.rest.server.exceptions.ResourceNotFoundException: HTTP 404
+</code></pre></div>
+<p>What am I missing here?</p>
+
+
+
+<a name="243233151"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi%20fhir%20protect%20agains%20race%20conditions/near/243233151" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html#243233151">(Jun 19 2021 at 06:44)</a>:</h4>
+<p>Looks like you are starting a client within your server before the service is actually started</p>
+
+
+
+<a name="243243230"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi%20fhir%20protect%20agains%20race%20conditions/near/243243230" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html#243243230">(Jun 19 2021 at 10:41)</a>:</h4>
+<p>instantiate your client outside the bootstrappning of your server and you should be fine</p>
+
+
+
+<a name="245755981"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi%20fhir%20protect%20agains%20race%20conditions/near/245755981" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Pengyu Wang <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html#245755981">(Jul 12 2021 at 22:01)</a>:</h4>
+<p><span class="user-mention" data-user-id="191427">@Jens Villadsen</span> i created a custom search parameter on the patient identifer and it seems to be working as intended when i bulk inserted multiple patients into a single partition (I have partitioning enabled on the server). However, the uniqueness constraint seemed to be applied across partitions as well. When I tried to create a patient resource in a different partition but with the same identifier, the server doesn't allow me to do it and I got the error <code>Can not create resource of type Patient as it would create a duplicate unique index matching query</code>. Is there a way to make this constraint only apply to resources within a partition? Meaning I should be able to create Patient with identifier 123 in multiple partitions, but in each partition there should only be one such patient? Detaild description of this issue is posted <a href="#narrow/stream/179167-hapi/topic/Unique.20search.20parameter.20constraint.20applied.20across.20partitions/near/245783105">here</a></p>
+
+
+
+<a name="245794275"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi%20fhir%20protect%20agains%20race%20conditions/near/245794275" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html#245794275">(Jul 13 2021 at 08:44)</a>:</h4>
+<p>I don't believe that is a feature of HAPI. You could proceed the hack'ish way and make a compound identifier consisting of the partition Id and the patient identifier.</p>
+
+
+
+<a name="267244054"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi%20fhir%20protect%20agains%20race%20conditions/near/267244054" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joe Atterberry <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html#267244054">(Jan 07 2022 at 21:18)</a>:</h4>
+<p>Thanks <span class="user-mention" data-user-id="191427">@Jens Villadsen</span> and <span class="user-mention" data-user-id="403495">@Pengyu Wang</span>  I was able to successfully create a custom search parameter and it does guard against race conditions as was noted, however when I try to retrieve any resource using an http GET of the form <a href="http://localhost:3111/my-fhir/v1/Patient?identifier=1555667">http://localhost:3111/my-fhir/v1/Patient?identifier=1555667</a> zero records are returned where one was returned before introducing the search parameter.</p>
+<p>I use the following:</p>
+<p>{<br>
+  "resourceType": "SearchParameter",<br>
+  "meta": {<br>
+    "lastUpdated": "2021-05-02T10:43:02.162-04:00",<br>
+    "tag": [ {<br>
+      "system": "<a href="https://my.health.com/x/Onc1C">https://my.health.com/x/Onc1C</a>",<br>
+      "code": "34a800fa-bba9-4cb9-77ed-0aa4d0eecef2",<br>
+      "display": "FHIR Implementation Team"<br>
+    } ]<br>
+  },<br>
+  "extension": [<br>
+    {<br>
+      "url": "<a href="http://hapifhir.io/fhir/StructureDefinition/sp-unique">http://hapifhir.io/fhir/StructureDefinition/sp-unique</a>",<br>
+      "valueBoolean": true<br>
+    }<br>
+  ],<br>
+  "url": "<a href="http://health.com/fhir/SearchParameter/uniq-patient-identifier">http://health.com/fhir/SearchParameter/uniq-patient-identifier</a>",<br>
+  "name": "unique-patient-identifier",<br>
+  "status": "active",<br>
+  "description": "A unique patient identifier",<br>
+  "code": "unique-patient-identifier",<br>
+  "base": [<br>
+    "Patient"<br>
+  ],<br>
+  "type": "token",<br>
+  "expression": "Patient",<br>
+  "component": [<br>
+    {<br>
+      "definition": "<a href="http://hl7.org/fhir/SearchParameter/patient-identifier">http://hl7.org/fhir/SearchParameter/patient-identifier</a>",<br>
+      "expression": "Patient"<br>
+    }<br>
+  ]<br>
+}</p>
+<p>In order to retrieve any resource I have to include the system with the identifier.  So the GET looks like <a href="http://localhost:3111/my-fhir/v1/Patient?identifier=urn:uuid:2.16.840.1.113883.4.349|1555667">http://localhost:3111/my-fhir/v1/Patient?identifier=urn:uuid:2.16.840.1.113883.4.349|1555667</a></p>
+<p>Is there anyway to change the search parameter so that the resource can be retrieved as it was before?<br>
+Thanks.</p>
+
+
+
+<a name="267488872"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi%20fhir%20protect%20agains%20race%20conditions/near/267488872" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Pengyu Wang <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html#267488872">(Jan 10 2022 at 19:37)</a>:</h4>
+<p><span class="user-mention" data-user-id="378195">@Joe Atterberry</span> is it safe to assume that the patients only have one identifier therefore you don't care about the system? if so have you tried adding an expression to the search parameter?  try adding <code>"expression":"Patient.identifier.value"</code> to the unique patient  sp</p>
+
+
+
+<a name="267946392"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/hapi%20fhir%20protect%20agains%20race%20conditions/near/267946392" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joe Atterberry <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions.html#267946392">(Jan 13 2022 at 23:24)</a>:</h4>
+<p><span class="user-mention" data-user-id="191427">@Jens Villadsen</span>  <span class="user-mention" data-user-id="403495">@Pengyu Wang</span> Yes, that is correct.   I tried using what you suggested.  I substituted "expression":"Patient with "expression":Patient.identifer.value" and I still need to include the system in order to retrieve the record.  I did check the HFJ_IDX_CMP_STRING_UNIQ table where the expressions are kept and IDX_STRING column includes the system.</p>
+<p>Patient?identifier=urn%3Auuid%3A2.16.840.1.113883.4.349%7C1555667</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

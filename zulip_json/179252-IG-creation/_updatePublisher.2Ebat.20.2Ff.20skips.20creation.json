@@ -1,0 +1,80 @@
+[
+    {
+        "content": "<p>When I run _updatePublisher.bat /f, it does not create, overwrite, or update scripts. If I run without the flag, it runs fine. If I change the script from {SET create=\"Y\"} to {SET create=Y} (and the same for the other two skipPrompts options) it runs fine as well. Has anyone else run into this?</p>",
+        "id": 217290596,
+        "sender_full_name": "Bryant Austin",
+        "timestamp": 1605801908
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191832\">@Jose Costa Teixeira</span></p>",
+        "id": 217293625,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1605803047
+    },
+    {
+        "content": "<p>On it</p>",
+        "id": 217295203,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1605803633
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"319386\">@Bryant Austin</span> want to test an updated version?</p>",
+        "id": 217301243,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1605806154
+    },
+    {
+        "content": "<p>I would be happy to.</p>",
+        "id": 217301339,
+        "sender_full_name": "Bryant Austin",
+        "timestamp": 1605806176
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span><code>@ECHO OFF\n\nSETLOCAL\n\nSET dlurl=https://github.com/HL7/fhir-ig-publisher/releases/latest/download/publisher.jar\nSET publisher_jar=publisher.jar\nSET input_cache_path=%CD%\\input-cache\\\nSET skipPrompts=false\n\nset update_bat_url=https://raw.githubusercontent.com/FHIR/sample-ig/master/_updatePublisher.bat\nset gen_bat_url=https://raw.githubusercontent.com/FHIR/sample-ig/master/_genonce.bat\nset gencont_bat_url=https://raw.githubusercontent.com/FHIR/sample-ig/master/_gencontinuous.bat\nset gencont_sh_url=https://raw.githubusercontent.com/FHIR/sample-ig/master/_gencontinuous.sh\nset gen_sh_url=https://raw.githubusercontent.com/FHIR/sample-ig/master/_genonce.sh\nset update_sh_url=https://raw.githubusercontent.com/FHIR/sample-ig/master/_updatePublisher.sh\n\nIF &quot;%~1&quot;==&quot;/f&quot; SET skipPrompts=y\n\n\nECHO.\nECHO Checking internet connection...\nPING tx.fhir.org -4 -n 1 -w 1000 | FINDSTR TTL &amp;&amp; GOTO isonline\nECHO We&#39;re offline, nothing to do...\nGOTO end\n\n:isonline\nECHO We&#39;re online\n\n\n:processflags\nSET ARG=%1\nIF DEFINED ARG (\n    IF &quot;%ARG%&quot;==&quot;-f&quot; SET FORCE=true\n    IF &quot;%ARG%&quot;==&quot;--force&quot; SET FORCE=true\n    SHIFT\n    GOTO processflags\n)\n\nFOR %%x IN (&quot;%CD%&quot;) DO SET upper_path=%%~dpx\n\nECHO.\nIF NOT EXIST &quot;%input_cache_path%%publisher_jar%&quot; (\n    IF NOT EXIST &quot;%upper_path%%publisher_jar%&quot; (\n        SET jarlocation=&quot;%input_cache_path%%publisher_jar%&quot;\n        SET jarlocationname=Input Cache\n        ECHO IG Publisher is not yet in input-cache or parent folder.\n        REM we don&#39;t use jarlocation below because it will be empty because we&#39;re in a bracketed if statement\n        GOTO create\n    ) ELSE (\n        ECHO IG Publisher FOUND in parent folder\n        SET jarlocation=&quot;%upper_path%%publisher_jar%&quot;\n        SET jarlocationname=Parent folder\n        GOTO upgrade\n    )\n) ELSE (\n    ECHO IG Publisher FOUND in input-cache\n    SET jarlocation=&quot;%input_cache_path%%publisher_jar%&quot;\n    SET jarlocationname=Input Cache\n    GOTO upgrade\n)\n\n:create\nIF DEFINED FORCE (\n    MKDIR &quot;%input_cache_path%&quot; 2&gt; NUL\n    GOTO download\n)\n\nIF &quot;%skipPrompts%&quot;==&quot;y&quot; (\n    SET create=&quot;Y&quot;\n) ELSE (\n    SET /p create=&quot;Ok? (Y/N) &quot;\n)\nIF /I &quot;%create%&quot;==&quot;Y&quot; (\n    ECHO Will place publisher jar here: %input_cache_path%%publisher_jar%\n    MKDIR &quot;%input_cache_path%&quot; 2&gt; NUL\n    GOTO download\n)\nGOTO done\n\n:upgrade\nIF &quot;%skipPrompts%&quot;==&quot;y&quot; (\n    SET overwrite=Y\n) ELSE (\n    SET /p overwrite=&quot;Overwrite %jarlocation%? (Y/N) &quot;\n)\n\nIF /I &quot;%overwrite%&quot;==&quot;Y&quot; (\n    GOTO download\n)\nGOTO done\n\n:download\nECHO Downloading most recent publisher to %jarlocationname% - it&#39;s ~100 MB, so this may take a bit\n\nFOR /f &quot;tokens=4-5 delims=. &quot; %%i IN (&#39;ver&#39;) DO SET VERSION=%%i.%%j\nIF &quot;%version%&quot; == &quot;10.0&quot; GOTO win10\nIF &quot;%version%&quot; == &quot;6.3&quot; GOTO win8.1\nIF &quot;%version%&quot; == &quot;6.2&quot; GOTO win8\nIF &quot;%version%&quot; == &quot;6.1&quot; GOTO win7\nIF &quot;%version%&quot; == &quot;6.0&quot; GOTO vista\n\nECHO Unrecognized version: %version%\nGOTO done\n\n:win10\nCALL POWERSHELL -command if (&#39;System.Net.WebClient&#39; -as [type]) {(new-object System.Net.WebClient).DownloadFile(\\&quot;%dlurl%\\&quot;,\\&quot;%jarlocation%\\&quot;) } else { Invoke-WebRequest -Uri &quot;%dlurl%&quot; -Outfile &quot;%jarlocation%&quot; }\n\nGOTO done\n\n:win7\nrem this may be triggering the antivirus - bitsadmin.exe is a known threat\nrem CALL bitsadmin /transfer GetPublisher /download /priority normal &quot;%dlurl%&quot; &quot;%jarlocation%&quot;\n\nrem this didn&#39;t work in win 10\nrem CALL Start-BitsTransfer /priority normal &quot;%dlurl%&quot; &quot;%jarlocation%&quot;\n\nrem this should work - untested\ncall (New-Object Net.WebClient).DownloadFile(&#39;%dlurl%&#39;, &#39;%jarlocation%&#39;)\nGOTO done\n\n:win8.1\n:win8\n:vista\nGOTO done\n\n\n\n:done\n\n\n\n\nECHO.\nECHO Updating scripts\nIF &quot;%skipPrompts%&quot;==&quot;y&quot; (\n    SET updateScripts=Y\n) ELSE (\n    SET /p updateScripts=&quot;Update scripts? (Y/N) &quot;\n)\nIF /I &quot;%updateScripts%&quot;==&quot;Y&quot; (\n    GOTO scripts\n)\nGOTO end\n\n\n:scripts\n\nREM Download all batch files (and this one with a new name)\n\nSETLOCAL DisableDelayedExpansion\n\n\n\n:dl_script_1\nECHO Updating _updatePublisher.sh\ncall POWERSHELL -command if (&#39;System.Net.WebClient&#39; -as [type]) {(new-object System.Net.WebClient).DownloadFile(\\&quot;%update_sh_url%\\&quot;,\\&quot;_updatePublisher.new.sh\\&quot;) } else { Invoke-WebRequest -Uri &quot;%update_sh_url%&quot; -Outfile &quot;_updatePublisher.new.sh&quot; }\nif %ERRORLEVEL% == 0 goto upd_script_1\necho &quot;Errors encountered during download: %errorlevel%&quot;\ngoto dl_script_2\n:upd_script_1\nstart copy /y &quot;_updatePublisher.new.sh&quot; &quot;_updatePublisher.sh&quot; ^&amp;^&amp; del &quot;_updatePublisher.new.sh&quot; ^&amp;^&amp; exit\n\n\n:dl_script_2\nECHO Updating _genonce.bat\ncall POWERSHELL -command if (&#39;System.Net.WebClient&#39; -as [type]) {(new-object System.Net.WebClient).DownloadFile(\\&quot;%gen_bat_url%\\&quot;,\\&quot;_genonce.new.bat\\&quot;) } else { Invoke-WebRequest -Uri &quot;%gen_bat_url%&quot; -Outfile &quot;_genonce.bat&quot; }\nif %ERRORLEVEL% == 0 goto upd_script_2\necho &quot;Errors encountered during download: %errorlevel%&quot;\ngoto dl_script_3\n:upd_script_2\nstart copy /y &quot;_genonce.new.bat&quot; &quot;_genonce.bat&quot; ^&amp;^&amp; del &quot;_genonce.new.bat&quot; ^&amp;^&amp; exit\n\n:dl_script_3\nECHO Updating _gencontinuous.bat\ncall POWERSHELL -command if (&#39;System.Net.WebClient&#39; -as [type]) {(new-object System.Net.WebClient).DownloadFile(\\&quot;%gencont_bat_url%\\&quot;,\\&quot;_gencontinuous.new.bat\\&quot;) } else { Invoke-WebRequest -Uri &quot;%gencont_bat_url%&quot; -Outfile &quot;_gencontinuous.bat&quot; }\nif %ERRORLEVEL% == 0 goto upd_script_3\necho &quot;Errors encountered during download: %errorlevel%&quot;\ngoto dl_script_4\n:upd_script_3\nstart copy /y &quot;_gencontinuous.new.bat&quot; &quot;_gencontinuous.bat&quot; ^&amp;^&amp; del &quot;_gencontinuous.new.bat&quot; ^&amp;^&amp; exit\n\n\n:dl_script_4\nECHO Updating _genonce.sh\ncall POWERSHELL -command if (&#39;System.Net.WebClient&#39; -as [type]) {(new-object System.Net.WebClient).DownloadFile(\\&quot;%gen_sh_url%\\&quot;,\\&quot;_genonce.new.sh\\&quot;) } else { Invoke-WebRequest -Uri &quot;%gen_sh_url%&quot; -Outfile &quot;_genonce.sh&quot; }\nif %ERRORLEVEL% == 0 goto upd_script_4\necho &quot;Errors encountered during download: %errorlevel%&quot;\ngoto dl_script_5\n:upd_script_4\nstart copy /y &quot;_genonce.new.sh&quot; &quot;_genonce.sh&quot; ^&amp;^&amp; del &quot;_genonce.new.sh&quot; ^&amp;^&amp; exit\n\n:dl_script_5\nECHO Updating _gencontinuous.sh\ncall POWERSHELL -command if (&#39;System.Net.WebClient&#39; -as [type]) {(new-object System.Net.WebClient).DownloadFile(\\&quot;%gencont_sh_url%\\&quot;,\\&quot;_gencontinuous.new.sh\\&quot;) } else { Invoke-WebRequest -Uri &quot;%gencont_sh_url%&quot; -Outfile &quot;_gencontinuous.sh&quot; }\nif %ERRORLEVEL% == 0 goto upd_script_5\necho &quot;Errors encountered during download: %errorlevel%&quot;\ngoto dl_script_6\n:upd_script_5\nstart copy /y &quot;_gencontinuous.new.sh&quot; &quot;_gencontinuous.sh&quot; ^&amp;^&amp; del &quot;_gencontinuous.new.sh&quot; ^&amp;^&amp; exit\n\n\n\n:dl_script_6\nECHO Updating _updatePublisher.bat\ncall POWERSHELL -command if (&#39;System.Net.WebClient&#39; -as [type]) {(new-object System.Net.WebClient).DownloadFile(\\&quot;%update_bat_url%\\&quot;,\\&quot;_updatePublisher.new.bat\\&quot;) } else { Invoke-WebRequest -Uri &quot;%update_bat_url%&quot; -Outfile &quot;_updatePublisher.new.bat&quot; }\nif %ERRORLEVEL% == 0 goto upd_script_6\necho &quot;Errors encountered during download: %errorlevel%&quot;\ngoto end\n:upd_script_6\nstart copy /y &quot;_updatePublisher.new.bat&quot; &quot;_updatePublisher.bat&quot; ^&amp;^&amp; del &quot;_updatePublisher.new.bat&quot; ^&amp;^&amp; exit\n\n\n:end\n\n\nIF &quot;%skipPrompts%&quot;==&quot;true&quot; (\n  PAUSE\n}\n</code></pre></div>",
+        "id": 217302361,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1605806624
+    },
+    {
+        "content": "<p>(sorry, it was just quicker for me to paste than to attach a file)</p>",
+        "id": 217302469,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1605806655
+    },
+    {
+        "content": "<p>No worries!</p>",
+        "id": 217302937,
+        "sender_full_name": "Bryant Austin",
+        "timestamp": 1605806855
+    },
+    {
+        "content": "<p>The others work, but SET create=\"Y\" is still the same.  Looks great, except for that.</p>",
+        "id": 217303249,
+        "sender_full_name": "Bryant Austin",
+        "timestamp": 1605806995
+    },
+    {
+        "content": "<p>right, i missed that, thanks</p>",
+        "id": 217308715,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1605809436
+    },
+    {
+        "content": "<p><a href=\"https://github.com/FHIR/sample-ig/pull/42\">https://github.com/FHIR/sample-ig/pull/42</a></p>",
+        "id": 217311122,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1605810637
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span></p>",
+        "id": 217311129,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1605810641
+    },
+    {
+        "content": "<p>Merged</p>",
+        "id": 217345647,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1605829160
+    }
+]

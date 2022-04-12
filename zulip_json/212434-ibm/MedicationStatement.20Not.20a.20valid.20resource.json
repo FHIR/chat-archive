@@ -1,0 +1,56 @@
+[
+    {
+        "content": "<p>Hey all, we just updated to version 4.7.0 (from version 4.5.0)<br>\nWhen I tried to load a MedicationStatement resource into the FHIR Server I got the following error:</p>\n<p>400 Bad Request: [{<br>\n    \"resourceType\": \"OperationOutcome\",<br>\n    \"id\": \"c0-a8-a0-3-8f3064f7-1cff-4ff5-becc-a6060d92c971\",<br>\n    \"issue\": [ {<br>\n            \"severity\": \"error\",<br>\n            \"code\": \"not-found\",<br>\n            \"details\": {<br>\n                \"text\": \"The requested resource type 'MedicationStatement' is not found\"<br>\n            }}]}]</p>\n<p>Is there something I need to add to the standard installation of the fhir server to use the MedicationStatement resource? Seems odd that it is not able to find the resource type anymore.</p>",
+        "id": 239410909,
+        "sender_full_name": "Dorian Quell",
+        "timestamp": 1621426016
+    },
+    {
+        "content": "<p>Hi Dorian.  I'd be surprised if there was something special about MedicationStatement here.  Do other resource types work?  I assume not and I'd suggest having a quick look at the server logs.  Are you using the docker image or did you install yourself?</p>",
+        "id": 239447218,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1621438700
+    },
+    {
+        "content": "<p>quite a bit has changed since 4.5.0, so I'd highly suggest going through the migration consideration sections of the release notes.  especially for 4.6.0 and 4.7.0</p>",
+        "id": 239447394,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1621438766
+    },
+    {
+        "content": "<p>Hey, I tried out some other resources.<br>\nConditon, Observation, Procedure, Patient, and Immunization worked without problems.<br>\nMedicationStatement and Consent were not recognized.<br>\nWe running the server in a docker container, but because of the large jump between the versions, we didn't migrate the data, but created new resources and posted them to the server again. So the server is a clean install and had no data before.</p>\n<p>The Docker container also says unhealthy, but we cannot find any problem that would cause this</p>\n<p>The server logs only say \"Error while processing request bundle.\"</p>\n<p>[5/20/21, 6:34:04:348 UTC] 0000031c FHIRRestServl I   Received request: tenantId:[default] dsId:[default] user:[fhiruser] method:[POST] uri:[<strong>*</strong>***/fhir-server/api/v4]<br>\n[5/20/21, 6:34:04:354 UTC] 0000031c CacheTransact I   Transaction failed - afterCompletion(status = 4)<br>\n[5/20/21, 6:34:04:354 UTC] 0000031c FHIRResource  I   Error while processing request bundle.<br>\n[5/20/21, 6:34:04:355 UTC] 0000031c FHIRRestServl I   Completed request[0.007 secs]: tenantId:[default] dsId:[default] user:[fhiruser] method:[POST] uri:[<strong>*</strong>****/fhir-server/api/v4] status:[400]</p>",
+        "id": 239569988,
+        "sender_full_name": "Dorian Quell",
+        "timestamp": 1621508013
+    },
+    {
+        "content": "<p>Here is also the docker-compose we used:</p>\n<p>version: '3.7'<br>\nservices:<br>\n  postgres:<br>\n    build:<br>\n      context: postgres<br>\n      dockerfile: Dockerfile<br>\n    shm_size: 256MB<br>\n    tty: true<br>\n    stdin_open: true<br>\n    hostname: postgres-db<br>\n    volumes:</p>\n<div class=\"codehilite\"><pre><span></span><code>  - type: bind\n    source: ./postgres/db\n    target: /db\n# Stop Grace Period - 30 seconds\nstop_grace_period: 30s\nsysctls:\n  net.core.somaxconn: 256\n  net.ipv4.tcp_syncookies: 0\n  # To use all of 2 gigabytes\n  kernel.shmmax: 1055092736\n  kernel.shmall: 257591\nprivileged: true\ncommand: tail -f /dev/null\nenvironment:\n  PG_TRUST_LOCALNET: &#39;true&#39;\nhealthcheck:\n  start_period: 21s\n  test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -d fhirdb -U fhiradmin&quot;]\n  interval: 10s\n  timeout: 5s\n  retries: 3\nnetworks:\n\n  - fhir\n</code></pre></div>\n\n<h1>ports:</h1>\n<h1>- 5432:5432</h1>\n<p>fhir-server:<br>\n    image: ibmcom/ibm-fhir-server:4.7.1<br>\n    hostname: fhir<br>\n    volumes:</p>\n<div class=\"codehilite\"><pre><span></span><code>  - type: bind\n    source: ./fhir/config\n    target: /opt/ol/wlp/usr/servers/defaultServer/config\n    read_only: true\n\n  - type: bind\n    source: ./fhir/configDropins/overrides\n    target: /opt/ol/wlp/usr/servers/defaultServer/configDropins/overrides\n    read_only: true\n\n  - type: bind\n    source: ./fhir/userlib\n    target: /opt/ol/wlp/usr/servers/defaultServer/userlib\n    read_only: true\n\n  - type: bind\n    source: ./fhir/openapi.json\n    target: /opt/ol/wlp/usr/servers/defaultServer/apps/expanded/fhir-openapi.war/META-INF/openapi.json\n    read_only: true\n\n  - type: bind\n    source: ./fhir/server.xml\n    target: /opt/ol/wlp/usr/servers/defaultServer/server.xml\n    read_only: true\n\n  - type: bind\n    source: ./certs\n    target: /opt/ol/wlp/usr/servers/defaultServer/resources/security\n    read_only: true\ncommand: bash -c &quot;\n  java -jar /opt/ibm-fhir-server/tools/fhir-persistence-schema-*-cli.jar\n    --db-type postgresql --prop db.host=postgres --prop db.port=5432 --prop db.database=fhirdb --prop user=fhiradmin --prop password=change-password\n    --prop resourceTypes=AllergyIntolerance,CarePlan,CareTeam,CodeSystem,Condition,Coverage,Device,DiagnosticReport,DocumentReference,Encounter,ExplanationOfBenefit,Goal,Group,Immunization,List,Location,Medication,MedicationAdministration,MedicationDispense,MedicationRequest,Observation,Organization,Patient,Practitioner,PractitionerRole,Procedure,Provenance,StructureDefinition,ValueSet\n    --update-schema --grant-to fhirserver &amp;&amp;\n  /opt/ol/wlp/bin/server run&quot;\nhealthcheck:\n  start_period: 32s\n  interval: 30s\n  timeout: 5s\n  retries: 3\n  # https://docs.docker.com/compose/compose-file/#variable-substitution\n  test: curl -k -u &#39;fhiruser:change-password&#39; &#39;https://localhost/fhir-server/api/v4/$$healthcheck&#39;\nports:\n</code></pre></div>\n\n<h1>- 9080:9080</h1>\n<div class=\"codehilite\"><pre><span></span><code>  - 443:9443\ndepends_on:\n  postgres:\n    condition: service_healthy\nnetworks:\n\n  - fhir\n</code></pre></div>\n\n<p>networks:<br>\n  fhir:<br>\n    driver: bridge</p>\n<p>The only things we adjusted was to change the port from 9443 to 443 and add the binds for the certificates.</p>",
+        "id": 239582546,
+        "sender_full_name": "Dorian Quell",
+        "timestamp": 1621514016
+    },
+    {
+        "content": "<p>Thanks for the added detail, that helps a lot.  It looks like you based this docker-compose on the one in our demo folder at <a href=\"https://github.com/IBM/FHIR/tree/main/demo\">https://github.com/IBM/FHIR/tree/main/demo</a> ...thats great!</p>\n<p>This docker-compose uses a somewhat-experimental feature (read: not well documented) for creating tables for only a subset of the resource types in the specification.  The list is documented at <a href=\"https://github.com/IBM/FHIR/tree/main/demo#limitations\">https://github.com/IBM/FHIR/tree/main/demo#limitations</a> along with steps on how to add new ones.</p>",
+        "id": 239589891,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1621516921
+    },
+    {
+        "content": "<p>Note that we also just landed a quick update to explain how to modify the docker-compose.yml and fhir-server-config.json files to support additional resource types.</p>",
+        "id": 239590111,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1621516996
+    },
+    {
+        "content": "<p>Thank you, that fixed the problem.</p>",
+        "id": 239602702,
+        "sender_full_name": "Dorian Quell",
+        "timestamp": 1621521526
+    },
+    {
+        "content": "<p>great.  i've also opened a pull request to add those 2 resource types to the demo env by default:  <a href=\"https://github.com/IBM/FHIR/pull/2397\">https://github.com/IBM/FHIR/pull/2397</a></p>",
+        "id": 239602805,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1621521568
+    }
+]

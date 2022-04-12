@@ -1,0 +1,80 @@
+[
+    {
+        "content": "<p>I've done a partial write-up of an odd behavior I've found in the FHIR client.<br>\n<code>new FhirDateTime(“2015-01-02”).ToDateTimeOffset(new TimeSpan(-5, 0, 0)).Day != 2</code><br>\n<a href=\"http://brianpos.com/2018/10/19/dates-and-timezones-in-the-fhir-net-api/\" target=\"_blank\" title=\"http://brianpos.com/2018/10/19/dates-and-timezones-in-the-fhir-net-api/\">http://brianpos.com/2018/10/19/dates-and-timezones-in-the-fhir-net-api/</a><br>\nPlanning to do more research and a recommendation on how we could proceed.<br>\n<span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span>, not sure if there is something similar in the Java Client libs too.</p>\n<div class=\"codehilite\"><pre><span></span>FhirDateTime testDate = new FhirDateTime(&quot;2015-01-02&quot;);\nTrace.WriteLine($&quot;Undeclared Timezone: {testDate.ToDateTimeOffset().ToString()}&quot;);\nTrace.WriteLine($&quot;Melbourne: {testDate.ToDateTimeOffset(new TimeSpan(11, 0, 0)).ToString()}&quot;);\nTrace.WriteLine($&quot;Boston: {testDate.ToDateTimeOffset(new TimeSpan(-5, 0, 0)).ToString()}&quot;);\n</pre></div>\n\n\n<p>This test gives this result</p>\n<div class=\"codehilite\"><pre><span></span>Undeclared Timezone: 2/01/2015 12:00:00 AM +00:00\nMelbourne: 2/01/2015 11:00:00 AM +11:00\nBoston: 1/01/2015 7:00:00 PM -05:00\n</pre></div>",
+        "id": 154010312,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1539905887
+    },
+    {
+        "content": "<p>I can see how to get the values you are asking for, something like this still needs work:</p>\n<div class=\"codehilite\"><pre><span></span>public static DateTimeOffset? ToNewDateTimeOffset(this Hl7.Fhir.Model.FhirDateTime FhirDate, TimeSpan TimeSpan)\n    {\n      if (FhirDate.Value.Length &lt; 11 )\n      {\n        DateTime? TempDateTime = FhirDate.ToDateTime();\n        if (TempDateTime.HasValue)\n        {\n          TempDateTime = DateTime.SpecifyKind(TempDateTime.Value, DateTimeKind.Unspecified);\n          return new DateTimeOffset(TempDateTime.Value, TimeSpan);\n        }\n        return null;\n      }\n      else\n      {\n        return FhirDate.ToDateTimeOffset(TimeSpan);\n      }\n    }\n</pre></div>",
+        "id": 154010365,
+        "sender_full_name": "Angus Millar",
+        "timestamp": 1539934623
+    },
+    {
+        "content": "<p>But I don't understand how you would use it in your server search indexing, how do you know what Timezone to use on index commit or on the search query?</p>",
+        "id": 154010366,
+        "sender_full_name": "Angus Millar",
+        "timestamp": 1539934709
+    },
+    {
+        "content": "<p>Yes, Hence my desire to redo the implementation in our server.</p>",
+        "id": 154010824,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1540180184
+    },
+    {
+        "content": "<p>Brian if it helps I tackled this somewhat differently. Still not great but as close as I could possibly get with this problem to make it reasonable. Love to hear what you come up with.<br>\nSo below are my notes on what I did. I will also point out that every date and datetime index I store is stored with two DateTimes, a Low and a High. So every single one is a range, not a single dateTime. Then all the searchers on these indexes are range on range searches. They are also all converted and stored in the database as  Zulu time UTC +0000. The server's default timezone is used when no timezone information is given, such as Dates and any DateTime without time zone info.<br>\nGiven all this here are my notes about the Date with no time zone problem and what I do:</p>\n<p>To deal with the problem of no time zones on Dates, e.g 2018-10-05 we treat the search as a 36 hour day rather than a 24 hours day when the precision is one on Year, Month or Day. For more fine-grained precisions such as Hour, Min, Sec we expect to have the time zones information supplied if time zone differences are a concern of the searcher. <br>\nSo to do this I subtract 6 hours from the beginning of the date range 2018-10-05T00:00 and add 6 hours to the end of the day 2018-10-05T23:59. This gives us a 36 hour day range. The idea is that it is better to return more than less for the search.</p>\n<p>This is a compromise as we really do not know what is meant by a date with no time zone. We can assume the servers default time zone as a starting point but this is only a guess to what the true time zone was for either the supplied search date or the stored FHIR resource dates when dealing with only date and no time.  </p>\n<p>So the range we actually use for this example is not:   <br>\n  2018-10-05T00:00 to 2018-10-05T23:59 <br>\nbut rather: <br>\n  2018-10-04T18:00 to 2018-10-06T05:59 <br>\nWhich in a 12hr clock is 04/10/2018 6:00PM to 06/10/2018 6:00AM when the search date was: 05/10/2018<br>\nAlso bear in mind that all date times are converted to UTC Zulu +00:00 time when stored and searched in the database.</p>",
+        "id": 154012098,
+        "sender_full_name": "Angus Millar",
+        "timestamp": 1540457162
+    },
+    {
+        "content": "<p>My server also does the high low thing that you've described. But  it happy with the other parts I've done.<br>\nI'm considering doing 2 indexes, one for partials (no times), and one for precise (with tines/zones)</p>",
+        "id": 154012297,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1540504252
+    },
+    {
+        "content": "<p>Then these compromises aren't needed, but does cost storage space</p>",
+        "id": 154012298,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1540504317
+    },
+    {
+        "content": "<p>A 3 integer index.</p>",
+        "id": 154012299,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1540504339
+    },
+    {
+        "content": "<p>I still don't see it.  <br>\nIf I receive a resource with a Date only 2018-10-05 I will store that in three indexes as follows:<br>\nDate:  2018-10-05<br>\nLowDateTime: 2018-10-05T00:00 Z<br>\nHighDateTime: 2018-10-05T23:59 Z<br>\nI've already had to make an assumption on time zone for the Low and High DateTimes .</p>\n<p>Now a search comes in with a timezone: 2018-10-05T21:00 -04:00  which converted to Zulu will be: 2018-10-06T01:00 Z<br>\nThat will not match on the indexes we have , but the assumption I think we wanted is that it would.</p>\n<p>What about the other way around?</p>\n<p>If I receive a resource with a DateTime and time zone 2018-10-05T21:00 -04:00 I will store that in three indexes as follows:<br>\nDate:  2018-10-05<br>\nLowDateTime: 2018-10-06T01:00:00 Z<br>\nHighDateTime: 2018-10-06T01:00:59 Z<br>\nNow a search comes in with a only a date: 2018-10-05  <br>\nIts a match, but then so is :2018-10-06</p>\n<p>I don't know if I have you idea wrong but I'm still stumped on how to solve it.</p>",
+        "id": 154012332,
+        "sender_full_name": "Angus Millar",
+        "timestamp": 1540539495
+    },
+    {
+        "content": "<blockquote>\n<p>That will not match on the indexes we have , but the assumption I think we wanted is that it would.</p>\n</blockquote>\n<p>Why? A date without a timezone is ambiguous. My Friday in The Netherlands partially overlaps with your Friday. Without a specific timezone, a date represents a broad and imprecise range.<br>\nI like your interval arithmetic approach, as it provides clearly defined behavior for imprecise ranges. You could also transform the incoming search date to an interval (possibly wider in case of missing timezone), then search db intervals for non-zero intersections.</p>",
+        "id": 154012336,
+        "sender_full_name": "Michel Rutten",
+        "timestamp": 1540543260
+    },
+    {
+        "content": "<p>Sorry, the 3 indexes I meant were year, month, day depending on the precision required. Plus the high low for precise data.</p>",
+        "id": 154012760,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1540592505
+    },
+    {
+        "content": "<p>FYI: Vonk also translates every date(time) to a range based on the precision and translated to an offset of 0. Both the date(time)s in resources and in search arguments, and then match on overlap. Pretty much the same as you do. <span class=\"user-mention\" data-user-id=\"191391\">@Angus Millar</span> idea of a 36 hour day is a nice workaround. <br>\n<span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span> solution for y/m/d/high/low is most precise. Reality is that no Vonk user has reported an issue with our current solution yet.</p>",
+        "id": 154013139,
+        "sender_full_name": "Christiaan Knaap",
+        "timestamp": 1540801066
+    },
+    {
+        "content": "<p>Thanks for the feedback Christiaan, great to know.</p>",
+        "id": 154013141,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1540802111
+    }
+]

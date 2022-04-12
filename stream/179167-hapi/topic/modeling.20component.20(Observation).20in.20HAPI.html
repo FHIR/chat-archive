@@ -1,0 +1,95 @@
+---
+layout: page
+title: "FHIR Chat  · modeling component (Observation) in HAPI · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/modeling.20component.20(Observation).20in.20HAPI.html">modeling component (Observation) in HAPI</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="276655039"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/modeling%20component%20%28Observation%29%20in%20HAPI/near/276655039" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Robinson <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/modeling.20component.20(Observation).20in.20HAPI.html#276655039">(Mar 25 2022 at 17:42)</a>:</h4>
+<p>Hi everybody, I am working on a Java class to model a profiled resource of the GA4GH Phenopacket (<a href="http://phenopackets.org/core-ig/StructureDefinition-phenopackets-variant.html">http://phenopackets.org/core-ig/StructureDefinition-phenopackets-variant.html</a>). The resource extends Observation and makes use of the components list. I would like to know how to model each of these components in a Java HAPI FHIR class. Is there a good example?</p>
+<p>Here is the signature of the class</p>
+<p>@ResourceDef(<br>
+        profile="<a href="https://github.com/phenopackets/core-ig/StructureDefinition/PhenopacketsVariant">https://github.com/phenopackets/core-ig/StructureDefinition/PhenopacketsVariant</a>")<br>
+public class PhenopacketsVariant extends Observation <br>
+// ???<br>
+}</p>
+<p>Here is the corresponding FSH code:</p>
+<p>Profile: PhenopacketsVariant<br>
+Parent: <a href="http://hl7.org/fhir/uv/genomics-reporting/StructureDefinition/variant">http://hl7.org/fhir/uv/genomics-reporting/StructureDefinition/variant</a> // Genomics Reporting Variant profile<br>
+Id: phenopackets-variant<br>
+Title: "Phenopackets Variant"<br>
+Description: "A profile of Genomics Reporting Variant profile that represents relevant phenopackets building blocks."</p>
+<ul>
+<li>^status = #draft // This would be changed later to active</li>
+<li>^version = "0.1.0"</li>
+<li>^date = "2021-10-18T06:00:00-04:00"</li>
+<li>^publisher = "GA4GH Phenopacket Working Group"</li>
+<li>
+<p>^contact.name = "Aly Khalifa"<br>
+//* ^short = "A phenopackets profile of the genomics reporting Variant profile. It represents<br>
+            //phenopackets GeneDescriptor, VariationDescriptor, VcfRecord, and VariantInterpretation building blocks."<br>
+//This is a placeholder for all Must-support elements (MS). Based on a team discussion, all elements should be MS.</p>
+</li>
+<li>
+<p>component[gene-studied] and <br>
+component[ref-sequence-assembly] and <br>
+component[cytogenetic-location] and</p>
+</li>
+</ul>
+
+
+
+<a name="276731551"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/modeling%20component%20%28Observation%29%20in%20HAPI/near/276731551" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Robinson <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/modeling.20component.20(Observation).20in.20HAPI.html#276731551">(Mar 26 2022 at 15:38)</a>:</h4>
+<p>I think I figured this out. It needs to be like this</p>
+<p>/**</p>
+<div class="codehilite"><pre><span></span><code> * We want have something like this:
+ * Note that 48001-2  Cytogenetic (chromosome) location
+ *  &lt;component&gt;
+ *     &lt;code&gt;
+ *       &lt;coding&gt;
+ *         &lt;system value=&quot;http://loinc.org&quot;/&gt;
+ *         &lt;code value=&quot;48001-2&quot;/&gt;
+ *       &lt;/coding&gt;
+ *     &lt;/code&gt;
+ *     &lt;valueCodeableConcept&gt;
+ *       &lt;coding&gt;
+ *         &lt;system value=&quot;http://loinc.org&quot;/&gt;
+ *         &lt;code value=&quot;LA21263-1&quot;/&gt;
+ *         &lt;display value=&quot;10&quot;/&gt;
+ *       &lt;/coding&gt;
+ *     &lt;/valueCodeableConcept&gt;
+ *   &lt;/component&gt;
+ * @param loincCode the LOINC code to represent a chromosome, e.g., &quot;LA21263-1&quot; for chromosome 10
+ * @param display The display value, e.g., &quot;10&quot; for chromosome 10
+ */
+public void setCytogeneticLocation(String loincCode, String display) {
+    Coding loincCytogeneticCoding = new Coding();
+    loincCytogeneticCoding.setSystem(LOINC_SYSTEM)
+            .setCode(LOINC_CYTOGENETIC_CHROMOSOME_LOCATION_ID)
+            .setDisplay(LOINC_CYTOGENETIC_CHROMOSOME_LOCATION_DISPLAY);
+    CodeableConcept cytogeneticCodeableConcept = new CodeableConcept().addCoding(loincCytogeneticCoding);
+    Coding chromosomeCoding = new Coding();
+    chromosomeCoding.setSystem(LOINC_SYSTEM)
+            .setCode(loincCode)
+            .setDisplay(display);
+    CodeableConcept cc = new CodeableConcept();
+    cc.addCoding(chromosomeCoding);
+    ObservationComponentComponent occ = new ObservationComponentComponent();
+    occ.setCode(cytogeneticCodeableConcept);
+    occ.setValue(chromosomeCoding);
+    this.addComponent(occ);
+}
+</code></pre></div>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

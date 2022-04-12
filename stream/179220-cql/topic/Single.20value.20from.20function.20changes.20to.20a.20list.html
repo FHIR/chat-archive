@@ -1,0 +1,96 @@
+---
+layout: page
+title: "FHIR Chat  · Single value from function changes to a list · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Single.20value.20from.20function.20changes.20to.20a.20list.html">Single value from function changes to a list</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="241431040"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Single%20value%20from%20function%20changes%20to%20a%20list/near/241431040" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Single.20value.20from.20function.20changes.20to.20a.20list.html#241431040">(Jun 03 2021 at 18:15)</a>:</h4>
+<p>I've been writing a script to capture an index date of a covid immunization with the FHIR library on cql. But I'm having an issue with typing of returns from functions. I'm working from this initial script definition</p>
+<div class="codehilite"><pre><span></span><code>library &quot;TestExampleOfFunction&quot; version &#39;0.0.1&#39;
+using FHIR version &#39;4.0.0&#39;
+include &quot;FHIRHelpers&quot; version &#39;4.0.0&#39; called FHIRHelpers
+codesystem &quot;ICD-10-CM&quot;: &#39;http://hl7.org/fhir/sid/icd-10-cm&#39;
+codesystem &quot;CVX&quot;: &#39;http://hl7.org/fhir/sid/cvx&#39;
+codesystem &quot;RxNorm&quot;: &#39;http://www.nlm.nih.gov/research/umls/rxnorm&#39;
+codesystem &quot;NDC&quot;: &#39;http://hl7.org/fhir/sid/ndc&#39;
+codesystem &quot;CPT&quot;: &#39;http://www.ama-assn.org/go/cpt&#39;
+
+*Covid Vaccine Drug Exposure definition ommited for space*
+
+context Patient
+
+define &quot;CovidImmunization&quot;: [Immunization: &quot;Covid Vaccine Drug Exposure&quot;.codes]
+
+define &quot;MostRecentCovidI&quot;: MostRecentImmunizationDT(&quot;CovidImmunization&quot;)
+
+define function MostRecentImmunizationDT(ImmunizationList List&lt;FHIR.Immunization&gt;):
+  from ImmunizationList I
+  let result: Last(ImmunizationList I sort by (occurrence as FHIR.dateTime).value asc)
+    return (result.occurrence as FHIR.dateTime).value
+
+define &quot;testRange&quot;:
+  Interval[ &quot;MostRecentCovidI&quot; + 1 day, &quot;MostRecentCovidI&quot; + 42 days]
+</code></pre></div>
+<p>Now when I run this definition, I get a weird typing on "MostRecentCovidI" on the testRange definition</p>
+<div class="codehilite"><pre><span></span><code>Error [53:13] Could not resolve call to operator Add with signature (list&lt;System.DateTime&gt;,System.Quantity).
+</code></pre></div>
+<p>So it seems like the 'result' variable comes back as a tuple of a list with a quantity, which seems very odd, I was expecting a FHIR.dateTime.value which would be a system.DateTime in cql.</p>
+<p>So I try and reduce the result scope variable in the function definition itself and add another Last clause in the definition like so.</p>
+<div class="codehilite"><pre><span></span><code>define function MostRecentImmunizationDT(ImmunizationList List&lt;FHIR.Immunization&gt;):
+  from ImmunizationList I
+  let result: Last(ImmunizationList I sort by (occurrence as FHIR.dateTime).value asc)
+    return Last((result.occurrence as FHIR.dateTime).value)
+</code></pre></div>
+<p>This generates an error saying that the return value is already a System.DateTime, and the Last function cannot work on it.</p>
+<div class="codehilite"><pre><span></span><code>Error [50:12] Could not resolve call to operator Last with signature (System.DateTime).
+</code></pre></div>
+<p>So the return is already defined as a System.DateTime, but the only way I'm able to move forward on my script is to change my top level definition to </p>
+<div class="codehilite"><pre><span></span><code>define &quot;MostRecentCovidI&quot;: Last(MostRecentImmunizationDT(&quot;CovidImmunization&quot;))
+</code></pre></div>
+<p>Which makes no sense, the return type should have been a System.DateTime not a list. What's going on here? Is the return clause not firing correctly? Is this a poor way to craft functions? And what's a better way to check runtime types of defines?</p>
+
+
+
+<a name="241440976"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Single%20value%20from%20function%20changes%20to%20a%20list/near/241440976" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Single.20value.20from.20function.20changes.20to.20a.20list.html#241440976">(Jun 03 2021 at 19:32)</a>:</h4>
+<p>This code is a bit redundant in the sense that you're effectively generating the cross-product of ImmunizationList with itself</p>
+<div class="codehilite" data-code-language="cql"><pre><span></span><code>define function MostRecentImmunizationDT(ImmunizationList List&lt;FHIR.Immunization&gt;):
+  from ImmunizationList I
+  let result: Last(ImmunizationList I sort by (occurrence as FHIR.dateTime).value asc)
+    return (result.occurrence as FHIR.dateTime).value
+</code></pre></div>
+<p>I think what you're looking for is:</p>
+<div class="codehilite" data-code-language="cql"><pre><span></span><code>define function MostRecentImmunizationDT(ImmunizationList List&lt;FHIR.Immunization&gt;):
+Last(ImmunizationList I
+  return (I.occurrence as FHIR.dateTime).value
+  sort asc)
+</code></pre></div>
+<p>That creates a List of dateTime ordered earliest to latest, then gets the last one.</p>
+
+
+
+<a name="241441190"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Single%20value%20from%20function%20changes%20to%20a%20list/near/241441190" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Single.20value.20from.20function.20changes.20to.20a.20list.html#241441190">(Jun 03 2021 at 19:34)</a>:</h4>
+<p>As far as this error is concerned, the latter parameter that's showing as a Quantity is due to first parameter being a List and causing some type inference to blow up. There might be a way to improve the messaging in the future in the translator.</p>
+<blockquote>
+<p>Error [53:13] Could not resolve call to operator Add with signature (list&lt;System.DateTime&gt;,System.Quantity).</p>
+</blockquote>
+
+
+
+<a name="241547789"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Single%20value%20from%20function%20changes%20to%20a%20list/near/241547789" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Single.20value.20from.20function.20changes.20to.20a.20list.html#241547789">(Jun 04 2021 at 14:57)</a>:</h4>
+<p>Thank you for the help here. I will be more careful with the from clause, I thought I still needed the multi-query from clause to define the retrieval, as i wanted my return clause to be very clear in the function. but clearly you can just run the filters, and access down the List via an INTERNAL return clause.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

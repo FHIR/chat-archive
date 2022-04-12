@@ -1,0 +1,68 @@
+[
+    {
+        "content": "<p>I am looking into extending the ImagingStudy class.  I would like to add several properties to each instance and am unclear what is the right way of doing this.  <br>\nIs it as straightforward as subclassing the ImagingStudy and adding my own properties? <br>\nHow would a client that doesn't understand my custom properties deal with these? Would they just ignore, or would it fail?<br>\nApologies for the noob questions.  If you can point me to tutorial, documentation etc., i would appreciate it.</p>",
+        "id": 153926512,
+        "sender_full_name": "Tom Bedard",
+        "timestamp": 1513802855
+    },
+    {
+        "content": "<p>Check this page from the spec, it describes it pretty well<br>\n<a href=\"http://hl7.org/fhir/extensibility.html\" target=\"_blank\" title=\"http://hl7.org/fhir/extensibility.html\">http://hl7.org/fhir/extensibility.html</a></p>",
+        "id": 153926518,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1513802961
+    },
+    {
+        "content": "<p>The gist is you can't define new resource properties, but you can use the \"extension\" property to convey whatever additional elements you wish</p>",
+        "id": 153926523,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1513803269
+    },
+    {
+        "content": "<p>Thanks for the responses.<br>\nSo, the correct structure is to add each property as an extension to the object with a Url and valueX.</p>",
+        "id": 153926530,
+        "sender_full_name": "Tom Bedard",
+        "timestamp": 1513805042
+    },
+    {
+        "content": "<p>yes.  Or if it's a complex property (with multiple sub-properties), as an extension with child extensions (which might have further child extensions) until you eventually get down to a valueX</p>",
+        "id": 153926541,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1513808552
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"195009\">@Tom Bedard</span> What are the properties you are missing? If they are generally applicable, we can look at adding them to the resource, or as standard extensions.</p>\n<p>A client should (generally) ignore extensions it doesn't understand. By convention, the extension URI should resolve to a web page that explains how to use the extension.</p>",
+        "id": 153926598,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1513818508
+    },
+    {
+        "content": "<p>Um - not sure that's quite correct. The url in the instance extension should be the 'canonical' (read unique) url for the extension definition (StructureDefinition resource) that describes the extension.  Ideally it should resolve to the SD resource - though it doesn't have to (to support registries like simplifier...)</p>",
+        "id": 153926608,
+        "sender_full_name": "David Hay",
+        "timestamp": 1513825411
+    },
+    {
+        "content": "<p>Whether you get HTML or the resource will depend on your accept header</p>",
+        "id": 153926609,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1513825639
+    },
+    {
+        "content": "<p>yeah - but it should still be the SD that's referred to...</p>",
+        "id": 153926610,
+        "sender_full_name": "David Hay",
+        "timestamp": 1513825800
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191380\">@Elliot Silver</span>  - I am looking at adding location information to the Study and Instances.  For Studies, where the studies are stored and their availability (Partially available, fully available etc.)  For Instances, the actual storage locations, such as \\\\server\\share\\directory\\subdirectory\\filename.filetype with enough detail that they can be retrieved.   My original thinking was to add an Endpoint object to provide this information.</p>\n<p>In the HAPI FHIR there is something called \"Profiling\" which seems to be closer to what I was originally thinking, subclassing an existing resource and adding properties.  Is this a valid way of doing what I am proposing?  Noone suggested this when it's nearly identical to what I was initially asking.<br>\n<a href=\"http://hapifhir.io/doc_extensions.html#Custom_Resource_Types\" target=\"_blank\" title=\"http://hapifhir.io/doc_extensions.html#Custom_Resource_Types\">http://hapifhir.io/doc_extensions.html#Custom_Resource_Types</a></p>",
+        "id": 153926818,
+        "sender_full_name": "Tom Bedard",
+        "timestamp": 1513951050
+    },
+    {
+        "content": "<p>The availability is already in ImagingStudy, although it applies to the whole study (no way to indicate only specific instances are unavailable).</p>\n<p>We determined that for our key use case -- an ImagingStudy backed by a PACS -- there was no need for per-instance paths because the per-instance paths could be easily constructed once we had a WADO-RS endpoint. Also, for a study with 100s or 1000s of instances, which is not unusual, per-instance paths were expected to consume a large amount of space repeating almost identical information. If you have another type of endpoint, you can structure it in a similar way that allows you to derive the actual path from the study/series/instance information: or you'll need a per-instance extension with the full path. (I'd still suggest providing an endpoint reference, since that would provide info like who to call if the endpoint is down.)</p>\n<p>There are two basic ways of doing what you want -- either creating a new resource from scratch, by defining extensions on Basic; or adding new elements to ImagingStudy by defining extensions on ImagingStudy. Once you have defined the extensions, you can use profiling to say a compliant instance of Tom's Basic, or of Tom's ImagingStudy must have these extensions, may not have those elements, etc. Starting from Basic would be a lot of work in my mind, and no-one would be able to use Tom's Basic at all, unless they knew all about your extensions. On the other hand, if you define extensions to ImagingStudy, they might not be able to retrieve the instances from your special archive without knowing your extensions,  but they'd still be able to understand all the regular parts of ImagingStudy. </p>\n<p>Also, I don't think you can reference Basic from somewhere that is defined as Reference(ImagingStudy), so defining your own resource from scratch would mean you need to define further extensions to be able to reference it from DiagnosticReport, Observation, etc.</p>\n<p>One final option is to use Media. If only you have isolated imaging, no PACS, and they aren't all in DICOM format (which I gather might be the case, since you want to be able to specify filetype), then is there a need to use the DICOM-oriented ImagingStudy? Before going any further, I want to emphasize that my feeling (and I'd guess most of the HL7 members involved in designing ImagingStudy) strongly feel that the best, most robust, most accessible way to store imaging is in a DICOM archive, and reference it from using ImagingStudy. However, if you only deal with images occasionally, then you could stuff them in Media resources. You won't have any of the metadata, you won't be able to search by study, or series UID, they won't be grouped by (DICOM) study (although they could be linked by references to the same Procedure resource), and there are several other downsides. However, it can reference an arbitrary url for the storage location. This would not be my preference, but is an option.</p>\n<p>(By the way \\\\server\\share\\directory\\... is not a valid URL format. You'd need to convert that to the appropriate form is you intend to put it in a uri-typed element.)</p>",
+        "id": 153926850,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1513967297
+    }
+]

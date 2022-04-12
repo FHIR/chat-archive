@@ -1,0 +1,97 @@
+---
+layout: page
+title: "FHIR Chat  · &quot;Measurement Period&quot; in quality measure evaluation · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/.22Measurement.20Period.22.20in.20quality.20measure.20evaluation.html">&quot;Measurement Period&quot; in quality measure evaluation</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="198795492"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/%22Measurement%20Period%22%20in%20quality%20measure%20evaluation/near/198795492" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Miriam <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/.22Measurement.20Period.22.20in.20quality.20measure.20evaluation.html#198795492">(May 26 2020 at 17:33)</a>:</h4>
+<p>Hello, question about quality measure evaluation:</p>
+<p>The latest Quality Measure IG specifies that the "Measurement Period" CQL param should be made available to CQL libraries as the value of the <code>Measure.effectivePeriod</code> element (<a href="http://build.fhir.org/ig/HL7/cqf-measures/measure-conformance.html#measurement-period">http://build.fhir.org/ig/HL7/cqf-measures/measure-conformance.html#measurement-period</a>).</p>
+<p>however, the $evaluate-measure operation also requires inputs "periodStart" and "periodEnd," which are redundant with effectivePeriod. In addition, the IG provides the flexibility of <code>effectivePeriodAnchor</code> extensions, which can't really be represented in the evaluate-measure inputs. How are these two period definitions (periodStart|End vs. effectivePeriod) meant to relate to each other?</p>
+
+
+
+<a name="198796488"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/%22Measurement%20Period%22%20in%20quality%20measure%20evaluation/near/198796488" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/.22Measurement.20Period.22.20in.20quality.20measure.20evaluation.html#198796488">(May 26 2020 at 17:42)</a>:</h4>
+<p>The Measurement Period parameter is constructed from the periodStart/periodEnd inputs, because you can't serialize a Period value on the GET request. If we defined a "Measurement Period" parameter of type Period, it would force $evaluate-measure to be invoked with a POST, so we split them out that way to ensure it could be called with a GET.</p>
+
+
+
+<a name="198813056"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/%22Measurement%20Period%22%20in%20quality%20measure%20evaluation/near/198813056" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Miriam <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/.22Measurement.20Period.22.20in.20quality.20measure.20evaluation.html#198813056">(May 26 2020 at 19:53)</a>:</h4>
+<p>That makes sense. I'm wondering more about the guidance around "effectivePeriod." Let's say for example I have a Measure like this:</p>
+<div class="codehilite"><pre><span></span><code>{
+  &quot;id&quot;: &quot;my-measure&quot;,
+  &quot;effectivePeriod&quot; : {
+    &quot;extension&quot; : [
+      {
+        &quot;url&quot; : &quot;http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-effectivePeriodAnchor&quot;,
+        &quot;valueDateTime&quot; : &quot;2018-01-01T00:00:00+00:00&quot;
+      },
+      {
+        &quot;url&quot; : &quot;http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-effectivePeriodDuration&quot;,
+        &quot;valueDuration&quot; : {
+          &quot;value&quot; : 1,
+          &quot;system&quot; : &quot;http://unitsofmeasure.org&quot;,
+          &quot;code&quot; : &quot;a&quot;
+        }
+      }
+    ]
+  },
+ ....
+}
+</code></pre></div>
+
+
+<p>If I want to evaluate it using <code>$evaluate-measure</code>, I think the only valid way to do so is: <code>Measure/my-measure/$evaluate-measure?periodStart=2018-01-01&amp;periodEnd=2018-12-31</code>. It forces the caller to perform the duration "offset" calculation, and requires the start date to be represented in two places.</p>
+<p>Maybe that's fine, but it's probably worth adding a constraint to the IG along the lines of "if the quality Measure is being evaluated using $evaluate-measure, the effectivePeriod SHALL match the periodStart and periodEnd input parameters for the operation."</p>
+
+
+
+<a name="198831400"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/%22Measurement%20Period%22%20in%20quality%20measure%20evaluation/near/198831400" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Miriam <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/.22Measurement.20Period.22.20in.20quality.20measure.20evaluation.html#198831400">(May 26 2020 at 22:53)</a>:</h4>
+<p><span class="user-mention" data-user-id="191359">@Bryn Rhodes</span> actually in general, the IG's conformance requirement stating that "effectivePeriod" should be used for "Measurement Period" seems off, given it doesn't match up with the <code>Measure.effectivePeriod</code> description :</p>
+<blockquote>
+<p>The period during which the measure content was or is planned to be in active use.<br>
+... Allows establishing a transition before a resource comes into effect and also allows for a sunsetting process when new versions of the measure are or are expected to be used instead.<br>
+... The effective period for a measure determines when the content is applicable for usage and is independent of publication and review dates. For example, a measure intended to be used for the year 2016 might be published in 2015.</p>
+</blockquote>
+<p>This is very different from a measurement period. I would suggest just using <code>periodStart</code> and <code>periodEnd</code> to determine the "Measurement Period" CQL parameter. What do you think?</p>
+
+
+
+<a name="199167390"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/%22Measurement%20Period%22%20in%20quality%20measure%20evaluation/near/199167390" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/.22Measurement.20Period.22.20in.20quality.20measure.20evaluation.html#199167390">(May 29 2020 at 15:10)</a>:</h4>
+<p><span class="user-mention" data-user-id="225239">@Miriam</span> , that is a good point, and I agree, that should be clarified. Are you able to submit a tracker on that to the Quality Measure IG specification in Jira?</p>
+
+
+
+<a name="199184395"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/%22Measurement%20Period%22%20in%20quality%20measure%20evaluation/near/199184395" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/.22Measurement.20Period.22.20in.20quality.20measure.20evaluation.html#199184395">(May 29 2020 at 17:19)</a>:</h4>
+<p>Actually, I've gone ahead and created a ticket to clarify this issue: <a href="https://jira.hl7.org/browse/FHIR-27751">https://jira.hl7.org/browse/FHIR-27751</a></p>
+
+
+
+<a name="199185934"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/%22Measurement%20Period%22%20in%20quality%20measure%20evaluation/near/199185934" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Miriam <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/.22Measurement.20Period.22.20in.20quality.20measure.20evaluation.html#199185934">(May 29 2020 at 17:32)</a>:</h4>
+<p>great, thanks <span aria-label="thumbs up" class="emoji emoji-1f44d" role="img" title="thumbs up">:thumbs_up:</span> <br>
+When you say Measurement Period is "anchored by" effective period, is the implication that the measurement period must fall within (or overlap) the effective period?  It's not clear to me what is meant by a measure being "in active use" -- does it relate to "evaluation" period (when you evaluate the measure) or "measurement period" (historical period that you evaluate the measure against). This could be clarified as well.</p>
+
+
+
+<a name="199186815"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/%22Measurement%20Period%22%20in%20quality%20measure%20evaluation/near/199186815" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/.22Measurement.20Period.22.20in.20quality.20measure.20evaluation.html#199186815">(May 29 2020 at 17:39)</a>:</h4>
+<p>Yes, the implication is that the effectivePeriod is used to say when the measure is active, and that the measurement period (historical period that you evaluate the measure against) must be either the effectivePeriod, or specified using the anchor and duration to produce a measurement period aligned with that. So a measure that was published with an effectivePeriodAnchor of 2018-01-01 and an effectivePeriodDuration of 1 year, could have valid Measurement Periods of [2018-01-01, 2018-12-31], [2019-01-01, 2019-12-31], ...</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,92 @@
+[
+    {
+        "content": "<p>Hi, <br>\nGot a question about Reference pointers, and how to flatten them when assembling objects.  Let's say I have a Practitioner resource like the following, and I want to resolve the <code>managingOrganization</code> reference.  </p>\n<div class=\"codehilite\"><pre>{\n  &quot;resourceType&quot; : &quot;Practitioner&quot;,\n  &quot;name&quot; : {\n    &quot;given&quot; : &quot;Beverly&quot;,\n    &quot;family&quot; : &quot;Crusher&quot;\n  },\n  &quot;practitionerRole&quot; : [{\n    &quot;managingOrganization&quot;: {\n      &quot;display&quot; : &quot;Starfleet&quot;,\n      &quot;reference&quot;: &quot;https://myapp.com/fhir/Organizations/001&quot;\n    }\n  }]\n}\n</pre></div>\n\n\n<p>Is the proper way to resolve the reference and flatten the object to attach the Organization at the reference field?</p>\n<div class=\"codehilite\"><pre>{\n  &quot;resourceType&quot; : &quot;Practitioner&quot;,\n  &quot;name&quot; : {\n    &quot;given&quot; : &quot;Beverly&quot;,\n    &quot;family&quot; : &quot;Crusher&quot;\n  },\n  &quot;practitionerRole&quot; : [{\n    &quot;managingOrganization&quot;: {\n      &quot;display&quot; : &quot;Starfleet&quot;,\n      &quot;reference&quot; : {\n        &quot;resourceType&quot; : &quot;Organization&quot;,\n        &quot;active&quot; : true,\n        &quot;name&quot; : &quot;Starfleet&quot;,\n        &quot;partOf&quot; : {\n          &quot;display&quot; : &quot;Federation of Planets&quot;\n        }\n      }\n    }\n  }]\n}\n</pre></div>\n\n\n<p>Or should we replace the entire Reference resource?</p>\n<div class=\"codehilite\"><pre>{\n  &quot;resourceType&quot; : &quot;Practitioner&quot;,\n  &quot;name&quot; : {\n    &quot;given&quot; : &quot;Beverly&quot;,\n    &quot;family&quot; : &quot;Crusher&quot;\n  },\n  &quot;practitionerRole&quot; : [{\n    &quot;managingOrganization&quot;: {\n      &quot;resourceType&quot; : &quot;Organization&quot;,\n      &quot;active&quot; : true,\n      &quot;name&quot; : &quot;Starfleet&quot;,\n      &quot;partOf&quot; : {\n        &quot;display&quot; : &quot;Federation of Planets&quot;\n      }\n    }\n  }]\n}\n</pre></div>\n\n\n<p>My assumption is that it's the former (which is how I've been implementing for the past few months).  But the latter is more concise and coherent, and I'm not ruling out the possibility I've been doing things wrong for awhile now.  Just want to confirm that I'm interpreting the standard correctly.  Are there any discussions or best practices on the best way to handle this kind of object assembly?  I suspect this dovetails into the discussions about JSON-LD and other linked data best practices.</p>",
+        "id": 153863006,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1481489453
+    },
+    {
+        "content": "<p>Wouldn't you just use a contained resource here, or is this some next-gen stuff I'm not on top of?</p>",
+        "id": 153863035,
+        "sender_full_name": "Vadim Peretokin",
+        "timestamp": 1481490379
+    },
+    {
+        "content": "<p>looks like a private implementation consideration to me. e.g. the Java reference implementation has an adornment on referece so that you can connect the resource being referred to the reference once you've resolved it, to save you resolving it again</p>",
+        "id": 153863037,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1481490662
+    },
+    {
+        "content": "<p>Fair enough... can't see the cons for using contained if you're inloning it though, wouldn't that solve some troubles for you</p>",
+        "id": 153863038,
+        "sender_full_name": "Vadim Peretokin",
+        "timestamp": 1481490868
+    },
+    {
+        "content": "<p>using contained screws over anyone you send to. So you should never do it for external consumption</p>",
+        "id": 153863039,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1481490927
+    },
+    {
+        "content": "<p>Mostly this is just about internal implementation.  I should note that we use Mongo and Redis, which are both schemaless datastores, so it's trivial for us to persist a flattened object to memory.  No need to deconstruct or normalize.  Which means that, given our own devices, we would implement interop between our apps where it's permissible to send an entirely flattened and resolved object from one app to the next.  </p>\n<p>It's sounding like the standard expects the resources to never be resolved or flattened?  ie. Endpoints should never be implemented with JOIN or $lookup operators?  </p>",
+        "id": 153863040,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1481492363
+    },
+    {
+        "content": "<p>so I have no idea what that last sentence means. But the standard is solely concerned with your interface; it says - and will say - nothing about what happens internally. </p>",
+        "id": 153863041,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1481492587
+    },
+    {
+        "content": "<p>the nearest we've come to that is some interest in fixing a HADOOP format, so that people can use a HADOOP database as their interface. But this hasn't gone anywhere</p>",
+        "id": 153863042,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1481492628
+    },
+    {
+        "content": "<p>:)<br>\nJOIN and $lookup operators are database functions.  From what I'm gathering, it's basically expected that the Practitioner endpoint only returns data from the Practitioner table; and wouldn't go off to an Organization table and $lookup the relevant organization, or JOIN that organization record to the queried practitioner record.  </p>",
+        "id": 153863043,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1481492810
+    },
+    {
+        "content": "<p>are you talking about _include? </p>",
+        "id": 153863044,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1481492848
+    },
+    {
+        "content": "<p>Ah.  Maybe?</p>",
+        "id": 153863045,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1481492856
+    },
+    {
+        "content": "<p>so you can get asked to include the related records - you appen them to the bundle</p>",
+        "id": 153863046,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1481492955
+    },
+    {
+        "content": "<p>Aaaaah.  2.1.1.5.3  Yeah, this is getting close to what I'm interested in figuring out.  </p>",
+        "id": 153863047,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1481493042
+    },
+    {
+        "content": "<p>Okay, so over the wire, we use a Bundle resource.  And we get something like this.  </p>\n<div class=\"codehilite\"><pre>{\n  &quot;resourceType&quot; : &quot;Bundle&quot;,\n  &quot;type&quot; : &quot;searchset&quot;,\n  &quot;entry&quot; : [{\n    &quot;display&quot; : &quot;Beverly Crusher&quot;,\n    &quot;reference&quot; : &quot;https://myapp.com/fhir/Practitioner/12345&quot;\n  }, {\n    &quot;display&quot; : &quot;Starfleet&quot;,\n    &quot;reference&quot; : &quot;https://myapp.com/fhir/Organizations/001&quot;\n  }]\n}\n</pre></div>\n\n\n<p>But then we're back to the original question.  Is it permissible to resolve the above reference,  and send the following over the wire?</p>\n<div class=\"codehilite\"><pre>{\n  &quot;resourceType&quot; : &quot;Bundle&quot;,\n  &quot;type&quot; : &quot;searchset&quot;,\n  &quot;entry&quot; : [{\n    &quot;resourceType&quot; : &quot;Practitioner&quot;,\n    &quot;name&quot; : {\n      &quot;given&quot; : &quot;Beverly&quot;,\n      &quot;family&quot; : &quot;Crusher&quot;\n    },\n    &quot;identifier&quot; : [{\n      &quot;use&quot; : &quot;system&quot;,\n      &quot;value&quot; : &quot;12345&quot;\n    }], \n    &quot;practitionerRole&quot; : [{\n      &quot;managingOrganization&quot;: {\n        &quot;display&quot; : &quot;Starfleet&quot;,\n        &quot;reference&quot;: &quot;https://myapp.com/fhir/Organizations/001&quot;\n      }\n    }]\n  }, {\n    &quot;resourceType&quot; : &quot;Organization&quot;,\n    &quot;identifier&quot; : [{\n      &quot;use&quot; : &quot;system&quot;,\n      &quot;value&quot; : &quot;001&quot;\n    }],\n    &quot;active&quot; : true,\n    &quot;name&quot; : &quot;Starfleet&quot;,\n    &quot;partOf&quot; : {\n      &quot;display&quot; : &quot;Federation of Planets&quot;\n    }\n  }]\n}\n</pre></div>\n\n\n<p>Obviously, I need to dig deeper into the test specs, and do more interop testing with external systems.  Which is what I'm trying to do.  Trying to figure out exactly where to begin with these more complex resources.</p>",
+        "id": 153863053,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1481494281
+    },
+    {
+        "content": "<p>You can try an example on <a href=\"http://spark.furore.com/fhir/Patient?organization=Organization/1&amp;_include=Patient:organization&amp;_count=1&amp;_format=json\" target=\"_blank\" title=\"http://spark.furore.com/fhir/Patient?organization=Organization/1&amp;_include=Patient:organization&amp;_count=1&amp;_format=json\">Spark</a>. It gives you 1 Patient with it's managing organization included.</p>",
+        "id": 153863220,
+        "sender_full_name": "Christiaan Knaap",
+        "timestamp": 1481640306
+    }
+]

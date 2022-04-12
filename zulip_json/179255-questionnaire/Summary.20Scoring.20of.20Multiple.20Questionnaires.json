@@ -1,0 +1,236 @@
+[
+    {
+        "content": "<p>Trying to decide the best way to summarize multiple questionnaires. For instance, if I have a set of 4 10-question questionnaires. They each have subscores and total scores for the questionnaire. My plan was to turn each of these into an observation. However, there are two other scores I need to calculate. I need the total scores of all of the questionnaires as a single sum. Then I have a complexity score. This is calculated from different questions in each of the questionnaires. For instance, I may need question 1-2 from questionnaire #1, question 3-4 from questionnaire #2, no questions from questionnaire #3 and then questions 5-10 for questionnaire #4. Is there a recommended way to specify these scores? Should I create another questionnaire with calculatedValues? Or is there a better resource (DiagnosticReport or Observation for instance) that I should be using?</p>",
+        "id": 252304925,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1631021384
+    },
+    {
+        "content": "<p>I would say Observation with a derivedFrom pointing to the relevant Questionnaires would be fine.  Do you need to surface the specific values used in the calculations?</p>",
+        "id": 252305536,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1631021645
+    },
+    {
+        "content": "<p>Not for the total sum. We're going to create a report that will contain the complexity score and the total scores from all of the questionnaires. Then lower down in the report, we're going to have the Totals from each of the questionnaires, then the subscores from each of the questionnaires, and finally the answers to the individual items.</p>",
+        "id": 252309411,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1631023198
+    },
+    {
+        "content": "<p>If I used Observation with derivedFrom then the logic would have to be specified outside of FHIR? <br>\nI've been trying to create this as flexible as possible. So currently, we're going through the workflow that you and I have discussed previously (overall Task, sub-tasks for each Questionnaire, etc). So that using the Task, we know which questionnaires to display, and then from that I can dynamically create a score and Observations from the Questionnaire, with all of that logic specified in the FHIR resources.</p>",
+        "id": 252310217,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1631023483
+    },
+    {
+        "content": "<p>Is there a similar way to specify the complexity score logic (different questions from different questionnaireResponses), to be embedded in the FHIR resources, so that anyone that can render and work with FHIR could use them?</p>",
+        "id": 252310745,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1631023694
+    },
+    {
+        "content": "<p>The logic could be specified in a PlanDefinition or Library.  <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> may have some specific guidance.  The main reason that Questionnaires embed logic is so that the scores can be calculated and displayed as the user fills them in or because scores may influence what gets displayed or when the Questionnaire is deemed 'complete'.</p>",
+        "id": 252319930,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1631027054
+    },
+    {
+        "content": "<p>You could use a Measure to produce the score, that would be a continuous variable measure with logic that references the QuestionnaireResponse resources for each Questionnaire to get the component scores.</p>",
+        "id": 252349404,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1631039047
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> So I've been thinking about this, and I think I like the measure idea. As I said, I currently have a set of questionnaires. Each questionnaire has some subscores and a total score. There is also a separate score that's calculated from  certain questions in each questionnaire. I had included FHIRPath expressions for the subscores, but I'm not actually using them for display purposes. So then I thought about taking out all of the FHIRPath expressions, and moving them all, along with the combined score calculation, to a single measure resource, would that make sense?</p>",
+        "id": 252914365,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1631371861
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"235060\">@Grey Faulkenberry</span> , yes, that would make a lot of sense, especially if the questionnaire-specific calculations are just part of calculating the overall score.</p>",
+        "id": 253109923,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1631547198
+    },
+    {
+        "content": "<p>Awesome. Any chance you have any examples of such a thing? No worries if not, I just always find examples helpful when I'm trying to build something out.</p>",
+        "id": 253122450,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1631551753
+    },
+    {
+        "content": "<p>Sorry, I have to ask for some more guidance. I was thinking about something vaguely like this:</p>",
+        "id": 253149339,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1631562742
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;resourceType&quot;: &quot;Measure&quot;,\n  &quot;scoring&quot;: {\n    &quot;coding&quot;: [\n      {\n        &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/measure-scoring&quot;,\n        &quot;code&quot;: &quot;continuous-variable&quot;,\n        &quot;display&quot;: &quot;Continuous Variable&quot;\n      }\n    ]\n  },\n  &quot;compositeScoring&quot;: {\n    &quot;coding&quot;: [\n      {\n        &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/composite-measure-scoring&quot;,\n        &quot;code&quot;: &quot;opportunity&quot;,\n        &quot;display&quot;: &quot;Opportunity&quot;\n      }\n    ]\n  },\n  &quot;group&quot;: [\n    {\n      &quot;id&quot;: &quot;Scores for Questionnaire1&quot;,\n      &quot;population&quot;: [\n        {\n          &quot;criteria&quot;: {\n            &quot;language&quot;: &quot;text/fhirpath&quot;,\n            &quot;expression&quot;: &quot;%response1.item.answer.valueCoding.extension.value.aggregate($this + $total, 0)&quot;\n          }\n        }\n      ]\n    },\n    {\n      &quot;id&quot;: &quot;Scores for QuestionnaireA&quot;,\n      &quot;population&quot;: [\n        {\n          &quot;criteria&quot;: {\n            &quot;language&quot;: &quot;text/fhirpath&quot;,\n            &quot;expression&quot;: &quot;%responseA.item.answer.valueCoding.extension.value.aggregate($this + $total, 0)&quot;\n          }\n        }\n      ]\n    },\n    {\n      &quot;id&quot;: &quot;Summary Score&quot;,\n      &quot;population&quot;: [\n        {\n          &quot;criteria&quot;: {\n            &quot;language&quot;: &quot;text/fhirpath&quot;,\n            &quot;expression&quot;: &quot;%response1.item.where(linkId = &#39;/questionnaire1/1&#39; or linkId = &#39;/questionnaire1/4&#39;).answer.valueCoding.extension.value.aggregate($this + $total, 0)%responseA.item.where(linkId = &#39;/questionnaireA/3&#39; or linkId = &#39;/questionnaireA/8&#39;).answer.valueCoding.extension.value.aggregate($this + $total, 0)&quot;\n          }\n        }\n      ]\n    }\n  ]\n}\n</code></pre></div>",
+        "id": 253149352,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1631562747
+    },
+    {
+        "content": "<p>Although I'm not sure, do I include both the scoring and compositeScoring concepts, since I think I'm using both?</p>",
+        "id": 253149701,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1631562885
+    },
+    {
+        "content": "<p>And then my goal was to get the total of all the answers for Questionnaire1 as the first score, the total for all answers in QuestionnaireA, and then the sum of questions 1 &amp; 4 in Questionnaire1 and 3 &amp; 8 in QuestionnaireA.</p>",
+        "id": 253149981,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1631562981
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span></p>",
+        "id": 253162365,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1631568014
+    },
+    {
+        "content": "<p>Just threw together a quick example using the PHQ9 depression questionnaire from the spec:</p>",
+        "id": 253172759,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1631573626
+    },
+    {
+        "content": "<p>This library shows how to calculate the score from questionnaire responses:</p>",
+        "id": 253172846,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1631573656
+    },
+    {
+        "content": "<p><a href=\"https://github.com/cqframework/sample-content-ig/blob/master/input/cql/PHQ9Logic.cql\">https://github.com/cqframework/sample-content-ig/blob/master/input/cql/PHQ9Logic.cql</a></p>",
+        "id": 253172847,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1631573657
+    },
+    {
+        "content": "<p>This library shows how to pull those together (from potentially multiple questionnaires, just add more libraries for the different questionnaires:</p>",
+        "id": 253172881,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1631573683
+    },
+    {
+        "content": "<p><a href=\"https://github.com/cqframework/sample-content-ig/blob/master/input/cql/QuestionnaireMeasure.cql\">https://github.com/cqframework/sample-content-ig/blob/master/input/cql/QuestionnaireMeasure.cql</a></p>",
+        "id": 253172892,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1631573690
+    },
+    {
+        "content": "<p>And this Measure resource shows how to express that as a continuous variable measure:</p>",
+        "id": 253172909,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1631573703
+    },
+    {
+        "content": "<p><a href=\"https://github.com/cqframework/sample-content-ig/blob/master/input/resources/Measure-QuestionnaireMeasure.json\">https://github.com/cqframework/sample-content-ig/blob/master/input/resources/Measure-QuestionnaireMeasure.json</a></p>",
+        "id": 253172926,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1631573713
+    },
+    {
+        "content": "<p>There's a test case for the PHQ9Logic library but it doesn't currently run, I suspect because it's hitting QuestionnaireResponse (which we don't typically do in Quality Measures) but I need to debug on that further.</p>",
+        "id": 253172978,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1631573747
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span>  and <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  Alright, final question (I hope), for now. Some of the logic of how I create the MeasureReport is not fully defined in FHIR, but the output should be. Would you mind taking a glance at an abbreviated MeasureReport I'm generating to see if there are any issues that you notice?</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;resourceType&quot;: &quot;MeasureReport&quot;,\n  &quot;group&quot;: [\n    {\n      &quot;code&quot;: { &quot;text&quot;: &quot;Scoring for Developmental Milestones: 23-28 months&quot; },\n      &quot;stratifier&quot;: [\n        {\n          &quot;stratum&quot;: [\n            {\n              &quot;value&quot;: {\n                &quot;text&quot;: &quot;Total Score for Developmental Milestones: 23-28 months&quot;\n              },\n              &quot;component&quot;: [\n                {\n                  &quot;code&quot;: {\n                    &quot;coding&quot;: [{ &quot;code&quot;: &quot;Review&quot;, &quot;display&quot;: &quot;Review&quot; }]\n                  },\n                  &quot;value&quot;: {\n                    &quot;coding&quot;: [\n                      {\n                        &quot;system&quot;: &quot;mayjuun.com/fhir/ValueSet/low_medium_high_risk&quot;,\n                        &quot;code&quot;: &quot;high-risk&quot;,\n                        &quot;display&quot;: &quot;high risk&quot;\n                      }\n                    ]\n                  }\n                }\n              ],\n              &quot;measureScore&quot;: { &quot;value&quot;: &quot;10&quot; }\n            }\n          ]\n        }\n      ]\n    },\n    {\n      &quot;code&quot;: { &quot;text&quot;: &quot;Scoring for PSC-17: Preschool&quot; },\n      &quot;stratifier&quot;: [\n        {\n          &quot;stratum&quot;: [\n            {\n              &quot;value&quot;: { &quot;text&quot;: &quot;PSC-17: Preschool, Irritability Subscore&quot; },\n              &quot;measureScore&quot;: { &quot;value&quot;: &quot;9&quot; }\n            }\n          ]\n        },\n        {\n          &quot;stratum&quot;: [\n            {\n              &quot;value&quot;: { &quot;text&quot;: &quot;PSC-17: Preschool, Inflexibility Subscore&quot; },\n              &quot;measureScore&quot;: { &quot;value&quot;: &quot;3&quot; }\n            }\n          ]\n        },\n        {\n          &quot;stratum&quot;: [\n            {\n              &quot;value&quot;: { &quot;text&quot;: &quot;PSC-17: Preschool, Routines Subscore&quot; },\n              &quot;measureScore&quot;: { &quot;value&quot;: &quot;6&quot; }\n            }\n          ]\n        },\n        {\n          &quot;stratum&quot;: [\n            {\n              &quot;value&quot;: { &quot;text&quot;: &quot;PSC-17: Preschool, Total Score&quot; },\n              &quot;component&quot;: [\n                {\n                  &quot;code&quot;: {\n                    &quot;coding&quot;: [{ &quot;code&quot;: &quot;At Risk&quot;, &quot;display&quot;: &quot;At Risk&quot; }]\n                  },\n                  &quot;value&quot;: {\n                    &quot;coding&quot;: [\n                      {\n                        &quot;system&quot;: &quot;mayjuun.com/fhir/ValueSet/low_medium_high_risk&quot;,\n                        &quot;code&quot;: &quot;high-risk&quot;,\n                        &quot;display&quot;: &quot;high risk&quot;\n                      }\n                    ]\n                  }\n                }\n              ],\n              &quot;measureScore&quot;: { &quot;value&quot;: &quot;18&quot; }\n            }\n          ]\n        }\n      ]\n    },\n</code></pre></div>",
+        "id": 253470438,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1631732869
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"235060\">@Grey Faulkenberry</span> , apologies for the delay, that looks good, yes</p>",
+        "id": 254776626,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1632519513
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> no worries for the delay, thanks for the input!</p>",
+        "id": 254777758,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1632520107
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> I had another question about MeasureReports. I've successfully implemented multiple questionnaires that are scored together using one Measure and produces a MeasureReport of multiple scores (total and sub-scores) from the different questionnaires. Is there a way to reference the specific questionnaire (or QuestionnaireReport) that the MeasureReport is scoring? Is that only available through the evaluatedResource?</p>",
+        "id": 261046543,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1636574545
+    },
+    {
+        "content": "<p>Hi Grey, what context are you wanting to do this in? Are you processing the MeasureReport post evaluation?</p>",
+        "id": 261050247,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1636576178
+    },
+    {
+        "content": "<p>Yeah. So the workflow is that an outside clinician/social worker/someone, enters a request (which comes into our system as a ServiceRequest). That ServiceRequest triggers the creation of a Task. The inputs to the task are Questionnaires and  a Measure from a PlanDefinition (based on age). We take those questionnaires from the task, download and render them for the end user. When the end user has completed all of the Questionnaires (there's a bunch of them - too many in my opinion but what do I know? - although we are allowing them to save their progress and return to it later), but when they've all been completed, we use the Measure to score all of the Questionnaires and create the MeasureReport. The MeasureReport (currently) is going to then be used to create a PDF (again, not necessarily the way I would have gone), but this way we can present the final report to Clinicians who use an EHR that we don't have access to. And they asked if there was a way I could create a reference to the questionnaire or questionnaireReport within that MeasureReport to indicate where the data was coming from.</p>",
+        "id": 261064414,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1636583245
+    },
+    {
+        "content": "<p>Yes, the evaluatedResources for an individual MeasureReport will have references to the data used to compute the measure, so that would include the QuestionnaireResponse resources, and those will in turn have a reference to the Questionnaire.</p>",
+        "id": 261073022,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1636587996
+    },
+    {
+        "content": "<p>Hmmmm, ok. So there's no way to associate a specific score with a specific QuestionnaireResponse?</p>",
+        "id": 261164520,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1636652674
+    },
+    {
+        "content": "<p>For instance, if I have 4 scores, each from a separate questionnaire, I'll have the list of scores, and then a list of Questionnaires. But is there a way to show that the first score came from the first questionnaire, the second came from the second, but then scores 3 &amp; 4 both came from the third Questionnaire?</p>",
+        "id": 261164729,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1636652789
+    },
+    {
+        "content": "<p>In the CQL, you could pretty easily return the Questionnaire with the score. Do the scores have a LOINC code associated? (Or even a code from your IG if they don't have LOINC codes), you could construct Observation resources to hold the calculated score and the associated LOINC code. You could also use the <code>derivedFrom</code> element of the Observation to reference the QuestionnaireResponse.</p>",
+        "id": 261166144,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1636653590
+    },
+    {
+        "content": "<p>They don't have LOINC codes, these questionnaires were created for this project (although they are some of them part of the SWYC assessments).</p>",
+        "id": 261166405,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1636653709
+    },
+    {
+        "content": "<p>So far I've been avoiding creating new Observations and have just left the MeasureReport as the resource that we're storing the scores in</p>",
+        "id": 261166499,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1636653746
+    },
+    {
+        "content": "<p>(also I've been using FHIRPath to perform the calculations)</p>",
+        "id": 261166636,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1636653843
+    },
+    {
+        "content": "<p>Currently my MeasureReport still looks pretty similar to the one I posted earlier in this conversation if that's at all useful for illustration purposes</p>",
+        "id": 261166816,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1636653943
+    },
+    {
+        "content": "<p>In that case you could create codes in the IG where you are creating the Questionnaires, and use that. If you don't want to put it in an observation, you could put it in the \"group.code\" element for the score.</p>",
+        "id": 261166898,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1636653991
+    },
+    {
+        "content": "<p>Aha, I like that, thanks!</p>",
+        "id": 261166995,
+        "sender_full_name": "Grey Faulkenberry",
+        "timestamp": 1636654067
+    }
+]

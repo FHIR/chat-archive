@@ -1,0 +1,206 @@
+[
+    {
+        "content": "<p>Is it possible to have a ruleset populate nested items?</p>",
+        "id": 224904771,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1612286488
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span><code>RuleSet: Question(linkId, text, type, repeats)\n* item[+].linkId = &quot;{linkId}&quot;\n* item[=].text = &quot;{text}&quot;\n* item[=].type = #{type}\n* item[=].repeats = {repeats}\n</code></pre></div>\n<p>This works OK for top level, but I need it to create </p>\n<div class=\"codehilite\"><pre><span></span><code>* item[=].item[=].item[=].item[+].linkId = &quot;{linkId}&quot;\n* item[=].item[=].item[=].item[=].text = &quot;{text}&quot;\n* item[=].item[=].item[=].item[=].type = #{type}\n* item[=].item[=].item[=].item[=].repeats = {repeats}\n</code></pre></div>\n<p>And I don't want to have  to create a ruleset for each level</p>",
+        "id": 224905094,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1612286601
+    },
+    {
+        "content": "<p>in other words, when is the <code>with</code> coming? :)</p>",
+        "id": 224905130,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1612286616
+    },
+    {
+        "content": "<p>Yup, I noted this a couple of days ago (<a href=\"#narrow/stream/215610-shorthand/topic/Soft.20Indexing.20downside/near/224426782\">https://chat.fhir.org/#narrow/stream/215610-shorthand/topic/Soft.20Indexing.20downside/near/224426782</a>).</p>",
+        "id": 224905169,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1612286632
+    },
+    {
+        "content": "<p>I was trying to think of a way to pass in the parent item, and then tack on the current context, but I haven't built a working example yet.</p>",
+        "id": 224905754,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1612286840
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span><code>RuleSet: Question(context, linkId, text, type, repeats)\n* {context}.item[+].linkId = &quot;{linkId}&quot;\n* {context}.item[=].text = &quot;{text}&quot;\n* {context}.item[=].type = #{type}\n* {context}.item[=].repeats = {repeats}\n</code></pre></div>\n<p>Then you could do:</p>\n<div class=\"codehilite\"><pre><span></span><code>* insert(this, ...)\n* insert(item[=], ...)\n</code></pre></div>\n<p>Not sure, just theorizing...</p>",
+        "id": 224906509,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1612287130
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191832\">@Jose Costa Teixeira</span> -- we're experimenting w/ contextual rule grammars right now.  And I agree, this is a good advanced use case for it.  But another possible approach I've considered for this type of use case (inserting a ruleset in the context of a path):</p>\n<div class=\"codehilite\"><pre><span></span><code>* item[=].item[=].item[=] insert Question(foo, Foo?, boolean, false)\n</code></pre></div>\n<p>That would match some of our other grammars that are <code>{path} {command} {value}</code>.</p>\n<p>For the time being, it is ugly, but I think this would work w/ the current grammar:</p>\n<div class=\"codehilite\"><pre><span></span><code>RuleSet: Question(prefixPath, linkId, text, type, repeats)\n* {prefixPath}item[+].linkId = &quot;{linkId}&quot;\n* {prefixPath}item[=].text = &quot;{text}&quot;\n* {prefixPath}item[=].type = #{type}\n* {prefixPath}item[=].repeats = {repeats}\n</code></pre></div>\n<p>then</p>\n<div class=\"codehilite\"><pre><span></span><code>* insert Question(item[=].item[=].item[=]., foo, Foo?, boolean, false)\n</code></pre></div>",
+        "id": 224906731,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1612287218
+    },
+    {
+        "content": "<p>Right - this is ugly :) I'm trying it now</p>",
+        "id": 224906855,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1612287268
+    },
+    {
+        "content": "<p>Ha.  I see that <span class=\"user-mention\" data-user-id=\"191380\">@Elliot Silver</span> beat me to the punch on that last one.  But SUSHI doesn't understand <code>this</code>, so I think you'd need to do something more like my example that would work w/ and empty <code>prefixPath</code> to have no nested path (but requires trailing <code>.</code> when there is a nested path).</p>",
+        "id": 224907053,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1612287350
+    },
+    {
+        "content": "<p>correct</p>",
+        "id": 224907446,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1612287511
+    },
+    {
+        "content": "<p>still</p>",
+        "id": 224907461,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1612287516
+    },
+    {
+        "content": "<p>Or maybe do:</p>\n<div class=\"codehilite\"><pre><span></span><code>RuleSet: Question(context, linkId, text, type, repeats)\n* {context}[+].linkId = &quot;{linkId}&quot;\n* {context}[=].text = &quot;{text}&quot;\n* {context}[=].type = #{type}\n* {context}[=].repeats = {repeats}\n</code></pre></div>\n<p>On first look the ruleset in context looks ugly, but it's somewhat growing on me.</p>",
+        "id": 224907505,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1612287536
+    },
+    {
+        "content": "<ul>\n<li>insert Question(* item[=].,pastOrPresent,Active\\, Inactive or Resolved allergy?,choice,false)</li>\n</ul>\n<div class=\"codehilite\"><pre><span></span><code>Sushi: Line: 22                                                                  (00:01.0634)\nSushi: error Errors parsing insert rule with parameterized RuleSet Question      (00:01.0642)\nSushi: - no viable alternative at input &#39;* *&#39;                                    (00:01.0690)\n</code></pre></div>",
+        "id": 224907508,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1612287537
+    },
+    {
+        "content": "<p>sorry</p>",
+        "id": 224907548,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1612287553
+    },
+    {
+        "content": "<p>Don't include the *</p>",
+        "id": 224907552,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1612287557
+    },
+    {
+        "content": "<p>indeed.</p>",
+        "id": 224910197,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1612288723
+    },
+    {
+        "content": "<p>confirming - this works</p>",
+        "id": 224910272,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1612288760
+    },
+    {
+        "content": "<p>Next on \"Obfuscating FSH\", we'll present the award winners, Elliot and Jose for their \"Impenetrable Item Path\"</p>",
+        "id": 224935152,
+        "sender_full_name": "David Pyke",
+        "timestamp": 1612299350
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192587\">@David Pyke</span> you probably don't want me to ask the other thing I've been wondering about with rulesets: can they nest? Can one ruleset invoke another? All of this questionnaire stuff is great, except that the item type dictates the information that needs to be collected. So, can I do:</p>\n<div class=\"codehilite\"><pre><span></span><code>RuleSet: Question(context, linkId, text, type, repeats)\n* {context}[+].linkId = &quot;{linkId}&quot;\n* {context}[=].text = &quot;{text}&quot;\n* {context}[=].type = #{type}\n* {context}[=].repeats = {repeats}\n\nRuleSet: QuestionValueSet(context, linkId, text, repeats, vs)\n* insert Question({context}, {linkId}, {text}, choice, {repeats})\n* {context}[=].choiceValueSet = {vs}\n\n...\n* insert Question(item, foo, bar, group, false)\n* insert QuestionValueSet(item, baz, boom, false, myValueSet.)\n</code></pre></div>",
+        "id": 224936632,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1612299995
+    },
+    {
+        "content": "<p>Give it a shot and see how many layers of  rulesets you can do before it screams</p>",
+        "id": 224937888,
+        "sender_full_name": "David Pyke",
+        "timestamp": 1612300647
+    },
+    {
+        "content": "<p>ooh, can we do<br>\n<a href=\"/user_uploads/10155/Gy8d365q4f-pd4hWV5yvkcrA/image.png\">recursive fsh</a>?</p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/Gy8d365q4f-pd4hWV5yvkcrA/image.png\" title=\"recursive fsh\"><img src=\"/user_uploads/10155/Gy8d365q4f-pd4hWV5yvkcrA/image.png\"></a></div>",
+        "id": 224938382,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1612300877
+    },
+    {
+        "content": "<p>Yeah, you should be able to do recursive rule sets as long as they don't infinitely recurse.  That said, I do wonder if maybe things would get gummed up w/ the escape sequences, because the escaping <code>\\</code> would get removed when it's applied the first time.   I'll have to try it.</p>",
+        "id": 224943072,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1612303086
+    },
+    {
+        "content": "<p>Ugh.  Yeah, the recursive calls don't work with escapes.  Dang.  We're trying to avoid doing anything too clever, but... we might have to do something clever to support this. <a href=\"https://fshschool.org/FSHOnline/#/share/2YFQDdu\">https://fshschool.org/FSHOnline/#/share/2YFQDdu</a></p>",
+        "id": 224943873,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1612303467
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> , just to be clear, I don't really see a need for recursive rulesets, particularly since there is no way to encode stop conditions. On the other hand, I do see a need for nested rulesets.</p>",
+        "id": 224944138,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1612303609
+    },
+    {
+        "content": "<p>Well even nested ones would have an issue in the (hopefully rare) case that a substitution you pass in at the top-level needs to be passed into a nested rule set insert rule <em>and</em> needs to have an escaped character (<code>(</code> or <code>,</code>).  But we'll try to fix that.  Aside from that one issue, nested rulesets should be fine.</p>",
+        "id": 224947805,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1612305610
+    },
+    {
+        "content": "<p>Maybe add a marker to where a parameter is used indicating whether to leave the content escaped? Arbitrarily choosing exclamation as the marker, my nested example would become:</p>\n<div class=\"codehilite\"><pre><span></span><code>RuleSet: QuestionValueSet(context, linkId, text, repeats, vs)\n* insert Question({!context}, {!linkId}, {!text}, choice, {!repeats})\n* {context}[=].choiceValueSet = {vs}\n</code></pre></div>",
+        "id": 224948199,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1612305859
+    },
+    {
+        "content": "<p>That seems a reasonable approach.  I was also thinking just to automatically keep the escape chars when we know we're expanding into an <code>insert</code> rule.  That would be less for authors to remember and fewer opportunities to make a mistake and forget to do it.  I also can't think of any other use cases where you would want to specifically keep <code>\\,</code> and <code>\\)</code>except when passing into another <code>insert</code> rule.</p>",
+        "id": 225215546,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1612469442
+    },
+    {
+        "content": "<p>But if that proves too hard and we need to have a signal to leave it unescaped, I like the <code>!</code> -- it's brief and to the point.</p>",
+        "id": 225215691,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1612469506
+    },
+    {
+        "content": "<p>I wonder if there are use cases where you want to pass in escaped content that remains escaped in the expansion? For example passing in text that needs to remain escaped so the correct html/markdown is generated.</p>",
+        "id": 225216930,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1612470040
+    },
+    {
+        "content": "<p>but then you should just escape your escape characters, no?</p>",
+        "id": 225228526,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1612475416
+    },
+    {
+        "content": "<p>like, if I want my text to be explicitly \"(\\abc\\)123\" then I should pass in \"(\\\\abc\\\\\\)123\" it doesn't matter in that case if I end up using that in the initial ruleset or passing it through to another one, that text is what I want to write under Chris's model right?</p>",
+        "id": 225228823,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1612475532
+    },
+    {
+        "content": "<p>hmm, right. So if it is used in the ruleset, the use removes a level of escaping. If it is passed into another ruleset, the passed-in value does not escape. Yeah, you could probably get away without a \"don't touch that\" signal.</p>",
+        "id": 225229833,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1612475998
+    },
+    {
+        "content": "<p>you should listen to that Mr Moehrke dude</p>",
+        "id": 225234188,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1612478159
+    },
+    {
+        "content": "<p>Right.  And the only things we support escaping for are <code>\\</code>, <code>,</code>, and <code>)</code> -- which is probably a little too narrow and specific to be useful anywhere else but in the context of <code>insert</code> rules.</p>",
+        "id": 225241592,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1612482281
+    }
+]

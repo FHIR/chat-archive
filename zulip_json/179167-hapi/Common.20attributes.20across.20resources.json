@@ -1,0 +1,296 @@
+[
+    {
+        "content": "<p>Hi All, so a proposal came to me from <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> via <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>:</p>\n<blockquote>\n<p>There's actually a common set of elements across all resources - identifier, code, url, date, etc<br>\nIf we make every resource implement that interface, and then we can generate the accessors for each resource, based on meta data defined in the resource definitions (I have a slot for that)</p>\n</blockquote>\n<p>My immediate reaction is that this could be convenient, but would also be problematic. My main concern is that you lose some of the benefit of static type checking. E.g. if <code>Patient</code> now has a method <code>getCode()</code> even though the patient resource has no such property, I might accidentally call <code>patient.getCode()</code> and I'm presumably now getting a runtime error instead of a compile time one.</p>\n<p>One possible mitigation of this would be to split the proposal into a few interfaces. <code>IHasCode</code>, <code>IHasIdentifier</code> etc, and have the individual resources implement those. Another option might be to deprecate the methods on the resources that aren't used.</p>\n<p>Thoughts?</p>\n<p>(Pinging <span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span> <span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span> for their thoughts from the .NET side)</p>",
+        "id": 153827307,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1463062815
+    },
+    {
+        "content": "<p>my immediate response is that IHasCode is just moving the deck chairs around. Yes, this will create run time errors. But this is mainly useful when you have a object of type \"Resource\" anyway, and wahtever you do is going to be run-time error anyway</p>",
+        "id": 153827332,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463066680
+    },
+    {
+        "content": "<p>if thing instanceof [type] then ...<br>\nelse<br>\n  runtime error....</p>",
+        "id": 153827333,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463066699
+    },
+    {
+        "content": "<p>so I don't think that's persausive</p>",
+        "id": 153827334,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463066712
+    },
+    {
+        "content": "<p>I would certainly help implementers of Terminology Services where all our key Resources have common elements.<br>\nFWIW, my first thought for mitigating the issue of unwanted methods on other Resources was also your suggestion of marking them as deprecated.  Reasonable, I think, from a Java perspective, but would this need to flow across into all language bindings?</p>",
+        "id": 153827479,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1463080715
+    },
+    {
+        "content": "<p>I don't follow the deprecation argument, So you deprecate the implementation - so what </p>",
+        "id": 153827520,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463084333
+    },
+    {
+        "content": "<p>The idea there is that if you are putting <code>getCode()</code> on the <code>Resource</code> class, you could put a copy of it on <code>Patient</code> that is marked as deprecated so that users get a compile-time warning if they try to use it on Patient.</p>\n<p>The more I think about it though, I'm not clear on what problem this solves. Does this method throw an exception if you call it incorrectly? (say, <code>getCode()</code> on <code>Patient</code>) If so, you need to test for <code>instanceof</code> before you call it anyhow so you could cast it then...</p>",
+        "id": 153827569,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1463086115
+    },
+    {
+        "content": "<p>ok you want a deprecation so as not to use it directly - I follow that</p>",
+        "id": 153827571,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463086355
+    },
+    {
+        "content": "<p>I would return null - there is no code on patient. Since the intent is that you use it generically, it's not an error to call it on patient, there just isn't one. </p>",
+        "id": 153827572,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463086403
+    },
+    {
+        "content": "<p>Ugh, I don't like that at all... That's a recipe for bugs. I guess this is my general problem with this, the whole intent we have with HAPI at least is to provide as much compile-time checking as possible for code. That's why we use annotated fields for extensions for instance.</p>\n<p>Would it make more sense to just provide a utility class with a method <code>List&lt;CodeableConcept&gt; getCode(Resource theResource);</code></p>",
+        "id": 153827573,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1463086567
+    },
+    {
+        "content": "<p>you can't have an implementation with a lower visibility can you? </p>",
+        "id": 153827574,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463086584
+    },
+    {
+        "content": "<p>sadly not</p>",
+        "id": 153827575,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1463086598
+    },
+    {
+        "content": "<p>really, I don't understand why that's better than just putting it on an interface</p>",
+        "id": 153827576,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463086618
+    },
+    {
+        "content": "<p>what's the practical difference between resource.getCode() and Utilities.getCode(resource) other than ungainly syntax?</p>",
+        "id": 153827577,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463086666
+    },
+    {
+        "content": "<p>well, to me the practical difference is that there are no misleading methods showing up in intellisense on Patient.java this way. If I use the utility method it's clear that I need to be careful.</p>\n<p>To be honest though, I still don't understand why this whole thing is useful. What are the situations where you don't care what type of resource you have, you just want its code or identifier. Are they common enough that they merit \"polluting\" the resource hierarchy for convenience? That's what I'm trying to weigh...</p>",
+        "id": 153827578,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1463086942
+    },
+    {
+        "content": "<p>common properties on the conformance resource - which will be spreading to more CQI resources. Identifier. .... perhaps status....  And a bunch of things that are a datatype ModelMetaData that will be flattened on the various resources it lives on </p>",
+        "id": 153827580,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463087062
+    },
+    {
+        "content": "<p>I constantly use .getUrl(), .getStatus(), .getDate(), .getName() on conformance resources generically</p>",
+        "id": 153827581,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463087132
+    },
+    {
+        "content": "<p>Bryn does too</p>",
+        "id": 153827582,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463087137
+    },
+    {
+        "content": "<p>I would not put .getCode on there - this is not something that is remotely consistent across resources</p>",
+        "id": 153827584,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463087222
+    },
+    {
+        "content": "<p>On a related note, I've heard complaints now from a few developers that the DSTU3 structures have pages and pages of \"castToFoo\" methods showing up in intellisense. I do see value in being kind to people who work that way..</p>\n<p>But surely we wouldn't add something like <code>getUrl()</code> to Resource just for your/Bryn's conformance use cases? If a bunch of the conformance resources all have these properties, should we just have a BaseConformanceResorce class that all of them inherit from that adds the 4 properties you list?</p>",
+        "id": 153827585,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1463087361
+    },
+    {
+        "content": "<p>well, maybe we could, yes, though I'm not sure where I'd drive it from. </p>",
+        "id": 153827586,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463088110
+    },
+    {
+        "content": "<p>can we do something clever with the cast* methods, or is it all or nothing? </p>",
+        "id": 153827587,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463088139
+    },
+    {
+        "content": "<p>I'm kind of worried that we're inventing a whole alternative approach to inheritance with this interfacey-view-layer thing.</p>",
+        "id": 153827589,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1463088988
+    },
+    {
+        "content": "<p>well, we are extremely limited in our approach to inheritence. Further, we often do not use it because not all features of an element are common, even when the parts related to code generation are constant</p>",
+        "id": 153827590,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463089052
+    },
+    {
+        "content": "<p>but i suppose that rather than interfaces, I could optimise the generation to use inheritence carefully</p>",
+        "id": 153827591,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463089102
+    },
+    {
+        "content": "<p>James, how would you feel about introducing a new abstract resource \"ConformanceResource\"</p>",
+        "id": 153827592,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463089132
+    },
+    {
+        "content": "<p>I would feel very good about that approach</p>",
+        "id": 153827593,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1463089162
+    },
+    {
+        "content": "<p>:-)</p>",
+        "id": 153827594,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1463089167
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-email=\"bryn@databaseconsultinggroup.com\">@Bryn Rhodes</span> - I think that this comes to the same outcome, and I think it works for you</p>",
+        "id": 153827595,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463089210
+    },
+    {
+        "content": "<p>James, the getXType methods - I use these a lot so I love them but I know that they clutter the hints</p>",
+        "id": 153827596,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463089347
+    },
+    {
+        "content": "<p>Yeah, I understand that... I don't see an easy solution to that, and at least they are grouped together.</p>",
+        "id": 153827597,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1463089425
+    },
+    {
+        "content": "<p>can't see any way to suppress them</p>",
+        "id": 153827598,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463089523
+    },
+    {
+        "content": "<p>I'd say let's leave them alone then.</p>",
+        "id": 153827600,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1463089577
+    },
+    {
+        "content": "<p>So are we saying that there would be a BaseConformanceResource type that all the conformance and artifact-related resources would descend from, and we would flatten the ModuleMetadata type into elements on that resource?</p>",
+        "id": 153827602,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1463090716
+    },
+    {
+        "content": "<p>maybe. Or another base resource instead - depending on how the resources are changed</p>",
+        "id": 153827603,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463090764
+    },
+    {
+        "content": "<p>That makes sense and addresses the use case.</p>",
+        "id": 153827604,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1463090881
+    },
+    {
+        "content": "<p>ok. I'll do that. james, do you need to do something in HAPI if I do that? </p>",
+        "id": 153827609,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463091729
+    },
+    {
+        "content": "<p>Nope, just let me know when it's ready and I'll sync the structures into HAPI</p>",
+        "id": 153827610,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1463091979
+    },
+    {
+        "content": "<p>ok I'll let you know</p>",
+        "id": 153827611,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463092179
+    },
+    {
+        "content": "<p>On the IHasCode interface stuff, my 2c is that there are probably a couple of groups of resources that could have a common interface like that IConformanceResource (with the URL etc params), IPatientRelatedResource (with patient, identifiers ...)</p>",
+        "id": 153827652,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1463112496
+    },
+    {
+        "content": "<p>that's what we decided to do</p>",
+        "id": 153827673,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463126259
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span> <span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span> would  you do the same in C# if I defined the semantics in a mapping in the structure definition? </p>",
+        "id": 153827674,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463126317
+    },
+    {
+        "content": "<p>Do you mean generate the baseconformance resource?</p>",
+        "id": 153827726,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1463142658
+    },
+    {
+        "content": "<p>yes.</p>",
+        "id": 153827727,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463142676
+    },
+    {
+        "content": "<p>If so then yes could do that</p>",
+        "id": 153827728,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1463142723
+    },
+    {
+        "content": "<p>Ok.</p>",
+        "id": 153827729,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1463142729
+    },
+    {
+        "content": "<p>great.</p>",
+        "id": 153827730,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1463142766
+    },
+    {
+        "content": "<p>With dot net we'd use extension methods for the little used stuff in a special namespace for those that want them.<br>\nThis reduces stuff in intelligence. Don't know if there is an equivalent in java</p>",
+        "id": 153827731,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1463143026
+    },
+    {
+        "content": "<p>nope :(</p>",
+        "id": 153827865,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1463181327
+    }
+]

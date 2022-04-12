@@ -1,0 +1,111 @@
+---
+layout: page
+title: "FHIR Chat  · differences in Validator and IGPublisher · conformance"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/index.html">conformance</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/differences.20in.20Validator.20and.20IGPublisher.html">differences in Validator and IGPublisher</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="262648863"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/differences%20in%20Validator%20and%20IGPublisher/near/262648863" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Oliver Egger <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/differences.20in.20Validator.20and.20IGPublisher.html#262648863">(Nov 24 2021 at 22:50)</a>:</h4>
+<p>we experienced a very strange issue. we have a <a href="http://fhir.ch/ig/ch-emed/StructureDefinition-ch-emed-document-medicationcard.html">FHIR document profile</a> which requires that the composition.subject is a patient and the patient needs to have one identifier. We have <a href="http://build.fhir.org/ig/ehealthsuisse/ch-emed/branches/validation/qa.html#_scratch_ig-build-temp-CHRP4N_repo_input_examples_bundle_medicationcard">an incorrect example</a> without a Patient identifier and the IGPubliser correctly shows the failing in the reasoning (what a cool feature, btw):</p>
+<div class="codehilite"><pre><span></span><code>This element does not match any known slicedefined_in_the_profilehttp://fhir.ch/ig/ch-emed/StructureDefinition/ch-emed-document-medicationcard
+Bundle.entry[0]: discriminator = true and resource.conformsTo(&#39;http://fhir.ch/ig/ch-emed/StructureDefinition/ch-emed-composition-medicationcard&#39;)
+,
+Bundle.entry[0]: Profile http://fhir.ch/ig/ch-emed/StructureDefinition/ch-emed-composition-medicationcard does not match for Bundle because of the following profile issues:
+Bundle.entry[0].resource.subject: Unable to find a match for profile Patient/65788 among choices: http://fhir.ch/ig/ch-core/StructureDefinition/ch-core-patient-epr
+,
+Bundle.entry[0].resource.subject:
+Bundle.entry[1].resource.ofType(Patient): Patient.identifier: minimum required = 1, but only found 0 (from http://fhir.ch/ig/ch-core/StructureDefinition/ch-core-patient-epr)
+</code></pre></div>
+<p>however when we validate the same document with the FHIR validator we do not get an error:</p>
+<div class="codehilite"><pre><span></span><code>java -jar validator_cli.jar -version 4.0.1 -ig ch.fhir.ig.ch-emed#1.0.0 -profile http://fhir.ch/ig/ch-emed/StructureDefinition/ch-emed-document-medicationcard http://build.fhir.org/ig/ehealthsuisse/ch-emed/branches/validation/Bundle-medicationcard.json
+...
+Success: 0 errors, 9 warnings, 6 notes
+  Information @ Bundle.entry[1] (line 124, col6): This element does not match any known slice defined in the profile http://fhir.ch/ig/ch-emed/StructureDefinition/ch-emed-document-medicationcard
+</code></pre></div>
+<p>trying to debug it, there is a comment in <a href="https://github.com/hapifhir/org.hl7.fhir.core/blob/41b7a0566c2059c947fa27226247644c40cee55a/org.hl7.fhir.validation/src/main/java/org/hl7/fhir/validation/instance/InstanceValidator.java#L3475">InstanceValidator</a> that the conformsTo breaks the stack and you end up there, but the code is not entered because hostContext is null </p>
+<p>if i adjust the <a href="https://github.com/hapifhir/org.hl7.fhir.core/pull/676/files">hostContext that is provided as a bundle</a> I get back the validation error, but I'am a bit puzzled why the InstanceValidator is needing an adjustment, but the same is working for the IG Publisher. </p>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> <span class="user-mention" data-user-id="248736">@Mark Iantorno</span> do you have any ideas?</p>
+
+
+
+<a name="262959609"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/differences%20in%20Validator%20and%20IGPublisher/near/262959609" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/differences.20in.20Validator.20and.20IGPublisher.html#262959609">(Nov 29 2021 at 01:42)</a>:</h4>
+<p>well, I'll have to debug</p>
+
+
+
+<a name="262966096"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/differences%20in%20Validator%20and%20IGPublisher/near/262966096" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/differences.20in.20Validator.20and.20IGPublisher.html#262966096">(Nov 29 2021 at 04:28)</a>:</h4>
+<p>can you make a validator test case that shows the problem as a PR to <a href="https://github.com/FHIR/fhir-test-cases/pulls">https://github.com/FHIR/fhir-test-cases/pulls</a> ?</p>
+
+
+
+<a name="262973149"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/differences%20in%20Validator%20and%20IGPublisher/near/262973149" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Oliver Egger <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/differences.20in.20Validator.20and.20IGPublisher.html#262973149">(Nov 29 2021 at 07:10)</a>:</h4>
+<p>it on my todo list <span aria-label="smile" class="emoji emoji-1f642" role="img" title="smile">:smile:</span>  will let you know as soon as i have done it</p>
+
+
+
+<a name="263074515"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/differences%20in%20Validator%20and%20IGPublisher/near/263074515" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Oliver Egger <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/differences.20in.20Validator.20and.20IGPublisher.html#263074515">(Nov 29 2021 at 22:10)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> </p>
+<ol>
+<li>IG where error is correctly raised is <a href="http://build.fhir.org/ig/oliveregger/BundleConformsTo/branches/master/qa.html#_scratch_ig-build-temp-DWHJ33_repo_fsh-generated_resources_Bundle-medicationcard">here</a> </li>
+<li>added the example and structuredefinitions to this <a href="https://github.com/FHIR/fhir-test-cases/pull/102">validation testcase PR</a>, the error is not raised (which should be raised) within the validation tests </li>
+<li>Verified with the <a href="https://github.com/hapifhir/org.hl7.fhir.core/pull/676">PR</a> that the error is raised</li>
+</ol>
+<p>let me know if you need any additional info to debug.</p>
+
+
+
+<a name="263093010"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/differences%20in%20Validator%20and%20IGPublisher/near/263093010" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/differences.20in.20Validator.20and.20IGPublisher.html#263093010">(Nov 30 2021 at 01:51)</a>:</h4>
+<p>I don't really understand the proposed fix - the appContext is not interchangeable with the root resource</p>
+
+
+
+<a name="263093095"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/differences%20in%20Validator%20and%20IGPublisher/near/263093095" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/differences.20in.20Validator.20and.20IGPublisher.html#263093095">(Nov 30 2021 at 01:52)</a>:</h4>
+<p>and the app context is set outside the InstanceValidator and passed around so it can be used in callbacks so the application can keep it's context together</p>
+
+
+
+<a name="263096395"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/differences%20in%20Validator%20and%20IGPublisher/near/263096395" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/differences.20in.20Validator.20and.20IGPublisher.html#263096395">(Nov 30 2021 at 02:55)</a>:</h4>
+<p>on further investigation.. the IG publisher sets the appContext to the bundle element for it's own convenience. Other applications do something else. So that change you're made works with the IG publisher, but would break other applications that host the validator</p>
+
+
+
+<a name="263096445"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/differences%20in%20Validator%20and%20IGPublisher/near/263096445" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/differences.20in.20Validator.20and.20IGPublisher.html#263096445">(Nov 30 2021 at 02:56)</a>:</h4>
+<p>so that code shouldn't be using and looking at the app context (it's broken in the other cases already, casting appContext to Element). It should be using the rootResource, and the rootResource should be set. two fixes...</p>
+
+
+
+<a name="263096484"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/differences%20in%20Validator%20and%20IGPublisher/near/263096484" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/differences.20in.20Validator.20and.20IGPublisher.html#263096484">(Nov 30 2021 at 02:57)</a>:</h4>
+<p>I'll close your PR and make my own</p>
+
+
+
+<a name="263096489"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/differences%20in%20Validator%20and%20IGPublisher/near/263096489" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/differences.20in.20Validator.20and.20IGPublisher.html#263096489">(Nov 30 2021 at 02:57)</a>:</h4>
+<p>but I'll keep your test case - thanks</p>
+
+
+
+<a name="263139413"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/differences%20in%20Validator%20and%20IGPublisher/near/263139413" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Oliver Egger <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/differences.20in.20Validator.20and.20IGPublisher.html#263139413">(Nov 30 2021 at 12:54)</a>:</h4>
+<p>thanks a lot for your investigation and explanations and looking forward for you PR!</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

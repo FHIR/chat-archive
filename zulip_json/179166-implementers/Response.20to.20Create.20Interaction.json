@@ -1,0 +1,116 @@
+[
+    {
+        "content": "<p>I just noticed that from FHIR v1.6.0 to FHIR v1.8.0, there was a change in conformance language for the expected response to a Create Interaction:</p>\n<p>The server returns a 201 Created HTTP status code, and <strong>SHOULD</strong> also return a Location header which contains the new Logical Id and Version Id of the created resource version (<a href=\"http://hl7.org/fhir/2016Sep/http.html#create\" target=\"_blank\" title=\"http://hl7.org/fhir/2016Sep/http.html#create\">http://hl7.org/fhir/2016Sep/http.html#create</a>)</p>\n<p>The server returns a 201 Created HTTP status code, and <strong>SHALL</strong> also return a Location header which contains the new Logical Id and Version Id of the created resource version (<a href=\"http://hl7.org/fhir/2017Jan/http.html#create\" target=\"_blank\" title=\"http://hl7.org/fhir/2017Jan/http.html#create\">http://hl7.org/fhir/2017Jan/http.html#create</a>)</p>\n<p>Does this imply that a FHIR Server's Create Interaction:<br>\n1) Must persist a copy of the FHIR Resource (e.g. that \"Create\" cannot by transient, and be used as transmission)?<br>\n2) Must support/enable the retrieval of that FHIR Resource after its creation (since the location must be available)?</p>\n<p>Just noticed this change, and wondering if those implications are correct.</p>\n<p>Thanks!</p>",
+        "id": 177654494,
+        "sender_full_name": "Ken Sinn",
+        "timestamp": 1570565694
+    },
+    {
+        "content": "<p>I don't believe it implies either of those 2 things. But it does imply that the system understands that the location it returned thereafter refers to that resource, and it won't re-use the location for another resource, and it will understand future references to that location as being references to that resource. </p>\n<p>None of that requires that the resource exist or be available, but it does imply that some record of the transaction needs to be retained (unless the location is a random UUID and you regard references to resources by UUID as likely a reference to a past resource and you don't care about integrity)</p>",
+        "id": 177666866,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570575156
+    },
+    {
+        "content": "<p>Thank you Grahame. Returning a copy of the newly created FHIR resource in the response body is only optional/situation, correct? For some reason, I had it in my head that a Create Interaction should always return a copy of the new resource, but I may be conflating it with a different conformance rule.</p>",
+        "id": 177670812,
+        "sender_full_name": "Ken Sinn",
+        "timestamp": 1570579259
+    },
+    {
+        "content": "<p>The client has the ability to indicate whether it wants back a copy of the created record or not using the Prefer:return header, but that's a preference, not a requirement.  In the end, the server can choose what to return - be that just the headers, or headers + OperationOutcome (if warnings) or headers + content.  The latter is most important if the server has persisted something other than what was sent (e.g. dropped or transformed content in some way) to allow subsequent update without re-query.</p>",
+        "id": 177676515,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570587407
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> Do we have language that says that a client needs to pay attention to the content echoed back on a create (or an update for that matter) when planning subsequent updates?</p>",
+        "id": 177676536,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570587460
+    },
+    {
+        "content": "<p>no i don't think so. We couldn't make it a SHALL and it's self evident that it's probably a good thing to do</p>",
+        "id": 177676707,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570587619
+    },
+    {
+        "content": "<p>I don't think it's self-evident.  I suspect most clients don't twig to the fact that the stored content could be different from the submitted content.  Most probably blindly assume that whatever's returned just echos what they submitted in the first place.</p>",
+        "id": 177677055,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570588156
+    },
+    {
+        "content": "<p>We do have a whole page about that</p>",
+        "id": 177677261,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570588481
+    },
+    {
+        "content": "<p>Is it pointed to by the HTTP spec?</p>",
+        "id": 177677436,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570588717
+    },
+    {
+        "content": "<p>What I currently see is \"The second asks to return the full resource. \" - there's no explanation of why this could or should happen (independent of whether the client asks for it).  We do point to the \"varations between submitted and stored data\" section a few places, but we don't have anywhere that specifically says:<br>\na) if you've changed the content of the resource, you SHOULD return it;<br>\nb) if you receive the content of the stored source in a response and want to be able to do updates, you SHALL drive your update from the returned content, not the originally submitted content.</p>\n<p>If we can't do a SHALL for the latter, then we should at least make it a SHOULD and note the danger involved in failing to do so (and perhaps suggest that servers that change data and don't trust clients to drive off the version in the response shouldn't include the etag and instead require systems to query for it)</p>",
+        "id": 177677736,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570589176
+    },
+    {
+        "content": "<p>what's the danger? but sure, make a task to link to it from the appropriate place</p>",
+        "id": 177680613,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570593492
+    },
+    {
+        "content": "<p>Danger is that data gets changed by the EHR, the client then sends an update and the changes aren't taken into account.  For example, a clients submits a patient with an email address and two phone numbers.  The server dumps the email address because it can't store emails.  The client subsequently uses PATCH to correct the first phone number.  If the client received an etag in response to the initial create and based their PATCH off the submitted record rather than the returned record, the PATCH would end up replacing the second phone number rather than the first .</p>",
+        "id": 177682056,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570595730
+    },
+    {
+        "content": "<p><a href=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=24914\" target=\"_blank\" title=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=24914\">GF#24914</a></p>",
+        "id": 177682319,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570596221
+    },
+    {
+        "content": "<p><a href=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=22770\" target=\"_blank\" title=\"http://gforge.hl7.org/gf/project/fhir/tracker/?action=TrackerItemEdit&amp;tracker_item_id=22770\">GF#22770</a> also indicate that \"a server MAY determine that <code>create</code> request matches an existing record with high confidence, and MAY return a 201, effectively making it look to the client as though a new resource had been created, even though the the \"created\" resource is actually a pre-existing resource.\"</p>",
+        "id": 177713307,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1570627796
+    },
+    {
+        "content": "<p>The HTTP page <a href=\"https://www.hl7.org/fhir/http.html#create\" target=\"_blank\" title=\"https://www.hl7.org/fhir/http.html#create\">https://www.hl7.org/fhir/http.html#create</a> section points to Variations between Submitted data and Retrieved data <br>\n (<a href=\"http://hl7.org/fhir//updates.html\" target=\"_blank\" title=\"http://hl7.org/fhir//updates.html\">http://hl7.org/fhir//updates.html</a>) and transactional integrity (<a href=\"https://www.hl7.org/fhir/http.html#transactional-integrity\" target=\"_blank\" title=\"https://www.hl7.org/fhir/http.html#transactional-integrity\">https://www.hl7.org/fhir/http.html#transactional-integrity</a>)</p>",
+        "id": 177716706,
+        "sender_full_name": "Ken Sinn",
+        "timestamp": 1570629952
+    },
+    {
+        "content": "<p>Yes - it points to those pages.  But there's no normative wording in those pages.  And there's no specific warning in the HTTP page that highlights the fact that paying attention to what comes back is important.</p>",
+        "id": 177727260,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570636047
+    },
+    {
+        "content": "<p>(and why)</p>",
+        "id": 177727266,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1570636052
+    },
+    {
+        "content": "<blockquote>\n<p>unless the location is a random UUID </p>\n</blockquote>\n<p>Reading over the Create section <a href=\"https://www.hl7.org/fhir/http.html#create\" target=\"_blank\" title=\"https://www.hl7.org/fhir/http.html#create\">https://www.hl7.org/fhir/http.html#create</a>, it doesn't seem like a random UUID is allowed for the location header -- \"the location SHALL contain logical id\", in the format Location: [base]/[type]/[id]/_history/[vid].</p>",
+        "id": 180744965,
+        "sender_full_name": "Ken Sinn",
+        "timestamp": 1573747675
+    },
+    {
+        "content": "<p>the id can be a random UUID</p>",
+        "id": 180768447,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1573761598
+    }
+]

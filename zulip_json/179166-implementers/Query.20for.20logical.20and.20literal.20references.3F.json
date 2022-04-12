@@ -1,0 +1,44 @@
+[
+    {
+        "content": "<p>I've tried searching the threads on this topic but haven't found a definite answer. Let's say you want to create an Observation about a Patient that does not yet exist in the FHIR Server. All you have a is some logical reference to it. The Observation could then for example look like this: </p>\n<div class=\"codehilite\"><pre><span></span><code>{\n &quot;resourceType&quot;: &quot;Observation 1&quot;,\n &quot;subject&quot;: {\n     &quot;identifier&quot;: {\n        &quot;system&quot;: &quot;uri:patient&quot;,\n        &quot;value&quot;: &quot;someUUID&quot;\n      }\n    }\n}\n</code></pre></div>\n<p>Then how do we query for this? <a href=\"#narrow/stream/179167-hapi/topic/searching.20for.20subject.3Aidentifier/near/207846974\">This thread</a> indicates we should do <code>Observation?subject:Identifier=uri:patient:someUUID</code>, but <a href=\"#narrow/stream/179166-implementers/topic/.E2.9C.94.20Condition.20subject.20identifier.20search/near/259543199\">other posts</a> have suggested we do: <code>Observation?subject.Identifier=uri:patient:someUUID</code>. I didn't find much guidance on the page about <a href=\"https://www.hl7.org/fhir/references.html#logical\">logical references</a>. Not sure where in the FHIR standard the mention of using ':' is mentioned?</p>\n<p>Furthermore, once this Patient has been created in a FHIR server, so for example:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n &quot;resourceType&quot;: &quot;Patient&quot;,\n &quot;id&quot;: 123\n &quot;identifier&quot;: {\n     &quot;system&quot;: &quot;uri:patient&quot;,\n      &quot;value&quot;: &quot;someUUID&quot;\n  }\n  &quot;name&quot;: &quot;Hakan&quot;\n}\n</code></pre></div>\n<p>And someone then creates an Observation with a literal reference:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n &quot;resourceType&quot;: &quot;Observation 2&quot;,\n  &quot;subject&quot;: {\n     &quot;reference&quot;: &quot;Patient/123&quot;\n    }\n}\n</code></pre></div>\n<p>I would ideally like to perform a query that fetches <strong>both</strong> of these two Observations. What would be the correct FHIR syntax for this?</p>",
+        "id": 271813300,
+        "sender_full_name": "Håkan MacLean",
+        "timestamp": 1644837799
+    },
+    {
+        "content": "<p>This may not be answering your question,  but it is unusual to create observations for patients that don't exist. Do you have a strong requirement to do it this way around? <br>\nFHIR is designed primarily to work on literal references. Logical ones tend to be to things that exist outside of FHIR and so may never be queryable (using FHIR).<br>\nIf the patient data is coming along soon (e.g. later in the session), is it not possible to add it first? Or if the patient data is never coming along (because it is not going to be on that server, or will not be in FHIR and so the logical reference will always remain logical and never be referenceable), then you cannot reliably query it. <br>\nBy the way your 2 queries look the same to me.</p>",
+        "id": 271815895,
+        "sender_full_name": "Rik Smithies",
+        "timestamp": 1644839498
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191651\">Rik Smithies</span> <a href=\"#narrow/stream/179166-implementers/topic/Query.20for.20logical.20and.20literal.20references.3F/near/271815895\">said</a>:</p>\n<blockquote>\n<p>Do you have a strong requirement to do it this way around? </p>\n</blockquote>\n<p>Unfortunately yes. It might be data coming from partners where we will never even have the Patient object.</p>\n<blockquote>\n<p>By the way your 2 queries look the same to me.</p>\n</blockquote>\n<p>One is <code>subject:Identifier</code> and the other <code>subject.Identifier</code>, which seems to have been the topic of a lot of debate (see links in original post).</p>",
+        "id": 271822811,
+        "sender_full_name": "Håkan MacLean",
+        "timestamp": 1644843911
+    },
+    {
+        "content": "<p>hi I think you may want to create a patient object as a proxy for the \"real\" one. You can use the external, non-referenceable identifier, but also have a local FHIR id. <br>\nBasically, if you have no patient object, then there is no query.<br>\nAnd if you do have a patient object, there is no harm in assigning a FHIR id and using it. All created resources will have one anyway. <br>\nSome servers can search for identifiers on the same server (but the FHIR id can also so that), but in general, there is no way to know what server that patient exists on, so this is not reliable.</p>",
+        "id": 271827813,
+        "sender_full_name": "Rik Smithies",
+        "timestamp": 1644846536
+    },
+    {
+        "content": "<p>Note that the ':identifier' qualifier is lower-case.<br>\nThere's no way with a single query to retrieve both boy 'identifier' and by formal reference.  You'll need to exercise two queries.  (In general, once the Patient exists, you'd want to update your original Observation to have an explicit Reference.reference, as you can't chain or include based on Reference.identifier.</p>",
+        "id": 271842848,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1644852971
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179166-implementers/topic/Query.20for.20logical.20and.20literal.20references.3F/near/271842848\">said</a>:</p>\n<blockquote>\n<p>Note that the ':identifier' qualifier is lower-case.</p>\n</blockquote>\n<p>Right. But I'm still a bit unsure about when the ':' syntax is appropriate and when to use '.'? Can I read about it somewhere?</p>\n<blockquote>\n<p>In general, once the Patient exists, you'd want to update your original Observation to have an explicit Reference.reference, as you can't chain or include based on Reference.identifier.</p>\n</blockquote>\n<p>Interesting. What type of consequences should such changes have to the original Observation have? A new versionId?</p>",
+        "id": 271843560,
+        "sender_full_name": "Håkan MacLean",
+        "timestamp": 1644853276
+    },
+    {
+        "content": "<p>You use ':' when you're using one of the modifiers (:identifier, :text, :in, etc.).  You use '.' when you're chaining - so referring to a search parameter within the scope of the resource you're currently searching on.</p>\n<p>Updating Observation would cause meta.version to change.</p>",
+        "id": 271843832,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1644853387
+    }
+]

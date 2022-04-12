@@ -1,0 +1,746 @@
+---
+layout: page
+title: "FHIR Chat  · Concepts from RxNorm and terminology powered search · terminology"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/index.html">terminology</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html">Concepts from RxNorm and terminology powered search</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="275740661"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/275740661" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#275740661">(Mar 17 2022 at 23:10)</a>:</h4>
+<p>I've been dabbling with extracting RxNorm as an example including terms, attributes, and relationships. I will note that <a href="https://build.fhir.org/rxnorm">https://build.fhir.org/rxnorm</a> doesn't mention attributes at all, which seems to suggest that attributes aren't available for most FHIR servers to query over.  (Is this intentional?)</p>
+<p>Working from the <a href="https://www.nlm.nih.gov/research/umls/rxnorm/docs/rxnormfiles.html">current prescribable file</a> from NLM, I loaded into sqlite and use the following script to generate an ndjson.gz file ( 4.5MB):</p>
+<div class="spoiler-block"><div class="spoiler-header">
+<p>Generate ndjson file</p>
+</div><div class="spoiler-content" aria-hidden="true">
+<div class="codehilite" data-code-language="Bash"><pre><span></span><code>sqlite3 rxnorm.db  <span class="s2">"with</span>
+<span class="s2">by_tty as (</span>
+<span class="s2">    select rxcui, tty, json_group_array(str) arr</span>
+<span class="s2">    from rxnconso where SAB='RXNORM' group by rxcui, tty),</span>
+<span class="s2">by_conso as (</span>
+<span class="s2">    select rxcui, json_group_object(tty, json(arr)) as terms</span>
+<span class="s2">    from by_tty group by rxcui),</span>
+<span class="s2">by_atn as (</span>
+<span class="s2">    select rxcui, atn, json_group_array(atv) arr</span>
+<span class="s2">    from rxnsat where sab='RXNORM' group by rxcui, atn),</span>
+<span class="s2">by_attr as (</span>
+<span class="s2">    select rxcui, json_group_object(atn, json(arr)) as attrs</span>
+<span class="s2">    from by_atn group by rxcui),</span>
+<span class="s2">by_rela as (</span>
+<span class="s2">    select rxcui2 as rxcui, rela, json_group_array(rxcui1) arr</span>
+<span class="s2">    from rxnrel where sab='RXNORM' and stype1='CUI' group by rxcui, rela),</span>
+<span class="s2">by_rels as (</span>
+<span class="s2">    select rxcui, json_group_object(rela, json(arr)) as rels</span>
+<span class="s2">    from by_rela group by rxcui)</span>
+<span class="s2">select json_object(</span>
+<span class="s2">    'cui', c.rxcui,</span>
+<span class="s2">    'terms', json(terms),</span>
+<span class="s2">    'attrs', json(coalesce(attrs, '{}')),</span>
+<span class="s2">    'rels', json(coalesce(rels, '{}')))</span>
+<span class="s2">from by_conso c</span>
+<span class="s2">    left join by_attr a on c.rxcui=a.rxcui</span>
+<span class="s2">    left join by_rels r on c.rxcui=r.rxcui</span>
+<span class="s2">"</span> <span class="p">|</span> gzip &gt; rxnorm.ndjson.gz
+</code></pre></div>
+</div></div>
+<div class="spoiler-block"><div class="spoiler-header">
+<p>Example concept representation (shown with jq invocation)</p>
+</div><div class="spoiler-content" aria-hidden="true">
+<div class="codehilite" data-code-language="Bash"><pre><span></span><code>$ jq --slurp  <span class="s1">'</span>
+<span class="s1">    .[] |</span>
+<span class="s1">    select(.terms.SCD[]?|test("loratadine")) |</span>
+<span class="s1">    select(.attrs.RXTERM_FORM[]?=="Cap")</span>
+<span class="s1">'</span> &lt;<span class="o">(</span>zcat rxnorm.ndjson.gz <span class="o">)</span>
+</code></pre></div>
+<p>Which yields an example:</p>
+<div class="codehilite" data-code-language="JSON"><pre><span></span><code><span class="p">{</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"cui"</span><span class="p">:</span><span class="w"> </span><span class="s2">"828269"</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"terms"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"PSN"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"loratadine 10 MG 24HR Oral Capsule"</span><span class="w"></span>
+<span class="w">    </span><span class="p">],</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"SCD"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"loratadine 10 MG Oral Capsule"</span><span class="w"></span>
+<span class="w">    </span><span class="p">],</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"SY"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"loratadine 10 MG 24HR Oral Capsule"</span><span class="w"></span>
+<span class="w">    </span><span class="p">]</span><span class="w"></span>
+<span class="w">  </span><span class="p">},</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"attrs"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"NDC"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"11673098607"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"11673098630"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"11822044600"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"11822202203"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"21130019502"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"25000002108"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"25000002113"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"25000002121"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"25000002134"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"25000002136"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"25000002146"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"36800075539"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"36800075552"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"41226068630"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"49483068607"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"49483068630"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"49738068607"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"49738068630"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"50804084010"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"53943011613"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"55910062939"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"55910062952"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"59556088201"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"59556088281"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"63868066910"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"68016005510"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"69452021103"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"69452021107"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"69452021116"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"69452021126"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"69452028317"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"69452028319"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"69452028325"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"69842068607"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"69842068630"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"69842068660"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"70000021701"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"72288044639"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"79481044600"</span><span class="w"></span>
+<span class="w">    </span><span class="p">],</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"RXN_AI"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"{316167} 28889"</span><span class="w"></span>
+<span class="w">    </span><span class="p">],</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"RXN_AM"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"{316167} 28889"</span><span class="w"></span>
+<span class="w">    </span><span class="p">],</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"RXN_AVAILABLE_STRENGTH"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"10 MG"</span><span class="w"></span>
+<span class="w">    </span><span class="p">],</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"RXN_BOSS_FROM"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"{316167} AI"</span><span class="w"></span>
+<span class="w">    </span><span class="p">],</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"RXN_HUMAN_DRUG"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"US"</span><span class="w"></span>
+<span class="w">    </span><span class="p">],</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"RXTERM_FORM"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"Cap"</span><span class="w"></span>
+<span class="w">    </span><span class="p">]</span><span class="w"></span>
+<span class="w">  </span><span class="p">},</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"rels"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"consists_of"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"316167"</span><span class="w"></span>
+<span class="w">    </span><span class="p">],</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"has_dose_form"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"316965"</span><span class="w"></span>
+<span class="w">    </span><span class="p">],</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"has_tradename"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"836338"</span><span class="w"></span>
+<span class="w">    </span><span class="p">],</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"isa"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"828268"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"1165336"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">"1165337"</span><span class="w"></span>
+<span class="w">    </span><span class="p">]</span><span class="w"></span>
+<span class="w">  </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre></div>
+</div></div>
+<p>This isn't directly useful, but I think the JSON model is the same <em>kind of thing</em> as the "Concept" resource that <span class="user-mention" data-user-id="191318">@nicola (RIO/SS)</span> has described.</p>
+
+
+
+<a name="275757325"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/275757325" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Peter Jordan <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#275757325">(Mar 18 2022 at 03:49)</a>:</h4>
+<p>Interesting. I had a tentative stab at doing this on Terminz 2-3 years ago - the result can be obtained from <a href="https://terminz.azurewebsites.net/fhir/CodeSystem/$lookup?system=http://www.nlm.nih.gov/research/umls/rxnorm&amp;code=828269&amp;property=*">here</a><br>
+It uses the 01032022 version of RxNorm (I only update it sporadically). Many of the property types are incorrect, but this was only meant as a 'starter for 10' to take to a Connectathon.</p>
+
+
+
+<a name="276149368"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276149368" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276149368">(Mar 22 2022 at 06:54)</a>:</h4>
+<p>If you could tweak that sqlite to generate objects more like:</p>
+<div class="codehilite" data-code-language="JSON"><pre><span></span><code><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"828269"</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"display"</span><span class="p">:</span><span class="w"> </span><span class="s2">"loratadine 10 MG 24HR Oral Capsule"</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"designation"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="nt">"use"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"PSN"</span><span class="p">,</span><span class="w"> </span><span class="nt">"system"</span><span class="p">:</span><span class="w"> </span><span class="s2">"???"</span><span class="w"> </span><span class="p">},</span><span class="w"></span>
+<span class="w">            </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="s2">"loratadine 10 MG 24HR Oral Capsule"</span><span class="w"></span>
+<span class="w">        </span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="nt">"use"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"SCD"</span><span class="p">,</span><span class="w"> </span><span class="nt">"system"</span><span class="p">:</span><span class="w"> </span><span class="s2">"???"</span><span class="w"> </span><span class="p">},</span><span class="w"></span>
+<span class="w">            </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="s2">"loratadine 10 MG Oral Capsule"</span><span class="w"></span>
+<span class="w">        </span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="nt">"use"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"SY"</span><span class="p">,</span><span class="w"> </span><span class="nt">"system"</span><span class="p">:</span><span class="w"> </span><span class="s2">"???"</span><span class="w"> </span><span class="p">},</span><span class="w"></span>
+<span class="w">            </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="s2">"loratadine 10 MG 24HR Oral Capsule"</span><span class="w"></span>
+<span class="w">        </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="p">],</span><span class="w"></span>
+<span class="w">    </span><span class="nt">"property"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"11673098607"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"11673098630"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"11822044600"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"11822202203"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"21130019502"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"25000002108"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"25000002113"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"25000002121"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"25000002134"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"25000002136"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"25000002146"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"36800075539"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"36800075552"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"41226068630"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"49483068607"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"49483068630"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"49738068607"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"49738068630"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"50804084010"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"53943011613"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"55910062939"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"55910062952"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"59556088201"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"59556088281"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"63868066910"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"68016005510"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"69452021103"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"69452021107"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"69452021116"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"69452021126"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"69452028317"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"69452028319"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"69452028325"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"69842068607"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"69842068630"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"69842068660"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"70000021701"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"72288044639"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NDC"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"79481044600"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"RXN_AI"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueString"</span><span class="p">:</span><span class="w"> </span><span class="s2">"{316167} 28889"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"RXN_AM"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueString"</span><span class="p">:</span><span class="w"> </span><span class="s2">"{316167} 28889"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"RXN_AVAILABLE_STRENGTH"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueString"</span><span class="p">:</span><span class="w"> </span><span class="s2">"10 MG"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"RXN_BOSS_FROM"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueString"</span><span class="p">:</span><span class="w"> </span><span class="s2">"{316167} AI"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"RXN_HUMAN_DRUG"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueString"</span><span class="p">:</span><span class="w"> </span><span class="s2">"US"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"RXTERM_FORM"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueString"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Cap"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"consists_of"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"316167"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"has_dose_form"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"316965"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"has_tradename"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"836338"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"parent"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"828268"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"parent"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1165336"</span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="p">{</span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"parent"</span><span class="p">,</span><span class="w"> </span><span class="nt">"valueCode"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1165337"</span><span class="p">}</span><span class="w"></span>
+<span class="w">      </span><span class="p">]</span><span class="w"></span>
+<span class="w">  </span><span class="p">}</span><span class="w"></span>
+</code></pre></div>
+<p>Then it would drop right in to <code>CodeSystem</code></p>
+
+
+
+<a name="276149501"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276149501" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276149501">(Mar 22 2022 at 06:57)</a>:</h4>
+<p>(I don't know RxNorm, so I've just guessed types for the properties above and that "PSN" might mean preferred synonym, and hence be the thing to use for "display")</p>
+
+
+
+<a name="276183617"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276183617" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276183617">(Mar 22 2022 at 12:54)</a>:</h4>
+<p>Cool! Sure, I'll give that a shot. I see I should be using word "designation" above. Quick notes</p>
+<ul>
+<li>
+<p>PSN is a "prescribable name" suitable for electronic prescribing UIs</p>
+</li>
+<li>
+<p>To my knowledge RxNorm only models attributes as strings, so even NDC codes would use valueString</p>
+</li>
+</ul>
+<p>QQ: is there a way to differentiate in FHIR between an attribute with a coded value vs a relationship to a concept? Like... use <a href="http://build.fhir.org/codesystem-definitions.html#CodeSystem.property.type">http://build.fhir.org/codesystem-definitions.html#CodeSystem.property.type</a> of valueCode for within-CodeSystem relationships, and use Codings got other coded attributes? Or is there a way to express this distinction explicitly?</p>
+
+
+
+<a name="276236032"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276236032" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276236032">(Mar 22 2022 at 18:38)</a>:</h4>
+<p>Here's an updated script that makes the changes you suggested (although I don't re-name "isa", and I use valueString for all attributes and valueCode for all relations)</p>
+<div class="spoiler-block"><div class="spoiler-header">
+<p>Generation</p>
+</div><div class="spoiler-content" aria-hidden="true">
+<p>sqlite3 rxnorm.db  "<br>
+with<br>
+by_designation as (<br>
+    select rxcui, json_object('use', json_object('code', tty), 'value', str) designation, (case<br>
+        when tty = 'PSN' then 1<br>
+        when tty in ('SY', 'TMSY', 'DF', 'ET', 'DFG') then -1<br>
+        else 0<br>
+        end) priority<br>
+    from rxnconso where SAB='RXNORM' order by priority desc),<br>
+by_attr as (<br>
+    select rxcui, json_object('code', atn, 'valueString', atv) attribute<br>
+    from rxnsat where sab='RXNORM'),<br>
+by_rela as (<br>
+    select rxcui2 as rxcui, json_object('code', rela, 'valueCode', rxcui1) relation<br>
+    from rxnrel where sab='RXNORM' and stype1='CUI'),<br>
+by_prop as (<br>
+    select rxcui, json_object('code', 'tty', 'valueString', designation-&gt;&gt;'use.code') as property from by_designation<br>
+    UNION<br>
+    select rxcui, attribute as property from by_attr<br>
+    UNION<br>
+    select rxcui, relation as property from by_rela<br>
+),<br>
+output_pass_1 as (<br>
+    select json_object(<br>
+        'code', c.rxcui,<br>
+        'display', c.designation-&gt;&gt;'value',<br>
+        'designation', json_group_array(json(c.designation))) as concept<br>
+    from by_designation c<br>
+    group by c.rxcui),<br>
+output_pass_2 as (<br>
+    select json_object(<br>
+        'code', prev.concept-&gt;&gt;'code',<br>
+        'display', prev.concept-&gt;'display',<br>
+        'designation', prev.concept-&gt;'designation',<br>
+        'property', json_group_array(json(<a href="http://by_prop.property">by_prop.property</a>))) as concept<br>
+    from output_pass_1 prev<br>
+    left join by_prop on prev.concept-&gt;&gt;'code' = by_prop.rxcui<br>
+    group by prev.concept-&gt;&gt;'code'<br>
+    )<br>
+select * from output_pass_2<br>
+" | gzip &gt; rxnorm.ndjson.gz</p>
+</div></div>
+<div class="spoiler-block"><div class="spoiler-header">
+<p>Example query</p>
+</div><div class="spoiler-content" aria-hidden="true">
+<div class="codehilite" data-code-language="Bash"><pre><span></span><code>$ jq -c  --slurp  <span class="s1">'</span>
+<span class="s1">    .[]</span>
+<span class="s1">    | select(.designation[] | select(.use.code == "SBD"))</span>
+<span class="s1">    | select(.property[] | select(.code=="RXTERM_FORM" and .valueString=="Gel"))</span>
+<span class="s1">'</span> &lt;<span class="o">(</span>zcat rxnorm.ndjson.gz <span class="o">)</span>
+</code></pre></div>
+<div class="codehilite" data-code-language="JavaScript"><pre><span></span><code><span class="p">{</span>
+  <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"998437"</span><span class="p">,</span>
+  <span class="s2">"display"</span><span class="o">:</span> <span class="s2">"miconazole nitrate 2 % Topical Gel"</span><span class="p">,</span>
+  <span class="s2">"designation"</span><span class="o">:</span> <span class="p">[</span>
+    <span class="p">{</span>
+      <span class="s2">"use"</span><span class="o">:</span> <span class="p">{</span>
+        <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"PSN"</span>
+      <span class="p">},</span>
+      <span class="s2">"value"</span><span class="o">:</span> <span class="s2">"miconazole nitrate 2 % Topical Gel"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="s2">"use"</span><span class="o">:</span> <span class="p">{</span>
+        <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"SCD"</span>
+      <span class="p">},</span>
+      <span class="s2">"value"</span><span class="o">:</span> <span class="s2">"miconazole nitrate 0.02 MG/MG Topical Gel"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="s2">"use"</span><span class="o">:</span> <span class="p">{</span>
+        <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"SY"</span>
+      <span class="p">},</span>
+      <span class="s2">"value"</span><span class="o">:</span> <span class="s2">"miconazole nitrate 2 % Topical Gel"</span>
+    <span class="p">}</span>
+  <span class="p">],</span>
+  <span class="s2">"property"</span><span class="o">:</span> <span class="p">[</span>
+    <span class="p">{</span>
+      <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"RXN_AI"</span><span class="p">,</span>
+      <span class="s2">"valueString"</span><span class="o">:</span> <span class="s2">"{998427} 42790"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"RXN_AM"</span><span class="p">,</span>
+      <span class="s2">"valueString"</span><span class="o">:</span> <span class="s2">"{998427} 6932"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"RXN_AVAILABLE_STRENGTH"</span><span class="p">,</span>
+      <span class="s2">"valueString"</span><span class="o">:</span> <span class="s2">"0.02 MG/MG"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"RXN_BOSS_FROM"</span><span class="p">,</span>
+      <span class="s2">"valueString"</span><span class="o">:</span> <span class="s2">"{998427} AI"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"RXN_HUMAN_DRUG"</span><span class="p">,</span>
+      <span class="s2">"valueString"</span><span class="o">:</span> <span class="s2">"US"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"RXTERM_FORM"</span><span class="p">,</span>
+      <span class="s2">"valueString"</span><span class="o">:</span> <span class="s2">"Gel"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"consists_of"</span><span class="p">,</span>
+      <span class="s2">"valueCode"</span><span class="o">:</span> <span class="s2">"998427"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"has_dose_form"</span><span class="p">,</span>
+      <span class="s2">"valueCode"</span><span class="o">:</span> <span class="s2">"346286"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"isa"</span><span class="p">,</span>
+      <span class="s2">"valueCode"</span><span class="o">:</span> <span class="s2">"1164112"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"isa"</span><span class="p">,</span>
+      <span class="s2">"valueCode"</span><span class="o">:</span> <span class="s2">"377981"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"tty"</span><span class="p">,</span>
+      <span class="s2">"valueString"</span><span class="o">:</span> <span class="s2">"PSN"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"tty"</span><span class="p">,</span>
+      <span class="s2">"valueString"</span><span class="o">:</span> <span class="s2">"SCD"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="s2">"code"</span><span class="o">:</span> <span class="s2">"tty"</span><span class="p">,</span>
+      <span class="s2">"valueString"</span><span class="o">:</span> <span class="s2">"SY"</span>
+    <span class="p">}</span>
+  <span class="p">]</span>
+<span class="p">}</span>
+</code></pre></div>
+</div></div>
+
+
+
+<a name="276438601"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276438601" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276438601">(Mar 24 2022 at 07:05)</a>:</h4>
+<p>Thank you, that is an awesome leg up!</p>
+
+
+
+<a name="276480123"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276480123" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276480123">(Mar 24 2022 at 14:08)</a>:</h4>
+<div class="spoiler-block"><div class="spoiler-header">
+<p>Boilerplate and tweaks for an actual CodeSystem</p>
+</div><div class="spoiler-content" aria-hidden="true">
+<div class="codehilite" data-code-language="Bash"><pre><span></span><code>sqlite3 rxnorm.db  <span class="s2">"</span>
+<span class="s2">with</span>
+<span class="s2">by_designation as (</span>
+<span class="s2">    select rxcui, json_object('use', json_object('code', tty), 'value', str) designation, (case</span>
+<span class="s2">        when tty = 'PSN' then 1</span>
+<span class="s2">        when tty in ('SY', 'TMSY', 'DF', 'ET', 'DFG') then -1</span>
+<span class="s2">        else 0</span>
+<span class="s2">        end) priority</span>
+<span class="s2">    from rxnconso where SAB='RXNORM' order by priority desc),</span>
+<span class="s2">by_attr as (</span>
+<span class="s2">    select rxcui, json_object('code', atn, 'valueString', atv) attribute</span>
+<span class="s2">    from rxnsat where sab='RXNORM'),</span>
+<span class="s2">by_rela as (</span>
+<span class="s2">    select rxcui2 as rxcui, json_object('code', rela, 'valueCode', rxcui1) relation</span>
+<span class="s2">    from rxnrel where sab='RXNORM' and stype1='CUI'),</span>
+<span class="s2">by_prop as (</span>
+<span class="s2">    select rxcui, json_object('code', 'TTY', 'valueString', designation-&gt;&gt;'use.code') as property from by_designation</span>
+<span class="s2">    UNION</span>
+<span class="s2">    select rxcui, attribute as property from by_attr</span>
+<span class="s2">    UNION</span>
+<span class="s2">    select rxcui, relation as property from by_rela</span>
+<span class="s2">),</span>
+<span class="s2">output_pass_1 as (</span>
+<span class="s2">    select json_object(</span>
+<span class="s2">        'code', c.rxcui,</span>
+<span class="s2">        'display', c.designation-&gt;&gt;'value',</span>
+<span class="s2">        'designation', json_group_array(json(c.designation))) as concept</span>
+<span class="s2">    from by_designation c</span>
+<span class="s2">    group by c.rxcui),</span>
+<span class="s2">output_pass_2 as (</span>
+<span class="s2">    select json_object(</span>
+<span class="s2">        'code', prev.concept-&gt;&gt;'code',</span>
+<span class="s2">        'display', prev.concept-&gt;'display',</span>
+<span class="s2">        'designation', prev.concept-&gt;'designation',</span>
+<span class="s2">        'property', json_group_array(json(by_prop.property))) as concept</span>
+<span class="s2">    from output_pass_1 prev</span>
+<span class="s2">    left join by_prop on prev.concept-&gt;&gt;'code' = by_prop.rxcui</span>
+<span class="s2">    group by prev.concept-&gt;&gt;'code'</span>
+<span class="s2">    )</span>
+<span class="s2">select json_object(</span>
+<span class="s2">  'resourceType', 'CodeSystem',</span>
+<span class="s2">  'id', 'rxnorm',</span>
+<span class="s2">  'url', 'http://www.nlm.nih.gov/research/umls/rxnorm',</span>
+<span class="s2">  'version', '20220703',</span>
+<span class="s2">  'name', 'RxNorm',</span>
+<span class="s2">  'title', 'RxNorm',</span>
+<span class="s2">  'status', 'draft',</span>
+<span class="s2">  'experimental', 'true',</span>
+<span class="s2">  'valueSet', 'http://www.nlm.nih.gov/research/umls/rxnorm/vs',</span>
+<span class="s2">  'content', 'complete',</span>
+<span class="s2">  'property', json_array(</span>
+<span class="s2">    json('{\"code\": \"NDC\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"ORIG_CODE\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"ORIG_SOURCE\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_ACTIVATED\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_AI\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_AM\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_AVAILABLE_STRENGTH\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_BN_CARDINALITY\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_BOSS_FROM\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_BOSS_STRENGTH_DENOM_UNIT\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_BOSS_STRENGTH_DENOM_VALUE\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_BOSS_STRENGTH_NUM_UNIT\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_BOSS_STRENGTH_NUM_VALUE\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_HUMAN_DRUG\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_IN_EXPRESSED_FLAG\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_OBSOLETED\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_QUALITATIVE_DISTINCTION\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_QUANTITY\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_STRENGTH\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXN_VET_DRUG\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"RXTERM_FORM\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"TTY\", \"type\": \"string\"}'),</span>
+<span class="s2">    json('{\"code\": \"consists_of\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"constitutes\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"contained_in\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"contains\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"dose_form_of\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"doseformgroup_of\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"form_of\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"has_dose_form\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"has_doseformgroup\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"has_form\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"has_ingredient\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"has_ingredients\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"has_part\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"has_precise_ingredient\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"has_quantified_form\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"has_tradename\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"ingredient_of\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"ingredients_of\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"part_of\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"precise_ingredient_of\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"quantified_form_of\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"reformulated_to\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"reformulation_of\", \"type\": \"code\"}'),</span>
+<span class="s2">    json('{\"code\": \"tradename_of\", \"type\": \"code\"}')</span>
+<span class="s2">  ),</span>
+<span class="s2">  'concept', json_group_array(concept)</span>
+<span class="s2">) from output_pass_2</span>
+<span class="s2">"</span> <span class="se">\</span>
+  <span class="p">|</span> sed <span class="s1">'s/"inverse_isa"/"child"/g'</span> <span class="se">\</span>
+  <span class="p">|</span> sed <span class="s1">'s/"isa"/"parent"/g'</span> <span class="se">\</span>
+  <span class="p">|</span> gzip &gt; rxnorm.json.gz
+</code></pre></div>
+</div></div>
+<p>As a first-cut, this is usable, promising, and only 5.5M compressed.</p>
+<p>Looking at <a href="https://www.hl7.org/fhir/rxnorm.html#4.3.2.3">https://www.hl7.org/fhir/rxnorm.html#4.3.2.3</a> there's a more explicit spec for identifying the display term, as well as a general filter here <a href="https://www.hl7.org/fhir/rxnorm.html#filters">https://www.hl7.org/fhir/rxnorm.html#filters</a> for identifying valid(?) CUIs that probably need to be factored in and then it'd be nice to have a standard transform into a CodeSystem representation.</p>
+
+
+
+<a name="276485336"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276485336" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276485336">(Mar 24 2022 at 14:42)</a>:</h4>
+<p>I was a bit puzzled by <a href="https://www.hl7.org/fhir/rxnorm.html">https://www.hl7.org/fhir/rxnorm.html</a> as a whole, so I decided to just think about how I would want to represent RxNorm concepts on my own as a first pass. The SQL queries listed on that page for generating display names, for example, only match concepts for a couple of types. They omit about a dozen types including branded and generic drug packs, branded and generic ingredients, precise ingredients, and so on. I'm also not sure why the SCD/SBD designation afeknfsy would be preferred to a prescribable designation string for example. This might be reasonable but I don't know whether this was a considered decision or just a default choice.</p>
+<p>(I did submit a Jira issue asking why RxNorm attributes are not included in that page, but I realize I don't have full context for the choices made in that page.)</p>
+
+
+
+<a name="276485761"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276485761" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276485761">(Mar 24 2022 at 14:45)</a>:</h4>
+<p>I will noodle on suggestions for mapping a file like this into a standard CodeSystem resource. The main decision I see is whether to include the additional framing metadata (URL, publisher, version, etc) as a headerline in this GZip ndjson file or as a separate companion CodeSystem (sans concepts) JSON file. I tend toward the latter.</p>
+
+
+
+<a name="276518067"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276518067" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276518067">(Mar 24 2022 at 18:09)</a>:</h4>
+<p><a href="https://build.fhir.org/rxnorm">https://build.fhir.org/rxnorm</a> specifies version as</p>
+<blockquote>
+<p>Where a version is used, it should be the date of release, encoded as in the download files, e.g. "07092014"</p>
+</blockquote>
+<p>... but this doesn't distinguish between different releases like Full releases vs Current Prescribable Content releases. So I'm going to use a modified convention based on RxNorm filenames (with the <code>RxNorm_</code> prefix and <code>.zip</code> suffix stripped).</p>
+
+
+
+<a name="276522356"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276522356" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276522356">(Mar 24 2022 at 18:41)</a>:</h4>
+<p>One thought is that for publication, separating the CodeSystem from the Concepts array as follows may be a good idea:</p>
+<div class="spoiler-block"><div class="spoiler-header">
+<p>CodeSystem as small FHIR JSON file</p>
+</div><div class="spoiler-content" aria-hidden="true">
+<div class="codehilite" data-code-language="JSON"><pre><span></span><code><span class="p">{</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"resourceType"</span><span class="p">:</span><span class="w"> </span><span class="s2">"CodeSystem"</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://www.nlm.nih.gov/research/umls/rxnorm"</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"identifier"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">    </span><span class="p">{</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"system"</span><span class="p">:</span><span class="w"> </span><span class="s2">"urn:ietf:rfc:3986"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="s2">"urn:oid:2.16.840.1.113883.4.642.4.343"</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">  </span><span class="p">],</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"full_prescribe_03072022"</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"RxNormCurrentPrescribableContent"</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"title"</span><span class="p">:</span><span class="w"> </span><span class="s2">"RxNorm Current Prescribable Content"</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"draft"</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"experimental"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"publisher"</span><span class="p">:</span><span class="w"> </span><span class="s2">"U.S. National Library of Medicine"</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"valueSet"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http://www.nlm.nih.gov/research/umls/rxnorm/vs"</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"RxNorm provides normalized names for clinical drugs and links its names to many of the drug vocabularies commonly used in pharmacy management and drug interaction software"</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"copyright"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Attribution and Rights for Government Works:  Works produced by the U.S. government are not subject to copyright protection in the United States. Any such works found on National Library of Medicine (NLM) Web sites may be freely used or reproduced without permission in the U.S. Please acknowledge NLM as the source of the information by including the phrase “Courtesy of the U.S. National Library of Medicine” or “Source: U.S. National Library of Medicine.”"</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"caseSensitive"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"content"</span><span class="p">:</span><span class="w"> </span><span class="s2">"complete"</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">"extension"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://tx.fhir.me/concepts.ndjson.gz"</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="nt">"valueUrl"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ipfs://QmdcesSyDm12aSjfg1fFR28Yhfi6yC6nRxcNJkazU2zN5r/concepts/rxnorm/full_prescribe_03072022.ndjson.gz"</span><span class="w"></span>
+<span class="w">  </span><span class="p">}]</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre></div>
+</div></div>
+<p>...this then links out to a concepts file via <code>.extension.valueUrl</code> (example above uses IPFS; can be resolved via <code>ipfs get QmdcesSyDm12aSjfg1fFR28Yhfi6yC6nRxcNJkazU2zN5r/concepts/rxnorm/full_prescribe_03072022.ndjson.gz</code> or with a web gateway like <a href="https://cloudflare-ipfs.com/ipfs/QmdcesSyDm12aSjfg1fFR28Yhfi6yC6nRxcNJkazU2zN5r/concepts/rxnorm/full_prescribe_03072022.ndjson.gz">https://cloudflare-ipfs.com/ipfs/QmdcesSyDm12aSjfg1fFR28Yhfi6yC6nRxcNJkazU2zN5r/concepts/rxnorm/full_prescribe_03072022.ndjson.gz</a>). I'm thinking this would make it easier for servers to associate content with the "scaffold" as needed.</p>
+
+
+
+<a name="276530790"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276530790" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276530790">(Mar 24 2022 at 19:53)</a>:</h4>
+<p>I'm not at all familiar with RxNorm details, so the rxnorm.html page was the best I had to go on, but I do get the sense that it's not mature.<br>
+It would be great to get people expert in the content itself involved in reviewing it and filling in the gaps.</p>
+
+
+
+<a name="276531082"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276531082" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276531082">(Mar 24 2022 at 19:55)</a>:</h4>
+<p>On the version topic, whether rxnorm uses date strings in the form DDMMYYYY or MMDDYYYY ( I guess the latter since it's the US), these are bad for sorting -- it would be far better to base them on YYYYMMDD so that a natural lexical ordering also matches date ordering.<br>
+Also I did wonder about the Full releases vs Current Prescribable Content release and how these relate to each other - are they just parallel versions where one is a strict subset of the other?</p>
+
+
+
+<a name="276531330"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276531330" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276531330">(Mar 24 2022 at 19:57)</a>:</h4>
+<blockquote>
+<p>On the version topic, whether rxnorm uses date strings in the form DDMMYYYY or MMDDYYYY ( I guess the latter since it's the US), these are bad for sorting -- it would be far better to base them on YYYYMMDD so that a natural lexical ordering also matches date ordering.</p>
+</blockquote>
+<p>100%. The current rxnorm.html page establishes this convention as a direct reflection of NLM's filename conventions.</p>
+
+
+
+<a name="276531368"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276531368" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276531368">(Mar 24 2022 at 19:57)</a>:</h4>
+<blockquote>
+<p>I did wonder about the Full releases vs Current Prescribable Content release and how these relate to each other - are they just parallel versions where one is a strict subset of the other?</p>
+</blockquote>
+<p>Yes, Current Prescribable should be a strict subset of Full. It's licensed more liberally, excludes attributes sourced from third-party drug terminologies, and excludes retired concepts. (At least, that's my rough understanding.)</p>
+
+
+
+<a name="276532530"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276532530" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276532530">(Mar 24 2022 at 20:06)</a>:</h4>
+<p>I'm not sure why you want to separate the metadata parts from the concepts though.  (Part of) the metadata changes every release and it's not a significant addition?</p>
+
+
+
+<a name="276532912"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276532912" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276532912">(Mar 24 2022 at 20:09)</a>:</h4>
+<p>I'm only looking to separate them insofar as I want to support things like</p>
+<ul>
+<li>POSTing a small resource to a server and letting the server resolve concepts asynchronously in the background</li>
+<li>Streaming processing of concepts one by one</li>
+</ul>
+<p>But maybe I'll try for a "belt and suspenders" and throw the "shell" CodeSystem into the first line of the ndjson.gz file</p>
+
+
+
+<a name="276541704"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276541704" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Craig McClendon <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276541704">(Mar 24 2022 at 21:26)</a>:</h4>
+<p>Not sure if this is helpful, but throwing it out there in case it is.. <br>
+The OMOP/OHDSI terminology downloads include RxNorm (300.3K concepts) in the omop terminology schema. <br>
+It's an easy schema to query. <br>
+I ran a few queries to see what's there and it appears to capture the hierarchies and many relationships. </p>
+<p>These are all the relationship types I see for it for one direction of the relationship (with counts): <br>
+Has dose form group 39179<br>
+Has form    3145<br>
+Has marketed form   343467<br>
+Has precise ing 14138<br>
+Has quantified form 20342<br>
+Has tradename   378819<br>
+Is a    8<br>
+Mapped from 1092880<br>
+Maps to 200375<br>
+Precise ing of  14138<br>
+Quantified form of  6446<br>
+RxNorm - ATC    30084<br>
+RxNorm - ATC pr lat 5078<br>
+RxNorm - ATC pr up  3622<br>
+RxNorm - ATC sec lat    1278<br>
+RxNorm - ATC sec up 36571<br>
+RxNorm - SNOMED eq  21148<br>
+RxNorm dose form of 1758063<br>
+RxNorm has dose form    105946<br>
+RxNorm has ing  87212<br>
+RxNorm ing of   260090<br>
+RxNorm inverse is a 243613<br>
+RxNorm is a 219049<br>
+Subsumes    4<br>
+Tradename of    105457</p>
+
+
+
+<a name="276546208"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276546208" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276546208">(Mar 24 2022 at 22:11)</a>:</h4>
+<p>Indeed -- the releases in OMOP do a good job covering core vocabularies used in profiles like US Core</p>
+
+
+
+<a name="276546504"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276546504" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276546504">(Mar 24 2022 at 22:14)</a>:</h4>
+<p>Attributes and relationships are well accounted for. The distribution mechanism relies <a href="https://athena.ohdsi.org/vocabulary/list">https://athena.ohdsi.org/vocabulary/list</a> or something similar to centrally/consistently allocate identifiers for each code system, which makes it a bit harder to manage in an environment where different publishers manage their own process. (While this thread is focused on rxnorm, the capability I'm driving at here is a general-purpose distribution mechanism for CodeSystems that can easily be loaded into a FHIR server. Using OMOP table structures is certainly a possibility there, but it require working through a bit of mapping into the FHIR structures on the receiving side, and I'm wondering whether it's possible to do something more "fhir native".)</p>
+
+
+
+<a name="276546611"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276546611" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276546611">(Mar 24 2022 at 22:15)</a>:</h4>
+<p>I've captured my current thinking in <a href="https://github.com/jmandel/fhir-concept-publication-demo">https://github.com/jmandel/fhir-concept-publication-demo</a> which has examples of:</p>
+<ul>
+<li>CodeSystem JSON file with all concepts embedded</li>
+<li>CodeSystem JSON "shell" with a pointer to concepts in an ndjson file</li>
+<li>ndjson file where the first line is a CodeSystem and each subsequent line is a Concept</li>
+</ul>
+
+
+
+<a name="276555663"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276555663" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Lawley <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276555663">(Mar 25 2022 at 00:05)</a>:</h4>
+<p><span class="user-mention" data-user-id="193261">@Craig McClendon</span> can you explain what's going on with "Is a" and "RxNorm is a" (and, I guess, "Subsumes" and "RxNorm inverse is a") -- why are these separate?</p>
+
+
+
+<a name="276621697"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/276621697" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Craig McClendon <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#276621697">(Mar 25 2022 at 13:54)</a>:</h4>
+<p><span class="user-mention" data-user-id="191343">@Michael Lawley</span>  I don't know enough about RxNorm to tell you much. 'Is a' has only 8 relationships, 'Subsumes' 4. Here are some samples of the codes that match those relationships (columns below are concept1_id , concept1_name, concept2_id, concept2_name)</p>
+<div class="codehilite"><pre><span></span><code>&#39;Is a&#39;
+40220901    influenza A virus (H5N1) antigen    21601333    Influenza vaccines
+42903441    influenza A virus   21601333    Influenza vaccines
+42903442    influenza B virus   21601333    Influenza vaccines
+42903696    immunoglobulin M, human 21601255    Immunoglobulins, normal human
+43531966    immunoglobulin A    21601255    Immunoglobulins, normal human
+44814323    hepatitis C virus   21601337    Hepatitis vaccines
+19117912    immunoglobulin G    21601255    Immunoglobulins, normal human
+19013765    respiratory syncytial virus immune globulin intravenous 21601276    Other immunoglobulins
+
+&#39;Subsumes&#39;
+1311078 cytarabine  2718853 Injection, cytarabine liposome, 10 mg
+1338512 doxorubicin 43533290    Injection, doxorubicin hydrochloride, liposomal, imported lipodox, 10 mg
+1338512 doxorubicin 44786607    Injection, doxorubicin hydrochloride, liposomal, not otherwise specified, 10 mg
+1717240 amphotericin B  2718244 Injection, amphotericin b liposome, 10 mg
+
+&#39;RxNorm inverse is a&#39;
+739473  relugolix Oral Product  739475  relugolix Oral Tablet
+739473  relugolix Oral Product  739476  relugolix 120 MG Oral Tablet
+...
+</code></pre></div>
+
+
+
+<a name="277472924"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/277472924" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert McClure <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#277472924">(Apr 01 2022 at 20:21)</a>:</h4>
+<p>Catching up on zulip... I am not an RxNorm technical expert; don't even have it loaded in a DB (that may be coming soon ;-) BUT wrt <span class="user-mention" data-user-id="193261">@Craig McClendon</span> relationship list above,  I don't think any of those codes are RxNorm <em>concept identifiers</em>, IE; RxCUIs. They might be atom identifiers. And even then, remember that RxNorm <strong>only</strong> represents drug elements, so things like viruses and Influenza vaccines likely are external information included in the files. It does include information (limited) representing drug classes. For example <a href="https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&amp;searchTerm=2472780">relugolix Oral Product </a> has [RxCUI = 2472780].</p>
+
+
+
+<a name="277474403"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/277474403" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Craig McClendon <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#277474403">(Apr 01 2022 at 20:34)</a>:</h4>
+<p>That's my mistake <span class="user-mention" data-user-id="191503">@Robert McClure</span>  - I listed the primary keys and not the concept codes above. The RxCUI 2472780 is indeed associated with Relugolix Oral Product in the Athena database.</p>
+
+
+
+<a name="277475386"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179202-terminology/topic/Concepts%20from%20RxNorm%20and%20terminology%20powered%20search/near/277475386" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Craig McClendon <a href="https://fhir.github.io/chat-archive/stream/179202-terminology/topic/Concepts.20from.20RxNorm.20and.20terminology.20powered.20search.html#277475386">(Apr 01 2022 at 20:43)</a>:</h4>
+<p>If anyone is interested, you can use the Athena web UI to browse and see what all is in it.  I think this link should work:    <a href="https://athena.ohdsi.org/search-terms/terms?query">https://athena.ohdsi.org/search-terms/terms?query</a></p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

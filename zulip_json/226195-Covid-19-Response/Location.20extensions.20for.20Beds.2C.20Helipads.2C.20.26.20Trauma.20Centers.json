@@ -1,0 +1,80 @@
+[
+    {
+        "content": "<p>Hi,<br>\nSo I've been digging into the ArcGIS HIFLD Hospital data file, and interestingly it provides a nation wide inventory of 7581 hospitals, including bed count, trauma center availability, and helipad availability.  Here's a sample record if anybody wants to take a look:</p>\n<div class=\"codehilite\"><pre><span></span>{\n  type: &#39;Feature&#39;,\n  properties: {\n    OBJECTID: 1001,\n    ID: &#39;0007892363&#39;,\n    NAME: &#39;COLORADO RIVER MEDICAL CENTER&#39;,\n    ADDRESS: &#39;1401 BAILEY AVENUE&#39;,\n    CITY: &#39;NEEDLES&#39;,\n    STATE: &#39;CA&#39;,\n    ZIP: &#39;92363&#39;,\n    ZIP4: &#39;NOT AVAILABLE&#39;,\n    TELEPHONE: &#39;NOT AVAILABLE&#39;,\n    TYPE: &#39;GENERAL ACUTE CARE&#39;,\n    STATUS: &#39;OPEN&#39;,\n    POPULATION: 25,\n    COUNTY: &#39;SAN BERNARDINO&#39;,\n    COUNTYFIPS: &#39;06071&#39;,\n    COUNTRY: &#39;USA&#39;,\n    LATITUDE: 34.8330659210001,\n    LONGITUDE: -114.617493964,\n    NAICS_CODE: &#39;622110&#39;,\n    NAICS_DESC: &#39;GENERAL MEDICAL AND SURGICAL HOSPITALS&#39;,\n    SOURCE: &#39;http://www.oshpd.ca.gov/HID/Facility-Listing.html&#39;,\n    SOURCEDATE: &#39;2018-08-08T00:00:00.000Z&#39;,\n    VAL_METHOD: &#39;IMAGERY/OTHER&#39;,\n    VAL_DATE: &#39;2014-02-10T00:00:00.000Z&#39;,\n    WEBSITE: &#39;http://www.cityofneedles.com/Hospitals.asp&#39;,\n    STATE_ID: &#39;NOT AVAILABLE&#39;,\n    ALT_NAME: &#39;NOT AVAILABLE&#39;,\n    ST_FIPS: &#39;06&#39;,\n    OWNER: &#39;GOVERNMENT - LOCAL&#39;,\n    TTL_STAFF: -999,\n    BEDS: 25,\n    TRAUMA: &#39;NOT AVAILABLE&#39;,\n    HELIPAD: &#39;Y&#39;\n  },\n  geometry: {\n    type: &#39;Point&#39;,\n    coordinates: [ -114.61749396399995, 34.83306592100008 ]\n  }\n}\n</pre></div>\n\n\n<p>Anyhow, I'm thinking it makes sense to create a Location extension to track some of these extra parameters.</p>",
+        "id": 193748036,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1586758559
+    },
+    {
+        "content": "<p>I had used an extension somewhere to store the lat/long to support \"near\" search in FHIR.  The ID: field is something we can put into the identifier of the reporting organization.  Since the other data is publicly accessible knowledge, if the consumer wants it, they could simply join against the ARCGIS data set.</p>",
+        "id": 193755245,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1586768423
+    },
+    {
+        "content": "<p>There is Long/Lat in the Location resource -- Location.position<br>\nYou added extension on the Measure.. I think the Location resource should be leveraged for this, not duplicated in extensions in Measure</p>",
+        "id": 193770908,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1586783933
+    },
+    {
+        "content": "<p>Several of these should also also be slottable into existing identifier and telecommunication elements. It would be good to figure out what's left over.</p>",
+        "id": 193771040,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1586784055
+    },
+    {
+        "content": "<p>Note of clarification:  I'm thinking less of a location extension on other elements (that has been covered previously), and more along the lines of what Josh is saying, and making sure that identifier and telecom extension is available to add to Location.  </p>\n<p>Yeah, it's the beds, trauma unit, and helipad fields that are the leftovers that I'm noodling over.  There are the <code>Location.physicalType</code> field and the <code>Location.type</code> array that can maybe be used to track trauma/helipad availability.  physicalType seems more appropriate, but it's not available as an array.  We'd need have separate Locations and link together via <code>Location.partOf</code>, which is its own bit of set theory fun.  </p>\n<p>But the two fields from this geojson file that would probably be most impactful to have on Location via an extension would be  <code>POPULATION</code> and <code>BEDS</code>.  In effect, the ArcGIS HIFLD Hospital data file is arguing (on behalf of the GIS community) that there is a clear use case for a capacity planning and population census extension for Location.</p>\n<p>And if we go and make a an extension with two valueQuantitites for beds and population, should we also include ventilators, masks, etc?</p>",
+        "id": 193778857,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1586789099
+    },
+    {
+        "content": "<p>Also, to further clarify - when the Location resources wind up in the GIS systems, they tend to get squashed/mapped into large GeoJson files, or translated into super in-memory optimized LatLng or Marker pointers.  Due to the nature of how GIS systems load up large data sets of tiny points and do their rendering, it's often not possible to do data joins after the fact.  It wont work with the map rendering lifecycle.  The data that is going to be on the map is preferably squashed onto the Location object as it enters the GIS system, hence the use case for a Location extention for things like capacity planning.  Within the GIS application, that extension will be getting mapped to color and styling variables in the presentation layer, and it's difficult to pull in other data after-the-fact.</p>",
+        "id": 193779626,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1586789556
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191404\">John Moehrke</span> <a href=\"#narrow/stream/226195-Covid-19-Response/topic/Location.20extensions.20for.20Beds.2C.20Helipads.2C.20.26.20Trauma.20Centers/near/193770908\" title=\"#narrow/stream/226195-Covid-19-Response/topic/Location.20extensions.20for.20Beds.2C.20Helipads.2C.20.26.20Trauma.20Centers/near/193770908\">said</a>:</p>\n<blockquote>\n<p>There is Long/Lat in the Location resource -- Location.position<br>\nYou added extension on the Measure.. I think the Location resource should be leveraged for this, not duplicated in extensions in Measure</p>\n</blockquote>\n<p>John, I added that a while back.  It kind of  depends on where Location fits, because MeasureReport can have either \"Location\" or \"Organization\" as the reporter.  Location can get you to Organization, so using that might work, but then we get into a \"Chained + near\" search in a FHIR Server.  I know I can probably make one or the other work in at least one off-the-shelf server, but combining both could be challenging.  I'll look at this when I get to rebuilding examples tonight for FEMA reports from real (state level) data.</p>",
+        "id": 193828042,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1586815934
+    },
+    {
+        "content": "<p>I'm struggling a bit here because it feels like we are defining a second FHIR structure for the same data we have in SANER (e.g., if we are adding all the quantities we care about to location, why are we using <code>Measure</code> and <code>MeasureReport</code>?).  Further (as Abigail points out), the data needs to be converted from FHIR into something like GeoJson anyway.</p>\n<p>I guess my question is: if there's already a required translation step, can it use the SANER format as input?</p>\n<ul>\n<li>this could be the return of an operation - a Bundle with the Org, Location, and Reports of interest</li>\n<li>in addition to a FHIR Bundle, servers could support GeoJson (<code>application/geo+json</code>) returns directly</li>\n</ul>\n<p>Even if a FHIR server didn't want to implement the operation, a proxy could be stood up in front of anything that's SANER compliant quite easily.</p>",
+        "id": 193921155,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1586880799
+    },
+    {
+        "content": "<p>So, I'd suggest that the extension for Location be thought of in terms of supporting presentation layer only.  Google Maps isn't the place to have provenance, auditing, measure reporting, etc.  We just need to know how to color markers and which icons to use.  Yet, with that being said, if we're going to put that presentation data anywhere, the Location resource makes the most sense because it primarily handles Lat/Lng already.  This isn't suggesting to muck with any of the upstream decisions or processes that have been hashed out.  We just need a rider extension on the resource that some of the downstream systems will be exchanging.</p>\n<p>Otherwise, yes on the proxy servers.  <code>application/geo+json</code> would be ideal, but I'm not holding my breath waiting for the major vendors to implement anytime soon.  T</p>\n<p>A Bundle of Org, Location, Reports would also be perfectly fine.  Our server acting as a proxy could totally handle that.  But once it's in our system, we will be flattening it into something that can be stored in a single table with a 2dsphere geospatial index on Mongo.  That's how we get performant scalability, is to preoptimize the queries and do the joins at the front end when the server receives the data.  The received Orgs, Reports, and Locations will be sitting around in helper collections.  </p>\n<p>The obvious resource for doing all that is a modified Location (with internal extensions), and we just run the geospatial index on the Lat/Lng point.   But if we're serving those indexed Location records up to mapping clients or other GIS systems, then we have a responsibility to document our changes according to the FHIR spec.</p>",
+        "id": 193928632,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1586884244
+    },
+    {
+        "content": "<p>My concern is around trying to push specific presentation logic into generic resources/servers/specs - particularly when it duplicates data from other areas.  I don't think it's possible to capture all the requirements (especially over time), and my experience is that chasing it is always painful.</p>\n<p>To use the mapping example, what about when I need to start reporting Ethnicity, distance to care location, etc.?  There would be quite a few extensions on Location, and you only care about a couple of them.</p>\n<p>If the existing formats aren't suitable for exchange downstream, that is something that should be discussed/addressed.  The more formats we have, the more likely we are to introduce errors.</p>",
+        "id": 193945856,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1586892440
+    },
+    {
+        "content": "<p>It's an extension.  We're not discussing putting the that presentation data into the Location schema itself.  It's what extensions were built for.  And we're going to have an SQL/NoSQL disagreement around normalizing data and deduplicating.  So let's just agree to disagree on that point.  If the CDC updates their reporting requirements, and it goes through SANER, and we need to update Covid19 related maps accordingly, we'll update the extension.  This doesn't need to be difficult.</p>",
+        "id": 193949588,
+        "sender_full_name": "Abbie Watson",
+        "timestamp": 1586894391
+    },
+    {
+        "content": "<p>Apologies if I come across as being difficult.  I am just hoping to avoid multiple \"standard\" representations of the same data in FHIR.</p>",
+        "id": 193955435,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1586897458
+    },
+    {
+        "content": "<p>I'd ask that folks write up the user stories around location as Issues, so that we can get more clarity on the requirements.  I'll write up the user story on the extension I used and that can help explain why I used it.  It's already partly in these stories  <a href=\"https://github.com/AudaciousInquiry/fhir-saner/issues/23\" title=\"https://github.com/AudaciousInquiry/fhir-saner/issues/23\">https://github.com/AudaciousInquiry/fhir-saner/issues/23</a> and <a href=\"https://github.com/AudaciousInquiry/fhir-saner/issues/24\" title=\"https://github.com/AudaciousInquiry/fhir-saner/issues/24\">https://github.com/AudaciousInquiry/fhir-saner/issues/24</a></p>",
+        "id": 193957282,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1586898418
+    }
+]

@@ -1,0 +1,62 @@
+[
+    {
+        "content": "<p>Hi All,<br>\nI have following requirement for FHIR subscription:<br>\n Client application wants to subscribe and get notification in following scenario:</p>\n<div class=\"codehilite\"><pre><span></span><code> - When Task resource linked to a patient X is created, modified\n AND\n\n - Encounter linked to a patient X has specific code ABC\n</code></pre></div>\n\n<p>I thought of using Subscription with following :</p>\n<p>- *Criteria * field as : &lt;Server&gt;/fhir/task?owner:Patient=12345<br>\n   - additional criteria ( as mentioned in  <a href=\"https://build.fhir.org/ig/HL7/fhir-subscription-backport-ig/StructureDefinition-backport-subscription.html\">https://build.fhir.org/ig/HL7/fhir-subscription-backport-ig/StructureDefinition-backport-subscription.html</a>)<br>\n      as  &lt;Server&gt;/fhir/Encounter? patient=12345&amp;code=ABC</p>\n<p>Could you please let me know if my usage of ANDing Criteria and additional criteria is correct? </p>\n<p>I am using combination of Criteria and additional criteria as in AND combination to narrow down the condition to send notification (only when Task resource for a patient with particular encounter exists).</p>",
+        "id": 224031531,
+        "sender_full_name": "Anand Jahagirdar",
+        "timestamp": 1611664226
+    },
+    {
+        "content": "<p>@all, do you have any inputs for me. thanks.</p>",
+        "id": 224145736,
+        "sender_full_name": "Anand Jahagirdar",
+        "timestamp": 1611730110
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span> ? the backport description doesn't show us exactly what 'additional criteria' maps to in R5 ..</p>",
+        "id": 224151298,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1611735639
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191372\">@René Spronk</span> Indeed, it doesn't appear to.  The short answer is that it is needed to avoid creating a new search syntax for multiple resource triggers (e.g., if a subscription can trigger off of <code>Encounter</code> or <code>Appointment</code>, how do you express the filters rooted in each).  That said, if you could open a ticket I would appreciate it.</p>",
+        "id": 224188524,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1611757910
+    },
+    {
+        "content": "<p><a href=\"https://jira.hl7.org/projects/FHIR/issues/FHIR-30634\">https://jira.hl7.org/projects/FHIR/issues/FHIR-30634</a></p>",
+        "id": 224191370,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1611759002
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"221050\">@Anand Jahagirdar</span> , sorry for not seeing this - WGM week is crazy.</p>\n<p>From a quick look, that is not quite correct.  Having multiple resource triggers is a way of specifying different ways the subscription could be triggered (e.g., starting from an <code>Appointment</code> or starting from an <code>Encounter</code>).</p>\n<p>I think it requires a change to the definition of your SubscriptionTopic; e.g., you want to know when a <code>Task</code> is <code>created</code> or <code>modified</code> and that Task's <code>patient</code> <code>_has</code> an <code>Encounter</code> with the code you are looking for (I'm not sure if you mean a reason code, or some other).</p>\n<p>With the updated definition, the only filter is on the Patient (id).  The model moves most of the complexity into the topic, so a server is aware of what they are signing up for by when supporting a topic.</p>",
+        "id": 224196389,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1611760918
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span> . <br>\nLet me explain what I understood from your statement:</p>\n<ul>\n<li>I have to create a subscriptionTopic :  Change in Task whose patient has an encounter with specific reason code.</li>\n</ul>\n<p>Then how will criteria look like? Task resource or Patient resource. <br>\nI believe it will be Task resource.<br>\nFrom server implementation point of view, </p>\n<ul>\n<li>I will still be monitoring Task resource creation / modification:<ul>\n<li>When I update/ create Task, I will evaluate the Patient resource corresponding to Task has particular encounter or not.</li>\n<li>If Yes, send notification with Task</li>\n<li>If No, no notification.</li>\n</ul>\n</li>\n</ul>\n<p>I am still not clear how I should communicate this to my clients:</p>\n<p>- only through subscription Topic <br>\n - or through Criteria as well.</p>\n<p>Again, I assume through subscription topic and Criteria is on plain Task resource.</p>\n<p>Is my understanding correct ? thanks.</p>",
+        "id": 224213300,
+        "sender_full_name": "Anand Jahagirdar",
+        "timestamp": 1611767301
+    },
+    {
+        "content": "<p>There are two areas where criteria of some kind are applied.  The first is the core of what a <code>SubscriptionTopic</code> does, the <code>resourceTrigger</code>.  Based on what I understand you are trying to do, it sounds like you would want a <code>resourceTrigger</code> rooted in <code>Task</code>.  Building the exact triggering criteria expressions for this topic will probably take some tinkering and sample data to make sure it is correct.</p>\n<p>Generally speaking, we have tried to put anything 'complex' into this area.  This is to allow servers to understand the implications of topics they want to support.  In earlier versions of subscriptions, this was on the subscription itself.  Unfortunately, that meant servers were being asked to do a lot of work which they didn't support or at least had not optimized for.</p>\n<p>However, it wouldn't make sense to make topics for each individual patient (for example).  So, the other place where some form of filtering exists is in the <code>canFilterBy</code> and matching <code>filterBy</code> (R5) or <code>criteria</code>/<code>additionalCriteria</code> (R4 backport).  These are filters the server exposes to clients.  If it is expected that a client would want only notifications for one particular patient (for example), the allowed filters can include the search parameter <code>patient</code>.  When creating a subscription, the requester can then set that filter to match what they should receive.</p>\n<p>For the communication between server and client, it is a little challenging in the backport (compared to R5) because the new resources do not exist; right now the idea is to do that kind of discovery is out of band.  Given how specific this topic is, I assume you have some sort of integration documentation - that would be a good place to describe this and list the canonical URL for the topic.  Long term, topics will also be listed in the FHIR registry, to make them easier to reuse.</p>\n<p>So overall (again, using the backport):</p>\n<ul>\n<li>You define the topic (e.g., task for patients that have had this particular type of encounter) with the appropriate trigger definitions (e.g., query criteria, FHIRpath, etc.).</li>\n<li>Implementers are made aware of the topic and what it means externally (e.g., through documentation).</li>\n<li>Subscribers can filter based what is allowed in the SubscriptionTopic (e.g., if a subscriber is only interested in notifications for <code>Patient/123</code>).</li>\n</ul>",
+        "id": 224364046,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1611855676
+    },
+    {
+        "content": "<p>For me, I like to think about the trigger being what the subscription is for (so must fully describe the event and change of interest), and exposed filters are for letting clients reduce to what they can/should/want to see of that set.</p>",
+        "id": 224364790,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1611855902
+    },
+    {
+        "content": "<p>Thanks for the clarifications <span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span></p>",
+        "id": 224570038,
+        "sender_full_name": "Anand Jahagirdar",
+        "timestamp": 1611989979
+    }
+]

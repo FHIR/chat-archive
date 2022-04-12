@@ -1,0 +1,172 @@
+---
+layout: page
+title: "FHIR Chat  · How to authenticate with C# FHIR API to post to simplifier · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/How.20to.20authenticate.20with.20C.23.20FHIR.20API.20to.20post.20to.20simplifier.html">How to authenticate with C# FHIR API to post to simplifier</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153904293"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/How%20to%20authenticate%20with%20C%23%20FHIR%20API%20to%20post%20to%20simplifier/near/153904293" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Munro <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/How.20to.20authenticate.20with.20C.23.20FHIR.20API.20to.20post.20to.20simplifier.html#153904293">(Sep 01 2017 at 10:25)</a>:</h4>
+<p>I'm trying to post a structure definition to a simplifier project, I have the project endpoint and tried the following but get an error 'unauthorised' using the code below</p>
+<p>var uri = new Uri(simplifierEndpoint);<br>
+var uriWithCred = new UriBuilder(uri) { UserName = "myusername", Password = "mypassword" }.Uri;<br>
+var client = new FhirClient(uriWithCred);</p>
+<p>FhirXmlParser parser = new FhirXmlParser();<br>
+StructureDefinition stdef = parser.Parse&lt;StructureDefinition&gt;(XMLstr); //XMLstr is file with profile<br>
+client.Create&lt;StructureDefinition&gt;(stdef);</p>
+<p>I'm wondering if <span class="user-mention" data-user-id="191347">@Mirjam Baltus</span> , <span class="user-mention" data-user-id="191328">@Ewout Kramer</span>  or <span class="user-mention" data-user-id="191336">@Michel Rutten</span>  could help?</p>
+
+
+
+<a name="153904294"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/How%20to%20authenticate%20with%20C%23%20FHIR%20API%20to%20post%20to%20simplifier/near/153904294" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michel Rutten <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/How.20to.20authenticate.20with.20C.23.20FHIR.20API.20to.20post.20to.20simplifier.html#153904294">(Sep 01 2017 at 10:52)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="193298">@Chris Munro</span>, you should add the credentials to the http headers. In Forge we use a small utility class:</p>
+<div class="codehilite"><pre><span></span>var _basicAuthDecorator = new BasicAuth(endpoint, credentials);
+// ...
+using (var client = new SimplifierWebClient(Timeout))
+{
+    // add basic authentication
+    _basicAuthDecorator.AddAuthentication(client.Headers);
+
+    client.Encoding = Encoding.UTF8;
+    client.DownloadString(...)
+}
+
+--- BasicAuth.cs ---
+
+using System;
+using System.Net;
+using System.Text;
+
+namespace Forge.ViewModels
+{
+    public sealed class BasicAuth
+    {
+        private readonly string authenticationType;
+        private readonly ICredentials credentials;
+        public Uri ServerUrl { get; private set; }
+
+        // Initialize the endpoint URL and the credentials for authentication
+        public BasicAuth(Uri serverUrl, ICredentials credentials)
+        {
+            this.credentials = credentials;
+            ServerUrl = serverUrl;
+            authenticationType = &quot;Basic &quot;;
+        }
+
+        // Initialize the endpoint URL and the credentials for authentication
+        public BasicAuth(string serverUrl, ICredentials credentials) : this(new Uri(serverUrl), credentials)
+        {
+        }
+
+        // Add basic authentication to the request
+        public void AddAuthentication(WebHeaderCollection headers)
+        {
+            if (credentials == null) return; // no credentials given, proceed without authentication
+            var networkCredentials = credentials.GetCredential(ServerUrl, authenticationType);
+            if (networkCredentials.UserName == null) return; // no credentials given, proceed without authentication
+            var encodedCredentials = Convert.ToBase64String(Encoding.UTF8.GetBytes(networkCredentials.UserName + &quot;:&quot; + networkCredentials.Password));
+            headers[HttpRequestHeader.Authorization] = authenticationType + encodedCredentials;
+        }
+    }
+}
+</pre></div>
+
+
+
+<a name="153904314"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/How%20to%20authenticate%20with%20C%23%20FHIR%20API%20to%20post%20to%20simplifier/near/153904314" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Munro <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/How.20to.20authenticate.20with.20C.23.20FHIR.20API.20to.20post.20to.20simplifier.html#153904314">(Sep 01 2017 at 14:11)</a>:</h4>
+<p>Thanks <span class="user-mention" data-user-id="191336">@Michel Rutten</span>,  is the URL <a href="https://stu3.simplifier.net/ELabTest2" target="_blank" title="https://stu3.simplifier.net/ELabTest2">https://stu3.simplifier.net/ELabTest2</a> the correct one to put in? I tried even with postman to post an XML file to this URL with the username/password in the header and I get a 404 not found error</p>
+
+
+
+<a name="153904316"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/How%20to%20authenticate%20with%20C%23%20FHIR%20API%20to%20post%20to%20simplifier/near/153904316" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michel Rutten <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/How.20to.20authenticate.20with.20C.23.20FHIR.20API.20to.20post.20to.20simplifier.html#153904316">(Sep 01 2017 at 14:23)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="193298">@Chris Munro</span>, the project url appears to be correct.</p>
+<p>I forgot to mention that you need to hook/override FhirClient.(On)BeforeRequest and add credential headers, e.g. using</p>
+<div class="codehilite"><pre><span></span>basicAuthDecorator.AddAuthentication(rawRequest.Headers);
+</pre></div>
+
+
+<p>I can succesfully publish profiles to my Forge STU3 demo project on Simplifier, so there are no issues on the server.</p>
+
+
+
+<a name="153904319"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/How%20to%20authenticate%20with%20C%23%20FHIR%20API%20to%20post%20to%20simplifier/near/153904319" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michel Rutten <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/How.20to.20authenticate.20with.20C.23.20FHIR.20API.20to.20post.20to.20simplifier.html#153904319">(Sep 01 2017 at 14:35)</a>:</h4>
+<p>I just realized that the logic I posted earlier is for retrieving a list of personal projects from Simplifier. This is a custom operation, not a FHIR call.</p>
+<p>To actually publish a profile to Simplifier, Forge uses a specialized FhirClient with OnBeforeRequest hook to add http heades for credentials (using BasicAuth utility class above):</p>
+<div class="codehilite"><pre><span></span>public sealed class SimplifierFhirClient : FhirClient
+{
+    private readonly BasicAuth basicAuthDecorator;
+
+    public SimplifierFhirClient(Uri serverUrl, ICredentials credentials, bool verifyFhirVersion = false) : base(serverUrl, verifyFhirVersion)
+    {
+        basicAuthDecorator = new BasicAuth(serverUrl, credentials);
+    }
+
+    public SimplifierFhirClient(Uri serverUrl, string projectName, ICredentials credentials, bool verifyFhirVersion = false)
+        : this(new Uri(serverUrl, projectName), credentials, verifyFhirVersion)
+    {
+    }
+
+    protected override void BeforeRequest(HttpWebRequest rawRequest, byte[] body)
+    {
+        base.BeforeRequest(rawRequest, body);
+        // ER 22-03-2016 add default accept [Spark: bugfix 9c64d8a3 (8/1/2016)]
+        PreferredFormat = ResourceFormat.Json;
+        basicAuthDecorator.AddAuthentication(rawRequest.Headers);
+    }
+
+    // DEBUGGING
+#if DEBUG
+    protected override void AfterResponse(HttpWebResponse webResponse, byte[] body)
+    {
+        base.AfterResponse(webResponse, body);
+
+        // var s = System.Text.Encoding.UTF8.GetString(body);
+        // System.IO.File.WriteAllText(@&quot;D:\test.xml&quot;, s)
+    }
+#endif
+
+}
+</pre></div>
+
+
+<p>Here's the calling logic:</p>
+<div class="codehilite"><pre><span></span>            var client = new SimplifierFhirClient(url, new NetworkCredential(userName, password));
+
+            T result;
+            if (string.IsNullOrEmpty(resource.Id))
+            {
+                result = client.Create(resource);
+            }
+            else
+            {
+                result = client.Update(resource);
+            }
+</pre></div>
+
+
+
+<a name="153904321"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/How%20to%20authenticate%20with%20C%23%20FHIR%20API%20to%20post%20to%20simplifier/near/153904321" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Munro <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/How.20to.20authenticate.20with.20C.23.20FHIR.20API.20to.20post.20to.20simplifier.html#153904321">(Sep 01 2017 at 15:04)</a>:</h4>
+<p>Fab! Thank you <span class="user-mention" data-user-id="191336">@Michel Rutten</span> that's really helpful. I was getting into a bit of a mess but with the last post I've managed to get it working.</p>
+
+
+
+<a name="153904322"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/How%20to%20authenticate%20with%20C%23%20FHIR%20API%20to%20post%20to%20simplifier/near/153904322" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michel Rutten <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/How.20to.20authenticate.20with.20C.23.20FHIR.20API.20to.20post.20to.20simplifier.html#153904322">(Sep 01 2017 at 15:07)</a>:</h4>
+<p>Great, happy to help out!<br>
+Sorry for the confusing first post. Friday afternoon... ;p</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

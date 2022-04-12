@@ -1,0 +1,164 @@
+---
+layout: page
+title: "FHIR Chat  · .Matches not working on Resources with BackboneElement · dotnet"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/index.html">dotnet</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/.2EMatches.20not.20working.20on.20Resources.20with.20BackboneElement.html">.Matches not working on Resources with BackboneElement</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="242626455"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/.Matches%20not%20working%20on%20Resources%20with%20BackboneElement/near/242626455" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joelle McCarthy <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/.2EMatches.20not.20working.20on.20Resources.20with.20BackboneElement.html#242626455">(Jun 14 2021 at 16:45)</a>:</h4>
+<p>I am attempting to use the .Matches() method to pattern match two Encounters, A and B, and getting back false when I believe I should be getting true. A has a Participant (in the Participants BackboneElement). B has Participant = null.</p>
+<p>Generally, when a property is valued in A and null in B, Matches should return true, but in this case, it returns false. This is specific to this property (and BackboneElement properties generally). There are other properties which are valued in A and not in B which are not causing Matches to return false.</p>
+<p>Has anyone experienced this issue/know of a workaround? Could this be considered a bug in the firely-net-sdk?</p>
+
+
+
+<a name="242647769"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/.Matches%20not%20working%20on%20Resources%20with%20BackboneElement/near/242647769" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ewout Kramer <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/.2EMatches.20not.20working.20on.20Resources.20with.20BackboneElement.html#242647769">(Jun 14 2021 at 19:29)</a>:</h4>
+<p>The only semi-formal definition we have for matches -as far as I know- can be found here: <a href="http://hl7.org/fhir/elementdefinition-definitions.html#ElementDefinition.pattern_x_">http://hl7.org/fhir/elementdefinition-definitions.html#ElementDefinition.pattern_x_</a></p>
+<p>It seems to me that if your pattern has a value for a backbone element, but the instance has not, they are not equal.  I must admit that the signature for <code>Matches()</code> is reversed: <code> public static bool Matches(IDeepComparable a, IDeepComparable pattern)</code>, so the second argument is the pattern.</p>
+<p>And indeed, if the pattern has a <code>null</code> value, the code says:   <code>if (pattern == null) return true;</code>.  But I don't know which of your A and B is the pattern and which the instance...</p>
+
+
+
+<a name="242648321"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/.Matches%20not%20working%20on%20Resources%20with%20BackboneElement/near/242648321" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ewout Kramer <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/.2EMatches.20not.20working.20on.20Resources.20with.20BackboneElement.html#242648321">(Jun 14 2021 at 19:34)</a>:</h4>
+<p>This is the case when you use the static <code>DeepComparable.Matches()</code> method.  When you call <code>a.Matches(pattern)</code>, make sure the root of the pattern is not null, otherwise you do get <code>false</code>.  Which seems inconsistent, yes.</p>
+
+
+
+<a name="242648448"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/.Matches%20not%20working%20on%20Resources%20with%20BackboneElement/near/242648448" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ewout Kramer <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/.2EMatches.20not.20working.20on.20Resources.20with.20BackboneElement.html#242648448">(Jun 14 2021 at 19:35)</a>:</h4>
+<p>This code has been untouched for over 7 years. I need to get a refresher myself ;-)</p>
+
+
+
+<a name="242919139"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/.Matches%20not%20working%20on%20Resources%20with%20BackboneElement/near/242919139" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joelle McCarthy <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/.2EMatches.20not.20working.20on.20Resources.20with.20BackboneElement.html#242919139">(Jun 16 2021 at 18:04)</a>:</h4>
+<p>Thanks for your response <span class="user-mention" data-user-id="191328">@Ewout Kramer</span>. I should have more clearly specified my example. Here are two contrasting tests that demonstrate the issue, using the simplest possible pattern -- an Encounter with no properties set.</p>
+<p><strong>This passes, as expected:</strong></p>
+<div class="codehilite" data-code-language="C#"><pre><span></span><code><span class="na">    [Test]</span>
+    <span class="k">public</span> <span class="k">static</span> <span class="k">void</span> <span class="nf">MatchingId_Passes</span><span class="p">()</span>
+    <span class="p">{</span>
+      <span class="kt">var</span> <span class="n">encounter</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Encounter</span>
+      <span class="p">{</span>
+        <span class="n">Id</span> <span class="p">=</span> <span class="s">"id"</span>
+      <span class="p">};</span>
+
+      <span class="kt">var</span> <span class="n">pattern</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Encounter</span><span class="p">();</span>
+
+      <span class="n">Assert</span><span class="p">.</span><span class="n">IsTrue</span><span class="p">(</span><span class="n">encounter</span><span class="p">.</span><span class="n">Matches</span><span class="p">(</span><span class="n">pattern</span><span class="p">));</span> <span class="c1">// PASSES</span>
+    <span class="p">}</span>
+</code></pre></div>
+<p><strong>Contrary to my expectation, this does not pass:</strong></p>
+<div class="codehilite" data-code-language="C#"><pre><span></span><code><span class="na">    [Test]</span>
+    <span class="k">public</span> <span class="k">static</span> <span class="k">void</span> <span class="nf">MatchingParticipant_Fails</span><span class="p">()</span>
+    <span class="p">{</span>
+      <span class="kt">var</span> <span class="n">encounter</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Encounter</span>
+      <span class="p">{</span>
+        <span class="n">Participant</span> <span class="p">=</span> <span class="k">new</span> <span class="n">List</span><span class="p">&lt;</span><span class="n">Encounter</span><span class="p">.</span><span class="n">ParticipantComponent</span><span class="p">&gt;</span>
+        <span class="p">{</span>
+          <span class="k">new</span> <span class="n">Encounter</span><span class="p">.</span><span class="n">ParticipantComponent</span>
+          <span class="p">{</span>
+            <span class="n">Individual</span> <span class="p">=</span> <span class="k">new</span> <span class="n">ResourceReference</span><span class="p">(</span><span class="s">"Practitioner/1234"</span><span class="p">)</span>
+          <span class="p">}</span>
+        <span class="p">}</span>
+      <span class="p">};</span>
+
+      <span class="kt">var</span> <span class="n">pattern</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Encounter</span><span class="p">();</span>
+
+      <span class="n">Assert</span><span class="p">.</span><span class="n">IsTrue</span><span class="p">(</span><span class="n">encounter</span><span class="p">.</span><span class="n">Matches</span><span class="p">(</span><span class="n">pattern</span><span class="p">));</span> <span class="c1">// FAILS</span>
+    <span class="p">}</span>
+</code></pre></div>
+<p>These examples are identical, but in the first the set property is Id, in the second it is Participant (a BackboneElement property). I would expect the behavior for these two cases to be the same: passing in both cases. However, for some reason the second one fails.</p>
+
+
+
+<a name="242928942"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/.Matches%20not%20working%20on%20Resources%20with%20BackboneElement/near/242928942" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/.2EMatches.20not.20working.20on.20Resources.20with.20BackboneElement.html#242928942">(Jun 16 2021 at 19:17)</a>:</h4>
+<p>I believe the issue is in the chaining of <code>.Matches</code> into <code>BackboneElement</code> types.  Matches always returns false if the match pattern is <code>null</code> (e.g., <code>Assert.IsTrue(encounter.Matches(null))</code> will fail).</p>
+<p>Internally, each type just forwards the call to sub-types and it cannot differentiate between the null-fail and a mismatch fail.</p>
+<p><span class="user-mention" data-user-id="191328">@Ewout Kramer</span> : would it make sense to add a null check before chaining in <code>Matches</code> the same way it is in <code>DeepCopy</code>?</p>
+
+
+
+<a name="242982030"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/.Matches%20not%20working%20on%20Resources%20with%20BackboneElement/near/242982030" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ewout Kramer <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/.2EMatches.20not.20working.20on.20Resources.20with.20BackboneElement.html#242982030">(Jun 17 2021 at 07:28)</a>:</h4>
+<p>Thanks for the example - this highlighted what was wrong.  The problem is not a backbone, but the fact that the element repeats.</p>
+
+
+
+<a name="242982092"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/.Matches%20not%20working%20on%20Resources%20with%20BackboneElement/near/242982092" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ewout Kramer <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/.2EMatches.20not.20working.20on.20Resources.20with.20BackboneElement.html#242982092">(Jun 17 2021 at 07:29)</a>:</h4>
+<p>For example, this test, which has a non-repeating backbone, succeeds:</p>
+<div class="codehilite" data-code-language="C#"><pre><span></span><code><span class="na">  [TestMethod]</span>
+        <span class="k">public</span> <span class="k">void</span> <span class="nf">MatchingParticipant_Fails</span><span class="p">()</span>
+        <span class="p">{</span>
+            <span class="kt">var</span> <span class="n">encounter</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Encounter</span>
+            <span class="p">{</span>
+                <span class="c1">//Participant = new List&lt;Encounter.ParticipantComponent&gt;</span>
+                <span class="c1">//{</span>
+                <span class="c1">//  new Encounter.ParticipantComponent</span>
+                <span class="c1">//  {</span>
+                <span class="c1">//    Individual = new ResourceReference("Practitioner/1234")</span>
+                <span class="c1">//  }</span>
+                <span class="c1">//},</span>
+
+                <span class="n">Hospitalization</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Encounter</span><span class="p">.</span><span class="n">HospitalizationComponent</span>
+                <span class="p">{</span>
+                    <span class="n">Destination</span> <span class="p">=</span> <span class="k">new</span> <span class="n">ResourceReference</span><span class="p">(</span><span class="s">"Practitioner/1234"</span><span class="p">)</span>
+                <span class="p">}</span>
+            <span class="p">};</span>
+
+            <span class="kt">var</span> <span class="n">pattern</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Encounter</span><span class="p">();</span>
+
+            <span class="n">Assert</span><span class="p">.</span><span class="n">IsTrue</span><span class="p">(</span><span class="n">encounter</span><span class="p">.</span><span class="n">Matches</span><span class="p">(</span><span class="n">pattern</span><span class="p">));</span> <span class="c1">// SUCCESS!</span>
+        <span class="p">}</span>
+</code></pre></div>
+
+
+
+<a name="242982197"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/.Matches%20not%20working%20on%20Resources%20with%20BackboneElement/near/242982197" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ewout Kramer <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/.2EMatches.20not.20working.20on.20Resources.20with.20BackboneElement.html#242982197">(Jun 17 2021 at 07:30)</a>:</h4>
+<p>The culprit is here, in IDeepComparable.cs:</p>
+<div class="codehilite" data-code-language="C#"><pre><span></span><code> <span class="k">public</span> <span class="k">static</span> <span class="kt">bool</span> <span class="n">Matches</span><span class="p">&lt;</span><span class="n">T</span><span class="p">&gt;(</span><span class="k">this</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">T</span><span class="p">&gt;</span> <span class="n">source</span><span class="p">,</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">T</span><span class="p">&gt;</span> <span class="n">pattern</span><span class="p">)</span>
+                    <span class="k">where</span> <span class="n">T</span> <span class="p">:</span> <span class="n">IDeepComparable</span>
+        <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">pattern</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span> <span class="k">return</span> <span class="k">true</span><span class="p">;</span>       <span class="c1">// if not present in the pattern, there's a match</span>
+
+            <span class="k">return</span> <span class="n">source</span><span class="p">.</span><span class="n">All</span><span class="p">(</span><span class="n">src</span> <span class="p">=&gt;</span> <span class="n">pattern</span><span class="p">.</span><span class="n">Any</span><span class="p">(</span><span class="n">patt</span> <span class="p">=&gt;</span> <span class="n">Matches</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="n">patt</span><span class="p">)));</span>
+        <span class="p">}</span>
+</code></pre></div>
+<p>The line <code>if(pattern == null)</code> makes sure that if there is no element, Matches returns true.  But with repeating elements, the element is never <code>null</code>, but rather an empty array. The line should therefore read:  </p>
+<div class="codehilite" data-code-language="C#"><pre><span></span><code>            <span class="k">if</span> <span class="p">(</span><span class="n">pattern</span> <span class="p">==</span> <span class="k">null</span> <span class="p">||</span> <span class="p">!</span><span class="n">pattern</span><span class="p">.</span><span class="n">Any</span><span class="p">())</span> <span class="k">return</span> <span class="k">true</span><span class="p">;</span>       <span class="c1">// if not present in the pattern, there's a match</span>
+</code></pre></div>
+<p>This fixes the problem.</p>
+
+
+
+<a name="242982515"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/.Matches%20not%20working%20on%20Resources%20with%20BackboneElement/near/242982515" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ewout Kramer <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/.2EMatches.20not.20working.20on.20Resources.20with.20BackboneElement.html#242982515">(Jun 17 2021 at 07:35)</a>:</h4>
+<p>See here for the reported issue on the SDK: <a href="https://github.com/FirelyTeam/firely-net-sdk/issues/1762">https://github.com/FirelyTeam/firely-net-sdk/issues/1762</a></p>
+
+
+
+<a name="243025927"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/.Matches%20not%20working%20on%20Resources%20with%20BackboneElement/near/243025927" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Joelle McCarthy <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/.2EMatches.20not.20working.20on.20Resources.20with.20BackboneElement.html#243025927">(Jun 17 2021 at 14:29)</a>:</h4>
+<p>Makes sense, thanks so much for your very prompt and helpful responses! <span aria-label="big smile" class="emoji emoji-1f604" role="img" title="big smile">:big_smile:</span></p>
+
+
+
+<a name="244386444"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179171-dotnet/topic/.Matches%20not%20working%20on%20Resources%20with%20BackboneElement/near/244386444" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ewout Kramer <a href="https://fhir.github.io/chat-archive/stream/179171-dotnet/topic/.2EMatches.20not.20working.20on.20Resources.20with.20BackboneElement.html#244386444">(Jun 30 2021 at 07:28)</a>:</h4>
+<p>The new version of the SDK for a fix for this issue will be released today or tomorrow!</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

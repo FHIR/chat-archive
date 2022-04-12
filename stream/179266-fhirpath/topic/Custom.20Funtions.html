@@ -1,0 +1,56 @@
+---
+layout: page
+title: "FHIR Chat  · Custom Funtions · fhirpath"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/index.html">fhirpath</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Custom.20Funtions.html">Custom Funtions</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="210765712"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Custom%20Funtions/near/210765712" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Custom.20Funtions.html#210765712">(Sep 21 2020 at 16:26)</a>:</h4>
+<blockquote>
+<p>The Reference Implementation of FHIRPath that Grahame developed provides support for custom functions, but unfortunately, custom functions don't have access (yet) to the left has side (the focus) of the expression</p>
+</blockquote>
+<p><span class="user-mention" data-user-id="191387">@Keith Boone</span> I don't know what this means</p>
+
+
+
+<a name="210765837"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Custom%20Funtions/near/210765837" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Custom.20Funtions.html#210765837">(Sep 21 2020 at 16:27)</a>:</h4>
+<p>more generally... I think you should propose a standard server API to FHIR-I rather than just ad-hocing a bunch of custom functions</p>
+
+
+
+<a name="210771024"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179266-fhirpath/topic/Custom%20Funtions/near/210771024" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Keith Boone <a href="https://fhir.github.io/chat-archive/stream/179266-fhirpath/topic/Custom.20Funtions.html#210771024">(Sep 21 2020 at 17:10)</a>:</h4>
+<p>this is how the memberOf() function gets called by FHIRPathEngine<br>
+case MemberOf : return funcMemberOf(context, focus, exp);</p>
+<p>this is how a custom function gets called by FHIRPathEngine<br>
+hostServices.executeFunction(context.appInfo, exp.getName(), params);</p>
+<p>This is what funcMemberOf can do:<br>
+  private List&lt;Base&gt; funcMemberOf(ExecutionContext context, List&lt;Base&gt; focus, ExpressionNode exp) {<br>
+    List&lt;Base&gt; valueSet = execute(context, focus, exp.getParameters().get(0), false);<br>
+    Set&lt;String&gt; vs = resolveAndInitialize(context, valueSet.get(0).primitiveValue());<br>
+    return Collections.singletonList(new BooleanType(doMemberOf(<strong>focus</strong>, vs)));<br>
+  }</p>
+<p>NOTE: It knows the collection being iterated over, and can thus determine if any in the collection ARE a member of the value set.</p>
+<p>If I were to define a MyMemberOf function to do the same thing as memberOf(), it would NOT be able to do the same, because it doesn't have access to the focus.</p>
+<p>instead of writing this:   code.memberOf("MyValueSetURL"), I have to write THIS: memberOf(code, "MyValueSetURL"), otherwise it doesn't and can't do its work.</p>
+<p>What I did to fix this in my fork of FHIRPathEngine was change this:<br>
+      return hostServices.executeFunction(context.appInfo, exp.getName(), params);<br>
+to this:<br>
+       return hostServices instanceof IEvaluationContext2 ?<br>
+              ((IEvaluationContext2) hostServices).executeFunction2(context.appInfo, exp.getName(), focus, params) :<br>
+              hostServices.executeFunction(context.appInfo, exp.getName(), params);</p>
+<p>Where IEvaluationContext2 extends IEvaluationContext and has an executeFunction2 method that accepts a parameter List&lt;Base&gt; focus which is the list of elements to evaluate the function against from the "left hand side" of the expression.</p>
+<p>The IEvaluationContext2 interface is needed to ensure that existing implementations implementing custom functions continue to work properly, while allowing others which know about IEvaluationContext2 to get the enhanced support.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

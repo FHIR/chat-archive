@@ -1,0 +1,44 @@
+[
+    {
+        "content": "<p>Working on a composition profile I ran into some problems trying to slice section under a sliced section. Not sure if this is me not doing the right thing or the slicing logic that needs more love. Here is an abbreviated version of my fsh file:</p>\n<div class=\"codehilite\"><pre><span></span>Profile: PatientSummary\nParent: http://hl7.org/fhir/StructureDefinition/Composition\nId: patient-summary\nTitle: &quot;Patient summary&quot;\nDescription: &quot;&quot;\n\n* section MS\n* section ^slicing.rules = #closed\n* section contains alerts 1..1\n\n* section[alerts].section 1..1 MS\n* section[alerts].section ^slicing.rules = #closed\n* section[alerts].section ^slicing.discriminator.type = #value\n* section[alerts].section ^slicing.discriminator.path = &quot;code&quot;\n* section[alerts].section contains allergies 1..1 MS\n\n* section[alerts].section[allergies] 1..1 MS\n* section[alerts].section[allergies].mode = #snapshot\n</pre></div>\n\n\n<p>Which will result in:</p>\n<div class=\"codehilite\"><pre><span></span>error No element found at path section[alerts].section[allergies].mode for PatientSummary, skipping rule\n  File: /.../fsh/Simple.fsh\n</pre></div>\n\n\n<p>Any thoughts? Known limitation?</p>",
+        "id": 188523462,
+        "sender_full_name": "Pétur Valdimarsson",
+        "timestamp": 1582100187
+    },
+    {
+        "content": "<p>I looked into this a little and it looks like you've found a formerly unknown limitation. It seems the issue is that <code>Composition.section:alerts.section:allergies</code> is a contentReference, and it is also a slice, and our handling of slicing was messing up our handling of contentReferences. I made a fix and I got the output below, which looks correct to my eye:<br>\n<a href=\"/user_uploads/10155/DhbsXX3aR0aVYAAaQSUeAc1S/StructureDefinition-patient-summary.json\" target=\"_blank\" title=\"StructureDefinition-patient-summary.json\">StructureDefinition-patient-summary.json</a> </p>\n<p>Assuming everything is good with the above, I'll push my fix and it will be in the next version of SUSHI.</p>",
+        "id": 188540149,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1582115916
+    },
+    {
+        "content": "<p>Sidenote: You could use Simplifier Snippet for sharing longer FHIR resources: <a href=\"https://simplifier.net/snippet/wardweistra/6\" target=\"_blank\" title=\"https://simplifier.net/snippet/wardweistra/6\">https://simplifier.net/snippet/wardweistra/6</a> Like Github Gists, but for FHIR <span aria-label=\"smile\" class=\"emoji emoji-263a\" role=\"img\" title=\"smile\">:smile:</span> <br>\n(I did have to change the FHIR version to 4.0.0 though, 4.0.1 will be recognized soon)</p>",
+        "id": 188544974,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1582120071
+    },
+    {
+        "content": "<p>First of all, thanks for a fast reply and of course for an awesome profiling tool. </p>\n<p>Nicely done on the quick localization of the problem &amp; corresponding fix. The profile looks correct, will do a validation when I get to my computer again. </p>\n<p>If the branch is available somewhere I'd love to try it out on the larger version of my .fsh file (I have migrated a few profiles from json to fsh and am doing diffs on them to validate the changes)</p>",
+        "id": 188547010,
+        "sender_full_name": "Pétur Valdimarsson",
+        "timestamp": 1582121432
+    },
+    {
+        "content": "<p>No problem! Glad you're enjoying the tool. </p>\n<p>The branch is <code>fix-contentReference-slicing-bug</code>: <a href=\"https://github.com/FHIR/sushi/tree/fix-contentReference-slicing-bug\" target=\"_blank\" title=\"https://github.com/FHIR/sushi/tree/fix-contentReference-slicing-bug\">https://github.com/FHIR/sushi/tree/fix-contentReference-slicing-bug</a>.</p>",
+        "id": 188547519,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1582121791
+    },
+    {
+        "content": "<p>Works like a charm. The only unexpected thing I'm seeing is the type BackboneElement part, but I guess that's mainly cosmetic.</p>\n<div class=\"codehilite\"><pre><span></span>{\n        &quot;id&quot;: &quot;Composition.section:medicalHistory.section:Immunization&quot;,\n        &quot;path&quot;: &quot;Composition.section.section&quot;,\n        &quot;sliceName&quot;: &quot;Immunization&quot;,\n        &quot;type&quot;: [\n          {\n            &quot;code&quot;: &quot;BackboneElement&quot;\n          }\n        ]\n      },\n</pre></div>",
+        "id": 188576264,
+        "sender_full_name": "Pétur Valdimarsson",
+        "timestamp": 1582140396
+    },
+    {
+        "content": "<p>It feels a little weird, but the reason SUSHI is putting that in there is because the <code>Composition.section.section</code> element originally does not have a type, because it is a contentReference.  So when we take that contentReference and access child elements of it, it is now a BackboneElement, no longer a contentReference in SUSHI's eyes. So the type has changed, so we include it in the differential.  That's the reasoning at least.</p>",
+        "id": 188635391,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1582204218
+    }
+]

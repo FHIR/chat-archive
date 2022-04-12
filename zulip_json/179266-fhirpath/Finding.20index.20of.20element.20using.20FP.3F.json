@@ -1,0 +1,194 @@
+[
+    {
+        "content": "<p>Hi there.  We've been working on a fhirpatch implementation for Javascript (which we're open sourcing).  We're using the <code>fhirpath.js</code> module to handle the fhirpath's.  In order to implement the delete operator for a path like this:</p>\n<div class=\"codehilite\"><pre><span></span><code>Practitioner.telecom.where(value=&#39;5551212&#39;)\n</code></pre></div>\n<p>Our current implementation tries to extract the index of the matching list entry.  However, we've tried a couple of different options and neither is producing the desired result:</p>\n<p>1) <code>Practitioner.telecom.where(value='5551212').$index</code> - returns the length of the array<br>\n2) <code>Practitioner.telecom.where(value='5551212').select($index)</code> - seems to return the number of matching elements in the array minus 1 (i.e. the index of the last matching element in the reduced list.)</p>\n<p>Is there any robust way in FHIRPath to implement this?  This is critical functionality for our use of fhirpatch, and we're trying to avoid having to write our own fhirpath implementation if we possibly can.</p>",
+        "id": 241768352,
+        "sender_full_name": "Patrick Narkinsky",
+        "timestamp": 1623068922
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> I don't believe we've made any definition for $index outside an iterator, but it's use here would be very difficult, since the index would be the index in the .where() not the index in .telecom.</p>\n<p>I think we'd have to define an indexOf() function on a list, and it seems like an obvious oversight to me</p>",
+        "id": 241785319,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1623076421
+    },
+    {
+        "content": "<p>in the meantime, patrick you can define your own additional functions no problem</p>",
+        "id": 241785414,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1623076444
+    },
+    {
+        "content": "<p>Why do you want the index?  What are you planning to use it for?</p>",
+        "id": 241786050,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1623076686
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"195344\">Paul Lynch</span> <a href=\"#narrow/stream/179266-fhirpath/topic/Finding.20index.20of.20element.20using.20FP.3F/near/241786050\">said</a>:</p>\n<blockquote>\n<p>Why do you want the index?  What are you planning to use it for?</p>\n</blockquote>\n<p>I started to try to explain this, but I think the source for our delete operation is clearer than any English explanation.  </p>\n<p>From <a href=\"https://github.com/caremesh/fhirpatch/blob/main/src/operation.js\">https://github.com/caremesh/fhirpatch/blob/main/src/operation.js</a></p>\n<div class=\"codehilite\"><pre><span></span><code>case &#39;delete&#39;:\n        // if the tail path contains an operation, patch it to be an absolute index\n        if (this.tail.path.startsWith(&#39;where\\(&#39;)) {\n          const [idx] = fp.evaluate(resource, `${this.path}.$index`);\n          if (typeof idx === &#39;undefined&#39;) {\n            break;\n          }\n          this.path = `${this.containingPath}[${idx}]`;\n        }\n\n        res = fp.evaluate(resource, this.containingPath);\n\n        if (res[0]) {\n          // it is not an error if a path to delete doesn&#39;t already exist\n          if (this.tail.index) {\n            if (res.length == 0) {\n              throw new PathNotFoundError(\n                  `Attempt to modify index but path ${this.containingPath\n                  } is not array`);\n            }\n\n            res[0][this.tail.path].splice(this.tail.index, 1);\n          } else {\n            delete res[0][this.tail.path];\n          }\n        }\n        break;\n</code></pre></div>\n<p>Granted this is a bit of a hack, but the idea here is that we need to delete the path referenced by the patch from the container.  So, we use fhirpath to get the parent (by tokenizing the path into the <code>containingPath</code> and the <code>tail</code> with an optional index) then we remove the referenced element from the parent.  However, our whole use case for this requires us to be able to delete accurately when the list order changes (long story why) so we can't do something like <code>delete Practitioner.telecom[0]</code> -- we need to be able to delete by value.  </p>\n<p>That's why we decided to implement fhirpatch rather than try to use jsonpatch -- with jsonpatch there was just no apparent way to support this use case.</p>",
+        "id": 241817825,
+        "sender_full_name": "Patrick Narkinsky",
+        "timestamp": 1623089536
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179266-fhirpath/topic/Finding.20index.20of.20element.20using.20FP.3F/near/241785319\">said</a>:</p>\n<blockquote>\n<p><span class=\"user-mention silent\" data-user-id=\"191359\">Bryn Rhodes</span> I don't believe we've made any definition for $index outside an iterator, but it's use here would be very difficult, since the index would be the index in the .where() not the index in .telecom.</p>\n<p>I think we'd have to define an indexOf() function on a list, and it seems like an obvious oversight to me</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> am I correct in understanding that implementing the indexOf function would best be done within our fhirpath implementation (fhirpath.js)?  Or is there some magic I'm not aware of?</p>",
+        "id": 241818588,
+        "sender_full_name": "Patrick Narkinsky",
+        "timestamp": 1623089866
+    },
+    {
+        "content": "<p>oh you'd have to do it in your implementation - there's no magic like getting an implementation for free ;-)</p>",
+        "id": 241820852,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1623090803
+    },
+    {
+        "content": "<p>It seems like support for the FHIRPatch operations should be in FHIRPath.</p>",
+        "id": 241820893,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1623090839
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"231454\">@Patrick Narkinsky</span>  You can fork fhirpath.js and add the indexOf function, which I guess should take an expression.  Alternativly, you could add a delete() function.  Simultaneously, I would recommend filing a ticket on <a href=\"http://jira.hl7.org\">jira.hl7.org</a> to add the missing functionality to the specification.</p>",
+        "id": 241821257,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1623091026
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"195344\">@Paul Lynch</span> since I've had no experience with ANTLR, I was trying to avoid getting deep into fhirpath.  Oh well...</p>",
+        "id": 241821455,
+        "sender_full_name": "Patrick Narkinsky",
+        "timestamp": 1623091126
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"231454\">@Patrick Narkinsky</span> I will PM you with some advice about the code-- you should not need to know ANTLR.</p>",
+        "id": 241821897,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1623091350
+    },
+    {
+        "content": "<p>Thanks folks!  With <span class=\"user-mention\" data-user-id=\"195344\">@Paul Lynch</span> 's help, I've got a working implementation.  I'm going to clean it up and then offer a pull request.  I will probably also significantly refactor our fhirpatch library now that I've seen how easy it is to modify fhirpath.js.</p>",
+        "id": 241842094,
+        "sender_full_name": "Patrick Narkinsky",
+        "timestamp": 1623100670
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> Where you thinking indexOf would take an expression, like \"where\", as in <code>Patient.name.indexOf(use='official') </code>?</p>",
+        "id": 241844955,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1623102052
+    },
+    {
+        "content": "<p>For me. more like this:</p>\n<div class=\"codehilite\"><pre><span></span><code>Patient.name.indexOf(Patient.name.where(use=&#39;official&#39;))\n</code></pre></div>",
+        "id": 241845911,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1623102574
+    },
+    {
+        "content": "<p>there's obvious problems with that</p>",
+        "id": 241845926,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1623102585
+    },
+    {
+        "content": "<p>If you just put the expression into the indexOf, the function can be the same as \"where\" except it returns the index instead of the object.</p>",
+        "id": 241846060,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1623102652
+    },
+    {
+        "content": "<p>maybe but it isn't it less re-usable?</p>",
+        "id": 241846091,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1623102679
+    },
+    {
+        "content": "<p>I'm not following.  Re-usable in what sense?</p>",
+        "id": 241846197,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1623102735
+    },
+    {
+        "content": "<p>Oh, I see.  You want to be able to look up the index based on the object, rather than the expression that finds it.   I suppose, but is twice the work if you are starting with an expression (first you find the object, and then you search for it again to find the index).</p>",
+        "id": 241846512,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1623102917
+    },
+    {
+        "content": "<blockquote>\n<p>look up the index based on the object</p>\n</blockquote>\n<p>yes.</p>",
+        "id": 241846557,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1623102942
+    },
+    {
+        "content": "<p>Testing for equality could be really inefficient if you have a complex object.  (Bundle.entry.indexOf(...)).</p>",
+        "id": 241847219,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1623103281
+    },
+    {
+        "content": "<p>It is too bad we can't pass in either an object or an expression.  Maybe we need two functions.</p>",
+        "id": 241847552,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1623103466
+    },
+    {
+        "content": "<blockquote>\n<p>It is too bad we can't pass in either an object or an expression</p>\n</blockquote>\n<p>can't we?</p>",
+        "id": 241848119,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1623103806
+    },
+    {
+        "content": "<p>I don't think we currently have such a case.  fhirpath.js would not handle it, but could be modified if the grammar could support it.</p>",
+        "id": 241852572,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1623107162
+    },
+    {
+        "content": "<p>It might be possible to check whether what is passed into indexOf is a TermExpression (from the grammar-- this would mean an object or value is being passed in).</p>",
+        "id": 241855490,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1623109589
+    },
+    {
+        "content": "<p>well we haven't said that couldn't happen, but we do differentiate between iterators and everything else</p>",
+        "id": 241862993,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1623117549
+    },
+    {
+        "content": "<p>Hmm... yes, definitely should have an IndexOf and agree it is an oversight. We could do it with the $index though:</p>\n<div class=\"codehilite\"><pre><span></span><code>Practitioner.telecom.select(iff(value=&#39;5551212&#39;, $index, { }))\n</code></pre></div>",
+        "id": 241967504,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1623178158
+    },
+    {
+        "content": "<p>Curious if that would work in fhirpath.js Paul?</p>",
+        "id": 241968182,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1623178418
+    },
+    {
+        "content": "<p><a href=\"https://jira.hl7.org/browse/FHIR-32882\">https://jira.hl7.org/browse/FHIR-32882</a></p>",
+        "id": 241968186,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1623178420
+    },
+    {
+        "content": "<p>And a tracker to remedy the oversight.</p>",
+        "id": 241968210,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1623178433
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191359\">Bryn Rhodes</span> <a href=\"#narrow/stream/179266-fhirpath/topic/Finding.20index.20of.20element.20using.20FP.3F/near/241968182\">said</a>:</p>\n<blockquote>\n<p>Curious if that would work in fhirpath.js Paul?</p>\n</blockquote>\n<p>Yes, it does!</p>",
+        "id": 241983754,
+        "sender_full_name": "Paul Lynch",
+        "timestamp": 1623185265
+    },
+    {
+        "content": "<p>that works in the java implementation when I commit it (I overlooked $index)</p>",
+        "id": 242563568,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1623657497
+    }
+]

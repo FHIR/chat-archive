@@ -1,0 +1,85 @@
+---
+layout: page
+title: "FHIR Chat  · FHIR &quot;Transaction&quot; Bundle POST... Mimicing on API PaaS? · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20.22Transaction.22.20Bundle.20POST.2E.2E.2E.20Mimicing.20on.20API.20PaaS.3F.html">FHIR &quot;Transaction&quot; Bundle POST... Mimicing on API PaaS?</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="203870626"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20%22Transaction%22%20Bundle%20POST...%20Mimicing%20on%20API%20PaaS%3F/near/203870626" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Cox <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20.22Transaction.22.20Bundle.20POST.2E.2E.2E.20Mimicing.20on.20API.20PaaS.3F.html#203870626">(Jul 14 2020 at 18:38)</a>:</h4>
+<p>Hello my FHIR friends,</p>
+<p>I wanted to come here with a couple questions related to an extension I am building as part of our custom API platform tied to Azure API For FHIR AS A MANAGED SERVICE (the "PaaS" version). As I understand, sending a Transaction-Bundle to this version of FHIR server will not complete the requests as a single atomic transaction... It will handle batch requests, but not transactions for that "atomic" aspect I think. I am going by the rules of the transaction bundle (Delete &gt; Post &gt; Put &gt; Get) </p>
+<p>I am just wondering about the most "RESTful" way to bridge the gap of this functionality for certain types of requests....</p>
+<p>DELETE: If I send an Http DELETE for a resource on an Azure API For FHIR, what would the best practice be to "undo" this interaction? </p>
+<div class="codehilite"><pre><span></span><code>- my thinking was, if the Server still persists the resource_id (so that it can say &quot;no longer available&quot; if attempted to retrieve), you could maybe send a PUT with the full resource data in the request to &quot;restore&quot; that resource which was deleted? 
+- Otherwise, would sending a new POST be correct? I just worry about the resource_id being changed and that breaking things
+</code></pre></div>
+
+
+<p>POST: </p>
+<div class="codehilite"><pre><span></span><code> - just send an HTTP Delete?
+</code></pre></div>
+
+
+<p>Also: If a GET fails, and there were successful PUT POST and DELETE reqs completed before then unrelated to the GET that is failing, is it still necessary to roll back the previous requests? </p>
+<p>Finally, since I am creating a custom flow, what would I need to do to create a new Bundle to return if the transaction request was fully successful? </p>
+<p>I was playing around on the HAPI server and saw that the response-schema is something like this: <br>
+{<br>
+  "resourceType": "Bundle",<br>
+  "id": "5821dd1d-80c7-4b55-a80c-ba82abdfb056",<br>
+  "type": "transaction-response",<br>
+  "link": [ {<br>
+    "relation": "self",<br>
+    "url": "<a href="http://hapi.fhir.org/baseR4">http://hapi.fhir.org/baseR4</a>"<br>
+  } ],<br>
+  "entry": [ {<br>
+    "response": {<br>
+      "status": "200 OK",<br>
+      "location": "Task/1414/_history/2",<br>
+      "etag": "2",<br>
+      "lastModified": "2020-06-01T23:37:45.967+00:00"<br>
+    }<br>
+  }, {<br>
+    "response": {<br>
+      "status": "201 Created",<br>
+      "location": "QuestionnaireResponse/1390659/_history/1",<br>
+      "etag": "1",<br>
+      "lastModified": "2020-07-13T23:07:57.933+00:00"<br>
+    }<br>
+  } ]</p>
+<p>How can I create a Bundle response like that manually? </p>
+<p>Thanks for any and all input as always folks!</p>
+
+
+
+<a name="203872436"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20%22Transaction%22%20Bundle%20POST...%20Mimicing%20on%20API%20PaaS%3F/near/203872436" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20.22Transaction.22.20Bundle.20POST.2E.2E.2E.20Mimicing.20on.20API.20PaaS.3F.html#203872436">(Jul 14 2020 at 18:55)</a>:</h4>
+<p>You can do an update on a deleted resource to put it back - but the meta.version/eTag and meta.lastUpdated will change.  That's going to be your problem in general, actually.  There is no way to 'do' and then 'undo' an action without triggering multiple increments of meta.version and meta.lastUpdated as well as (in some systems, anyway), the creation of corresponding Provenance and AuditEvent instances.</p>
+<p>The rules on transaction are that if anything fails, the whole thing rolls back.  (So don't stick GETs in your transaction if you want to maximize chances of success.)  You <em>could</em> submit a change request asking us to change the rules to allow ignoring GET failures.  That seems like a reasonable thing to do, but I'm not sure we can get away with it given that transaction is now normative.</p>
+<p>Don't really understand your question about a new Bundle.  You'll have your results from your Batch.  You should just be able to turn your batch-response into a transaction-response.  The trick is that the transaction-response conveying failure won't let you indicate which eTags got changed.</p>
+
+
+
+<a name="204019402"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/FHIR%20%22Transaction%22%20Bundle%20POST...%20Mimicing%20on%20API%20PaaS%3F/near/204019402" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Cox <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/FHIR.20.22Transaction.22.20Bundle.20POST.2E.2E.2E.20Mimicing.20on.20API.20PaaS.3F.html#204019402">(Jul 15 2020 at 22:11)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191320">Lloyd McKenzie</span> <a href="#narrow/stream/179166-implementers/topic/FHIR.20.22Transaction.22.20Bundle.20POST.2E.2E.2E.20Mimicing.20on.20API.20PaaS.3F/near/203872436">said</a>:</p>
+<blockquote>
+<p>You can do an update on a deleted resource to put it back - but the meta.version/eTag and meta.lastUpdated will change.  That's going to be your problem in general, actually.  There is no way to 'do' and then 'undo' an action without triggering multiple increments of meta.version and meta.lastUpdated as well as (in some systems, anyway), the creation of corresponding Provenance and AuditEvent instances.</p>
+<p>The rules on transaction are that if anything fails, the whole thing rolls back.  (So don't stick GETs in your transaction if you want to maximize chances of success.)  You <em>could</em> submit a change request asking us to change the rules to allow ignoring GET failures.  That seems like a reasonable thing to do, but I'm not sure we can get away with it given that transaction is now normative.</p>
+<p>Don't really understand your question about a new Bundle.  You'll have your results from your Batch.  You should just be able to turn your batch-response into a transaction-response.  The trick is that the transaction-response conveying failure won't let you indicate which eTags got changed.</p>
+</blockquote>
+<p>Hi Lloyd, thanks as always for the super informative responses.</p>
+<p>I understand that GETs would definitely compromise the success rate, for our use case I don't see a lot of GETs being involved.</p>
+<p>I wanted ask about what you meant in your last paragraph there... Were you suggesting that I submit the Bundle as a "batch" to my Azure API for FHIR, then "undo" or modify the operations that were completed IF there was one that was rejected? My original thinking was have custom logic parse out the transaction bundle then send each HTTP request independently?<br>
+Would I just be better off submitting as batch, checking to ensure all operations succeeded, then modifying the response to read "transaction" instead of "batch"?</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

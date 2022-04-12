@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p>We're trying to set the value of an extension on the underlying StructureDefinition for a profile we're defining by using the \"escape syntax\" (<code>^</code>):</p>\n<div class=\"codehilite\"><pre><span></span><code>Profile: NewOnsetOfT2DMDataElementCPG3\nParent: Observation\n* ^extension[inferenceExpression].valueExpression.language = #text/cql\n* ^extension[inferenceExpression].valueExpression.expression =\n  &quot;exists([Condition in \\&quot;T2DMConditionVS\\&quot;] c where c.onset is within last 2 months)&quot;\n* code = ExampleCdsCS#t2dm\n</code></pre></div>\n\n\n<p>Which builds fine, but it seems to be treating the <code>.valueExpression.language</code> part as constraints, rather than instance assignments...</p>\n<div class=\"codehilite\"><pre><span></span><code>&quot;extension&quot;: [\n    {\n      &quot;_sliceName&quot;: &quot;inferenceExpression&quot;,\n      &quot;valueExpression&quot;: {\n        &quot;language&quot;: {\n          &quot;fixedValue&quot;: &quot;text/cql&quot;,\n          &quot;_primitive&quot;: true\n        },\n        &quot;expression&quot;: {\n          &quot;fixedValue&quot;: &quot;exists([Condition in \\&quot;T2DMConditionVS\\&quot;] c where c.onset is within last 2 months)&quot;,\n          &quot;_primitive&quot;: true\n        }\n      }\n    }\n  ],\n</code></pre></div>\n\n\n<p>Am I missing something about how to set the value of an extension on the underlying StructureDefinition?</p>",
+        "id": 196711733,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1588808733
+    },
+    {
+        "content": "<p>Hmm, this looks broken.  I had a couple of ideas that turned out either not to work or were just invalid.</p>",
+        "id": 196713166,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1588809884
+    },
+    {
+        "content": "<p>I agree that SUSHI seems confused here.  I'd only expect this to work if SUSHI could resolve <code>inferenceExpression</code> to an extension's canonical URL.  Still, I tried it out and even if it does resolve to a valid URL, it's not working right.  This sort of thing works with <code>Instance:</code>, but I guess is not working with <code>^</code> in a profile (even though that is really just operating on the instance of the SD).  We'll have to look into it.</p>\n<p>That said, there is another syntax that works.  If you just reference the extension by a numbered index and set its values directly, it is happy.  For example:</p>\n<div class=\"codehilite\"><pre><span></span><code>Profile: NewOnsetOfT2DMDataElementCPG3\nParent: Observation\n* ^extension[0].url = &quot;http://example.org/url/for/inferenceExpression&quot;\n* ^extension[0].valueExpression.language = #text/cql\n* ^extension[0].valueExpression.expression =\n  &quot;exists([Condition in \\&quot;T2DMConditionVS\\&quot;] c where c.onset is within last 2 months)&quot;\n* code = ExampleCdsCS#t2dm\n</code></pre></div>\n\n\n<p>I don't think you'll get any validation that way though (at least not in SUSHI).</p>",
+        "id": 196727312,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1588827580
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span>  should we log this as a GH issue?</p>",
+        "id": 196762388,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1588854398
+    },
+    {
+        "content": "<p>Yes, please -- go ahead!  It was a little too late and I was a little too tired to log it last night!</p>",
+        "id": 196762648,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1588854586
+    },
+    {
+        "content": "<p>Another issue we're seeing with setting values of extensions, not sure if it's related to this or not, but given this example:</p>\n<div class=\"codehilite\"><pre><span></span><code>    Instance: ExampleQuestionnaireResponse\n    InstanceOf: SDCQuestionnaireResponse\n    * status = #completed\n    * questionnaire = &quot;Questionnaire/GeneratedQuestionnaire&quot;\n    * questionnaire.extension[questionnaireDisplay].valueString = &quot;Generated Questionnaire&quot;\n    * subject = Reference(&quot;Patient/123&quot;)\n    * authored = &quot;2020-01-01&quot;\n    * item[0].linkId = &quot;1&quot;\n    * item[0].answer.valueBoolean = true\n</code></pre></div>\n\n\n<p>We're getting this error from SUSHI:</p>\n<div class=\"codehilite\"><pre><span></span><code>    error Element QuestionnaireResponse.questionnaire.extension:questionnaireDisplay has minimum cardinality 1 but occurs 0 time(s).\n</code></pre></div>\n\n\n<p>Which also looks suspiciously like this issue: <a href=\"https://github.com/FHIR/sushi/issues/393\" title=\"https://github.com/FHIR/sushi/issues/393\">https://github.com/FHIR/sushi/issues/393</a></p>",
+        "id": 196912472,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1588952843
+    },
+    {
+        "content": "<p>Agreed, that looks like it may be the same issue...  What is the urgency on this and the previous issue you guys reported?  We're pretty busy heading up to Connectathon, so didn't have these bug-fixes planned yet, but if this is an urgent matter that would be good to know so we can try to accommodate as best we can.</p>",
+        "id": 196914963,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1588953902
+    },
+    {
+        "content": "<p>Not urgent, since SUSHI does actually generate the JSON we want, it just gives this error as part of the build.</p>",
+        "id": 196927537,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1588959958
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191359\">Bryn Rhodes</span> <a href=\"#narrow/stream/215610-shorthand/topic/Setting.20extension.20on.20StructureDefinition/near/196912472\">said</a>:</p>\n<blockquote>\n<p>Another issue we're seeing with setting values of extensions, not sure if it's related to this or not, but given this example:</p>\n<div class=\"codehilite\"><pre><span></span><code>    Instance: ExampleQuestionnaireResponse\n    InstanceOf: SDCQuestionnaireResponse\n    * status = #completed\n    * questionnaire = &quot;Questionnaire/GeneratedQuestionnaire&quot;\n    * questionnaire.extension[questionnaireDisplay].valueString = &quot;Generated Questionnaire&quot;\n    * subject = Reference(&quot;Patient/123&quot;)\n    * authored = &quot;2020-01-01&quot;\n    * item[0].linkId = &quot;1&quot;\n    * item[0].answer.valueBoolean = true\n</code></pre></div>\n<p><span class=\"user-mention silent\" data-user-id=\"340930\">Fred Marsh</span><br>\nWe're getting this error from SUSHI:</p>\n<div class=\"codehilite\"><pre><span></span><code>    error Element QuestionnaireResponse.questionnaire.extension:questionnaireDisplay has minimum cardinality 1 but occurs 0 time(s).\n</code></pre></div>\n<p>Which also looks suspiciously like this issue: <a href=\"https://github.com/FHIR/sushi/issues/393\">https://github.com/FHIR/sushi/issues/393</a></p>\n</blockquote>\n<p>Having a similar issue to this one. <a href=\"/user_uploads/10155/3orWZc0pBZYy8uItNgK0HBS5/eCCDiagnosticReport.fsh\">eCCDiagnosticReport.fsh</a> </p>\n<div class=\"codehilite\"><pre><span></span><code>Instance: eCCDiagnosticReport\nInstanceOf: http://hl7.org/fhir/us/core/StructureDefinition/us-core-diagnosticreport-note\nTitle: &quot;eCC Diagnostic Report&quot;\nDescription: &quot;Example eCC Diagnostic report using US Core&quot;\nUsage: #example\nLNC = http://loinc.org\n* id = &quot;eCCDiagnosticReport0&quot;\n* identifier.use = #usual\n* identifier.type = http://terminology.hl7.org/CodeSystem/v2-0203#MR &quot;Medical Record Number&quot;\n* identifier.system = &quot;http://hospital.example.org&quot;\n* identifier.value = &quot;eCCDiagnosticReport0&quot;\n* status = #final\n* category = LNC#LP7839-6 &quot;Pathology&quot;\n* code = LNC#60568-3 &quot;Pathology Synoptic report&quot;\n* subject = Reference(q201)\n* effective.effectiveDateTime = &quot;2021-01-14T10:00:00&quot;\n* performer = Reference(pathpract1)\n* result = Reference(Adrenal.Bx.Res.129_3.002.011.RC1_sdcFDF1.FormInstanceVersionURI.2157)\n* result = Reference(Adrenal.Bx.Res.129_3.002.011.RC1_sdcFDF.f96d3fea-62b3-47e9-8443-f199c2f946f0.ver1.49275.100004300)\n* result = Reference(Adrenal.Bx.Res.129_3.002.011.RC1_sdcFDF1.FormInstanceVersionURI.43324)\n* result = Reference(Adrenal.Bx.Res.129_3.002.011.RC1_sdcFDF1.FormInstanceVersionURI.56271)\n</code></pre></div>\n<p>All of the required elements in our instance example are giving the same error: </p>\n<div class=\"codehilite\"><pre><span></span><code>error Element DiagnosticReport.status has minimum cardinality 1 but occurs 0 time(s).\n</code></pre></div>\n<p>Has this been addressed? <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span></p>",
+        "id": 222774797,
+        "sender_full_name": "Alex Goel",
+        "timestamp": 1610654351
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"192545\">@Alex Goel</span>.  The issue you're seeing is due to an errant line in the wrong location: <code>LNC = http://loinc.org</code>.  Aliases are their own standalone definitions in FSH, so you can't have them embedded in another FSH definition.  Try removing that line and adding this to the top of your file:</p>\n<div class=\"codehilite\"><pre><span></span><code>Alias: LNC = http://loinc.org\n</code></pre></div>\n<p>I also noticed that in the file you attached, it said <code>* ^status</code> rather than <code>* status</code>.  It looks like you've fixed it in this message, but just to confirm -- in an <code>Instance</code> you do <em>not</em> use the <code>^</code> symbol.</p>",
+        "id": 222777214,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1610655291
+    },
+    {
+        "content": "<p>Whoops Thank you :)</p>",
+        "id": 222780834,
+        "sender_full_name": "Alex Goel",
+        "timestamp": 1610656883
+    },
+    {
+        "content": "<p>And yes, I fixed the ^ in the message, forgot to remove from file</p>",
+        "id": 222781476,
+        "sender_full_name": "Alex Goel",
+        "timestamp": 1610657187
+    }
+]

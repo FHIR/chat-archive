@@ -1,0 +1,121 @@
+---
+layout: page
+title: "FHIR Chat  · Dedupe patients · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dedupe.20patients.html">Dedupe patients</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="267631692"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dedupe%20patients/near/267631692" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Richard Stanley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dedupe.20patients.html#267631692">(Jan 11 2022 at 19:20)</a>:</h4>
+<p>This is a follow-up from external discussion. I have a use case where a patient receives care twice in a clinic but also registers twice, so is seen as a different person in clinical records. Our service (OpenCR) can create a third Patient record that has links to the others, so we have a master patient ID. I'd like to help to understand how to union across all patients linked to that master patient ID. An example master patient id resource is here: <a href="https://github.com/intrahealth/simple-hiv-ig/blob/master/opencr/opencr_goldenrecord.json">https://github.com/intrahealth/simple-hiv-ig/blob/master/opencr/opencr_goldenrecord.json</a> <span class="user-mention" data-user-id="191359">@Bryn Rhodes</span> <span class="user-mention" data-user-id="378988">@Jenny Thompson</span></p>
+
+
+
+<a name="267726613"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dedupe%20patients/near/267726613" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Derek Ritz <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dedupe.20patients.html#267726613">(Jan 12 2022 at 13:52)</a>:</h4>
+<p><span class="user-mention" data-user-id="194192">@Richard Stanley</span>  -- is there a potential problem with "deep hierarchies" being created over time? I'm just thinking that, if this scenario happens <strong>again</strong>, then <em>another</em> golden ID will be created that will now need to reference the "old golden ID", plus the new dupe... and now there is the start of a hierarchy.</p>
+
+
+
+<a name="267750123"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dedupe%20patients/near/267750123" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Richard Stanley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dedupe.20patients.html#267750123">(Jan 12 2022 at 16:38)</a>:</h4>
+<p>Great question. The way our record linkage works is that there isn't a nesting of golden IDs. So, no, I don't think it will be an issue but I don't know about other implementations of patient registries.</p>
+
+
+
+<a name="269190428"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dedupe%20patients/near/269190428" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dedupe.20patients.html#269190428">(Jan 25 2022 at 00:03)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="194192">@Richard Stanley</span> , with apologies for the delays here, there are two approaches to following patient links like this. The first is to related context retrieves to access the information from related patients:</p>
+<div class="codehilite"><pre><span></span><code>library PatientLinks
+
+using FHIR version &#39;4.0.1&#39;
+
+include FHIRHelpers version &#39;4.0.1&#39;
+
+context Patient
+
+define RelatedPatients:
+  Patient P
+    return (P.link L where L.type = &#39;seealso&#39; return L.other)
+
+define AllProcedures:
+  [Procedure]
+    union [RelatedPatients -&gt; Procedure]
+</code></pre></div>
+
+
+
+<a name="269190539"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dedupe%20patients/near/269190539" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dedupe.20patients.html#269190539">(Jan 25 2022 at 00:04)</a>:</h4>
+<p>The second is to use an <code>unfiltered</code> context:</p>
+<div class="codehilite"><pre><span></span><code>library PatientLinksUnfiltered
+
+using FHIR version &#39;4.0.1&#39;
+
+include FHIRHelpers version &#39;4.0.1&#39;
+
+context Unfiltered
+
+define AllPatientProcedures:
+  from [Patient] P, [Procedure] PR
+    where PR.subject = P.reference()
+      or PR.subject in (P.link L where L.type = &#39;seealso&#39; return L.other)
+</code></pre></div>
+
+
+
+<a name="269190733"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dedupe%20patients/near/269190733" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dedupe.20patients.html#269190733">(Jan 25 2022 at 00:07)</a>:</h4>
+<p>Unfortunately, the Java engine does not currently have support for related-context retrieves, and the support for <code>unfiltered</code> context is limited, so there is some implementation work to be done before either of these approaches would work in the Java stack (and likely the JavaScript stack as well).</p>
+
+
+
+<a name="269190766"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dedupe%20patients/near/269190766" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dedupe.20patients.html#269190766">(Jan 25 2022 at 00:07)</a>:</h4>
+<p>So it is possible to express de-duplication queries, but evaluating them will take some work.</p>
+
+
+
+<a name="269199108"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dedupe%20patients/near/269199108" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Richard Stanley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dedupe.20patients.html#269199108">(Jan 25 2022 at 02:01)</a>:</h4>
+<p>Thanks so very much <span class="user-mention" data-user-id="191359">@Bryn Rhodes</span>!</p>
+
+
+
+<a name="269605592"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dedupe%20patients/near/269605592" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> KC <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dedupe.20patients.html#269605592">(Jan 27 2022 at 17:17)</a>:</h4>
+<p>Hey <span class="user-mention" data-user-id="191359">@Bryn Rhodes</span> - a quick follow up to this, I am interested in running CQL queries using the execution service using the unfiltered context rather than the patient context (for example querying all patients with a given condition code), is there a way to not just query for one patient id?</p>
+
+
+
+<a name="269781924"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dedupe%20patients/near/269781924" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dedupe.20patients.html#269781924">(Jan 28 2022 at 18:37)</a>:</h4>
+<p>CQL does support expressing these types of queries with the <code>Unfiltered</code> context, but the execution stacks currently don't support this very well. For example, running this library in the Atom plugin:</p>
+<div class="codehilite" data-code-language="cql"><pre><span></span><code>library UnfilteredScratchpad
+
+using FHIR version '4.0.1'
+
+include FHIRHelpers version '4.0.1'
+
+context Unfiltered
+
+define Patients: [Patient]
+</code></pre></div>
+<p>Gives the error <code>UnknownType: Could not resolve type Unfiltered.</code>, the IDE plugins just don't know how to run Unfiltered context queries yet. It's an area we would certainly welcome contributions on. In the case of the file-based providers that the IDE plugins are using, it would probably be pretty straightforward to support, but we just haven't gotten to that yet.</p>
+
+
+
+<a name="269789048"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Dedupe%20patients/near/269789048" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> KC <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Dedupe.20patients.html#269789048">(Jan 28 2022 at 19:25)</a>:</h4>
+<p>Thanks for the response - makes sense I just want to confirm!</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

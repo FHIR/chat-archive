@@ -1,0 +1,116 @@
+[
+    {
+        "content": "<p>Looking at the code and trying to find what could be reasons for eventual leaks, I found a few things that could be worth looking at, but I need another pair of eyes to look at these:</p>",
+        "id": 245877208,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1626205519
+    },
+    {
+        "content": "<ol>\n<li>I see quite some lines like SomeObj.doSomething( var1, var2, TSomeOtherObject.create(var3)).<br>\nI think this causes the SomeOtherObject to be created but I was not sure whether they will get properly disposed of.<br>\nExample: </li>\n</ol>\n<div class=\"codehilite\" data-code-language=\"Delphi\"><pre><span></span><code><span class=\"n\">FOthers</span><span class=\"o\">.</span><span class=\"n\">Add</span><span class=\"p\">(</span><span class=\"n\">ics</span><span class=\"o\">.</span><span class=\"n\">systemUri</span><span class=\"o\">,</span> <span class=\"n\">TFhirCodeSystemProvider</span><span class=\"o\">.</span><span class=\"n\">create</span><span class=\"p\">(</span><span class=\"n\">ffactory</span><span class=\"o\">.</span><span class=\"n\">link</span><span class=\"o\">,</span> <span class=\"n\">TFHIRCodeSystemEntry</span><span class=\"o\">.</span><span class=\"n\">Create</span><span class=\"p\">(</span><span class=\"n\">FFactory</span><span class=\"o\">.</span><span class=\"n\">wrapCodeSystem</span><span class=\"p\">(</span><span class=\"n\">FValueSet</span><span class=\"o\">.</span><span class=\"n\">Resource</span><span class=\"o\">.</span><span class=\"n\">Link</span><span class=\"p\">))))</span><span class=\"o\">;</span>\n</code></pre></div>",
+        "id": 245877420,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1626205642
+    },
+    {
+        "content": "<p>A very common case of this happens with HTTPLanguages, lines like  this:</p>\n<div class=\"codehilite\" data-code-language=\"Delphi\"><pre><span></span><code><span class=\"n\">cs</span><span class=\"o\">.</span><span class=\"n\">displays</span><span class=\"p\">(</span><span class=\"n\">code</span><span class=\"o\">,</span> <span class=\"n\">displays</span><span class=\"o\">,</span> <span class=\"n\">THTTPLanguages</span><span class=\"o\">.</span><span class=\"n\">Create</span><span class=\"p\">(</span><span class=\"s\">'en'</span><span class=\"p\">))</span><span class=\"o\">;</span>\n</code></pre></div>",
+        "id": 245877863,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1626205884
+    },
+    {
+        "content": "<p>(this happens many times)</p>",
+        "id": 245877924,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1626205917
+    },
+    {
+        "content": "<ol start=\"2\">\n<li>Another thing I noticed is that sometimes the object that is a result of a function is created and it is not destroyed in the function (so it needs to be destroyed elsewhere). </li>\n</ol>\n<div class=\"codehilite\" data-code-language=\"Delphi\"><pre><span></span><code><span class=\"bp\">result</span> <span class=\"o\">:=</span> <span class=\"n\">TResourceWithReference</span><span class=\"o\">.</span><span class=\"n\">Create</span><span class=\"p\">(</span><span class=\"n\">id</span><span class=\"o\">,</span> <span class=\"n\">parser</span><span class=\"o\">.</span><span class=\"n\">parseResource</span><span class=\"p\">(</span><span class=\"n\">s</span><span class=\"p\">))</span><span class=\"o\">;</span>\n</code></pre></div>\n<p>Sometimes we  do see some functions that do a </p>\n<div class=\"codehilite\" data-code-language=\"Delphi\"><pre><span></span><code><span class=\"k\">try</span>\n   <span class=\"bp\">result</span> <span class=\"o\">=</span> <span class=\"n\">TSomeObject</span><span class=\"o\">.</span><span class=\"n\">create</span><span class=\"p\">(</span><span class=\"n\">whatever</span><span class=\"p\">)</span>\n<span class=\"k\">finally</span>\n   <span class=\"bp\">result</span><span class=\"o\">.</span><span class=\"n\">free</span>\n</code></pre></div>\n<p>I do not know if this explicit destroy is needed</p>",
+        "id": 245878247,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1626206072
+    },
+    {
+        "content": "<p>These being very common findings, I don't know if any of these is causing a leak, but we could start looking at it. However, we cannot isolate one by one, nor I know if they should even be fixed.<br>\nOne way to move forward would be to try and detect what kind of requests cause memory footprint to grow.</p>",
+        "id": 245878709,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1626206300
+    },
+    {
+        "content": "<p>And to do this, we can just throw 1000s of requests to the server until we find one request that causes a leak. We do it one at a time</p>",
+        "id": 245878818,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1626206358
+    },
+    {
+        "content": "<p>I don't know what are the types of requests that we see on the server, but I guess we have some GETs and mostly operations?</p>",
+        "id": 245878931,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1626206406
+    },
+    {
+        "content": "<p>we could select a few of those, but we should do it on a replica of the server, which actually contains the necessary content to work (at least part of SNOMED, LOINC...)</p>",
+        "id": 245879114,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1626206477
+    },
+    {
+        "content": "<p>Sadly, I do not have the server working since it moved to Lazarus. If we could get a replica of our server as a VM that I could run locally, i can setup jmeter to throw stuff at  the server to try</p>",
+        "id": 245879402,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1626206580
+    },
+    {
+        "content": "<p>THTTPLanguages is a record, not an object, so it doesn't live on the stack</p>",
+        "id": 245882590,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1626208153
+    },
+    {
+        "content": "<p>lists own the objects, and free them when they are removed from the lsit</p>",
+        "id": 245882729,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1626208183
+    },
+    {
+        "content": "<p>The server is not going down because it runs out of memory, so far as I can figure</p>",
+        "id": 245882984,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1626208231
+    },
+    {
+        "content": "<p>the server still compiles and runs under delphi</p>",
+        "id": 245883013,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1626208245
+    },
+    {
+        "content": "<p>I'll get started on this, getting the server to run. Should I do this in a VM for us all to share, for future debugging? just because the setup is not that trivial.</p>",
+        "id": 245885531,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1626209440
+    },
+    {
+        "content": "<p>I've been able to get the code to run under FPC - but I haven't done the rest of the setup yet with SQL Server, etc.  I'm just using the Console for the moment.</p>",
+        "id": 245885815,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1626209584
+    },
+    {
+        "content": "<p><a href=\"https://tx.fhir.org/r4/ValueSet/iso3166-1-3/$validate-code?system=urn:iso:std:iso:3166&amp;code=USA\">https://tx.fhir.org/r4/ValueSet/iso3166-1-3/$validate-code?system=urn:iso:std:iso:3166&amp;code=USA</a></p>",
+        "id": 248442783,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1628144951
+    },
+    {
+        "content": "<p>At a first glance, I think the issue would come from a line like this: </p>\n<div class=\"codehilite\" data-code-language=\"Delphi\"><pre><span></span><code><span class=\"k\">procedure</span> <span class=\"nc\">TCountryCodeServices</span><span class=\"o\">.</span><span class=\"nf\">Close</span><span class=\"p\">(</span><span class=\"n\">ctxt</span><span class=\"o\">:</span> <span class=\"n\">TCodeSystemProviderFilterPreparationContext</span><span class=\"p\">)</span><span class=\"o\">;</span>\n<span class=\"k\">begin</span>\n  <span class=\"k\">raise</span> <span class=\"n\">ETerminologyTodo</span><span class=\"o\">.</span><span class=\"n\">create</span><span class=\"p\">(</span><span class=\"s\">'TCountryCodeServices.Close'</span><span class=\"p\">)</span><span class=\"o\">;</span>\n<span class=\"k\">end</span><span class=\"o\">;</span>\n</code></pre></div>",
+        "id": 248442855,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1628145018
+    },
+    {
+        "content": "<p>Yes, that seems likely the case.</p>",
+        "id": 248503453,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1628181976
+    }
+]

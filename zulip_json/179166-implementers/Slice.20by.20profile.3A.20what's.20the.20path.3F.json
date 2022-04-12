@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p>Suppose I slice by profile. What would be in the discriminator.path? Is \"meta.profile\" too easy? I'm trying to profile MedicationRequest.supportingInformation that has Resource(any).</p>",
+        "id": 153971486,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1529923173
+    },
+    {
+        "content": "<p>Follow up question. If I slice by profile: am I effectively requesting at least that particular profile be present in the meta.profile of the instances? I would expect I am, but just making sure.</p>",
+        "id": 153971487,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1529923307
+    },
+    {
+        "content": "<p>If you slice by profile, you're checking whether the instance matches that profile and requiring that it can only match one of the profiles.</p>",
+        "id": 153971489,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1529923668
+    },
+    {
+        "content": "<p>There's no requirement if be declared</p>",
+        "id": 153971490,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1529923677
+    },
+    {
+        "content": "<p>In STU3 I get an error if I omit path. Also the definition in STU3 says \"Each discriminator is a pair of values: a type that indicates how the field is processed when evaluating the discriminator, and a FHIRPath  expression that identifies the element in which the discriminator is found.\"</p>",
+        "id": 153971517,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1529924998
+    },
+    {
+        "content": "<p>The thing with \"resource that matches the profile\", suggests that the instance needs to be valid against that profile.</p>\n<p>Suppose I want to profile MedicationRequest.supportingInformation to BodyWeight and BodyHeight. Both are profiles on Observation.</p>\n<p>If the supportingInformation instance reference goes to an Observation with meta.profile BodyWeight I would expect the validator to 'see' that BodyWeight is referenced and that this satisfies the supportingInformation requirement. </p>\n<p>Next, if the Observation with profile BodyWeight then yields a validation error, then this would be reported only on BodyWeight, but not on MedicationRequest. Are my assumptions correct here?</p>",
+        "id": 153971519,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1529925331
+    },
+    {
+        "content": "<p>So supportingInformation would be the path and the profile would be the targetProfile of the resource</p>",
+        "id": 153971547,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1529937094
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191375\">@Alexander Henket</span> -- if I'm understanding you correctly, I think you want to put the <code>slicing</code> on <code>Medication.supportingInformation</code>, so you can't use <code>supportingInformation</code> as the discriminator path (since discriminator path is relative to the element with the <code>slicing</code>).  In this case, since it's a reference, and the discriminator type is <code>profile</code>, I think your discriminator path needs to be <code>reference.resolve()</code>.</p>",
+        "id": 153972253,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1530136892
+    },
+    {
+        "content": "<p>I could be wrong (slicing is tricky), but that's my understanding based on the STU3 spec docs here: <a href=\"http://hl7.org/fhir/STU3/profiling.html#discriminator\" target=\"_blank\" title=\"http://hl7.org/fhir/STU3/profiling.html#discriminator\">http://hl7.org/fhir/STU3/profiling.html#discriminator</a>.  See the 3rd row in the discriminator examples table.</p>",
+        "id": 153972254,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1530137003
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> You could be right. I thought of that too and I'd agree with you that putting supportingInformation in the path when your context is already just that, doesn't seem right. </p>\n<p>That path excludes use of Reference.identifier + display does it not? Because there is no reference to resolve in that case. Would a validator need to error on use of identifier + display or just warn because it cannot establish conformance to the targetProfile?</p>\n<p>Is there something worth discussing here for R4? It feels like there are a couple of uncertainties we need to iron out.</p>\n<p>Just in case: here's the profile we're discussing <a href=\"https://simplifier.net/NictizSTU3-Zib2017/ZIB-MedicationAgreement/~overview\" target=\"_blank\" title=\"https://simplifier.net/NictizSTU3-Zib2017/ZIB-MedicationAgreement/~overview\">zib-MedicationAgreement</a></p>",
+        "id": 153972302,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1530168844
+    },
+    {
+        "content": "<p>Ah.  Gotcha.  If you just have an <code>identifier</code> (or worse yet, just a <code>display</code>), then it may not be resolvable anyway-- and as you noted, it certainly would not be resolvable via the <code>reference.resolve()</code> path.  Without resolving it, it's impossible to check if the reference conforms to the profile.</p>\n<p>That said, I <em>think</em> it would still pass validation?  You're using an <em>open</em> slicing and each of your slices (<em>BodyWeight</em> and <em>BodyHeight</em>) have a <em>min</em> 0.  If an instance had <code>supportingInformation</code> that used logical references (by <code>identifier</code>), I think the validator would not be able to identify them as belonging to one of the slices, but since it's an open slicing, it would still allow them to exist in the array anyway -- and since neither slice is required (<em>min</em> is 0), validation would pass without anything in the slices.  I think.</p>\n<p>Of course, if it was <em>closed</em> slicing, or your slices had a <em>min</em> of 1 -- then it would be a different story.  In that case I'm not sure what a validator would do, but I <em>suspect</em> you'd essentially need to require that those references be literal (i.e., use the <code>reference</code>).</p>\n<p>My caveat is that I haven't tried any of this -- I'm just going based on past similar (but still different) experiences.  The other caveat is that I think the validator may not know how to deal with profile-based discriminators anyway (see: <a href=\"#narrow/stream/99-IG-creation/topic/discriminators.20based.20on.20profiles.20is.20not.20yet.20supported\" title=\"#narrow/stream/99-IG-creation/topic/discriminators.20based.20on.20profiles.20is.20not.20yet.20supported\">https://chat.fhir.org/#narrow/stream/99-IG-creation/topic/discriminators.20based.20on.20profiles.20is.20not.20yet.20supported</a>) -- so even if you do it right it might not validate.</p>",
+        "id": 153972355,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1530189092
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 153978226,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1532586642
+    }
+]

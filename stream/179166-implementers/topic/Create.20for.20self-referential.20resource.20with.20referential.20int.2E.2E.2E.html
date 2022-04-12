@@ -1,0 +1,218 @@
+---
+layout: page
+title: "FHIR Chat  · Create for self-referential resource with referential int... · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html">Create for self-referential resource with referential int...</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="261956808"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261956808" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Geimer <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261956808">(Nov 18 2021 at 17:01)</a>:</h4>
+<p>I've got a chicken and egg problem. I have a resource that references another resource in an extension sort of like this (actual resource and extension changed to protect the innocent):</p>
+<p>&lt;Practitioner&gt;<br>
+   &lt;id value="employee1"/&gt;<br>
+  &lt;extension url="<a href="http://example.org/fhir/reports-to">http://example.org/fhir/reports-to</a>"&gt;<br>
+      &lt;valueReference value="employee2"/&gt;<br>
+   &lt;/extension&gt;<br>
+&lt;/Practitioner&gt;</p>
+<p>This works fine, except the for CEO it would be self-referential:</p>
+<p>&lt;Practitioner&gt;<br>
+   &lt;id value="ceo"/&gt;<br>
+  &lt;extension url="<a href="http://example.org/fhir/reports-to">http://example.org/fhir/reports-to</a>"&gt;<br>
+      &lt;valueReference value="Practitioner/ceo"/&gt;<br>
+   &lt;/extension&gt;<br>
+&lt;/Practitioner&gt;</p>
+<p>When I PUT (corrected, was POST)  the self-referential resource to HAPI with referential integrity turned on I get an error saying that Practioner/ceo does not exist so the create operation fails. </p>
+<p>I'm pretty sure this is a HAPI bug, but wanted to see what others think before I bug James.</p>
+
+
+
+<a name="261959947"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261959947" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261959947">(Nov 18 2021 at 17:22)</a>:</h4>
+<p>I would expect the valueReference to say either <code>Practitioner/ceo</code> or <code>#</code> rather than <code>ceo</code>, because a bare resource ID is not iself a valid reference (but I don't know whether any of these is <em>expected</em> to work in HAPI -- it's a fun edge case at any rate, though maybe the right answer here is <code>chair</code> :-))</p>
+
+
+
+<a name="261962075"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261962075" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261962075">(Nov 18 2021 at 17:37)</a>:</h4>
+<p>I don't think you can POST that with ref integrity. A create POST has no way to rewrite references to the created resource. You could do this inside a transaction bundle, making the self reference point to the fullUrl of the entry.</p>
+<p>For example, the Google implementation will accept this and do what you want, with referential integrity enabled:</p>
+<div class="codehilite"><pre><span></span><code>{
+  &quot;resourceType&quot;: &quot;Bundle&quot;,
+  &quot;type&quot;: &quot;transaction&quot;,
+  &quot;entry&quot;: [
+    {
+      &quot;request&quot;: {
+        &quot;method&quot;: &quot;POST&quot;,
+        &quot;url&quot;: &quot;Patient&quot;
+      },
+      &quot;fullUrl&quot;: &quot;Patient/me&quot;,
+      &quot;resource&quot;: {
+        &quot;resourceType&quot;: &quot;Patient&quot;,
+        &quot;link&quot;: [
+          {
+            &quot;other&quot;: {
+              &quot;reference&quot;: &quot;Patient/me&quot;
+            },
+            &quot;type&quot;: &quot;seealso&quot;
+          }
+        ]
+      }
+    }
+  ]
+}
+</code></pre></div>
+
+
+
+<a name="261962368"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261962368" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261962368">(Nov 18 2021 at 17:39)</a>:</h4>
+<p>The created resource looks like this, so it did put the uuid into the reference:</p>
+<div class="codehilite"><pre><span></span><code>{
+  &quot;id&quot;: &quot;9a7f77f0-134e-42a7-a9a4-69ef627f5320&quot;,
+  &quot;link&quot;: [
+    {
+      &quot;other&quot;: {
+        &quot;reference&quot;: &quot;Patient/9a7f77f0-134e-42a7-a9a4-69ef627f5320&quot;
+      },
+      &quot;type&quot;: &quot;seealso&quot;
+    }
+  ],
+  &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2021-11-18T17:35:45.905271+00:00&quot;,
+    &quot;versionId&quot;: &quot;MTYzNzI1Njk0NTkwNTI3MTAwMA&quot;
+  },
+  &quot;resourceType&quot;: &quot;Patient&quot;
+}
+</code></pre></div>
+
+
+
+<a name="261962957"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261962957" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261962957">(Nov 18 2021 at 17:43)</a>:</h4>
+<p>I tried posting the above bundle to <a href="http://hapi.fhir.org">hapi.fhir.org</a> and got a java.lang.StackOverflowError so....who knows</p>
+
+
+
+<a name="261965384"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261965384" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261965384">(Nov 18 2021 at 17:59)</a>:</h4>
+<p>Why are you including the reference at all?  The ceo just doesn't have a "reports-to"...</p>
+
+
+
+<a name="261966743"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261966743" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Geimer <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261966743">(Nov 18 2021 at 18:08)</a>:</h4>
+<p>Sorry, <span class="user-mention" data-user-id="191315">@Josh Mandel</span>  I meant Practitioner/ceo. Fortunately I still had a few minutes to edit it, so fixed the example above.</p>
+
+
+
+<a name="261966964"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261966964" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Geimer <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261966964">(Nov 18 2021 at 18:10)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> this is a contrived example for a different self-referential use case. I'm just trying to see if create on a self-referential resource is suppose to work in FHIR at all. If not then it should likely be documented somewhere.</p>
+
+
+
+<a name="261967230"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261967230" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Geimer <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261967230">(Nov 18 2021 at 18:12)</a>:</h4>
+<p><span class="user-mention" data-user-id="197072">@Paul Church</span> interesting solution using the transaction Bundle. Thanks!  That's a potential workaround. Another we found is to make it an identifier reference.</p>
+
+
+
+<a name="261967431"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261967431" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261967431">(Nov 18 2021 at 18:14)</a>:</h4>
+<p>Paul's right that POST here shouldn't work -- but if you can use <code>PUT</code> (specifying the id of the resource) that <em>could</em> work (I don't know whether it <em>does</em>).</p>
+
+
+
+<a name="261967697"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261967697" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Geimer <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261967697">(Nov 18 2021 at 18:16)</a>:</h4>
+<p>Thanks Josh, I'm relaying the issue from someone else, I assumed they used POST but you are correct that shouldn't work because you can't supply an id on POST. Will see if they tried create on PUT.</p>
+
+
+
+<a name="261968323"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261968323" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Geimer <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261968323">(Nov 18 2021 at 18:22)</a>:</h4>
+<p>They used PUT to create the resource, so my comments about POST above are a red-herring. Create on PUT with referential integrity on is not working in HAPI, so again just trying to see if that is a valid thing to do in FHIR, even if not recommended. </p>
+<p>Basically the use case involves a profile that requires [1..1] all resources of a given type to have an extension with a reference to the managing resource instance, and having a separate profile just for the top level resource is not desirable, hence the self-reference.</p>
+
+
+
+<a name="261969102"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261969102" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261969102">(Nov 18 2021 at 18:27)</a>:</h4>
+<p>Worth asking on <a class="stream" data-stream-id="179167" href="/#narrow/stream/179167-hapi">#hapi</a>  with a specific failing example</p>
+
+
+
+<a name="261969278"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261969278" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Geimer <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261969278">(Nov 18 2021 at 18:29)</a>:</h4>
+<p>Will do if we agree that it SHOULD work per the FHIR spec. Will also try Josh's suggestion about using "#" in the reference.  <span class="user-mention" data-user-id="191316">@Grahame Grieve</span> , thoughts here?</p>
+
+
+
+<a name="261972439"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261972439" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261972439">(Nov 18 2021 at 18:53)</a>:</h4>
+<p>The PUT version works on google but does not appear to work on HAPI.</p>
+<p>I don't see how "#" is a valid option, it only applies inside a contained resource to point to the container. Are there implementations that treat it as a general-purpose self-reference?</p>
+
+
+
+<a name="261973599"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261973599" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261973599">(Nov 18 2021 at 19:01)</a>:</h4>
+<p>I think vaguely in a general theoretical sense a resource should be able to refer to itself, but it's certainly a weird edge case, and i don't think that the specification anticipates that you can do a naked POST that works like that</p>
+
+
+
+<a name="261974023"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261974023" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Geimer <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261974023">(Nov 18 2021 at 19:05)</a>:</h4>
+<p>Agree that POST will not work, so the question is about create on PUT. <br>
+So I'll take "vaguely in a general theoretical sense a resource should be able to refer to itself" to mean that HAPI should not outright reject it. <span class="user-mention" data-user-id="191319">@James Agnew</span> ?</p>
+
+
+
+<a name="261975078"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/261975078" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Geimer <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#261975078">(Nov 18 2021 at 19:10)</a>:</h4>
+<p>And &lt;reference value="#"/&gt;  doesn't see to work when I call $validate<br>
+&lt;diagnostics value="Unable to resolve resource '#'"/&gt;</p>
+
+
+
+<a name="262001417"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/262001417" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#262001417">(Nov 18 2021 at 22:33)</a>:</h4>
+<blockquote>
+<p>&lt;reference value="#"/&gt; doesn't see to work when I call $validate ==&gt; &lt;diagnostics value="Unable to resolve resource '#'"/&gt;</p>
+</blockquote>
+<p>good</p>
+
+
+
+<a name="262025596"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/262025596" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#262025596">(Nov 19 2021 at 04:24)</a>:</h4>
+<p>Do we have a 'real' use-case where self-referencing is necessary/useful?</p>
+
+
+
+<a name="262025713"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/262025713" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#262025713">(Nov 19 2021 at 04:26)</a>:</h4>
+<p>Sounds like Rick has one but it's so bad he's embarrassed about it</p>
+
+
+
+<a name="262127045"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/262127045" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Geimer <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#262127045">(Nov 19 2021 at 20:43)</a>:</h4>
+<p>Checking to see if I can discuss the actual use case publicly.</p>
+
+
+
+<a name="262134945"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Create%20for%20self-referential%20resource%20with%20referential%20int.../near/262134945" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Create.20for.20self-referential.20resource.20with.20referential.20int.2E.2E.2E.html#262134945">(Nov 19 2021 at 21:51)</a>:</h4>
+<p>If you try validating that reference to # in the dotnet validator it used to get a stack overflow (not sure if it still does as I have a check for it) specifically where resource was being posted without Id, as the resource itself was resolving and therefore try validate itself again.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

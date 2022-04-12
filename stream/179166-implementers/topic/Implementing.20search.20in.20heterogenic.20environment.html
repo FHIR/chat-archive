@@ -1,0 +1,140 @@
+---
+layout: page
+title: "FHIR Chat  · Implementing search in heterogenic environment · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html">Implementing search in heterogenic environment</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153927164"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153927164" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mattias Flodin <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153927164">(Dec 28 2017 at 16:47)</a>:</h4>
+<p>I find generic search pretty difficult to implement. Behind my FHIR server I have a REST API that lets me query for objects based on certain filters. My general plan for dealing with an incoming query has been to parse it into an expression tree to represent the query, then find subqueries in the tree that I can make requests for from the REST API. For anything that can't be handled in the REST API, I perform the final joins / filtering in memory. But here's where it gets messy. A chained parameter is essentially a join that imposes a restriction on what referenced objects will be used. So, the global expression has an effect on how the local part of the expression should be executed.<br>
+There's probably a lot written about this stuff in database theory but it's not something I ever deep dived into. Does anyone know some good reading material to help me out here? Or is there code / libraries that will help me perform this?</p>
+
+
+
+<a name="153927178"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153927178" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christiaan Knaap <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153927178">(Dec 28 2017 at 19:25)</a>:</h4>
+<p>This is a problem we aim to help solving with Vonk FHIR Facade. It breaks down the search into the elementary units, where you get to fill in the details of actually filtering and retrieving your own data (of which you know the structure / API). Breaking down the search and then combining the results is indeed hard, especially if you also want to validate it (valid search parameters for the resourcetype(s) currently in focus, valid (type) modifiers, comparators and values for the type of search parameter etc.) and want to return meaningful OperationOutcomes if something is not correct. <br>
+While this can help to make the search <em>work</em> you need more to make it <em>efficient</em>. I don't know of any existing reading on this, but from my experience I can come up with two broad ways of dealing with this:<br>
+1. Gain knowledge / statistics about which filters are the most discriminating. Perform those first and use the results for a 'join' on the next REST call. This way you minimize the amount of data you have to retrieve through each call. (This is actually what a relational database does when computing the 'query plan'.)<br>
+2. Create a cache of the data 'behind' the REST API, and query that. But cache means cache-invalidation and the complexity of that depends on the data turnover in the source system and the delay that is allowed on the FHIR interface.<br>
+Regardless of the approach I think there is no really easy solution to this problem.</p>
+
+
+
+<a name="153927306"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153927306" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mattias Flodin <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153927306">(Dec 29 2017 at 09:21)</a>:</h4>
+<p>Hm, <code>a[b eq C1].c eq C2</code> should be equivalent to <code>a.b eq C1 and a.c eq C2</code> right? Is there any situation when a filter in the parameter path can't be factored out to remove all filters from the path?</p>
+
+
+
+<a name="153927310"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153927310" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Mattias Flodin <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153927310">(Dec 29 2017 at 10:13)</a>:</h4>
+<p>Seems that if you just use the surrounding path prefix to qualify each parameter path within the nested filter, then you can move it out of the path. So <code>(PREFIX[expr])</code> becomes <code>(PREFIX and expr2)</code>, where expr2 is expr with every parameter path prefixed by PREFIX.</p>
+
+
+
+<a name="153927317"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153927317" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christiaan Knaap <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153927317">(Dec 29 2017 at 13:15)</a>:</h4>
+<p>No time to analyze now, but I'd especially check the validity of your assumption on composite searchparameters and searchparameters that can have multiple values (like <a href="http://Patient.name" target="_blank" title="http://Patient.name">Patient.name</a>).</p>
+
+
+
+<a name="153949664"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153949664" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153949664">(Apr 02 2018 at 05:29)</a>:</h4>
+<p><span class="user-mention" data-user-id="191757">@Christiaan Knaap</span> Hi Christiaan, would you like to participate in FHIR storage track? We want to try it in Germany</p>
+
+
+
+<a name="153949665"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153949665" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153949665">(Apr 02 2018 at 05:32)</a>:</h4>
+<p>what exactly is the track?</p>
+
+
+
+<a name="153949667"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153949667" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153949667">(Apr 02 2018 at 05:33)</a>:</h4>
+<p>I mean, what do you do to partcipate?</p>
+
+
+
+<a name="153949668"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153949668" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153949668">(Apr 02 2018 at 05:33)</a>:</h4>
+<p>Just preparing it - hope we are not too late - <a href="https://github.com/fhir-fuel/fhir-storage-and-analytics-track" target="_blank" title="https://github.com/fhir-fuel/fhir-storage-and-analytics-track">https://github.com/fhir-fuel/fhir-storage-and-analytics-track</a></p>
+
+
+
+<a name="153949669"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153949669" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153949669">(Apr 02 2018 at 05:34)</a>:</h4>
+<p>so saw that but it doesn't tell me what i have to do to be part of it</p>
+
+
+
+<a name="153949671"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153949671" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153949671">(Apr 02 2018 at 05:35)</a>:</h4>
+<p>i am working on it. Should i use template?</p>
+
+
+
+<a name="153949672"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153949672" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153949672">(Apr 02 2018 at 05:36)</a>:</h4>
+<p>I want to find somebody, who help me to do it in a right way :)</p>
+
+
+
+<a name="153949675"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153949675" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153949675">(Apr 02 2018 at 05:38)</a>:</h4>
+<p>well, we can get to the template part later. What isn't clear is how it's about 'connecting'... at the moment it looks sort of like an unconference presentation</p>
+
+
+
+<a name="153949677"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153949677" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153949677">(Apr 02 2018 at 05:42)</a>:</h4>
+<p>Yes, that's true. Do you think this is not a track? I like discussions during the tracks and missing such about storage implementation - how to organise it?</p>
+
+
+
+<a name="153949679"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153949679" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153949679">(Apr 02 2018 at 05:43)</a>:</h4>
+<p>I think, the result can be  the report or guidelines for implementers</p>
+
+
+
+<a name="153949681"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153949681" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153949681">(Apr 02 2018 at 05:49)</a>:</h4>
+<p>we've had tracks like this before.. but most people come to make something work ('to connect'). So If you get interest we can do it. But it does need to be clear what your anticipated outcomes are</p>
+
+
+
+<a name="153949682"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153949682" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153949682">(Apr 02 2018 at 05:52)</a>:</h4>
+<p>Can you point me to similar tracks in order to use them as inspiration?</p>
+
+
+
+<a name="153949683"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153949683" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> nicola (RIO/SS) <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153949683">(Apr 02 2018 at 05:58)</a>:</h4>
+<p>Can Outcome  be working prototype of database  schema and FHIR search implementation? Or experience with existing approaches to do it?</p>
+
+
+
+<a name="153950121"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153950121" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christiaan Knaap <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153950121">(Apr 03 2018 at 08:02)</a>:</h4>
+<p><span class="user-mention" data-user-id="191318">@nicola (RIO/SS)</span> Certainly interesting, thanks. Only depends on the other tracks - cannot participate in three at the same time. Is there already any outline for the track or do you want me to think about that as well?</p>
+
+
+
+<a name="153950387"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Implementing%20search%20in%20heterogenic%20environment/near/153950387" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Implementing.20search.20in.20heterogenic.20environment.html#153950387">(Apr 03 2018 at 23:27)</a>:</h4>
+<p>so back to this... I don't know whether there's enough interest in a standard database schema that would both support the API, and also enable interoperable queries. I don't know if this is something that could be part of this, and would be the interoperability bit</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

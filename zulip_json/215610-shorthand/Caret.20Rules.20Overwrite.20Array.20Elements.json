@@ -1,0 +1,50 @@
+[
+    {
+        "content": "<p>I want to add some extensions into a profile's StructureDefinition.extension array. The parent is a FHIR resource (AllergyIntolerance) that has multiple extensions, a couple of which are not automatically filtered out by Sushi. I didn't realize this until I discovered improper extensions in the generated StructureDefinition. See <a href=\"https://fshschool.org/FSHOnline/#/share/2TM3CMb\">https://fshschool.org/FSHOnline/#/share/2TM3CMb</a>.</p>\n<p>I didn't see anything in the FSH Language Reference, but is there a syntax that would allow the addition of array elements rather than direct assignment by array index resulting in invalid overwrites?</p>\n<p>My work-around is to figure out the number of extension elements existing from the parent and then set the initial array index to 1+ that. I was hoping to not have to do that.</p>",
+        "id": 245490320,
+        "sender_full_name": "Joe Paquette",
+        "timestamp": 1625860805
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"211704\">@Joe Paquette</span>!  There are a few tricky things at play here...</p>\n<p>One tricky bit is that <em>some</em> extensions from a parent should be propagated to the child and others should not.  Unfortunately, there is not a programatic way of doing it right now, so SUSHI just has some special case code that looks for extensions that should <em>not</em> be inherited.  This basic issue is being tracked here: <a href=\"https://jira.hl7.org/browse/FHIR-27535\">https://jira.hl7.org/browse/FHIR-27535</a>.  All this to say, it's difficult as an author to even know how many extensions will get propagated to the child (in order to know the right indices of each).  </p>\n<p>So... authors ought not be <em>overwriting</em> existing extensions on the SD -- but it's difficult to figure out how <em>not</em> to do that.  Of course, if it was valid to overwrite extensions then we run into the issue that SUSHI does not provide a way to \"clear\" an element value completed, so you end up \"merging\" values into existing extensions instead of overwriting them.  That's not good either.</p>\n<p>I can think of a couple of potential approaches to the problem.  One very specific solution would be to special-case <code>^extension</code> so it always appends to the existing array instead of starting at <code>0</code>.   Another, more general, solution would be to introduce a syntax that indicates that an item should be appended to the end of the list.  For example <code>^extension[/]</code> or <code>^extension[&gt;]</code>, etc.  We could also potentially redefine <code>[+]</code> so that if it is the first occurrence of an indexer on that path, it appends to the end of the array (instead of always meaning <code>0</code> on its first use).</p>\n<p>Thoughts?</p>",
+        "id": 245496372,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1625864025
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"211704\">@Joe Paquette</span> -- Oh!  I forgot about this lifehack!</p>\n<div class=\"codehilite\"><pre><span></span><code>* ^extension[https://fhir.example.com/dp/StructureDefinition/dp-api].valueCode = #external-api\n* ^extension[https://fhir.example.com/dp/StructureDefinition/dp-api-supported-profile].valueUrl = &quot;http://hl7.org/fhir/us/core/StructureDefinition/us-core-allergyintolerance&quot;\n* ^extension[https://fhir.example.com/dp/StructureDefinition/dp-api-interaction].valueCode = #READ\n* ^extension[https://fhir.example.com/dp/StructureDefinition/dp-api-interaction][+].valueCode = #SEARCH\n</code></pre></div>\n<p>In an Instance (or in caret rules), if you do <code>extension[{url|id|name}]</code> and SUSHI can resolve that extension, then it will append the extension to the end of the extension array (properly setting the extension URL). For multiples of the same extension, add an indexer after.</p>\n<p>See: <a href=\"https://fshschool.org/FSHOnline/#/share/36o4QQp\">https://fshschool.org/FSHOnline/#/share/36o4QQp</a></p>",
+        "id": 245499060,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1625864877
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> !  Works perfectly! I was hoping there was some \"secret sauce\" that would solve this! After seeing your \"lifehack\", I went back into the language reference and found it at <a href=\"http://build.fhir.org/ig/HL7/fhir-shorthand/reference.html#extension-paths\">http://build.fhir.org/ig/HL7/fhir-shorthand/reference.html#extension-paths</a>.  Not sure how I missed it (guess it was too close to the weekend... <span aria-label=\"beer\" class=\"emoji emoji-1f37a\" role=\"img\" title=\"beer\">:beer:</span> ).</p>\n<p>As for your idea ( <code>^extension[/]</code> or <code>^extension[&gt;]</code>), this would be a good feature enhancement for any array assignments. I am also using the StructureDefinition.keyword  for some specific use cases, and <code>keyword</code> is an array.  While I have not seen it used in any StructureDefinitions we are dealing with, you never know. I'll add a feature request in the Sushi project.</p>",
+        "id": 245678590,
+        "sender_full_name": "Joe Paquette",
+        "timestamp": 1626092763
+    },
+    {
+        "content": "<p>I added <a href=\"https://github.com/FHIR/sushi/issues/875\">https://github.com/FHIR/sushi/issues/875</a> for the above feature request.</p>",
+        "id": 245681918,
+        "sender_full_name": "Joe Paquette",
+        "timestamp": 1626094704
+    },
+    {
+        "content": "<blockquote>\n<p>We could also potentially redefine [+] so that if it is the first occurrence of an indexer on that path, it appends to the end of the array (instead of always meaning 0 on its first use).</p>\n</blockquote>\n<p>Ahhh! Thank you pointing this out, <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span>  I had ran into almost the exact same issue as <span class=\"user-mention\" data-user-id=\"211704\">@Joe Paquette</span>  (placing Extensions into StructureDefinitions). I erroneously thought that <code>[+]</code> would <em>always</em> append to an Array.</p>\n<p>Personally, I would be in favor of redefining <code>[+]</code> to always mean \"append\" (also on first use). It would feel less surprising to me than the current implementation, but of course, it's a matter of opinion. I would not be in favor of another symbol to mean \"append only\". Instead, if <code>[+]</code> is redefined, then authors who want to refer to the 1st element have to explicitly state so using <code>[0]</code>, which seems more readable to me.</p>",
+        "id": 245759233,
+        "sender_full_name": "Martin Höcker",
+        "timestamp": 1626129652
+    },
+    {
+        "content": "<p>I agree, <span class=\"user-mention\" data-user-id=\"217988\">@Martin Höcker</span> . [+] should mean \"next element\" which would always mean \"append\"</p>",
+        "id": 245834965,
+        "sender_full_name": "Mark Kramer",
+        "timestamp": 1626187420
+    },
+    {
+        "content": "<p>I think we need to be careful about defining it though.  There is a difference between <code>[+]</code> always meaning append and <code>[+]</code> meaning append if no previous indexer was specified.  E.g., in an array of length 5, if you use <code>array[2]</code> and then <code>array[+]</code>, then the plus is either <code>3</code> or <code>5</code> depending on if <code>+</code> is _always_ append or if it is \"next element\" (and next element is append when no previous element was specified).</p>",
+        "id": 245838761,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1626188731
+    }
+]

@@ -1,0 +1,62 @@
+[
+    {
+        "content": "<p>Would it make sense to have more formalized description for FHIR async operations? Currently, for bulk FHIR, response is defined in an ad-hoc manner (<a href=\"https://www.hl7.org/fhir/async.html\">https://www.hl7.org/fhir/async.html</a>) as a simple JSON structure.</p>\n<p>I wonder if this should be generalized and OperationDefinition utilized as well to define format of async operations status?</p>\n<p>In our implementation of FHIR server, we use \"out\" parameters to define async operation status response. This gives a nice symmetry between synchronoous and asynchronous operation: whatever synchronous operation returns immediately, asynchronous operation returns in its status response. An implementation can also allow calling any synchronous operation asynchronously (in which case, operation completes immediately and status is the response itself) or asynchronous operation synchronously (in which case we poll for status internally, then return status response as a regular response).</p>\n<p>However, one little challenge is that Bulk FHIR, which is an operation defined in FHIR specification, uses format for its status output which is incompatible with the FHIR Parameters resource format.</p>\n<p>To handle that case, we kind of paper over it with the following \"trick\": we define a process of mapping Parameters response into \"simplified JSON response\". The mapping is trivial: every singular parameter becomes a field, every list parameter becomes field with JSON array as a value.</p>\n<p>For example, the following response:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;resourceType&quot;: &quot;Parameters&quot;,\n  &quot;parameter&quot;: [\n    {\n      &quot;name&quot;: &quot;message&quot;,\n      &quot;valueString&quot;: &quot;I&#39;m not a teapot!&quot;\n    }\n  ]\n}\n</code></pre></div>\n\n\n<p>converted to simplified JSON response will look like:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;message&quot;: &quot;I&#39;m not a teapot!&quot;\n}\n</code></pre></div>\n\n\n<p>It's not possible to represent arbitrary JSON this way (for example, array of array is not representable), but luckily, Bulk FHIR (the only one we care about so far) is representable this way.</p>\n<p>Currently, we distinguish between two response formats via Accept header: application/fhir+json will return Parameters resource, application/json will return simplified JSON response.</p>\n<p>Would this make sense to be proposed for the async specification? I think, having symmetry between sync and async operations is useful, and utilizing existing tools for formal declaration of status response is also very valuable.</p>\n<p>My preference, though, would be to limit status response to be Parameters resource always (without any \"simplified JSON response\"). I don't think it would require async operation implementor to necessarily be FHIR server (I think, I've seen this argument somewhere?) as Parameters JSON can be generated just like a regular JSON. One downside, though, is that Parameters resource is a bit difficult to use / handle, but this is complexity that FHIR has already anyways (for regular extended operations).</p>",
+        "id": 201197232,
+        "sender_full_name": "Ivan Dubrov",
+        "timestamp": 1592426292
+    },
+    {
+        "content": "<blockquote>\n<p>Bulk FHIR, which is an operation defined in FHIR specification, uses format for its status output which is incompatible with the FHIR Parameters resource format</p>\n</blockquote>\n<p>I don't think that's true</p>",
+        "id": 201197360,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1592426364
+    },
+    {
+        "content": "<p>I guess you are referring to the intermediate status update responses, for which we don't use the parameters resource</p>",
+        "id": 201197498,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1592426424
+    },
+    {
+        "content": "<p>I mean completed status response as defined here (for Bulk FHIR): <a href=\"https://www.hl7.org/fhir/async.html#3.1.6.4.0.4\">https://www.hl7.org/fhir/async.html#3.1.6.4.0.4</a> <br>\nFor example, in our server \"FHIR native\" status response looks like this:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;resourceType&quot;: &quot;Parameters&quot;,\n  &quot;parameter&quot;: [\n    {\n      &quot;name&quot;: &quot;transactionTime&quot;,\n      &quot;valueInstant&quot;: &quot;2020-06-17T17:47:29.941100+00:00&quot;\n    },\n    {\n      &quot;name&quot;: &quot;request&quot;,\n      &quot;valueUrl&quot;: &quot;&lt;url&gt;&quot;\n    },\n    {\n      &quot;name&quot;: &quot;requiresAccessToken&quot;,\n      &quot;valueBoolean&quot;: true\n    },\n    {\n      &quot;name&quot;: &quot;output&quot;,\n      &quot;part&quot;: [\n        {\n          &quot;name&quot;: &quot;partition&quot;,\n          &quot;valueUnsignedInt&quot;: 0\n        },\n        {\n          &quot;name&quot;: &quot;url&quot;,\n          &quot;valueUrl&quot;: &quot;&lt;url&gt;&quot;\n        },\n        {\n          &quot;name&quot;: &quot;count&quot;,\n          &quot;valueUnsignedInt&quot;: 570\n        }\n      ]\n    }\n  ]\n}\n</code></pre></div>\n\n\n<p>versus \"simplified JSON response\" which looks like this:</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;transactionTime&quot;: &quot;2020-06-17T17:47:29.941100+00:00&quot;,\n  &quot;request&quot;: &quot;&lt;url&gt;&quot;,\n  &quot;requiresAccessToken&quot;: true,\n  &quot;output&quot;: [\n    {\n      &quot;partition&quot;: 0,\n      &quot;url&quot;: &quot;&lt;url&gt;&quot;,\n      &quot;count&quot;: 570\n    }\n  ]\n}\n</code></pre></div>",
+        "id": 201198136,
+        "sender_full_name": "Ivan Dubrov",
+        "timestamp": 1592426761
+    },
+    {
+        "content": "<p>well, we deliberately chose not to use the Parameters resource here; the implementers at the time felt that it was simpler not to, and there was no pressing reason to. I guess you're saying that you have a hammer, and you'd rather that this was a nail right here</p>",
+        "id": 201198402,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1592426896
+    },
+    {
+        "content": "<p>I find that whole <a href=\"https://www.hl7.org/fhir/async.html\">https://www.hl7.org/fhir/async.html</a> page confusing because there is an entirely separate bulkdata IG which has a different response message defined at <a href=\"https://hl7.org/fhir/uv/bulkdata/\">https://hl7.org/fhir/uv/bulkdata/</a></p>",
+        "id": 201257895,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1592481631
+    },
+    {
+        "content": "<p>or, looking at <a href=\"https://hl7.org/fhir/uv/bulkdata/export/index.html#endpoint-1\">https://hl7.org/fhir/uv/bulkdata/export/index.html#endpoint-1</a> , I guess it might match today but who is responsible for keeping these in sync</p>",
+        "id": 201258091,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1592481769
+    },
+    {
+        "content": "<p>Yeah, this has been a challenge. We developed guidance in the bulk IG and aimed to bring the base FHIR spec into general alignment.</p>",
+        "id": 201290333,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1592496794
+    },
+    {
+        "content": "<p>As we make improvements like support for deletions, we'll at the least want to push the same changes into FHIR core. I'm open to ideas about how to better coordinate (FYI <span class=\"user-mention\" data-user-id=\"191414\">@Dan Gottlieb</span>)</p>",
+        "id": 201290511,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1592496852
+    },
+    {
+        "content": "<p>(We can continue to raise the question about whether we should switch to Parameters, but I think that's actually a distinct question from: how do we keep things in sync.)</p>",
+        "id": 201290665,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1592496920
+    }
+]

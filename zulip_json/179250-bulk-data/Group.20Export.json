@@ -1,0 +1,176 @@
+[
+    {
+        "content": "<p>This may be an obvious question, but looking to resolve a difference of opinion.<br>\nThe FHIR operation for all data on a group of patients is:    GET [fhir base]/Group/[id]/$export.<br>\nThe brackets around id does NOT mean optional (as it does in HL7), correct?  It is just a representation for substitution, correct?<br>\nSeems obvious that id is REQUIRED as part of the URL for group export.   But, I guess if not valued, it could be interpreted for get all patients.<br>\nPlease help me clarify.</p>",
+        "id": 198190012,
+        "sender_full_name": "Michelle Vondercrone",
+        "timestamp": 1589977488
+    },
+    {
+        "content": "<p>That is correct. URLs like <code>https://myfhirserver/Group/abc/$export</code> are valid but <code>https://myfhirserver/Group/$export</code> is not. To get all patients use <code>[fhir base]/Patient/$export</code>.</p>",
+        "id": 198191709,
+        "sender_full_name": "Vladimir Ignatov",
+        "timestamp": 1589978348
+    },
+    {
+        "content": "<p>Looking for opinions <span class=\"user-mention\" data-user-id=\"191414\">@Dan Gottlieb</span> <br>\nAs part of Group Export, we are allowing configuration on our system for the Group.  Configuration will include the definition of the group id and will be associated with a database query to get the list of patients.   <br>\nSo, when the Group Export is initiated with the ID of the group configured in our system, the first step before retrieving the resource data will be to get the list of patients in the group by running the associated query.  <br>\nIn the case of the query returning no patients, this is not really an error, so is it valid to create an informatinoal OperationOutcome and upon status request return Complete with OperationOutcome in the Output?</p>\n<p>{<br>\n    \"transactionTime\": \"[instant]\",<br>\n    \"request\" : \"[base]/Patient/$export?_type=Patient,Observation\",<br>\n    \"requiresAccessToken\" : true,<br>\n    \"output\" : [{<br>\n      \"type\" : \"OperationOutcome\",<br>\n      \"url\" : \"<a href=\"http://serverpath2/OperationOutcome_file_1.ndjson\">http://serverpath2/OperationOutcome_file_1.ndjson</a>\"<br>\n     }],<br>\n    \"error\" : [ ]<br>\n  }</p>",
+        "id": 203954621,
+        "sender_full_name": "Michelle Vondercrone",
+        "timestamp": 1594819587
+    },
+    {
+        "content": "<p>My inclination would be to use an empty output array  to indicate that no data is available for the group, but I'm curious what others folks think?</p>",
+        "id": 203965461,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1594824805
+    },
+    {
+        "content": "<p>Agreed Dan -- there's a close analogy to <a href=\"http://build.fhir.org/bundle-definitions.html#Bundle.entry.search.mode\">http://build.fhir.org/bundle-definitions.html#Bundle.entry.search.mode</a></p>",
+        "id": 203966467,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1594825219
+    },
+    {
+        "content": "<p>which provides a clear way to indicate whether you are seeing a resource because it matched your search or because it is giving you information about your search.</p>",
+        "id": 203966498,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1594825234
+    },
+    {
+        "content": "<p>For the export operation, the closest bucket we have to this is called \"error\" -- perhaps we should expand the meaning of this field to encompass any operation outcomes that give you information about the result rather than strictly errors.</p>",
+        "id": 203966602,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1594825290
+    },
+    {
+        "content": "<p>I agree. I would expect an empty output array in such situation. (which means the group is empty)<br>\n<span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> I don't quite understand what information server could provide in the \"expanded\" error array</p>",
+        "id": 203966865,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1594825408
+    },
+    {
+        "content": "<p>It's different than a search with query params that returns no results, but I think the idea is the same in that the server::<br>\nShall return 200<br>\nMay return an OperationOutcome with more information for the client to diagnosis the issue</p>",
+        "id": 203968995,
+        "sender_full_name": "Nathan Hall",
+        "timestamp": 1594826360
+    },
+    {
+        "content": "<p>My goal is just to make sure a client never thinks that the operation outcome is a resource returned by the search. If you put it in the outputs array, that is the implication.</p>",
+        "id": 203969385,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1594826516
+    },
+    {
+        "content": "<p>So if we think it's important to return such an OperationOutcome, I'd like to make sure we put it somewhere other than the \"outputs\" array. Right now the only contender is the \"errors\" array, which is actually pretty close to what we want (but its scope is a bit too narrow -- today, it's just for information that represents an error, rather than any information that you want to convey alongside your export results).</p>",
+        "id": 203969678,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1594826639
+    },
+    {
+        "content": "<p>Thanks for the feedback  everyone.  We can send an empty array in 'Output' and the informational Operation Outcome in 'Error' (if we an expand the scope of Error), otherwise my only other option is to have the request itself fail (which is not really correct either).</p>",
+        "id": 203970495,
+        "sender_full_name": "Michelle Vondercrone",
+        "timestamp": 1594826962
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> That makes sense. Maybe we should also change the name \"errors\" to \"issues\" if we decide to expand that element</p>",
+        "id": 203971619,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1594827374
+    },
+    {
+        "content": "<p>Related question: why errors is required? It is not fun to return an empty array all the time where there is no \"error\".<br>\nAnd this sentence is interesting: \"If no errors occurred, the server SHOULD return an empty array.\" If errors is required and there is no error, what other options for server rather than returning an empty array. (It is SHOULD which means server MAY do something different.)</p>",
+        "id": 203971968,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1594827533
+    },
+    {
+        "content": "<p>Yup, agree that it's worth considering renaming the errors field and expanding its scope to include info and warning level OperationOutcomes. What do folks think of the name \"issues\" that <span class=\"user-mention\" data-user-id=\"191506\">@Yunwei Wang</span> proposed (I like that it aligns with the language used in the OperationOutcome)?</p>",
+        "id": 203981232,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1594831594
+    },
+    {
+        "content": "<p>Re: the errors array with no errors, I don't remember why we made it a SHOULD rather than a SHALL. It seems like we should either require an empty array or explicitly leave it up to servers to choose, since in the case of a SHOULD, clients will have to handle parsing both possibilities anyway. Thoughts?</p>",
+        "id": 203981554,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1594831778
+    },
+    {
+        "content": "<p>I am good with Issue instead of Error.  I see Issue used in FHIR R4 OperationOutcome  definition:<br>\n<a href=\"https://www.hl7.org/fhir/operationoutcome-example-exception.json.html\">https://www.hl7.org/fhir/operationoutcome-example-exception.json.html</a><br>\n<a href=\"https://www.hl7.org/fhir/operationoutcome-example-allok.json.html\">https://www.hl7.org/fhir/operationoutcome-example-allok.json.html</a><br>\nI wouldn't want to have to write an OperationOutcome though if all ok.  Could this be an empty array []?</p>",
+        "id": 203984133,
+        "sender_full_name": "Michelle Vondercrone",
+        "timestamp": 1594833093
+    },
+    {
+        "content": "<p>Changing the name of the property would be a breaking change</p>",
+        "id": 203984542,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1594833299
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> - I was thinking we could phase it by expanding the definition in v1.2 and renaming the field in v2 (didn't express that very well though :)</p>",
+        "id": 203985705,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1594833884
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"258504\">@Michelle Vondercrone</span> Agreed - would definitely want to continue allowing an empty error array (and/or omitting the property entirely, depending on what we decide on the other issue in this thread)</p>",
+        "id": 203986019,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1594834025
+    },
+    {
+        "content": "<p>hello,  can the groupings be pre-defined by server, for example on age bracket or a postal code etc. Also, where would the group ids be retrieved from, is there a request for that ? or have to be configured in the client ? <span class=\"user-mention\" data-user-id=\"191414\">@Dan Gottlieb</span>  <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span></p>",
+        "id": 222914052,
+        "sender_full_name": "Ritika Jain",
+        "timestamp": 1610739813
+    },
+    {
+        "content": "<p>Yup, the groups are FHIR Group resources (<a href=\"https://www.hl7.org/fhir/group.html\">https://www.hl7.org/fhir/group.html</a>) so depending on the server they may be defined elsewhere and exposed through a FHIR interface (eg. patients in a postal code or the roster of patients for a particular plan at a payor) or could be groups of specific patients that a client can save to the server (as is the case in the CMS Data at the Point of Care project at <a href=\"https://dpc.cms.gov/docs#groups-attribution\">https://dpc.cms.gov/docs#groups-attribution</a>).</p>",
+        "id": 222918034,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1610741360
+    },
+    {
+        "content": "<p>Based on the IG, servers should support listing and searching for Groups using the FHIR REST API. Of course some servers may omit that interface and rely on ids the client should already be know (eg. plan id numbers for particular payor)</p>",
+        "id": 222918078,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1610741377
+    },
+    {
+        "content": "<p>I have few questions on group export. </p>\n<p>Based on the discussion it is mentioned that the group details could be fetched from FHIR (<a href=\"https://www.hl7.org/fhir/group.html\">https://www.hl7.org/fhir/group.html</a>). How do we create the group, who creates it?</p>\n<p>In the inferno test (or any certification test), how does it get the group ids to verify? for eg The inferno test tool takes \"fhir/Group/1/$export\", how does it fetch the group id as 1?<br>\n<span class=\"user-mention\" data-user-id=\"191414\">@Dan Gottlieb</span>  <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span></p>",
+        "id": 243612697,
+        "sender_full_name": "Moin Syed",
+        "timestamp": 1624431069
+    },
+    {
+        "content": "<p>Groups can be created using normal FHIR POST / PUT interactions, or in some off-band ways specific to each system. The bulk specs do not say anything about that.</p>",
+        "id": 243648598,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1624453761
+    },
+    {
+        "content": "<p>Similar for the group id: clients have to know which id to use - they could search groups using normal FHIR searches or some other method like a pre-configured list</p>",
+        "id": 243648718,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1624453820
+    },
+    {
+        "content": "<p>Adding to this point, it's entirely possible that an EHR might only support \"out of band\" Group creation (e.g., register your client and get access to a pre-defined group, or upload a patient list to negotiate a new group through some administrative process, etc).</p>",
+        "id": 243669518,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1624462339
+    },
+    {
+        "content": "<p>Inferno assumes the group to be tested already exists on the server.</p>",
+        "id": 243797253,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1624546182
+    },
+    {
+        "content": "<p>Hi All,<br>\nGreat discussion.  I just want to clarify the expectation of the Population Query from the EHR Vendor API perspective.   The groups are created off a pre-determined cohort list from say an external pop health system.. i.e.  All patients over 65 who have not had a covid shot.  This list of patient ID's would be used in the creation of the FHIR group for the planned EHR query.   There is no expectation for the EHR Vendors API to do that search work, create the group and further manage it correct?   I.e.  This is a group imported from external system outside the EHR and managed by that outside system.</p>",
+        "id": 247361064,
+        "sender_full_name": "Tom Lipcsey",
+        "timestamp": 1627405242
+    }
+]

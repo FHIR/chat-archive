@@ -1,0 +1,476 @@
+[
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> I believe we've found a bug when using assumeValidRestReferences in the version biggybagged with HAPI 5.0.2, but I can't remember where the github repo is, where you prefer samples</p>",
+        "id": 200857105,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1592206318
+    },
+    {
+        "content": "<p><a href=\"https://github.com/FHIR/fhir-test-cases/pulls\">https://github.com/FHIR/fhir-test-cases/pulls</a></p>",
+        "id": 200858877,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1592207906
+    },
+    {
+        "content": "<p>and test cases for STU3? ... should I just create that folder?</p>",
+        "id": 200863689,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1592211339
+    },
+    {
+        "content": "<p>sure</p>",
+        "id": 200915170,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1592239629
+    },
+    {
+        "content": "<p>oh no - hang on. For validation test cases, just use /validation. you specify the version in manifest.json</p>",
+        "id": 200915272,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1592239672
+    },
+    {
+        "content": "<p>my case is a bit convoluted ... we're experiencing that the validator behaves a bit different depending on the context is it invoked in. When validating resources (in my setup this is done on all invocations automatically), it works like a charm, but when wrapping it in Parameters, like when calling $validate, it seems like the profile is not picked correctly in combination with assumeValidRestReferences.</p>\n<p>When validated within a Parameters section (see example below), the error from the InstanceValidator (with assumeValidRestReferences set to true) is the following: </p>\n<p>Parameters.parameter[0].resource.ofType(Communication).partOf[0],message=The type \"CarePlan\" implied by the reference URL <a href=\"http://careplan.fut.trifork.com/CarePlan/42\">http://careplan.fut.trifork.com/CarePlan/42</a> is not a valid Target for this element (must be one of [Resource]) </p>\n<p>I believe this error message is wrong as CarePlan is in fact a <em>Resource</em>, hence it should be legal. Also, I've looked into it. I believe profile checks that are declared within the parameters can be checked using the following (replacing this line <a href=\"https://github.com/hapifhir/org.hl7.fhir.core/blob/49c35b1de2bd40f880dfdca7029df5941be69c91/org.hl7.fhir.validation/src/main/java/org/hl7/fhir/validation/instance/InstanceValidator.java#L3577\">https://github.com/hapifhir/org.hl7.fhir.core/blob/49c35b1de2bd40f880dfdca7029df5941be69c91/org.hl7.fhir.validation/src/main/java/org/hl7/fhir/validation/instance/InstanceValidator.java#L3577</a> with this):</p>\n<div class=\"codehilite\"><pre><span></span><code>  var profiles = element.getChildren(&quot;meta&quot;)\n                        .stream()\n                        .map(c -&gt; c.getChildren(&quot;profile&quot;))\n                        .filter(Objects::nonNull)\n                        .flatMap(List::stream)\n                        .map(Element.class::cast)\n                        .map(Element::getValue)\n                        .map(s -&gt; this.context.fetchRawProfile(s))\n                        .collect(Collectors.toList());\n                if(profiles.isEmpty())\n                    validateResource(hc, errors, resource, element, profile, idstatus, stack);\n                else\n                    // Any of the profiles may do ...?\n                    validateResource(hc, errors, resource, element, profiles.get(0), idstatus, stack);\n</code></pre></div>\n\n\n<p>I've tested it manually - seems to work as intended. Let me know if you would like a PR, <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> .</p>\n<p>---- example</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;resourceType&quot;: &quot;Parameters&quot;,\n  &quot;parameter&quot;: [\n    {\n      &quot;name&quot;: &quot;resource&quot;,\n      &quot;resource&quot;: {\n        &quot;resourceType&quot;: &quot;Communication&quot;,\n        &quot;meta&quot;: {\n          &quot;profile&quot;: [\n            &quot;http://ehealth.sundhed.dk/fhir/StructureDefinition/ehealth-message&quot;\n          ]\n        },\n        &quot;extension&quot;: [\n          {\n            &quot;url&quot;: &quot;http://ehealth.sundhed.dk/fhir/StructureDefinition/ehealth-communication-recipientCareTeam&quot;,\n            &quot;valueReference&quot;: {\n              &quot;reference&quot;: &quot;https://inttest.ehealth.sundhed.dk/organization/fhir/CareTeam/50&quot;\n            }\n          },\n          {\n            &quot;url&quot;: &quot;http://ehealth.sundhed.dk/fhir/StructureDefinition/ehealth-restriction-category&quot;,\n            &quot;valueCodeableConcept&quot;: {\n              &quot;coding&quot;: [\n                {\n                  &quot;system&quot;: &quot;http://ehealth.sundhed.dk/cs/restriction-category&quot;,\n                  &quot;code&quot;: &quot;None&quot;\n                }\n              ]\n            }\n          }\n        ],\n        &quot;partOf&quot;: [\n          {\n            &quot;reference&quot;: &quot;http://careplan.fut.trifork.com/CarePlan/42&quot;\n          }\n        ],\n        &quot;status&quot;: &quot;preparation&quot;,\n        &quot;category&quot;: [\n          {\n            &quot;coding&quot;: [\n              {\n                &quot;system&quot;: &quot;http://ehealth.sundhed.dk/cs/message-category&quot;,\n                &quot;code&quot;: &quot;message&quot;\n              }\n            ],\n            &quot;text&quot;: &quot;Besked&quot;\n          }\n        ],\n        &quot;medium&quot;: [\n          {\n            &quot;coding&quot;: [\n              {\n                &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/v3-ParticipationMode&quot;,\n                &quot;code&quot;: &quot;WRITTEN&quot;\n              }\n            ],\n            &quot;text&quot;: &quot;WRITTEN&quot;\n          }\n        ],\n        &quot;sender&quot;: {\n          &quot;reference&quot;: &quot;http://inttest.ehealth.sundhed.dk/trifork-fhir-server/Patient/100&quot;\n        },\n        &quot;reasonCode&quot;: [\n          {\n            &quot;coding&quot;: [\n              {\n                &quot;system&quot;: &quot;http://ehealth.sundhed.dk/cs/task-category&quot;,\n                &quot;code&quot;: &quot;MissingMeasurementResolving&quot;\n              }\n            ]\n          }\n        ],\n        &quot;payload&quot;: [\n          {\n            &quot;contentString&quot;: &quot;Hello world&quot;\n          }\n        ]\n      }\n    }\n  ]\n}\n</code></pre></div>",
+        "id": 200957005,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1592262964
+    },
+    {
+        "content": "<p>I don't think we're up to a PR yet. My interpretation of the error is that assumeValidRestReferences is true, but CarePlan is not a known resource - the StructureDefinition is not loaded?</p>",
+        "id": 200961866,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1592267487
+    },
+    {
+        "content": "<p>Also, I won't accept a PR to use streaming - the code looks nice but I typically find it impossible to debug</p>",
+        "id": 200961919,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1592267524
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179166-implementers/topic/AssumeValidRestReferences/near/200961866\">said</a>:</p>\n<blockquote>\n<p>I don't think we're up to a PR yet. My interpretation of the error is that assumeValidRestReferences is true, but CarePlan is not a known resource - the StructureDefinition is not loaded?</p>\n</blockquote>\n<p>If that was the case, I would have stumbled across the problem when I created the resource as I also validate it during the creation flow which is not the case. The problem is that the profile stated in the resource (in meta) in the parameter is not loaded in <code>validateContains</code>. My code fixes that - for loop or not.</p>\n<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179166-implementers/topic/AssumeValidRestReferences/near/200961919\">said</a>:</p>\n<blockquote>\n<p>Also, I won't accept a PR to use streaming - the code looks nice but I typically find it impossible to debug</p>\n</blockquote>\n<p>1) that is a matter of (your) taste. I am willing to convert it to a eg. 'for loop' but it would be at the cost of readability (you said \"it looks nice\". Readability is a quality of code that should never be underestimated).<br>\n2) if you were to accept it in its current state, debugging streams has been improved in IntelliJ (<a href=\"https://www.baeldung.com/intellij-debugging-java-streams\">https://www.baeldung.com/intellij-debugging-java-streams</a>)</p>",
+        "id": 200979260,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1592290942
+    },
+    {
+        "content": "<p>as for loop:</p>\n<div class=\"codehilite\"><pre><span></span><code>for (Element c : element.getChildren(&quot;meta&quot;)) {\n                    List&lt;Element&gt; children = c.getChildren(&quot;profile&quot;);\n                    if (children != null) {\n                        for (Element element1 : children) {\n                            Element element2 = element1;\n                            String s = element2.getValue();\n                            StructureDefinition structureDefinition = this.context.fetchRawProfile(s);\n                            profiles.add(structureDefinition);\n                        }\n                    }\n                }\n</code></pre></div>",
+        "id": 200979655,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1592291392
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> comments?</p>",
+        "id": 200998903,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1592305486
+    },
+    {
+        "content": "<p>Do you follow me on the argument:</p>\n<blockquote>\n<p>If that was the case, I would have stumbled across the problem when I created the resource as I also validate it during the creation flow which is not the case. The problem is that the profile stated in the resource (in meta) in the parameter is not loaded in validateContains. My code fixes that - for loop or not.</p>\n</blockquote>",
+        "id": 201117972,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1592385715
+    },
+    {
+        "content": "<p>I'll tell you where I will accept a PR: if you add a test case that demonstrates the problem by failing to validate properly  to <a href=\"https://github.com/FHIR/fhir-test-cases\">https://github.com/FHIR/fhir-test-cases</a></p>",
+        "id": 201203735,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1592429704
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>  sure - I would gladly do so, but that repo looks like a bunch of test files - I can't see any unit tests there - and AFAIK, I can't toggle the assumeValidRestReferences from commandline which would be needed, right?</p>",
+        "id": 201269649,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1592488012
+    },
+    {
+        "content": "<p>I think it would be easier for me to show the bug if I make a github project myself and write it as unit tests. Would you be willing to have a look at that?</p>",
+        "id": 201269958,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1592488153
+    },
+    {
+        "content": "<p>(I promise to keep it simple)</p>",
+        "id": 201269982,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1592488168
+    },
+    {
+        "content": "<p>no, use the test cases. The file validation\\manifest.json drives the unit tests - the Java class org.hl7.fhir.validation.tests.ValidationTests executes them. <code>\"assumeValidRestReferences\" : true</code> is the equivalent</p>",
+        "id": 201302437,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1592502213
+    },
+    {
+        "content": "<p>Got it</p>",
+        "id": 201327348,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1592515054
+    },
+    {
+        "content": "<p>hmmm .... this issue is not reproducible using the fhir-test-cases repo</p>",
+        "id": 201963655,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1593089212
+    },
+    {
+        "content": "<p>that indicates that the validator is working properly and the problem is somewhere else?</p>",
+        "id": 201963897,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1593089369
+    },
+    {
+        "content": "<p>maybe the context that the validator is started in - .... I'll keep digging ... or maybe just right in front of the screen ... I'll keep you posted</p>",
+        "id": 201966453,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1593090771
+    },
+    {
+        "content": "<p>ok <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>  - I'm pretty sure I've found something now. It's not directly related, but it is a bug. When validating a Communication resource with eg. a Communication.topic, where the topic is not constrained in the profile, the type returned on <a href=\"https://github.com/hapifhir/org.hl7.fhir.core/blob/f40f012dfb42d6579e8d3eb02c1b9a170642eb0e/org.hl7.fhir.validation/src/main/java/org/hl7/fhir/validation/instance/InstanceValidator.java#L2463\">https://github.com/hapifhir/org.hl7.fhir.core/blob/f40f012dfb42d6579e8d3eb02c1b9a170642eb0e/org.hl7.fhir.validation/src/main/java/org/hl7/fhir/validation/instance/InstanceValidator.java#L2463</a>  when using \"assumeValidRestReferences\", will be a reference to a \"Resource\". When an instance of a Communication that eg. refers to an EpisodeOfCare gets validated, it will end up failing with eg. </p>\n<div class=\"codehilite\"><pre><span></span><code>The type &quot;EpisodeOfCare&quot; implied by the reference URL https://careplan.inttest.ehealth.sundhed.dk/fhir/EpisodeOfCare/26869 is not a valid Target for this element (must be one of [Resource])\n</code></pre></div>",
+        "id": 203255789,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594207292
+    },
+    {
+        "content": "<p>while the github link points to latest, this is also present when using HAPI 5.0.2 as it uses the 5.0.0 version</p>",
+        "id": 203255933,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594207387
+    },
+    {
+        "content": "<p>yes that looks like a bug. do you have time to turn it into a test case for me? - that is, a profile and an instance that passes and one that fails</p>",
+        "id": 203258300,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594209217
+    },
+    {
+        "content": "<p>would you like it as a unit test or as a part of <a href=\"https://github.com/FHIR/fhir-test-cases\">https://github.com/FHIR/fhir-test-cases</a></p>",
+        "id": 203258929,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594209653
+    },
+    {
+        "content": "<p>I will put it in <a href=\"https://github.com/FHIR/fhir-test-cases\">https://github.com/FHIR/fhir-test-cases</a> but I can put it in there if you just create the relevant resources. But if you want to make it as a PR, you put it it /validator  and add it to /validator/manifest.xml</p>",
+        "id": 203259167,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594209821
+    },
+    {
+        "content": "<p>I'll give it a go later today</p>",
+        "id": 203259767,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594210263
+    },
+    {
+        "content": "<p>thx.</p>",
+        "id": 203259781,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594210277
+    },
+    {
+        "content": "<p>(I'm guessing I'm the only person currently using this feature then :) )</p>",
+        "id": 203260680,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594211037
+    },
+    {
+        "content": "<p>no you're not. You're probably the only one using that combination</p>",
+        "id": 203261045,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594211301
+    },
+    {
+        "content": "<p>awesome</p>",
+        "id": 203309560,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594235555
+    },
+    {
+        "content": "<p>Hmmm ... before I add my examples - I'm seeing other stuff as well: <a href=\"/user_uploads/10155/A03p1jRcpmOZYmcgS-A0U2wY/image.png\">image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/A03p1jRcpmOZYmcgS-A0U2wY/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/A03p1jRcpmOZYmcgS-A0U2wY/image.png\"></a></div>",
+        "id": 203314757,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594238214
+    },
+    {
+        "content": "<p>well, I'm not surprised. how can you fix the value of a Reference?</p>",
+        "id": 203315126,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594238384
+    },
+    {
+        "content": "<p>call it a monkey test in forge ;)</p>",
+        "id": 203315254,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594238429
+    },
+    {
+        "content": "<p>well, you found a corner case i had not implemented because my time is limited</p>",
+        "id": 203315338,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594238468
+    },
+    {
+        "content": "<p>its mostly the error message here: the IG is v4 - so how come there's a message saying something about an r5 model</p>",
+        "id": 203315357,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594238474
+    },
+    {
+        "content": "<p>(i know internally its v5)</p>",
+        "id": 203315373,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594238484
+    },
+    {
+        "content": "<p>because internally it's all r5 and you've managed to produce an internal error message</p>",
+        "id": 203315394,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594238500
+    },
+    {
+        "content": "<p><a href=\"https://github.com/FHIR/fhir-test-cases/pull/63\">https://github.com/FHIR/fhir-test-cases/pull/63</a> - I'm not entirely sure on the syntax in manifest file regarding the errors. There should be no errors in my profile - only in the invalid example</p>",
+        "id": 203317761,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594239705
+    },
+    {
+        "content": "<p>And FWIW - I hope your fix is not limited to r4, as I need it to work in STU3</p>",
+        "id": 203318394,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594240054
+    },
+    {
+        "content": "<p>so your PR says taht mycommunication.invalid.json is invalid against the base spec, but valid against the profile. That's a super rare combination, so I assume you meant the opposite</p>",
+        "id": 203320860,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594241212
+    },
+    {
+        "content": "<p>yep</p>",
+        "id": 203320939,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594241250
+    },
+    {
+        "content": "<p>while it may be super rare, i guess it would also be super useless ;)</p>",
+        "id": 203321034,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594241295
+    },
+    {
+        "content": "<p>I get these 4 errors validating against the profile:</p>\n<div class=\"codehilite\"><pre><span></span><code>ERROR: Communication.basedOn[0].reference: The element reference is present in the instance but not allowed in the applicable fixed value specified in profile\nERROR: Communication.basedOn[0].type: Missing element &quot;type&quot; - required by fixed value assigned in profile http://hl7.dk/fhir/core/StructureDefinition/MyCommunication\nERROR: Communication.basedOn[0]: The type &quot;Patient&quot; implied by the reference URL Patient/pat-good is not a valid Target for this element (must be one of [Resource])\nERROR: Communication.about[0]: The type &quot;Patient&quot; implied by the reference URL Patient/pat-good is not a valid Target for this element (must be one of [Resource])\n</code></pre></div>",
+        "id": 203321354,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594241464
+    },
+    {
+        "content": "<p>nr.3 and 4 are the ones that hit me in production</p>",
+        "id": 203321535,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594241567
+    },
+    {
+        "content": "<p>well, ok. but this can never be valid if the reference is prohibited</p>",
+        "id": 203321670,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594241639
+    },
+    {
+        "content": "<p>sry - no ... nr 4 hit me in production</p>",
+        "id": 203321775,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594241684
+    },
+    {
+        "content": "<p>which errors were present with mycommunication.invalid.json</p>",
+        "id": 203321882,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594241754
+    },
+    {
+        "content": "<p>?</p>",
+        "id": 203321890,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594241758
+    },
+    {
+        "content": "<p>I'm looking at the valid one here</p>",
+        "id": 203321949,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594241772
+    },
+    {
+        "content": "<p>oh</p>",
+        "id": 203321972,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594241782
+    },
+    {
+        "content": "<p>the 'basedOn' stuff was made up spontaneously</p>",
+        "id": 203322093,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594241861
+    },
+    {
+        "content": "<p>disregard those ... even though nr. 3 seems like its a valid bug</p>",
+        "id": 203322263,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594241927
+    },
+    {
+        "content": "<p>and nr.1  ... what are the rules again on fixed stuff? it seems weird that you can specify that the value is fixed without stating the fixed value itself - is that intentional?</p>",
+        "id": 203322705,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594242137
+    },
+    {
+        "content": "<p>nr. 2 seems redundant/void in the case where type is computed due to assumeValidRestReferences</p>",
+        "id": 203323464,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594242526
+    },
+    {
+        "content": "<p>so - if my understanding of fixed is correct, I would say that nr. 1 is an error in the profile AND the resource</p>",
+        "id": 203323586,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594242592
+    },
+    {
+        "content": "<p>well, here's quoting from your profile:</p>\n<div class=\"codehilite\"><pre><span></span><code>     <span class=\"nt\">&lt;fixedReference&gt;</span>\n        <span class=\"nt\">&lt;type</span> <span class=\"na\">value=</span><span class=\"s\">&quot;Patient&quot;</span> <span class=\"nt\">/&gt;</span>\n      <span class=\"nt\">&lt;/fixedReference&gt;</span>\n</code></pre></div>",
+        "id": 203323726,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594242660
+    },
+    {
+        "content": "<p>yep</p>",
+        "id": 203323748,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594242671
+    },
+    {
+        "content": "<p>you're saying that the vaule is fixed to not have a reference; it can only have a type, and the value of the type is \"Patient\"</p>",
+        "id": 203323786,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594242693
+    },
+    {
+        "content": "<p>oh my bad</p>",
+        "id": 203323817,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594242709
+    },
+    {
+        "content": "<p>misread it</p>",
+        "id": 203323823,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594242713
+    },
+    {
+        "content": "<p>and nr. 2 then ...</p>",
+        "id": 203324018,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594242804
+    },
+    {
+        "content": "<p>it says the resource should state a type in its reference ...</p>",
+        "id": 203324049,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594242823
+    },
+    {
+        "content": "<p>that's what your profile says</p>",
+        "id": 203324134,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594242849
+    },
+    {
+        "content": "<p>nop</p>",
+        "id": 203324194,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594242884
+    },
+    {
+        "content": "<p>indeed it does</p>",
+        "id": 203324217,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594242897
+    },
+    {
+        "content": "<p>wait ...</p>",
+        "id": 203324288,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594242937
+    },
+    {
+        "content": "<p>you're right</p>",
+        "id": 203324316,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594242950
+    },
+    {
+        "content": "<p>check out my fixed up tests - just committed</p>",
+        "id": 203324406,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594242983
+    },
+    {
+        "content": "<p>ok ... seems sane, now what about the invalid one</p>",
+        "id": 203324787,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594243144
+    },
+    {
+        "content": "<p>wait ...<br>\nyour commit shows that</p>",
+        "id": 203324846,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594243184
+    },
+    {
+        "content": "<p>the question from is now) when will the fix be available and released? - and) does the release contain breaking changes towards HAPI 5.0.2?</p>",
+        "id": 203325602,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594243566
+    },
+    {
+        "content": "<p>if the release contains breaking changes, I'll do the fix myself and do class shadowing</p>",
+        "id": 203325706,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594243613
+    },
+    {
+        "content": "<p><a href=\"https://github.com/hapifhir/org.hl7.fhir.core/pull/270\">https://github.com/hapifhir/org.hl7.fhir.core/pull/270</a></p>\n<p>no change to the interface but I can't comment on the HAPI release timeline. you'll have to ask on <a class=\"stream\" data-stream-id=\"179167\" href=\"/#narrow/stream/179167-hapi\">#hapi</a></p>",
+        "id": 203326190,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1594243864
+    },
+    {
+        "content": "<p>I can overwrite the validator dependency - so If you haven't changed the interface contract of how HAPI uses the validation framework, it should be safe for me to import it I suppose</p>",
+        "id": 203326570,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594244053
+    },
+    {
+        "content": "<p>(I like you call the branch 'work')</p>",
+        "id": 203326607,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594244076
+    },
+    {
+        "content": "<p><a href=\"/user_uploads/10155/h-wx6_OTAkuPY-1oWgmzjeSc/image.png\">image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/h-wx6_OTAkuPY-1oWgmzjeSc/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/h-wx6_OTAkuPY-1oWgmzjeSc/image.png\"></a></div>",
+        "id": 203326618,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594244081
+    },
+    {
+        "content": "<p><span aria-label=\"grinning\" class=\"emoji emoji-1f600\" role=\"img\" title=\"grinning\">:grinning:</span></p>",
+        "id": 203326687,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594244116
+    },
+    {
+        "content": "<p>but thx for the fix</p>",
+        "id": 203326973,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1594244258
+    }
+]

@@ -1,0 +1,108 @@
+---
+layout: page
+title: "FHIR Chat  · Output of cql execution framework · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Output.20of.20cql.20execution.20framework.html">Output of cql execution framework</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153991852"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Output%20of%20cql%20execution%20framework/near/153991852" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Georg Fette <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Output.20of.20cql.20execution.20framework.html#153991852">(Aug 30 2018 at 09:16)</a>:</h4>
+<p>Hello,<br>
+I executed the age.cql example from the cql execution framework documentation using the bundle as well described in the same documentation. The results written to the output console lead me to some questions:<br>
+- The cql script is defined to use the context 'patient'. The bundle which is supplied to the script, however, contains two patients. The output of the query looks like both patients were processed. Does the cql interpreter implicitly switch to 'population' mode because no explicit context was given ? Where can the context be set when using the cql execution framework ?<br>
+- The script contains no 'retrieve' statement. What is the expected extent of data that is returned by the interpreter ?<br>
+- The actual output contains three root objects: patientResults, populationResults and localIdPatientResultsMap. What are the semantics of the objects populationResults and localIdPatientResultsMap ? <br>
+- Is there a documentation how the output is syntactially defined ? There are standard patient resource instance serializations in JSON contained in the output, but parts of the surrounding objects (_bundle, patientResults, populationsResults) look proprietary.<br>
+- The 'patientResults' output contains both patients from the input bundle. Both patients are encapsulated by an object denoted by their ID (i.e. "1" and "2") in which the respective patient resource instance is contained, as well as the "InDemographic" definition from the cql script. Are all definitions from all included cql scripts contained in the results when these definitions relate to the returned resources ?<br>
+- The bundle to which each patient belongs to is also contained in the result. Is this the standard behavior how a FHIR resource instance is serialized in JSON ? This way the output looks a bit verbose when all referenced resource instances are also contained in the output.<br>
+- Is the syntactical format of the output independent of the model used in the cql script ?<br>
+Greetings</p>
+
+
+
+<a name="153992301"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Output%20of%20cql%20execution%20framework/near/153992301" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Output.20of.20cql.20execution.20framework.html#153992301">(Aug 31 2018 at 12:13)</a>:</h4>
+<p>Hi George.  I'm just seeing this now.  I'll try to answer your questions as best I can this morning.</p>
+
+
+
+<a name="153992383"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Output%20of%20cql%20execution%20framework/near/153992383" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Output.20of.20cql.20execution.20framework.html#153992383">(Aug 31 2018 at 16:29)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="196537">@Georg Fette</span>, these are good questions.  I'll do my best to answer them.  First, I'd like to point out a few things:</p>
+<p>1. The CQL specification doesn't prescribe how results should be returned from a CQL execution process — so many of the aspects of how the results are returned (and wrapped) by the cql-execution project are implementation details (not spec-prescribed details).<br>
+2. The example you pointed to uses the <code>QUICK</code> data model, which in this code base is not fully implemented and is based on an old interim FHIR release (v1.6 if I remember correctly). In other words, it's a rough example.<br>
+3. You may want to look at <a href="https://github.com/cqframework/cql-exec-examples" target="_blank" title="https://github.com/cqframework/cql-exec-examples">cql-exec-examples</a>, which provides a more fully featured example of executing CQL using a FHIR DSTU2 data model and value sets defined in the <a href="https://vsac.nlm.nih.gov/" target="_blank" title="https://vsac.nlm.nih.gov/">NLM Value Set Authority Center</a>. This is a better example as it uses CQL execution, data model, and code service implementations that have been piloted in actual clinical settings (although with different CQL).</p>
+<p>Now to your specific questions:</p>
+<blockquote>
+<p>The cql script is defined to use the context 'patient'. The bundle which is supplied to the script, however, contains two patients. The output of the query looks like both patients were processed. Does the cql interpreter implicitly switch to 'population' mode because no explicit context was given ? Where can the context be set when using the cql execution framework ?</p>
+</blockquote>
+<p>The CQL execution engine is designed to be able to execute against multiple patients in sequence — so if you want to run a quality measure against a set of patients, it can be done in one call with one aggregated result.  In the returned JSON document, the <code>patientResults</code> object includes the individual results for each patient (run in <code>Patient</code> context).  The <code>populationResults</code> contains the results from the <code>Population</code> context, if applicable.  In the example you used, nothing is done in the <code>Population</code> context, as indicated by the empty object for <code>populationResults</code>.</p>
+<blockquote>
+<p>The script contains no 'retrieve' statement. What is the expected extent of data that is returned by the interpreter ?</p>
+</blockquote>
+<p>I'm not sure I fully understand this question, but you can see the <em>cql-exec-examples</em> for an example that includes 'retrieve' statements. As for what data the interpreter (CQL execution) returns, it essentially returns the <em>results</em> of executing each defined expression in the CQL.  For example, if the CQL defines expressions called <code>Foo</code> and <code>Bar</code>, then for each patient, the CQL execution engine will return the results of evaluating the <code>Foo</code> and <code>Bar</code> expressions.</p>
+<blockquote>
+<p>The actual output contains three root objects: patientResults, populationResults and localIdPatientResultsMap. What are the semantics of the objects populationResults and localIdPatientResultsMap ?</p>
+</blockquote>
+<p>I covered some of this above, but here's a summary:</p>
+<ul>
+<li><code>patientResults</code> contains the <code>Patient</code> context results for each patient bundle passed into it.  It's indexed by patient ID.</li>
+<li><code>populationResults</code> contains the <code>Population</code> context results based on the entire population of patients passed into it.  If the CQL doesn't have a <code>Population</code> context, then this result will be empty.</li>
+<li><code>localIdPatientResultsMap</code> was introduced and is used by the <a href="https://bonnie.healthit.gov/" target="_blank" title="https://bonnie.healthit.gov/">Bonnie</a> project.  To be completely honest, I don't remember exactly how it works.</li>
+</ul>
+<blockquote>
+<p>Is there a documentation how the output is syntactially defined ? There are standard patient resource instance serializations in JSON contained in the output, but parts of the surrounding objects (_bundle, patientResults, populationsResults) look proprietary.</p>
+</blockquote>
+<p>As noted at the top of my response, these aspects of the results are implementation details not defined (or addressed) by the CQL specification.  Unfortunately, we have not documented these result formats, but at least the <code>patientResults</code> and <code>populationResults</code> formats are pretty simple:</p>
+<div class="codehilite"><pre><span></span>{
+  &quot;patientResults&quot;: {
+    &quot;$patientId_1&quot;: {
+      &quot;Patient&quot;: { /* Patient 1 data */ },
+      &quot;$patient_ctx_expression_1&quot;: /* patient context expression 1 result for patient 1 */,
+      &quot;$patient_ctx_expression_2&quot;: /* patient context expression 1 result for patient 1 */
+    },
+    &quot;$patientId_2&quot;: {
+      &quot;Patient&quot;: { /* Patient 2 data */ },
+      &quot;$patient_ctx_expression_1&quot;: /* patient context expression 1 result for patient 2 */,
+      &quot;$patient_ctx_expression_2&quot;: /* patient context expression 2 result for patient 2 */
+    }
+  },
+  &quot;populationResults&quot;: {
+    &quot;$population_ctx_expression_1&quot;: /* population context expression 1 result */,
+    &quot;$population_ctx_expression_2&quot;: /* population context expression 2 result */
+  }
+}
+</pre></div>
+
+
+<blockquote>
+<p>The 'patientResults' output contains both patients from the input bundle. Both patients are encapsulated by an object denoted by their ID (i.e. "1" and "2") in which the respective patient resource instance is contained, as well as the "InDemographic" definition from the cql script. Are all definitions from all included cql scripts contained in the results when these definitions relate to the returned resources ?</p>
+</blockquote>
+<p>As noted above, the <code>patientResults</code> contains the results of each expression in the <code>Patient</code> context for each patient.  You actually see <code>Patient</code> as one of the keys because CQL implicitly adds a <code>Patient</code> expression into the <code>Patient</code> context.  As for whether it includes the results of expressions in <em>every</em> CQL library referenced (e.g., CQL libraries "used" by the primary CQL library) — I'm not sure.  I'd have to look into that.  I know it at least returns every expression from the <em>primary</em> library passed in.</p>
+<blockquote>
+<p>The bundle to which each patient belongs to is also contained in the result. Is this the standard behavior how a FHIR resource instance is serialized in JSON ? This way the output looks a bit verbose when all referenced resource instances are also contained in the output.</p>
+</blockquote>
+<p>The inclusion of <code>_bundle</code> in the result is an implementation detail of the <code>QUICK</code> data model binding used by the example — which stores the whole bundle in the patient object.  If you look at the <em>cql-exec-examples</em> I referenced at the top of this response, it does <em>not</em> include the entire bundle in the response.  I agree that it's rather redundant and unnecessary in this case.</p>
+<blockquote>
+<p>Is the syntactical format of the output independent of the model used in the cql script ?</p>
+</blockquote>
+<p>Yes, to the extent that the execution returns CQL results, those results may contain data formatted according to the data model used by the CQL.  The overall result container (with <code>patientResults</code> and <code>populationResults</code>) wouldn't change based on the model, but the expression results could.</p>
+<p>It's also worth noting that results reflecting data types from the model will usually take on a syntax similar to how the model is defined in its <em>model-info</em> file. This is important to note because the FHIR DSTU2 model (used in <em>cql-exec-examples</em>) may return some data type results that don't conform fully to the FHIR-defined JSON format (but do conform to the way the FHIR DSTU2 model is described in its <em>model-info</em> file).  For example, primitives might be serialized as an object with a <code>value</code> property rather than the direct value itself (as in FHIR JSON).  We may at some point modify this behavior so that when results are converted to JSON, they serialize to FHIR-compliant versions, but it's not in any direct plans right now.</p>
+<p>Anyway, I hope this has been helpful.  Thanks for asking some good questions and I hope the execution framework works well for you.</p>
+
+
+
+<a name="153993650"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Output%20of%20cql%20execution%20framework/near/153993650" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Georg Fette <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Output.20of.20cql.20execution.20framework.html#153993650">(Sep 06 2018 at 07:55)</a>:</h4>
+<p>cool, thank you for the detailed response.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,80 @@
+---
+layout: page
+title: "FHIR Chat  · Filtering approaches for FHIR Search · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Filtering.20approaches.20for.20FHIR.20Search.html">Filtering approaches for FHIR Search</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="263488653"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Filtering%20approaches%20for%20FHIR%20Search/near/263488653" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Cooper Thompson <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Filtering.20approaches.20for.20FHIR.20Search.html#263488653">(Dec 02 2021 at 19:27)</a>:</h4>
+<p>I've recently run across an interesting FHIR search design, and I'm interested if folks have opinions on this.</p>
+<p>Normally, when I think of searching for a patient's allergies, I think of something like this (I'm assuming an OAuth2 auth layer):<br>
+<strong>Option A:</strong></p>
+<div class="codehilite"><pre><span></span><code>GET /AllergyInterance?patient=&lt;patient ID&gt;
+Authorization: Bearer &lt;access token&gt;
+</code></pre></div>
+<p>With this approach, you first find the allergies for the patient, then apply any authorization rules (based on claims associated with the access token) that may further limit the results.</p>
+<p>However, this is something that was proposed as an alternative:<br>
+<strong>Option B:</strong></p>
+<div class="codehilite"><pre><span></span><code>GET /AllergyInterance
+Authorization: Bearer &lt;JWT access token with a claim identifying the patient via a business identifier&gt;
+</code></pre></div>
+<p>This approach uses a server wide search, and relies on authorization rules to filter data for the patient. Here, the server has two options for handling the search:</p>
+<ol>
+<li>Find all allergies in the system, then use authorization rules associated with the token to filter down to just the allergies that are authorized.</li>
+<li>Pre-process the access token claims to determine the patient, then find allergies for that patient.  Then apply authorization rules.</li>
+</ol>
+<p>Assuming that authorization rules are defined and applied correctly, the results returned for both Option A and Option B queries should be identical.  The Alissa Knight report makes me nervous here, but really BOLA issues probably have similar impact for all options.  The performance for B1 and B2 <em>may</em> be very different, but performance for B2 should be similar to A.</p>
+<p>The context here is a patient-facing app (PHR) ecosystem.  The <em>reason</em> this second option is being proposed is because the authorization server is not aware of the patient FHIR ID at the time the authorization flow occurs.</p>
+<p>I have two questions:</p>
+<ul>
+<li>Do folks have any general opinions about doing the system-wide search and relying on access token based authorization filtering to limit the response to data about a specific patient?</li>
+<li>For other server implementers that have both a SMART auth server and FHIR API server, how do you manage the FHIR patient ID such that you can return it as the "patient" context parameter alongside the access token in the /token response?  Epic's authorization and API servers are very tightly coupled, so we "just have it".  But if anyone has an authorization server that is decoupled from the API server, it seems like you'd need to have something in place to populate the SMART patient context param with the FHIR ID from your API server at the time you issue access tokens.</li>
+</ul>
+
+
+
+<a name="263492441"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Filtering%20approaches%20for%20FHIR%20Search/near/263492441" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Filtering.20approaches.20for.20FHIR.20Search.html#263492441">(Dec 02 2021 at 19:57)</a>:</h4>
+<p>in my system, I inspect the token before performing any search to decide what the compartment limitations associated with it are - if any - and restrict search results accordingly. So it's kind of a bit of half way between your approaches</p>
+
+
+
+<a name="263492613"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Filtering%20approaches%20for%20FHIR%20Search/near/263492613" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Filtering.20approaches.20for.20FHIR.20Search.html#263492613">(Dec 02 2021 at 19:58)</a>:</h4>
+<p>like your system, my resource server and authorization server are tightly bound, so the authorization server asks the user to agree to a scope (though they may be constrained in their choices) when they go through the OAuth process, and the scopes are informed by the resources available</p>
+
+
+
+<a name="263492663"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Filtering%20approaches%20for%20FHIR%20Search/near/263492663" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Filtering.20approaches.20for.20FHIR.20Search.html#263492663">(Dec 02 2021 at 19:58)</a>:</h4>
+<p>Smart App Launch says that the details of this are a private negotiation between resource and authorization server</p>
+
+
+
+<a name="263492757"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Filtering%20approaches%20for%20FHIR%20Search/near/263492757" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Filtering.20approaches.20for.20FHIR.20Search.html#263492757">(Dec 02 2021 at 19:59)</a>:</h4>
+<p>the Heart/UMA specs standardise this interface (and do other things too) so you should look at what that does</p>
+
+
+
+<a name="263492760"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Filtering%20approaches%20for%20FHIR%20Search/near/263492760" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Filtering.20approaches.20for.20FHIR.20Search.html#263492760">(Dec 02 2021 at 19:59)</a>:</h4>
+<p>same here (as Grahame's setup)</p>
+
+
+
+<a name="263495988"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Filtering%20approaches%20for%20FHIR%20Search/near/263495988" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Filtering.20approaches.20for.20FHIR.20Search.html#263495988">(Dec 02 2021 at 20:26)</a>:</h4>
+<p>The Google implementation is pretty similar to Grahame's setup. Our reference configuration is one where all access using SMART auth goes through a proxy that ensures the requests reach the resource server with a SMART patient context. The resource server limits the search to the specified patient context. I don't think we have a pattern yet where the OAuth scopes available are directly informed by the resources on the server - we assume that the auth server knows those patient IDs out of band.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,190 @@
+---
+layout: page
+title: "FHIR Chat  · Seeking pattern for evaluating &quot;small&quot; valuesets · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html">Seeking pattern for evaluating &quot;small&quot; valuesets</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="232966755"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/232966755" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Aziz Boxwala <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#232966755">(Apr 03 2021 at 00:16)</a>:</h4>
+<p>Looking for the best practice on how to write an expression such as </p>
+<div class="codehilite"><pre><span></span><code>define &quot;Get Condition from Code Declaration&quot;:
+   [Condition: &quot;Acute Pharyngitis Code&quot;] C where clinicalStatus in &quot;Active and Recurrence and Relapse VS&quot;
+</code></pre></div>
+<p>I don't want to create an external value set  <code>Active and Recurrence and Relapse VS</code>. Seems like overkill .  Is there a better way to write the expression, perhaps using FHIR.ToConcept and checking for membership in a list of Concepts?</p>
+
+
+
+<a name="232967106"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/232967106" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Aziz Boxwala <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#232967106">(Apr 03 2021 at 00:23)</a>:</h4>
+<p>As I was typing my post, one of my team-mates, provided this solution:</p>
+<div class="codehilite"><pre><span></span><code>codesystem ConditionClinical: &#39;http://terminology.hl7.org/CodeSystem/condition-clinical&#39;
+code &quot;Active Status&quot; : &#39;active&#39; from ConditionClinical display &#39;Active&#39;
+code &quot;Recurrent Status&quot;: &#39;recurrence&#39; from ConditionClinical display &#39;Recurrence&#39;
+code &quot;Relapse Status&quot;: &#39;relapse&#39; from ConditionClinical display &#39;Relapse&#39;
+context Patient
+define HasAsthma:
+    exists ([Condition: code in &quot;Asthma&quot;] C  where
+       ( (C.clinicalStatus ~ &quot;Active Status&quot;) or
+        (C.clinicalStatus ~ &quot;Recurrent Status&quot;) or
+        (C.clinicalStatus ~ &quot;Relapse Status&quot;) ) )
+</code></pre></div>
+<p>Any feedback on this is welcome too.</p>
+
+
+
+<a name="233173959"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233173959" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233173959">(Apr 05 2021 at 13:49)</a>:</h4>
+<p>The logic approach works, clearly, but ultimately a value set may be more maintainable and readable. Especially if all three statuses should be checked when detecting any active condition, which seems like is probably the case.</p>
+
+
+
+<a name="233331450"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233331450" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233331450">(Apr 06 2021 at 14:50)</a>:</h4>
+<p>I'll note that it's tempting to use <code>in</code> for this (e.g., <code>code in {Code1, Code2, Code3}</code>) but this doesn't really work correctly since <code>in</code> is defined to use <em>equality</em> semantics, which would require code to be <em>exact</em> matches (including display).  So you're stuck with creating a VS or using <code>or</code>.  If you need it in multiple places, you could extract the <code>or</code> into a function though:</p>
+<div class="codehilite"><pre><span></span><code>define HasAsthma:
+    exists ([Condition: code in &quot;Asthma&quot;] C  where IsActiveOrRecurring(C))
+
+define function IsActiveOrRecurring(C Condition):
+    C.clinicalStatus ~ &quot;Active Status&quot; or
+    C.clinicalStatus ~ &quot;Recurrent Status&quot; or
+    C.clinicalStatus ~ &quot;Relapse Status&quot;
+</code></pre></div>
+
+
+
+<a name="233352555"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233352555" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233352555">(Apr 06 2021 at 16:46)</a>:</h4>
+<p>Yes, that's true, and to that end, I've put together some simple value sets in the CQF Common IG: <a href="http://build.fhir.org/ig/cqframework/cqf/artifacts.html">http://build.fhir.org/ig/cqframework/cqf/artifacts.html</a></p>
+
+
+
+<a name="233352669"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233352669" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233352669">(Apr 06 2021 at 16:47)</a>:</h4>
+<p>Which reminds me Chris, I know there is a CDS Connect Commons, should we try to align these two "Common" libraries: <a href="http://build.fhir.org/ig/cqframework/cqf/Library-FHIRCommon.html">http://build.fhir.org/ig/cqframework/cqf/Library-FHIRCommon.html</a></p>
+
+
+
+<a name="233363626"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233363626" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233363626">(Apr 06 2021 at 18:09)</a>:</h4>
+<p><span class="user-mention" data-user-id="191359">@Bryn Rhodes</span> -- it's probably worth at least reviewing them to see if it makes sense.  One thing about CDS Connect Commons is that it is also used by the CDS Authoring Tool and fairly tightly coupled to it; so I always need to keep that in mind as I consider changes to CDS Connect Commons.</p>
+
+
+
+<a name="233364342"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233364342" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233364342">(Apr 06 2021 at 18:14)</a>:</h4>
+<p>That makes sense, what process would be best to follow? I'm happy to submit an issue on the CQF Common repository github if that makes sense, but if there's a process supported by CDS Connect, happy to use that as well.</p>
+
+
+
+<a name="233377852"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233377852" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Corey Sanders <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233377852">(Apr 06 2021 at 19:49)</a>:</h4>
+<p>In the Java engine, a filtered retrieve (e.g. <code>[Condition: MyValueSet]</code>) is likely going to perform better than a retrieve that is filtered using the CQL "in" operator (e.g. <code>[Condition] c where c.code in MyValueSet</code>) since the RestFhirRetrieveProvider knows how to pass the filter along to the FHIR server via the <code>:in</code> modifier where the CQL <code>in</code> operator does not. It isn't directly relevant to the OP question about filtering based off clinicalStatus, but I thought it worth mentioning that not all code paths perform the same right now and it is best practice to use "primary code path" filters wherever possible.</p>
+
+
+
+<a name="233380805"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233380805" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233380805">(Apr 06 2021 at 20:10)</a>:</h4>
+<p>That's actually one of the cases where were looking at optimizing the ELM that the cql-translator produces . <code>[Condition] c where c.code in MyValueSet</code> could be emitted as an ELM Retrieve with the codePath set to <code>code</code> as opposed to a filter after the fact.</p>
+
+
+
+<a name="233380976"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233380976" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233380976">(Apr 06 2021 at 20:12)</a>:</h4>
+<p>(In principle all ELM engines, not just the Java one, would benefit from that optimization)</p>
+
+
+
+<a name="233395463"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233395463" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233395463">(Apr 06 2021 at 21:41)</a>:</h4>
+<p>Do any of the popular commercial vendors actually support the <code>:in</code> modifier in their FHIR interfaces?  Or is this an optimization that currently only works against some of the open source FHIR servers like HAPI?</p>
+
+
+
+<a name="233395687"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233395687" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233395687">(Apr 06 2021 at 21:43)</a>:</h4>
+<p>Our experience has been the latter, and so we are currently working on having the planning step take the target system's capability statement into account to determine whether the value set should use the :in modifier, or if it should be in-lined.</p>
+
+
+
+<a name="233415386"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233415386" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Aziz Boxwala <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233415386">(Apr 07 2021 at 01:09)</a>:</h4>
+<p>Can a valueset be defined as a literal in CQL? Can be useful for such cases. It may not be practical to have these valuesets be hosted in many a terminology server.</p>
+
+
+
+<a name="233492738"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233492738" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Corey Sanders <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233492738">(Apr 07 2021 at 14:02)</a>:</h4>
+<p>I am working with IBM FHIR. It does not currently support the ":in" modifier, but support is coming in the next release.</p>
+
+
+
+<a name="233493298"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233493298" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Corey Sanders <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233493298">(Apr 07 2021 at 14:05)</a>:</h4>
+<p><span class="user-mention" data-user-id="195129">@Aziz Boxwala</span> CQL has a language feature <code>concept</code> that is similar to an inline value set. You can read about it <a href="https://cql.hl7.org/02-authorsguide.html#concept">here</a>.</p>
+
+
+
+<a name="233494430"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233494430" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Aziz Boxwala <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233494430">(Apr 07 2021 at 14:12)</a>:</h4>
+<p>Thanks <span class="user-mention" data-user-id="341334">@Corey Sanders</span> . <code>concept</code> appears to be equivalent to <code>CodeableConcept</code>. Could we use it as a <code>Valueset</code>?</p>
+
+
+
+<a name="233494951"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233494951" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233494951">(Apr 07 2021 at 14:15)</a>:</h4>
+<p>You really shouldn't use it that way.  Note that <a href="https://cql.hl7.org/02-authorsguide.html#concept">CQL section 4.2.4</a> explicitly states:</p>
+<blockquote>
+<p>Note that the semantics of Concept are such that the codes within a given concept should all be semantically equivalent at the code level, but CQL itself will make no attempt to ensure that is the case. <strong>Concepts should never be used as a surrogate for proper valueset definition.</strong></p>
+</blockquote>
+
+
+
+<a name="233495367"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233495367" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Corey Sanders <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233495367">(Apr 07 2021 at 14:17)</a>:</h4>
+<p><span class="user-mention" data-user-id="191469">@Chris Moesel</span> <span class="user-mention" data-user-id="191359">@Bryn Rhodes</span>  Related to the ":in" modifier and availability in FHIR servers, I'd love to be able to use the CapabilityStatement to determine whether that is there or not, but my experience with HAPI and IBM FHIR servers is that it isn't clearly spelled out in the metadata. Taking the Condition resource as an example, <a href="http://hapi.fhir.org/baseR4/metadata">HAPI</a> provides <code>"definition": "http://hapi.fhir.org/baseR4/Condition-code"</code> for the code search parameter, but it doesn't host that resource at that location, so you can't dig in for further detail. IBM FHIR doesn't even provide the definition attribute. I ended up just hard-wiring the Java engine to expand value sets in the term provider vs. letting it try use the ":in" modifier. The <a href="https://github.com/DBCG/cql_engine/blob/8a11ef270d9f54b74d9996441ce76572fe1374ef/engine/src/main/java/org/opencds/cqf/cql/engine/retrieve/TerminologyAwareRetrieveProvider.java#L13">default behavior of the RestFhirRetrieveProvider</a>, though, is to try to use the ":in" modifier (e.g. not expand value sets).</p>
+
+
+
+<a name="233495879"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233495879" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Aziz Boxwala <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233495879">(Apr 07 2021 at 14:20)</a>:</h4>
+<p><span class="user-mention" data-user-id="191469">@Chris Moesel</span>  another challenge with using the ":in" operator is how the FHIR server resolves the valueset. Should we expect that the FHIR server will have every valueset that I want to use in my CQL expression? Or should it resolve to the URL of the valueset (which is not necessarily a physical address)?</p>
+
+
+
+<a name="233505595"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233505595" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233505595">(Apr 07 2021 at 15:06)</a>:</h4>
+<p>That is definitely a challenge if the server doesn't advertise it's search parameter modifier support, sounds like we will need to be able to override that definition in some cases.</p>
+
+
+
+<a name="233506017"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233506017" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233506017">(Apr 07 2021 at 15:08)</a>:</h4>
+<p>As far as versioning of value sets, we are working on an "artifact manifest" definition:<br>
+<a href="http://build.fhir.org/ig/HL7/cqf-measures/measure-terminology-service.html">http://build.fhir.org/ig/HL7/cqf-measures/measure-terminology-service.html</a></p>
+
+
+
+<a name="233506366"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233506366" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233506366">(Apr 07 2021 at 15:09)</a>:</h4>
+<p>That would you allow you to author artifacts without references to value set versions, but then deploy artifacts that would be specifically bound to particular versions of code systems and value sets. The $package operation would let you build bundles that contain all the required dependencies and deploy those to a target system.</p>
+
+
+
+<a name="233535735"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Seeking%20pattern%20for%20evaluating%20%22small%22%20valuesets/near/233535735" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Seeking.20pattern.20for.20evaluating.20.22small.22.20valuesets.html#233535735">(Apr 07 2021 at 18:05)</a>:</h4>
+<p>Though it's not yet supported by hapi AFAIK, the <code>TerminologyCapabilities</code> resource is where that could be advertised:</p>
+<p><a href="http://www.hl7.org/fhir/terminologycapabilities.html">http://www.hl7.org/fhir/terminologycapabilities.html</a></p>
+<p>The cql-engine actually handles that with a property called <code>isExpandValueSets</code> that is set depending on whether or not it's known that the ValueSets and clinical data resources are co-located on the same server:</p>
+<p><a href="https://github.com/DBCG/cql_engine/blob/8a11ef270d9f54b74d9996441ce76572fe1374ef/engine.fhir/src/main/java/org/opencds/cqf/cql/engine/fhir/retrieve/SearchParamFhirRetrieveProvider.java#L155">https://github.com/DBCG/cql_engine/blob/8a11ef270d9f54b74d9996441ce76572fe1374ef/engine.fhir/src/main/java/org/opencds/cqf/cql/engine/fhir/retrieve/SearchParamFhirRetrieveProvider.java#L155</a></p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

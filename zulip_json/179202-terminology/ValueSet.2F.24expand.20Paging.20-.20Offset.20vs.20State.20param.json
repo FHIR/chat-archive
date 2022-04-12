@@ -1,0 +1,440 @@
+[
+    {
+        "content": "<p>Terminology folks, this thread in the <a href=\"#narrow/stream/179166-implementers/topic/ValueSet.20for.20element.20and.20direction\" title=\"#narrow/stream/179166-implementers/topic/ValueSet.20for.20element.20and.20direction\">implementers stream</a> led to us debating the usefulness of the offset param when paging results of a ValueSet.$expand operation. </p>\n<p>Because the codes in a ValueSet aren't necessarily ordered, I think it makes more sense to use a kind of <em>pagingID</em> parameter that will let the user save the state from the last $expand instead of the client just passing in the Offset parameter. Grahame suggested I bring the discussion to this stream.</p>",
+        "id": 159184253,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1550863878
+    },
+    {
+        "content": "<p>I dispute the claim that they aren't ordered.  Happy to accept that the order may not have any special significance, though, but the paging semantics does require the terminology server to maintain some kind of order.<br>\nWhere I see difficulties is with infinite value sets where there's no obvious or simple natural ordering.<br>\nThe (very) nice thing about using an offset is that the request is entirely self-contained; no state needs to be preserved server-side to support paging and it's also not tied to a db cursor so is much more cacheable</p>",
+        "id": 159317665,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1551078390
+    },
+    {
+        "content": "<p>Ok, sure, i concede they are technically returned in some type of order, since they are represented by a list or array or something.  (even though  in math/computing: a \"set\" is a collection of distinct objects that aren't ordered. but this is not important, just kind of awkward...)</p>\n<p>But the point I was making is that the order does not matter, and a client is never going to say \"just give me the <em>N</em>th code through the <em>K</em>th code\" or something without first having gotten codes 1 through <em>N</em>. The param is only used for paging. But instead of letting the client just say \"give me the next page\", we are making them keep track of the offset/count/total. And the server may not even respect the count they pass in. So we are making it harder for clients to get the list of codes. </p>\n<p>In terms of making it better for servers:  The offset param assumes the server just stores the valueset in a big table; that is not always the case. </p>\n<p>If the server does not have the codes readily indexable, then they'd have to either:<br>\n - iterate from the beginning each time until they get to the offset, then return the next codes, or<br>\n - cache the whole expansion of codes<br>\nNeither of these solutions seem ideal.</p>",
+        "id": 159343099,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1551106892
+    },
+    {
+        "content": "<p>I just wonder how important this is. <span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span> do you have any statistics on how often the client pages past the first page?</p>",
+        "id": 159381109,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1551136161
+    },
+    {
+        "content": "<p>I could maybe dig out some stats like that, but they'd be heavily client &amp; context dependent.<br>\nMost of the use of $expand with a filter parameter only wants the first N (and the UIs we see don't offer ability to go past that).<br>\nFor us the default max of a \"full\" $expand call is 50,000 so it's rare that that many codes are ever generated in an expansion.</p>",
+        "id": 159381713,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1551136688
+    },
+    {
+        "content": "<p>Regarding server-side implementation details, we do not \"store the valueset in a big table\".  We compile the $expand request into a query and run it, then give you K codes starting from posn N.  Caching happens transparently in the db layer.<br>\nExpansion has two parts: matching the set of relevant codes, and ordering the matched codes.  The first part can be very fast, so re-running is not a major problem. The second part is only really useful if the filter parameter is supplied and is only costly when the set of matches is large.  Fortunately people rarely want lots of codes returned when they provide the filter parameter, and even less frequently want a second page of results.</p>",
+        "id": 159382536,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1551137433
+    },
+    {
+        "content": "<p>There's another significant problem created with using a token rather than start and offset for paging.  As stated earlier, it creates a stateful interaction between the client and server which means that if you've done any horizontal scaling of your back-end, then you need to ensure that the requests for subsequent pages are routed back to the node that served the original request.  This means you need smart routing and smart http caching between the client and server.<br>\nIt also introduces timeout issues; the paging token will only have a limited lifetime, so all the intermediate layers need to be in alignment to ensure stale results are not served up.<br>\nThis has been a sore point for the NCTS in the past.</p>",
+        "id": 159382802,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1551137693
+    },
+    {
+        "content": "<p>That's also, roughly, how I implement this, in C# middle tier code ... <code>valSet.Expansion.Contains = es.Contains.GetRange(offsetNo, countNo); </code> where valSet is a ValueSet object and es is a ValueSet.ExpansionComponent object.  The later is populated by each $expand request which, in turn, results in a DAL call, (T-SQL table-valued function) where query results are automatically cached by the DB Server.</p>",
+        "id": 159384693,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1551139427
+    },
+    {
+        "content": "<p>All things considered, it is this last issue, the entanglement of (stateful) paging with HTTP caching and load balancing / scaling that is the real problem.</p>",
+        "id": 159385030,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1551139800
+    },
+    {
+        "content": "<p>I have a single server and store stuff in memory. I drop it when memory becomes scarce. I don't mind either way. But it doesn't seem like too big a deal to do routing on an internally constructed token. It might skew your load balancing, but given that I think that following up for extra pages is a uncommon thing to do, it's not that big a deal?</p>",
+        "id": 159390057,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1551145352
+    },
+    {
+        "content": "<p>What we currently do is route stateful calls ($closure and resource search, which also has stateful paging) to one specific server in the cluster. The alternatives, of making a given client's searches stick to a given node in the cluster, seems to require client-side participation involving sticky session headers. Its a nuisance for $closure and resource search, but those aren't typically as high-volume or speed-sensitive for the terminology uses we see. $expand, by contrast, is both of those things, hence our reluctance.</p>",
+        "id": 159390286,
+        "sender_full_name": "Jim Steel",
+        "timestamp": 1551145616
+    },
+    {
+        "content": "<p>sure $expand is your high-volume call. but is the follow up high volume?</p>",
+        "id": 159390383,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1551145714
+    },
+    {
+        "content": "<p>As soon as its a possibility, you have to route it back to the same server it came from</p>",
+        "id": 159390396,
+        "sender_full_name": "Jim Steel",
+        "timestamp": 1551145733
+    },
+    {
+        "content": "<p>sure. but is that happening high volume?</p>",
+        "id": 159390416,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1551145756
+    },
+    {
+        "content": "<p>Doesn't matter</p>",
+        "id": 159390419,
+        "sender_full_name": "Jim Steel",
+        "timestamp": 1551145761
+    },
+    {
+        "content": "<p>We also currently prohibit $closure (which is fine because its not only stateful but non-idempotent) and search (which is stateful but idempotent) inside batch requests, because otherwise we'd have to open up POST bodies to determine whether they are stateful or not. We really want to avoid having to do that for $expand requests</p>",
+        "id": 159390554,
+        "sender_full_name": "Jim Steel",
+        "timestamp": 1551145907
+    },
+    {
+        "content": "<p>define high volume - we might go days or weeks with it not happening, but then someone comes along with a particular use-case or approach to solving their problem and they'll do it all day for a week.  [Note, this is based on looking only at our public server's logs.  There are many other Ontoserver instances out there with potentially wildly different uysage patterns.]</p>",
+        "id": 159401290,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1551161157
+    },
+    {
+        "content": "<p>My position is that, even if getting the next page is a low-volume scenario, changing / adding token-based page routing is has a major impact on implementers running high-volume services.  Routing on an internally constructed token is nasty; it is application semantics bleeding into layers where things should be transparent and has all sorts of knock-on consequences.<br>\ne.g., you can get the routing right, but if the response is cached at the HTTP layer, then the cached token for \"next\" may no longer be valid.  Only solution for a client that gets a 404 on the \"next\" link is to make a cache-busting request on the original $expand (which may be several pages back) or for the server to know how to tell the cache to pro-actively expire  pages.</p>",
+        "id": 159401514,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1551161507
+    },
+    {
+        "content": "<p>So given all this, are you all saying that not one implementation would support a paged $expand. Ipso facto, any expand bigger than a terminology server's max <em>can never be expanded</em>. Correct?</p>",
+        "id": 159464274,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1551219765
+    },
+    {
+        "content": "<p>Paged expansions are supported by those servers that implement the offset and count parameters - including mine. However, my Server will not still not expand any Value Set larger than 9,999 as it's not designed as a means of downloading large Code Systems in their entirety.</p>",
+        "id": 159465610,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1551220976
+    },
+    {
+        "content": "<p>Ontoserver also supports paging $expand using count and offset</p>",
+        "id": 159470410,
+        "sender_full_name": "Jim Steel",
+        "timestamp": 1551226284
+    },
+    {
+        "content": "<p>All servers I know of support paging with the existing mechanism.<br>\n<em>Changing</em> the mechanism to be like that for paging Bundles is what I'm pushing back against</p>",
+        "id": 159470495,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1551226384
+    },
+    {
+        "content": "<p>I’m not entirely sure that I’ve folowed you. You can turn your page / offset parameters into a state parameter, and anything else you need, and then it works no differently for you. You don’t have to support anyone else’s state. So I’m not sure why you’re pushing back so hard?</p>",
+        "id": 159488227,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1551251852
+    },
+    {
+        "content": "<p>I don't know why you say \"works no differently\"?<br>\nA state parameter couples the client with a specific node in my stack as well as polluting the http cache. This is because only the original node that did the <code>$expand</code> knows the mapping from the state parameter to the associated <code>$expand</code> parameters.<br>\nThis means:<br>\n1) the routing layer needs to to change to be aware of this parameter<br>\n2) the HTTP caching layer needs to to change to be aware of this parameter<br>\n3) scaling down the number of nodes needs to worry about stale state; if you shut down the original node you lose the mapping<br>\nTo me, this is all \"works differently\".<br>\nAs <span class=\"user-mention\" data-user-id=\"191376\">@Jim Steel</span> said, we also face similar issues with paging of <code>_search</code> and <code>$closure</code>.  We have a work-around that \"works\" but is not good; it adversely affects scaling behaviour. Fortunately these cases are not (currently) core issues.  However, <code>$expand</code> is and stateful paging behaviour for <code>$expand</code> would require a major re-work and complexity increase in our deployment models.</p>",
+        "id": 159552982,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1551302044
+    },
+    {
+        "content": "<p>but you can just put all those things in your state parameter, and ignore it's statefulness</p>",
+        "id": 159652732,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1551388429
+    },
+    {
+        "content": "<p>What do I do with the ValueSet from the POST?</p>",
+        "id": 159655029,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1551390210
+    },
+    {
+        "content": "<p>oh I hadn't considered the POST usecase</p>",
+        "id": 159668286,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1551401830
+    },
+    {
+        "content": "<p>For the POST you could still have a pagination token parameter (opaque to the client) while keeping all other parameters constant across calls, as is done with <code>offset|</code>.</p>",
+        "id": 159799241,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1551536304
+    },
+    {
+        "content": "<p>isn't that what we have now?</p>",
+        "id": 159811912,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1551556096
+    },
+    {
+        "content": "<p>No, right now we have an integer with offset semantics (\"Offset is number of records (not number of pages)\")</p>",
+        "id": 159915911,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1551708405
+    },
+    {
+        "content": "<p>Here I was talking about an opaque value with \"next page token\" semantics</p>",
+        "id": 159915934,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1551708429
+    },
+    {
+        "content": "<p>right but it would be functionally  equivalent. I don't know that buys anyone</p>",
+        "id": 159941237,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1551726986
+    },
+    {
+        "content": "<p>Leaving aside POST, the main differences are (single) server-calculated tokens vs (multiple) client-calculated \"tokens\" (_usually_, but not always, only varying the offset value).<br>\nWhen the client is in control, it can also vary the page size allowing \"get me the first few, get me the rest\" type behaviour. This can be useful for building responsive UIs.  When server is in control, then client has no say on varying page size.<br>\nAlso, if client asks for count=0, what should the page size be in a server-controlled token?</p>",
+        "id": 160053324,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1551830293
+    },
+    {
+        "content": "<p>From my perspective if we can get agreement on a set of client controlled parameters and servers don't have any concerns with being able to support these across arbitrary data, then that is a big win.</p>",
+        "id": 160056794,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1551834268
+    },
+    {
+        "content": "<p>we made a different call when it comes to search result behavior, and I wonder if there is a structural difference here that explains the difference in assessment.</p>",
+        "id": 160056798,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1551834288
+    },
+    {
+        "content": "<p>I think the differences are around work load and value</p>",
+        "id": 160058600,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1551836488
+    },
+    {
+        "content": "<p>I'm not following the technical end of this but I am concerned that we are defining a process that will create a situation where some value set expansions <em>can</em> <strong>never</strong> <em>be expanded</em>. I understand the futility of expanding a giant value set. But choosing some arbitrary size - for Apleon DTS it's <strong>1000!</strong> - over which it is impossible to get the additional members, is fatal. We need a standard way that in the rare case, something really big, can be created.</p>",
+        "id": 160303635,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1552062667
+    },
+    {
+        "content": "<p>Totally agree there, Rob. I think what we're discussing here is a couple of subtly different ways to accomplish just that.</p>",
+        "id": 160314994,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1552071416
+    },
+    {
+        "content": "<p>Well, what we're discussing is one of either <em>changing</em> an existing mechanism that has worked perfectly well until now, or adding an additional mechanism to do something that is already possible.<br>\nI am still struggling to understand what the real value of doing this is.</p>",
+        "id": 160348198,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1552103043
+    },
+    {
+        "content": "<p>As long as today's mechanism is easily supportable by servers without performance concerns, I don't suppose any value in making a change.</p>",
+        "id": 160386178,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1552169813
+    },
+    {
+        "content": "<p>It works \"perfectly well\" right now because not many people have implemented it. Have any major EHRs implemented it yet? At the fall connectathon, nobody I was working with had started it yet.</p>",
+        "id": 160601146,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1552418406
+    },
+    {
+        "content": "<p>Our server does not always store the valueset in an indexable structure; we can always iterate over the values though, potentially performing business logic on the values before returning as part of the valueset expansion. There isn't a simple way to say \"start at the 1000th code\" without either: <br>\n - starting at 1 and iterating over the first 999, then starting at 1000. or<br>\n - on the first request, iterate over the whole entire code set and cache it somewhere in a format that can be indexed, then page from there. <br>\nBoth of these approaches are less than ideal. </p>\n<p>However, if we just use the paging format that everybody can already support because it is the way that paging works for any other resource that isn't this one, then it makes it very simple. It removes the unique server requirement (the paging solution doesn't dictate the data model). And it makes it easier for the client (they don't have to do math. They just say \"next\" which is the only reason they would want to page anyway).</p>",
+        "id": 160602646,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1552419424
+    },
+    {
+        "content": "<p>If, as you say, the only reason for paging is to start at the beginning and go next, next, next, then how is that different (performance-wise) from your second strategy above?  (which, as I understand it, is how you'd be doing <code>_search</code> style paging)</p>",
+        "id": 160727723,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1552511630
+    },
+    {
+        "content": "<p>Storing a cache of all of the codes (and other metadata) from the valueset would typically take up a lot more space (It scales with the size of the valueSet: O(n)) than just caching the info about where we are in the search(just a constant amount of data: O(1)). </p>\n<p>In terms of time, it would take the same overall amount of time, but having to load the whole set at once to cache it would cause a delay on the first call. This could be kinda weird, but is probably neither here nor there i guess, if they are going to call through all the pages anyways.</p>",
+        "id": 160732274,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1552515320
+    },
+    {
+        "content": "<p>Where you are in the search is an index into something else, is it not?</p>",
+        "id": 160740120,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1552523212
+    },
+    {
+        "content": "<blockquote>\n<p>Where you are in the search is an index into something else, is it not?</p>\n</blockquote>\n<p>Is this like a lead-up question, or the actual question? </p>\n<p>Yes, where you are in the search is an index, naturally. <em>Whether that index has to be an integer or not</em> is what we have been going back and forth about, right?</p>",
+        "id": 160782038,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1552571842
+    },
+    {
+        "content": "<p>no, what we are going back and forth on is whether the value has to come from the server or whether the client drives it. (e.g. can the client skip pages, control page size)</p>",
+        "id": 160827863,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1552601674
+    },
+    {
+        "content": "<p>and also whether the server has to remember state. As it is now, the server does not have to remember state. But also, it cannot remember state - it has to rebuild it each time.</p>",
+        "id": 160828376,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1552602126
+    },
+    {
+        "content": "<p>except that this is not true. I build the state and remember it by a hash value generated on the request.</p>",
+        "id": 160828386,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1552602156
+    },
+    {
+        "content": "<p>exactly - currently the server does not <em>have</em> to remember state, but it can IF that's an optimisation.</p>",
+        "id": 160847702,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1552626584
+    },
+    {
+        "content": "<p>I don't really have anything else to add to this thread. If you do not concede that the current parameter does not work for all servers as is, then are we actually discussing anything? I've already stressed the performance concerns. Think outside of your own server and it would be a more useful discussion.</p>",
+        "id": 160876396,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1552658105
+    },
+    {
+        "content": "<p>As a general approach, server trends to be stateless.</p>",
+        "id": 160887557,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1552665466
+    },
+    {
+        "content": "<blockquote>\n<p>As a general approach, server trends to be stateless.</p>\n</blockquote>\n<p>Can you explain this claim? <span class=\"user-mention\" data-user-id=\"191506\">@Yunwei Wang</span></p>",
+        "id": 160888840,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1552666270
+    },
+    {
+        "content": "<p>Stateful server is easy to implement at small scale but costly at large scale while trying to maintain all server states. Load balancer adds another layer of complexity of sharing states among servers.</p>",
+        "id": 160891126,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1552667932
+    },
+    {
+        "content": "<p>How does a stateless server support paging in a resource that is not ValueSet?</p>",
+        "id": 160891627,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1552668249
+    },
+    {
+        "content": "<p>with a search interaction *</p>",
+        "id": 160891693,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1552668303
+    },
+    {
+        "content": "<p>the Bundle.link.url contains page parameter. example here: <br>\n<a href=\"http://build.fhir.org/http.html#paging\" target=\"_blank\" title=\"http://build.fhir.org/http.html#paging\">http://build.fhir.org/http.html#paging</a></p>",
+        "id": 160892676,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1552669057
+    },
+    {
+        "content": "<p>This example uses a state param -_-</p>",
+        "id": 160893511,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1552669657
+    },
+    {
+        "content": "<p>and page parameter <span aria-label=\"wink\" class=\"emoji emoji-1f609\" role=\"img\" title=\"wink\">:wink:</span></p>",
+        "id": 160900008,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1552673951
+    },
+    {
+        "content": "<p>I think server can choose either stateful or stateless. It is server implementer's choice. You can implement a stateful ValueSet.$expand by adding  state parameter to your server operation definition.</p>",
+        "id": 160901025,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1552674620
+    },
+    {
+        "content": "<p>Right. The spec does not dictate how the server must implement its solution. The server can use a state param or chose not to. Why would ValueSet be any different?</p>",
+        "id": 160901412,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1552674875
+    },
+    {
+        "content": "<p>Can you clarify \"Why would ValueSet be any different\". Do you mean all EHR servers (excluding Terminology servers) choose stateful implementation?</p>",
+        "id": 160902051,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1552675364
+    },
+    {
+        "content": "<p>No. The current ValueSet.$expand spec lists the \"offset\" parameter, but does not list a state parameter option. Why does a server have a choice to use a state param when implementing search for any resource if it does not have the option to implement a state parameter for ValueSet.$expand.</p>",
+        "id": 160902478,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1552675679
+    },
+    {
+        "content": "<p>If I remember correctly, while the paging was added at DSTU2, no terminology server had implemented or would implement paging as stateful. I remembered we argued at that time if offset should page based or index based. But no one at time asked for stateid.</p>",
+        "id": 160903928,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1552676668
+    },
+    {
+        "content": "<p>we covered why search is different to value set $expand much earlier in the process. you can't just add a state parameter, you have to add paging etc</p>",
+        "id": 160904244,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1552676901
+    },
+    {
+        "content": "<blockquote>\n<p>we covered why search is different to value set $expand much earlier in the process. you can't just add a state parameter, you have to add paging etc</p>\n</blockquote>\n<p>Grahame, I think we all understand the difference between search and $expand. And that you can't add literally just a state parameter and call it good. Obviously, the server would return an extra element that would be used for paging. <em>something something forest for the trees</em>.</p>",
+        "id": 160904946,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1552677454
+    },
+    {
+        "content": "<p>It sounds like a page-based offset was considered initially, and nobody in the room represented a server that would benefit from a state parameter. Is it too late to consider adding a state parameter? I've exhausted my performance arguments.</p>",
+        "id": 160905249,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1552677649
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"195194\">@Colby Seyferth</span> I am just wondering , do you view this question as a server implementer or client implementer?</p>",
+        "id": 160905506,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1552677832
+    },
+    {
+        "content": "<blockquote>\n<p><span class=\"user-mention silent\" data-user-id=\"195194\">Colby Seyferth</span> I am just wondering , do you view this question as a server implementer or client implementer?</p>\n</blockquote>\n<p>My perspective is: EHR Server implementing $expand.</p>",
+        "id": 160905956,
+        "sender_full_name": "Colby Seyferth",
+        "timestamp": 1552678124
+    },
+    {
+        "content": "<p>So there's a middle ground here - we could say that a state parameter could be added and supported for non-POST expands.</p>",
+        "id": 160918051,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1552688243
+    },
+    {
+        "content": "<p>As long as that doesn't break existing clients</p>\n<blockquote>\n<p>Servers are not obliged to support paging, but if they do, SHALL support both the offset and count parameters.</p>\n</blockquote>",
+        "id": 160920431,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1552690766
+    },
+    {
+        "content": "<p>of course</p>",
+        "id": 160926717,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1552698626
+    },
+    {
+        "content": "<p>Following discussions with <span class=\"user-mention\" data-user-id=\"191356\">@Jenni Syed</span> <span class=\"user-mention\" data-user-id=\"191936\">@Michael Donnelly</span> in Sydney, I've now created an issue for $expand paging <a href=\"http://jira.hl7.org/browse/FHIR-25786\" target=\"_blank\" title=\"http://jira.hl7.org/browse/FHIR-25786\">J#25786</a> - <span class=\"user-mention\" data-user-id=\"195194\">@Colby Seyferth</span></p>",
+        "id": 187409411,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1580857198
+    }
+]

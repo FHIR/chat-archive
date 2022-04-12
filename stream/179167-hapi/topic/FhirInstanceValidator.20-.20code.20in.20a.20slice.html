@@ -1,0 +1,120 @@
+---
+layout: page
+title: "FHIR Chat  · FhirInstanceValidator - code in a slice · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/FhirInstanceValidator.20-.20code.20in.20a.20slice.html">FhirInstanceValidator - code in a slice</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="166170688"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/FhirInstanceValidator%20-%20code%20in%20a%20slice/near/166170688" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lars Rückert <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/FhirInstanceValidator.20-.20code.20in.20a.20slice.html#166170688">(May 21 2019 at 13:13)</a>:</h4>
+<p>Hello,</p>
+<p>TL/DR: I have an Issue with the FhirInstanceValidator on a code in a required slice. Can I work around it without removing the profile from the validator?</p>
+<p>To be precise: I want to create an Organization which is supposed to have a work address. The Profile states that it should have a slice of address with the use defined as work using this <a href="http://hl7.org/fhir/STU3/valueset-address-use.html" target="_blank" title="http://hl7.org/fhir/STU3/valueset-address-use.html">valueset</a>.  Without the Validator using my Profile enabled I can create the organization just fine, sending in something like:</p>
+<div class="codehilite"><pre><span></span>{
+  &quot;resourceType&quot;: &quot;Organization&quot;,
+  &quot;name&quot;: &quot;org&quot;,
+  &quot;address&quot;: [{
+    &quot;use&quot;: &quot;work&quot;,
+    &quot;city&quot;: &quot;Atown&quot;,
+    &quot;postalCode&quot;: &quot;12345&quot;,
+    &quot;country&quot;: &quot;Bland&quot;,
+    &quot;line&quot;: [
+      &quot;CStreet 1&quot;
+    ]
+  }]
+}
+</pre></div>
+
+
+<p>When I activate the validator though, I get the following response:</p>
+<div class="codehilite"><pre><span></span>&quot;response&quot;: {
+    &quot;statusCode&quot;: 422,
+    &quot;body&quot;: {
+      &quot;resourceType&quot;: &quot;OperationOutcome&quot;,
+      &quot;issue&quot;: [
+        {
+          &quot;severity&quot;: &quot;error&quot;,
+          &quot;code&quot;: &quot;processing&quot;,
+          &quot;diagnostics&quot;: &quot;Problem evaluating slicing expression for element in profile &lt;Profile&gt; path Organization.address (fhirPath = true and (use memberOf &#39;http://hl7.o
+rg/fhir/ValueSet/address-use&#39;)): null&quot;,
+          &quot;location&quot;: [
+            &quot;Organization.address&quot;
+          ]
+        },
+        {
+          &quot;severity&quot;: &quot;information&quot;,
+          &quot;code&quot;: &quot;processing&quot;,
+          &quot;diagnostics&quot;: &quot;Profile &lt;Profile&gt;, Element &#39;Organization.address[workAddress]&#39;&#39;: Unable to check minimum required (1) due to lack of slicing validation&quot;,
+          &quot;location&quot;: [
+            &quot;Organization&quot;
+          ]
+        }
+      ]
+    }
+</pre></div>
+
+
+<p>I debugged through lots of the code and noticed that it gets to the point where the rule: <code>use memberOf 'http://hl7.o
+rg/fhir/ValueSet/address-use'</code> is evaluated.<br>
+The given value of use (which is <code>work</code>)  is being converted to a Codeing.<br>
+To do this the given valueset is trying to be expanded which ends up in this code:</p>
+<div class="codehilite"><pre><span></span>@Override
+public ValueSetExpander.ValueSetExpansionOutcome expandVS(org.hl7.fhir.r4.model.ElementDefinition.ElementDefinitionBindingComponent binding, boolean cacheOk, boolean heiarchical) {
+  throw new UnsupportedOperationException();
+}
+</pre></div>
+
+
+<p>What I think to be weird, is that when the same kind of attribute (a code given as string value with an implicit valueset) is outside of a slice, it works. For example posting an observation which has a status that is part of a valueset as well, works.<br>
+I did notice though that posting an observation with an invalid status does not fail in validation but in processing.</p>
+<p>Now to my question:<br>
+Is there any way for me to make the validator not fail on my adress slice other than removing the profile altogether?<br>
+Can I overwrite the expandVS function in my validator to make it work somehow?<br>
+Is there maybe a way to express the same thing in the profile in a different way? (Multiple adresses are okay, but one has to be a work address.)</p>
+<p>Thanks and best regards,<br>
+Lars</p>
+
+
+
+<a name="166205819"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/FhirInstanceValidator%20-%20code%20in%20a%20slice/near/166205819" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/FhirInstanceValidator.20-.20code.20in.20a.20slice.html#166205819">(May 21 2019 at 19:43)</a>:</h4>
+<p>Hi Lars,</p>
+<p>Before any other checking, it would be worth testing your system against the latest snapshot builds of HAPI FHIR (3.8.0-SNAPSHOT). The validator is very actively developed, so many things have been fixed since 3.7.0 was released.</p>
+
+
+
+<a name="166244006"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/FhirInstanceValidator%20-%20code%20in%20a%20slice/near/166244006" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lars Rückert <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/FhirInstanceValidator.20-.20code.20in.20a.20slice.html#166244006">(May 22 2019 at 07:35)</a>:</h4>
+<p>Hi James,</p>
+<p>thanks for the answer, unfortunately we have a setup where we have to get the dependencies from maven, which seems not to be available yet.<br>
+I think we can work around it for now by changing the profile a bit.<br>
+Do you have an estimation as to when 3.8.0 will be released?</p>
+
+
+
+<a name="166263489"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/FhirInstanceValidator%20-%20code%20in%20a%20slice/near/166263489" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/FhirInstanceValidator.20-.20code.20in.20a.20slice.html#166263489">(May 22 2019 at 12:46)</a>:</h4>
+<p>We'll be releasing on this coming Tuesday. If you want to use snapshot builds before then, there are instructions on how to do this here: <a href="http://hapifhir.io/download.html#_toc_using_snapshot_builds" target="_blank" title="http://hapifhir.io/download.html#_toc_using_snapshot_builds">http://hapifhir.io/download.html#_toc_using_snapshot_builds</a></p>
+
+
+
+<a name="166268503"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/FhirInstanceValidator%20-%20code%20in%20a%20slice/near/166268503" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lars Rückert <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/FhirInstanceValidator.20-.20code.20in.20a.20slice.html#166268503">(May 22 2019 at 13:46)</a>:</h4>
+<p>That's great! Thank you a lot for the information.</p>
+
+
+
+<a name="166340173"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/FhirInstanceValidator%20-%20code%20in%20a%20slice/near/166340173" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lars Rückert <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/FhirInstanceValidator.20-.20code.20in.20a.20slice.html#166340173">(May 23 2019 at 07:55)</a>:</h4>
+<p>Version 3.8.0 fixes the described Problem with codes in slices. Thanks.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

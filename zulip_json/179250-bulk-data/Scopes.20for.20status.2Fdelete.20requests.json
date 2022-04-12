@@ -1,0 +1,164 @@
+[
+    {
+        "content": "<p>During $export, scopes communicate the set of resources that can be exported.  A bulk client will validate against _type parameters or otherwise limit what is exported.</p>\n<p>During download, if <code>requiresAccessToken</code> is true,  scopes can limit access to specific files depending on what resource they represent.  The app already had access to initiate export, but scopes can be used again here to ensure the specific token allows access to the resource being accessed.</p>\n<p>This topic is more around the role of scopes in status/delete requests.  If an export request was successfully kicked off, there is no corresponding scope granting access to check the job's status.  From a workflow perspective, I'd expect the bulk client to use the same token from the export request to check the status of the job.  The underlying system knows whether that bulk client is the owner of that job.  The FHIR scopes don't seem to bear relevance because the request isn't accessing any FHIR resources.</p>\n<p>Once the initial token expired from the export request, the bulk client will request another token to continue checking status.  Since scopes are required, I'd assume best practice is to use the same set, but am I correct that they don't seem to have relevance for this stage of the workflow?</p>",
+        "id": 239772173,
+        "sender_full_name": "Dennis Patterson",
+        "timestamp": 1621612183
+    },
+    {
+        "content": "<p>Indeed we don't have explicit scopes for managing an export request. We could define something like <code>$export.manageJobs</code> (but in practice, I don't think it's a huge problem to say that a client with system level read scopes is authorized to create a job that exports data within its scopes, and to manage the jobs it kicks off -- this is directly analogous to how synchronous requests work; a client can query data and can break a connection at any time)</p>",
+        "id": 239773121,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1621612542
+    },
+    {
+        "content": "<blockquote>\n<p>\"From a workflow perspective, I'd expect the bulk client to use the same token from the export request to check the status of the job.\"</p>\n</blockquote>\n<p>This is an interesting idea, but the duration of polling might far exceed the lifetime of the security token, unless you are suggesting that the specific security token used to initiate the export _MUST_ be used to access the resource regardless of expiry (I think that would need to be called out in the spec for interoperability purposes, if that's the case.)</p>\n<blockquote>\n<p>\"We could define something like $export.manageJobs\"</p>\n</blockquote>\n<p>I think the broader concern is that the actual protection mechanism for that resource URL is ambiguous in the spec.  It isn't a FHIR resource, nor does the bulk data specification define an explicit protection mechanism for it.  If you read the specification as-is, one might assume that the resource is intended to not be protected.  It could be sufficient to say that the caller must present a token with the scope associated with the resource from which the export was initiated (that wouldn't require declaring any new scope mechanisms, and would eliminate the ambiguity.)  If that's what was expected/intended, it probably should just be formally called out in the spec.</p>",
+        "id": 239776777,
+        "sender_full_name": "Matt Randall",
+        "timestamp": 1621613964
+    },
+    {
+        "content": "<p>My assumption was that clients will use the same access token for everything, and should also be capable of renewing it on the fly when it expires. If someone makes an export with <code>system/*.read</code>, but then re-authenticates with <code>system/Patient.read</code> and attempts to download an Observation file, that should be detected and rejected.</p>",
+        "id": 239789189,
+        "sender_full_name": "Vladimir Ignatov",
+        "timestamp": 1621619680
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191609\">@Matt Randall</span> we had two modes of operation in mind (and hence the boolean flag <code>requiresAccessToken</code>, which I agree is struggling to communicate well).</p>\n<ol>\n<li>Client uses the output url itself (which could be something like an S3 signed URL conveying access)  +/- any out of band arrangements. Signaled when <code>requiresAccessToken: false</code></li>\n<li>Client authenticates to the output URLs just the same way as for the kickoff (i.e., a token with relevant SMART system scopes).Signaled when <code>requiresAccessToken: true</code></li>\n</ol>",
+        "id": 239795797,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1621622811
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>  - the  <code>requiresAccessToken</code> flag  doesn't make mention of the polling endpoint (I think it is pretty clear cut for the download/file request.)  Are you saying you intended this flag to also apply to the polling endpoint?</p>",
+        "id": 239799281,
+        "sender_full_name": "Matt Randall",
+        "timestamp": 1621624304
+    },
+    {
+        "content": "<blockquote>\n<p>Are you saying you intended this flag to also apply to the polling endpoint?</p>\n</blockquote>\n<p>No, sorry if I introduced confusion by talking about fetching outputs. Glad you think that part is clear at least :-)</p>\n<p>Re: the status endpoint, my expectation would be that it's protected the same way as the $export operation; you need to have a token that is valid for the resources the request is exporting, and I think it'd be reasonable for servers to also lock down access by client (so client X could only check / cancel status on the requests it initiated).</p>",
+        "id": 239803641,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1621626372
+    },
+    {
+        "content": "<blockquote>\n<p>it's protected the same way as the $export operation; you need to have a token that is valid for the resources the request is exporting, and I think it'd be reasonable for servers to also lock down access by client (so client X could only check / cancel status on the requests it initiated).</p>\n</blockquote>\n<p>This makes perfect sense to me.  Should this guidance be added to the specification to avoid variability in how this gets implemented?  This type of authorization logic does not exist elsewhere in the SMART App Launch Framework.  I could see other implementers jumping to the conclusion that access tokens should be re-used (potentially even if expired, or perhaps extending the TTL of such tokens for this use case...) given that (if I recall correctly) the Inferno test suite reuses its access token for use with the polling endpoint.</p>",
+        "id": 240199429,
+        "sender_full_name": "Matt Randall",
+        "timestamp": 1621954373
+    },
+    {
+        "content": "<p>Makes sense to me. <span class=\"user-mention\" data-user-id=\"191414\">@Dan Gottlieb</span> shall we take this up during our ballot reconciliation?</p>",
+        "id": 240206465,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1621957021
+    },
+    {
+        "content": "<p>Added <a href=\"http://jira.hl7.org/browse/FHIR-32772\">FHIR-32772</a></p>",
+        "id": 240206693,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1621957138
+    },
+    {
+        "content": "<p>What does \"SHALL be protected the same way the Bulk Data Kick-off Request\" mean? Does it mean the status endpoint and file endpoint shall require the same access token? or does it mean the status endpoint the file endpoint shall require new/different access tokens using the same back-end authorization workflow?</p>",
+        "id": 242222966,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1623338016
+    },
+    {
+        "content": "<p>That sentence continues:</p>\n<blockquote>\n<p>including an access token with scopes that cover all resources being exported. </p>\n</blockquote>\n<p>The idea is it doesn't need to literally be the same access token because that one may have expired :-) just a valid access token with the right Scopes associated with it</p>",
+        "id": 242238525,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1623344649
+    },
+    {
+        "content": "<p>Does this make sense? Is there other language you would want to add to clarify this point?</p>",
+        "id": 242238542,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1623344658
+    },
+    {
+        "content": "<p>We have not consider token expired situation. There are two scenarios<br>\n1) If server allows client using the same access token for status and download, and the token expired, should the token auto renewed by server?<br>\n2) If server requires new token for status and download, what's the workflow for client to get a new token?</p>",
+        "id": 242239611,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1623345087
+    },
+    {
+        "content": "<p>1) no way! What would an expiration time even mean in that case?</p>",
+        "id": 242240211,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1623345327
+    },
+    {
+        "content": "<p>1) no way! What would an expiration time even mean in that case?</p>",
+        "id": 242240213,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1623345328
+    },
+    {
+        "content": "<p>2) client gets a token the same way in all cases, by authenticating to the /token endpoint and requesting it</p>",
+        "id": 242240215,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1623345328
+    },
+    {
+        "content": "<p>Then Should token response <a href=\"http://build.fhir.org/ig/HL7/bulk-data/authorization.html#issuing-access-tokens\">http://build.fhir.org/ig/HL7/bulk-data/authorization.html#issuing-access-tokens</a> include refresh token in it?</p>",
+        "id": 242240866,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1623345604
+    },
+    {
+        "content": "<p>2) Server need a way to communicate such requirement, e.g. file download need a different token, to the client. So requiresAccessToken should be code type with value: no, existing-token-allowed, new-token-required</p>",
+        "id": 242241339,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1623345827
+    },
+    {
+        "content": "<p>No, there's no refresh token required when there's no user in the loop. A backend service can simply request an access token when it needs one.</p>",
+        "id": 242242007,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1623346124
+    },
+    {
+        "content": "<p>that backs to my first question. if the access token is expired at, for example status check, what client should do if it cannot refresh this token?</p>",
+        "id": 242242229,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1623346227
+    },
+    {
+        "content": "<p>Re (2) the only thing we try to standardize with the requiresAccessToken property is \"is this output file protected using SMART Backend Services OAuth, or something else\". There's no meaningful distinction between an \"existing\" vs \"new\" access token associated with a given client and set of scopes. The client id, scopes, and expiration  tell the whole story.</p>",
+        "id": 242242250,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1623346238
+    },
+    {
+        "content": "<p>The client is a SMART Backend Services client. It's authorized to obtain access tokens with system/ scopes, so all it needs to do is request a token (authenticating to the token endpoint). Whenever a token expires, the client can request a new one just the same way it requested the original.</p>",
+        "id": 242242474,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1623346330
+    },
+    {
+        "content": "<p>Then I assume that server should continue current export process (instead of starting a new process) with new access token. That make sense.</p>",
+        "id": 242242954,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1623346545
+    },
+    {
+        "content": "<p>I'm confused. The server starts an export whenever an authorized client issues a kickoff request. It continues the export until it's done, or until an authorized client issues a DELETE request against an active export status URL</p>",
+        "id": 242243270,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1623346664
+    },
+    {
+        "content": "<p>For some reason I got the impression that export \"session\" is associated with a token. So if token expires, the export session expires. It makes sense that the export links to client identifier.</p>",
+        "id": 242244977,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1623347426
+    },
+    {
+        "content": "<p>That is definitely not right. If there's any language in the specification that you can identify as contributing to this misapprehension, it would be great to clean that up.</p>",
+        "id": 242245100,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1623347483
+    }
+]

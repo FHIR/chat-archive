@@ -1,0 +1,146 @@
+[
+    {
+        "content": "<p>In a v2-to-FHIR translation scenario, if one wanted to preserve the difference between || (value unknown) and |\"\"| (value known to be empty), it seems one would have to add an extension to an element, something like \"knownToBeEmpty, valueBoolean\". It's not a dataAbsentReason/NullFlavor, and I'm unable to find any other extension in Simplifier which seems to fit the bill. Any other ideas/suggestions as to how to support this?</p>",
+        "id": 164715937,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1556809606
+    },
+    {
+        "content": "<blockquote>\n<p>In a v2-to-FHIR translation scenario, if one wanted to preserve the difference between || (value unknown) and |\"\"| (value known to be empty), it seems one would have to add an extension to an element, something like \"knownToBeEmpty, valueBoolean\". It's not a dataAbsentReason/NullFlavor, and I'm unable to find any other extension in Simplifier which seems to fit the bill. Any other ideas/suggestions as to how to support this?</p>\n</blockquote>\n<p>I don't think you need to do an extension as this would map differently: || (value unknown) would mean that the data element would not be present in the XML/JSON while |\"\"| means that the element would be present, eg. &lt;description&gt;&lt;/description&gt;</p>",
+        "id": 164716123,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1556809753
+    },
+    {
+        "content": "<p>the XML representation of v2 did this &lt;CE.1&gt;&lt;/CE.1&gt; was equivalent to |\"\"| while no CE.1 tag meant unknown</p>",
+        "id": 164716217,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1556809807
+    },
+    {
+        "content": "<p>In FHIR, the expectation is that you are always sending everything.  If that's not an assumption you can make when converting from v2, then v2 updates will have to be handled as PATCH rather than PUT.</p>",
+        "id": 164716692,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1556810155
+    },
+    {
+        "content": "<p>What would be the equivalent of this in JSON?  (the \"knownToBeEmpty\")</p>",
+        "id": 164720155,
+        "sender_full_name": "John Silva",
+        "timestamp": 1556812667
+    },
+    {
+        "content": "<p>XML vs. JSON doesn't matter</p>",
+        "id": 164720603,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1556812951
+    },
+    {
+        "content": "<p>If it's empty in FHIR, you omit the element - a missing element is <em>always</em> interpreted as \"this element has no data\".</p>",
+        "id": 164720625,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1556812981
+    },
+    {
+        "content": "<blockquote>\n<p>What would be the equivalent of this in JSON?  (the \"knownToBeEmpty\")</p>\n</blockquote>\n<p>\"description\": \"\"</p>",
+        "id": 164720954,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1556813224
+    },
+    {
+        "content": "<p>note: that would be telling someone \"the description exists, but it is currently empty\" as opposed to the \"description\" tag not being present which is \"there is no description\".  I'm not sure when you'd ever want to say that the description existed and was empty, but you can in XML and JSON.</p>",
+        "id": 164721209,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1556813424
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  -- this is coming from an HL7 V2 message perspective where \"\" implies something (like DBnull vs empty string).   <span class=\"user-mention\" data-user-id=\"192166\">@Jean Duteau</span>  answer makes more sense from a V2 perspective.   If my FHIR server implementation was using a relational DB I would need to clear out (DBnull) the field in the DB vs putting an a zero-length string.    Also, even if it was a noSQL storage, if I have a client with a pub/sub request on changes to a specific field that went from something (empty string) to nothing (DBnull), I'd need to notify that client.    With the 'just don't send it approach' that wouldn't be as deterministic because from the V2 message perspective, an empty field doesn't imply that the property should be \"DBnull'd\" just that a particular sender didn't know the value (of that field).</p>",
+        "id": 164724184,
+        "sender_full_name": "John Silva",
+        "timestamp": 1556815671
+    },
+    {
+        "content": "<p>You can't have empty strings in FHIR - it's not allowed.  so \"description\":\"\" is not permitted.</p>",
+        "id": 164725606,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1556816714
+    },
+    {
+        "content": "<p>To clear out something in FHIR, you send a copy of the resource that excludes the element.  If you have a Patient and specify no addresses, that says \"delete all addresses you have for the patient\".  There is no way to send a Patient in FHIR and say \"I'm not telling you anything about addresses, so keep what you have\" except by using PATCH.</p>",
+        "id": 164725716,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1556816779
+    },
+    {
+        "content": "<p>ah, Lloyd is right.  Quoting from the spec:</p>\n<blockquote>\n<p>Objects are never empty. If an element is present in the resource, it SHALL have properties as defined for its type, or 1 or more extensions<br>\nString property values can never be empty. Either the property is absent, or it is present with at least one character of content</p>\n</blockquote>\n<p>So extension it is.</p>",
+        "id": 164727612,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1556818260
+    },
+    {
+        "content": "<p>Extension isn't appropriate here.  To make something go away, you don't need \"null\" in the v2 sense, you just omit it.  <em>Everything</em> omitted goes away.  The tricky part with FHIR is how to <em>not</em> make something go away but still not send it.  In that case, you'd need either a modifier extension or you'd need to use PATCH.</p>",
+        "id": 164728020,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1556818525
+    },
+    {
+        "content": "<blockquote>\n<p>The tricky part with FHIR is how to <em>not</em> make something go away but still not send it.  In that case, you'd need either a modifier extension or you'd need to use PATCH.</p>\n</blockquote>\n<p>That is what I was meaning - for that use case, you'd need an extension.</p>",
+        "id": 164728126,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1556818585
+    },
+    {
+        "content": "<p>modifierExtension.  If a regular extension were there, systems that didn't recognize it would still strip the data.</p>",
+        "id": 164729284,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1556819447
+    },
+    {
+        "content": "<p>OK, but if the V2 source feed comes from multiple sources, some of which know the data (e.g. patient's address) and others which don't this approach becomes problematic.</p>",
+        "id": 164736104,
+        "sender_full_name": "John Silva",
+        "timestamp": 1556824107
+    },
+    {
+        "content": "<p>If you're doing a RESTful create or update operation in FHIR, yes the resource has to be complete. But in talking about converting v2 to FHIR, we've often been discussing messaging bundles which are handled by a FHIR server's $process-message operation \"according to the definition of the event in the message header.\" That's pretty open-ended.</p>\n<p>At Redox, we process V2 messages as FHIR message bundles full of resources with temporary ids. As a FHIR server, we take each resource from the bundle and either create a new permanent resource, or merge the data into an existing resource (using something like identifier to match). We do have different rules based on the source event (which drives MessageHeader.event). For example - a bundle containing a patient with no address on an ADT feed would likely \"clear out\" an existing patient who previously had an address, but a bundle with a similar address-less patient coming from an ORU feed would <em>not</em> strip out the address because we expect the demographics to be richer from ADT feeds than from ORU feeds.</p>\n<p>This would be a great topic to explore in more depth this weekend in the V2-to-FHIR track or in future calls.  Can we create a clear way to differentiate a missing resource field as due to explicitly known to be empty vs simply not present (i.e. leave any existing data alone) ?</p>",
+        "id": 164742021,
+        "sender_full_name": "Benjamin Flessner",
+        "timestamp": 1556828457
+    },
+    {
+        "content": "<p>I'd say one would probably ignore the entire PID received in an ORU, unless the patient was entirely unknown. This also requires server-side logic to determine which sending system is considered to be a \"more reliable\" source for particular categories of data. Things like allergies could be in contained in lots of message types - whom do you consider to be authoritative source(s), and what systems are likely to just echo older versions of data which they in turn received from those authoritative sources? I don't see a use case for PATCH here, this is more an issue of whether one wishes to use one \"snapshot\" or another \"snapshot\", depending on the source of the data.</p>",
+        "id": 164772197,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1556866303
+    },
+    {
+        "content": "<p>v2 to FHIR has two possible modes of operation.  One is you're converting a v2 message into a FHIR message.  In that case, you can theoretically embed into the event code count some of the same 'magic' as is found in the v2 space - though that also means that any resources you receive are not \"safe\" to be automatically turned into REST resources or document resources.  (And I'd argue that for safety purposes, you really should set the Resource.implicitRules flag.)  The othe possibility is that you're trying to process the message against a FHIR RESTful server.  In that case, you're going to need to use PATCH or will need to query the resource before updating it in order not to lose data.</p>",
+        "id": 164787084,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1556883838
+    },
+    {
+        "content": "<p>Obviously the first approach is easier than the second, but the second is going to let you share the data with a lot more servers.</p>",
+        "id": 164787152,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1556883881
+    },
+    {
+        "content": "<p>|\"\"| is proof that the HL7 message is a patch. There's a variety of ways to handle it. but what you have is fundamentally a patch not a snapshot.</p>",
+        "id": 164858831,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1556961863
+    },
+    {
+        "content": "<p>though it may prove that you can ignore it's patchiness. But as far as I can see, making an extension for this is completely missing the point</p>",
+        "id": 164858832,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1556961897
+    },
+    {
+        "content": "<p>Making an extension is reasonable, but only if you're shifting from processing in a traditional RESTful mode.   And I think even if you're using FHIR messaging, the presumption is that resources are \"complete\", which is why I lean to making people use Resource.implicitRules if they want to make FHIR behave like v2.  (And if you do that, then an extension to mark nulls is reasonable.)</p>",
+        "id": 164863123,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1556967441
+    }
+]

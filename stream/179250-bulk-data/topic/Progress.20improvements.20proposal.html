@@ -1,0 +1,79 @@
+---
+layout: page
+title: "FHIR Chat  · Progress improvements proposal · bulk data"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/index.html">bulk data</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Progress.20improvements.20proposal.html">Progress improvements proposal</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="197571964"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Progress%20improvements%20proposal/near/197571964" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vladimir Ignatov <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Progress.20improvements.20proposal.html#197571964">(May 14 2020 at 15:26)</a>:</h4>
+<p>I have a proposal for small addition to the export (and import) spec that<br>
+attempts to improve how a progress is being reported.</p>
+<p>The problem is that the value reported in the <code>x-progress</code> is implementation-dependent<br>
+and could be literally anything. While that is understandable, it also means that it<br>
+is not really possible to create a client that can do anything with that information,<br>
+other than simply displaying it. In other words, I may have a client that is capable of<br>
+rendering a progress indicator, but it wouldn't know for sure if that <code>x-progress</code> value is<br>
+a percent number, or remaining time or something else...</p>
+<p>My idea is to add another optional custom header that describes the type of data<br>
+that <code>x-progress</code> represents. That new header could be called <code>x-progress-type</code> and<br>
+could contain a value from a predefined list (e.g.: "percent-complete", "estimate-time-remaining", "resources-handled", "message"...).<br>
+Perhaps think of it as a ValueSet for progress information types.</p>
+<p>The clients can then behave as follows:</p>
+<ul>
+<li>If the <code>x-progress-type</code> is not present or contains unknown value, treat it as if the value was "message".</li>
+<li>If the <code>x-progress-type</code> value is "message" the clients can simply display the value of <code>x-progress</code> as is.</li>
+<li>If the <code>x-progress-type</code> value is "percent-complete" the clients can render a progress bar.</li>
+<li>Other values are TBD, but clients can always fail back to "message"</li>
+</ul>
+
+
+
+<a name="197741714"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Progress%20improvements%20proposal/near/197741714" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christiaan Knaap <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Progress.20improvements.20proposal.html#197741714">(May 15 2020 at 19:25)</a>:</h4>
+<p>Suggestion: standardize x-progress (<em>if present</em>) to the format "x/y" where y can be "?" if the server does not know the total number of resources to process. If x <em>and</em> y are unknown to the server, just don't send the x-progress at all.<br>
+If you want to express a percentage, use y = 100</p>
+
+
+
+<a name="197750246"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Progress%20improvements%20proposal/near/197750246" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vladimir Ignatov <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Progress.20improvements.20proposal.html#197750246">(May 15 2020 at 20:45)</a>:</h4>
+<p>Seems doable but implies parsing on  the client-side. Also, that might restrict the servers by  not allowing them to send a free-text message.</p>
+<p>BTW, I just realized that a client should be able to inspect the size of the downloaded files and that way determine that the process is not stuck. This means that the only remaining issue is that the client would like to know how to interpret the progress information. Consider these examples: </p>
+<ul>
+<li><code>350/4600</code> is usable for progress bars if parsed. Can also be displayed as is, although it is not very descriptive.</li>
+<li><code>350/4600 resources</code> is usable for progress bars if parsed. Can also be displayed as is and is slightly easier to understand if rendered somewhere.</li>
+<li><code>46%</code> is usable for progress bars if parsed. Can also be displayed (even though it is a little short).</li>
+<li><code>number</code> - Not usable! The client wouldn't know what it is. It can be displayed as is, if that makes any sense.</li>
+<li><code>string</code> - anything else can only be displayed as is.</li>
+</ul>
+<p>If we decide to specify the format (instead of the two headers solution), then perhaps we need to make sure that this format can cover every single use case.  For example the following formats can probably be used and parsed with simple RegExp:</p>
+<ul>
+<li><code>^{number}{unit} {optional suffix}</code> - for example "33% done" or "5 min remaining"</li>
+<li><code>^{numerator}/{denominator} {subject} {optional suffix}</code> - for example "34/45 resources handled" or "1024/45678 bytes exported..."</li>
+<li><code>anything else as free message</code> - for example "Export in progress. Please try again in 3 minutes."</li>
+</ul>
+<p>We can predict most of it, but I don't feel confident that we can have a format that covers everything. At least not until we have good number of servers and EHRs that support bulk-data in production, so that we have a reasonably good idea about what the possible x-progress values might be.</p>
+
+
+
+<a name="197751306"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Progress%20improvements%20proposal/near/197751306" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christiaan Knaap <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Progress.20improvements.20proposal.html#197751306">(May 15 2020 at 20:56)</a>:</h4>
+<p>Regarding "<a href="https://hl7.org/fhir/uv/bulkdata/export/index.html#response---complete-status">https://hl7.org/fhir/uv/bulkdata/export/index.html#response---complete-status</a>": As per <a href="https://hl7.org/fhir/uv/bulkdata/export/index.html#response---complete-status">https://hl7.org/fhir/uv/bulkdata/export/index.html#response---complete-status</a> the file download can only start when the server is done exporting the data. By then progress reporting is not useful anymore.</p>
+
+
+
+<a name="197751700"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Progress%20improvements%20proposal/near/197751700" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vladimir Ignatov <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Progress.20improvements.20proposal.html#197751700">(May 15 2020 at 21:00)</a>:</h4>
+<p>Yes, that is correct. Please disregard the part about the progress being stuck :)</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

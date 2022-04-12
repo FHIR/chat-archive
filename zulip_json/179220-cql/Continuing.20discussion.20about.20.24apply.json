@@ -1,0 +1,134 @@
+[
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> <span class=\"user-mention\" data-user-id=\"191782\">@Brian Kaney</span> <span class=\"user-mention\" data-user-id=\"192545\">@Alex Goel</span> <span class=\"user-mention\" data-user-id=\"274202\">@Keith Thompson</span> <span class=\"user-mention\" data-user-id=\"324272\">@Michael O'Hanlon</span> <span class=\"user-mention\" data-user-id=\"193307\">@Derek Ritz</span> </p>\n<p>During the CPG on FHIR call yesterday there was a continuation of the discussion about the $apply operation and the desire to update it for R5. From my notes, there were a number of proposals, questions, and concerns raised, and I'd like to try to capture them all accurately in this thread. This is what I have:</p>\n<ol>\n<li>$apply currently produces both CarePlan and RequestGroup resources, which is redundant and could be simplified to just produce RequestGroup.<ol>\n<li>What elements would need to be added to RequestGroup so that no information is lost compared to the status quo?</li>\n<li>What is the role of CarePlan if $apply only produces RequestGroup?</li>\n</ol>\n</li>\n<li>The spec isn't currently clear about how nested actions should be treated.<ol>\n<li>Should the nesting be (optionally?) preserved in the resulting RequestGroup or should the output be \"flat?\"</li>\n<li>Is explicit nesting necessary, or can it be captured via references? Is this another option?</li>\n</ol>\n</li>\n<li>Human input considerations<ol>\n<li>How to handle cases like conditional actions depending upon a Questionnaire that needs to be filled in or on a particular action being selected from a group?</li>\n<li>Is it up to the $apply implementation to handle these cases to ensure the logic doesn't get stuck or give the wrong result?</li>\n<li>Or is $apply \"dumb\" and it is expected you rerun it as much as necessary to ensure every logic path has been fully resolved?</li>\n<li>How should an $apply implementation know when to rerun?</li>\n</ol>\n</li>\n<li>Managing multiple PlanDefinitions<ol>\n<li>Similar challenges to #2 and #3.</li>\n<li>Additional challenge is if two PlanDefinitions both being $applied produce conflicting or redundant outputs.</li>\n</ol>\n</li>\n</ol>",
+        "id": 264018361,
+        "sender_full_name": "David Winters",
+        "timestamp": 1638891631
+    },
+    {
+        "content": "<p>I think the role of the CarePlan might vary depending on implementation, but it could be used as a context holder of what was and is planned to be done - that's how I picture it anyways I think <span class=\"user-mention\" data-user-id=\"191990\">@Emma Jones</span> mentioned that as well</p>",
+        "id": 264053031,
+        "sender_full_name": "Alex Goel",
+        "timestamp": 1638903113
+    },
+    {
+        "content": "<p>I think human input needs to be mapped out in a use case where we have a questionnaire. Maybe we can use the ABSI use case <span class=\"user-mention\" data-user-id=\"195840\">@David Winters</span> that one has clear link between the Questionnaire and the PlanDefinition. </p>\n<p>I think much of the logic of the $apply is on the expressions and what fires based on those. The Questionnaire is just one resource that might trigger and how that's handled needs to be clear from an implementation stand point</p>",
+        "id": 264053174,
+        "sender_full_name": "Alex Goel",
+        "timestamp": 1638903171
+    },
+    {
+        "content": "<p>Interesting suggestion to use Alcohol Screening and Brief Intervention (ASBI) as a use case.  There we have two separate PlanDefinitions, one which presents a Questionnaire and another which reads the QuestionnaireResponse and provides patient-specific intervention prompts.  I had designed those so that the latter triggered once the QuestionnaireResponse was created by the former.  Alternatively, I could have embedded both PlanDefinitions in a hierarchy and replaced their triggers with applicability conditions.  You would have to run $apply twice on the combined ASBI PlanDefinition hierarchy, because on the first go around there would be no QuestionnaireResponse to activate the intervention component.</p>\n<p>References:</p>\n<ul>\n<li><a href=\"https://cds.ahrq.gov/cdsconnect/artifact/alcohol-screening-using-world-health-organization-who-alcohol-use-disorders\">https://cds.ahrq.gov/cdsconnect/artifact/alcohol-screening-using-world-health-organization-who-alcohol-use-disorders</a></li>\n<li><a href=\"https://cds.ahrq.gov/cdsconnect/artifact/brief-behavioral-counseling-interventions-excessive-alcohol-consumption\">https://cds.ahrq.gov/cdsconnect/artifact/brief-behavioral-counseling-interventions-excessive-alcohol-consumption</a></li>\n<li><a href=\"https://github.com/asbi-cds-tools\">https://github.com/asbi-cds-tools</a></li>\n</ul>",
+        "id": 264157552,
+        "sender_full_name": "David Winters",
+        "timestamp": 1638971583
+    },
+    {
+        "content": "<p>Alternatively, we could just say that if you have a situation like I have for ASBI, you <strong>have</strong> to keep them separate and use triggers to coordinate them.  This sounds a lot like the \"flat\" approach <span class=\"user-mention\" data-user-id=\"193307\">@Derek Ritz</span> mentioned on Monday.  However, this does constrain the knowledge artifact designer and it makes the coupling between components harder to follow.  Hierarchies do have their downsides, but a big advantage is that they clearly spell out the relationships between components.  I don't think this is true with the \"flat\" approach.</p>",
+        "id": 264158123,
+        "sender_full_name": "David Winters",
+        "timestamp": 1638971875
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"195840\">@David Winters</span>  -- for me, patient safety (and its corollary, conformance-testability) is the key motivation driving my preferences regarding how computable care guidelines (CCGs) should be defined and processed. My sense is that we should look for ways that <em>tooling</em> can abstract the underlying complexities away... and that such tooling, both in the dev and review work tasks, would likely reduce the perceived benefits of how code is formatted. I must admit, for me, I think of each CCG recommendation as a \"card\", and the card has a set of conditions that must be true before the card can be \"played\". When a card is played, an action is recommended and when the action is done, there is a result. A particular CCG, then, would be a folder full of these cards. <br>\nThe folder-full-of-cards metaphor is one that <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span>  and I cooked up when we were both attending a conference in Ethiopia a couple of years ago. It is designed to try to simplify things enough that we can both define and execute CCGs in a patient-safe way. The metaphor's workings are described by this video: <a href=\"https://vimeo.com/653748605\">https://vimeo.com/653748605</a>. <span class=\"user-mention\" data-user-id=\"192545\">@Alex Goel</span>  and I co-presented at the FHIR North conference a few months ago and the video was the \"set-up\" to a demo that he did that illustrated how this approach can be operationalized by a SoF façade.</p>",
+        "id": 264167665,
+        "sender_full_name": "Derek Ritz",
+        "timestamp": 1638975974
+    },
+    {
+        "content": "<p>Apologies... there's a bit of pedagogy that precedes the actual description of the metaphor -- but it's actually important to the <strong>simplifying assumptions</strong> that underpin the overall approach. The whole video is ~13.5 minutes long. The \"common pattern\" Bryn was talking about is introduced at about the 5 minute mark, and the data model and the processing model descriptions follow.</p>",
+        "id": 264169043,
+        "sender_full_name": "Derek Ritz",
+        "timestamp": 1638976531
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"195840\">@David Winters</span> I think the 2 PlanDefinitions is what makes it a great use case :)</p>",
+        "id": 264171111,
+        "sender_full_name": "Alex Goel",
+        "timestamp": 1638977271
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"193307\">@Derek Ritz</span> I'll take a look at the video.  I'd be curious to hear your thoughts about how a CCG maps to a PlanDefinition or actions.</p>\n<p><span class=\"user-mention\" data-user-id=\"192545\">@Alex Goel</span> I wonder if it makes sense to consider this use case a connectathon?</p>",
+        "id": 264172160,
+        "sender_full_name": "David Winters",
+        "timestamp": 1638977615
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"195840\">@David Winters</span> let's do it as a use case! <br>\nRE: mapping the CCG profile to the <span class=\"user-mention\" data-user-id=\"193307\">@Derek Ritz</span> has told me he thinks of each \"card\" as a PlanDefinition + ActivityDefinition which makes the clinician do a task of some sort, whether that's a FHIR Task, ServiceRequest, MedicationRequest etc. Then the \"folder\" should be a PlanDefinition that references all the cards</p>",
+        "id": 264172968,
+        "sender_full_name": "Alex Goel",
+        "timestamp": 1638977880
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"193307\">@Derek Ritz</span>  - thanks for that background! I don't know if we want to conflate an authoring preference / approach (\"deck of cards\" vs. CPG -style pathway-strategy-recommendation hierarchy vs. ???) with processing semantics of <code>$apply</code>. I see them as two distinct things and are not in conflict.</p>",
+        "id": 264192543,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1638985599
+    },
+    {
+        "content": "<p>Hi Brian -- I agree with you that we should not <strong>conflate</strong> the processing semantics of $apply with the way PlanDefinitions (and ActivityDefinitions) are authored. That said, I believe we need to acknowledge that these distinct things are inexorably related to each other. The way care guidelines are defined as FHIR artefacts, and how these artefacts are processed when $apply is invoked, can be either patient-safe or <strong>not</strong> patient-safe. Notwithstanding that we (generally) want to leave a lot of flexibility in the hands of implementers, my strong preference is that we would not allow the latter.</p>",
+        "id": 264221034,
+        "sender_full_name": "Derek Ritz",
+        "timestamp": 1638997952
+    },
+    {
+        "content": "<p>I'm also worried that a requirement for multiple CCGs to be superimposable will (necessarily) constrain how we can safely define them. Superimposability seems to me to be a must-have requirement... but I'm curious to know if others feel that way, too.</p>",
+        "id": 264221361,
+        "sender_full_name": "Derek Ritz",
+        "timestamp": 1638998101
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"193307\">@Derek Ritz</span> I agree that the authoring and execution aspects are intrinsically connected.</p>",
+        "id": 265029722,
+        "sender_full_name": "David Winters",
+        "timestamp": 1639583537
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"193307\">@Derek Ritz</span> thanks for sharing the link to the video; definitely gave me a better understanding of the metaphor about a folder full of cards.  So a \"folder\" is a top-level PlanDefinition which points to multiple \"cards.\"  Each card is a single PlanDefinition which points to a single ActivityDefinition. Under this metaphor, you won't have deeply nested PlanDefinitions, just a flat structure with a single root. The current spec allows this structure but does not mandate it.</p>\n<p>But I don't see how this metaphor uniquely solves many of the issues I listed at the beginning of the thread.  You're imposing an extremely rigid approach to authoring CCGs, with the intent to make it harder for authors to create \"bad\" ones. But I don't think the \"folder full of cards\" metaphor is what achieves the conformability testing property you talk about. It's the notion discussed in the video that you have to run $apply repeatedly until no new information comes out of the CCG. You can have a deeply nested action tree in a PlanDefinition and if you require $apply to be rerun until everything is resolved, then I think you are fine from a patient safety or conformance perspective.</p>\n<p>A downside to having a completely flat CCG is that it can make it harder for implementors to figure out how the pieces fit together. A more general tree structure gives CCG authors more flexibility when designing their logic. The question in my mind is how do you define, from a spec perspective, what \"run $apply until nothing new comes out\" actually means? Complex tools can't help if the spec isn't clear on this topic.</p>",
+        "id": 265032876,
+        "sender_full_name": "David Winters",
+        "timestamp": 1639584721
+    },
+    {
+        "content": "<p>Thanks, <span class=\"user-mention\" data-user-id=\"195840\">@David Winters</span>. And I think you raise a really good point. The folder full of cards metaphor, <em>alone</em>, doesn't address the concerns... there is a fundamental reliance on the notion of a normative specification regarding <strong>how</strong> the stack of cards are to be processed. To be honest, the nesting of the cards can be thought of (for me, at least) as simply an organizational tool; metaphoric subfolders within which there can be other cards. </p>\n<p>For safety... to ensure cards are never missed... I believe it is especially important that the cards are idempotent and that they are \"declarative\"... and by that, I mean that the trigger is <strong>always true</strong> (really, trigger is not used). This means, at any time, <strong>all</strong> the cards in a stack whose condition statements fire true at the time $apply is invoked, get \"played\". If a card should only be played once per encounter, this would be expressed as one of the condition statements so that the card will behave as intended during the iteration of multiple $apply invocations. (e.g. notionally, a rule might be: \"if not yet obtained during this encounter, measure the subject's blood pressure\"). Importantly... this design approach means I can create a single stack of cards from multiple folders. I can create an \"encounter folder\" that contains a stack of cards from multiple CCGs and concurrently run $apply on multiple, superimposed, care guidelines (e.g. for a woman who is pregnant <em>and</em> HIV+).</p>",
+        "id": 265163688,
+        "sender_full_name": "Derek Ritz",
+        "timestamp": 1639665104
+    },
+    {
+        "content": "<p>The still-in-draft IHE CCG Profile spec describes the mandatory behaviour of a CCG processing engine in terms of what needs to be the outcome of the processing of a stack of cards. This will normatively describe iterative invocation of $apply until \"no cards fire true\" -- and in this way defend the patient safety risk that a card gets missed.</p>",
+        "id": 265164101,
+        "sender_full_name": "Derek Ritz",
+        "timestamp": 1639665282
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"193307\">@Derek Ritz</span> I think many people come away from the Clinical Reasoning Module and the CDS Hooks specification by thinking of CDS triggers as a \"once and you're done\" kind of a thing.  What is a trigger and what does it entail?  Running $apply?  Once?  I think this discussion highlights that maybe trigger is maybe more of the context under which a CDS/CCG can run, but that doesn't imply running $apply once and calling it a day.</p>",
+        "id": 265165671,
+        "sender_full_name": "David Winters",
+        "timestamp": 1639665921
+    },
+    {
+        "content": "<p>I haven't looked at any of the IHE stuff (you got links for that?) but think it would be worthwhile clarifying things in the Clinical Reasoning Module and in CPG-on-FHIR.</p>",
+        "id": 265165806,
+        "sender_full_name": "David Winters",
+        "timestamp": 1639665984
+    },
+    {
+        "content": "<p>But overall <span class=\"user-mention\" data-user-id=\"193307\">@Derek Ritz</span> I think we're agreeing :)</p>",
+        "id": 265165846,
+        "sender_full_name": "David Winters",
+        "timestamp": 1639666007
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"195840\">David Winters</span> <a href=\"#narrow/stream/179220-cql/topic/Continuing.20discussion.20about.20.24apply/near/265165806\">said</a>:</p>\n<blockquote>\n<p>I haven't looked at any of the IHE stuff (you got links for that?) but think it would be worthwhile clarifying things in the Clinical Reasoning Module and in CPG-on-FHIR.</p>\n</blockquote>\n<p>Sadly... the work has languished while we figured out some of the important aspects of the CPG-on-FHIR IG. HL7 and IHE are collaborating on this IG, and the related CCG Profile, as part of a Gemini Project. But the IG is upstream of the IHE spec... so the focus has been there for the last while. There's been a ton of important progress, and I believe soon we can complete IHE's downstream \"constraining\" CCG spec.</p>",
+        "id": 265172786,
+        "sender_full_name": "Derek Ritz",
+        "timestamp": 1639668778
+    },
+    {
+        "content": "<p>FWIW - I have a pending PR on pd-apply project here: <a href=\"https://github.com/cqframework/pd-apply/pull/1\">https://github.com/cqframework/pd-apply/pull/1</a>  -- it also uses a slightly modified encender (see the submodule) that implements mergeNestedCarePlans and requestGroupsOnly experimental features.</p>",
+        "id": 266648086,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1641180191
+    }
+]

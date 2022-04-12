@@ -1,0 +1,105 @@
+---
+layout: page
+title: "FHIR Chat  · Mapping value[x].property · shorthand"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/index.html">shorthand</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Mapping.20value.5Bx.5D.2Eproperty.html">Mapping value[x].property</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="191620318"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Mapping%20value%5Bx%5D.property/near/191620318" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Pétur Valdimarsson <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Mapping.20value.5Bx.5D.2Eproperty.html#191620318">(Mar 24 2020 at 14:51)</a>:</h4>
+<p>Hi! I've been playing around with the Mapping feature a bit and have found an issue. Not sure if this is due to incorrect usage from my part, a known limitation or bug, but I thought I'd post here and find out.</p>
+<p>I'm trying to put a mapping on a specific type of value[x], in this case in an extension. Have not tried on a native value[x]. The path seems to map incorrectly causing IG-publisher to fail in snapshot generation. </p>
+<p>Including a sample fsh-file below that provokes the result.</p>
+<div class="codehilite"><pre><span></span>Profile: IssueProfile
+Parent: http://hl7.org/fhir/StructureDefinition/Basic
+Id: issue-report
+Title: &quot;IssueReport&quot;
+
+* extension contains IssueExtension named issue 1..1 MS
+
+Extension: IssueExtension
+Id: issue-extension
+Title: &quot;IssuePeriod&quot;
+* ^context.expression = &quot;Basic&quot;
+* value[x] only Period
+* valuePeriod 1..1 MS
+
+Mapping:  IssueMapping
+Source:   IssueProfile
+Target:   &quot;http://something&quot;
+Title:    &quot;...&quot;
+Id:       issue-mapping
+* extension[issue].valuePeriod.start -&gt; &quot;Should have path Basic.extension:issue.value[x]:valuePeriod.start gets Basic.extension:issue.valuePeriod.start&quot;
+</pre></div>
+
+
+
+<a name="191642410"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Mapping%20value%5Bx%5D.property/near/191642410" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Nick Freiter <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Mapping.20value.5Bx.5D.2Eproperty.html#191642410">(Mar 24 2020 at 17:06)</a>:</h4>
+<p>Oh good find! This is something we haven't seen before, but I'm not sure it is specific to Mappings alone. I was able to get a similar looking error using the following FSH:</p>
+<div class="codehilite"><pre><span></span>Profile: IssueProfile
+Parent: http://hl7.org/fhir/StructureDefinition/Basic
+Id: issue-report
+Title: &quot;IssueReport&quot;
+* extension contains IssueExtension named issue 1..1 MS
+// * extension[issue].valuePeriod MS
+* extension[issue].valuePeriod.start MS
+
+Extension: IssueExtension
+Id: issue-extension
+Title: &quot;IssuePeriod&quot;
+* ^context.expression = &quot;Basic&quot;
+* value[x] only Period
+* valuePeriod 1..1
+</pre></div>
+
+
+<p>where the  offending line is <code>* extension[issue].valuePeriod.start MS</code>. However, if the line above that, <code>* extension[issue].valuePeriod MS</code> is uncommented, then the IG Publisher does not give any errors. This seems like it could be an issue with the IG Publisher failing to find the nested element unless the parent of that nested element is also in the differential.</p>
+<p>One possible workaround for you is to add a line to the mapping  that maps  <code>extension[issue].valuePeriod</code>:</p>
+<div class="codehilite"><pre><span></span>* extension[issue].valuePeriod -&gt; &quot;This should work now&quot;
+</pre></div>
+
+
+<p>Another possible solution would be to apply the mapping to the <code>IssueExtension</code> directly instead of applying via IssueProfile:</p>
+<div class="codehilite"><pre><span></span>Mapping:  IssueMapping
+Source:   IssueExtension
+Target:   &quot;http://something&quot;
+Title:    &quot;...&quot;
+Id:       issue-mapping
+* valuePeriod.start -&gt; &quot;Should have path Basic.extension:issue.value[x]:valuePeriod.start gets Basic.extension:issue.valuePeriod.start&quot;
+</pre></div>
+
+
+
+<a name="191642877"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Mapping%20value%5Bx%5D.property/near/191642877" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Nick Freiter <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Mapping.20value.5Bx.5D.2Eproperty.html#191642877">(Mar 24 2020 at 17:10)</a>:</h4>
+<p>I submitted an issue for this <a href="https://github.com/FHIR/sushi/issues/293" target="_blank" title="https://github.com/FHIR/sushi/issues/293">https://github.com/FHIR/sushi/issues/293</a>, since I still think we need to dive a bit deeper and figure out if this is an issue on our end, the IG Publisher's end, or some mixture of the two.</p>
+
+
+
+<a name="191646905"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Mapping%20value%5Bx%5D.property/near/191646905" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Mapping.20value.5Bx.5D.2Eproperty.html#191646905">(Mar 24 2020 at 17:37)</a>:</h4>
+<p>In theory, the publisher supports sparse differentials -- but I think it does require some gaps to be filled when you're talking about paths w/ slices.  It <em>might</em> be a publisher issue, but I'm guessing that maybe we just need to detect this situation in SUSHI and generate the intermediate differential element for <code>extension[issue].valuePeriod</code>.</p>
+
+
+
+<a name="191648878"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Mapping%20value%5Bx%5D.property/near/191648878" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Pétur Valdimarsson <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Mapping.20value.5Bx.5D.2Eproperty.html#191648878">(Mar 24 2020 at 17:51)</a>:</h4>
+<p>Thanks for the swift reply and workaround! Will continue playing around and I'll let you know if I find other issues.</p>
+
+
+
+<a name="192796797"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/215610-shorthand/topic/Mapping%20value%5Bx%5D.property/near/192796797" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/215610-shorthand/topic/Mapping.20value.5Bx.5D.2Eproperty.html#192796797">(Apr 03 2020 at 12:39)</a>:</h4>
+<p>Oh.  That.  It's fixed locally.  I don't <em>think</em> it made it into a release yet?  Maybe today?</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

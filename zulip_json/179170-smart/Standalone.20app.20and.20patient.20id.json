@@ -1,0 +1,92 @@
+[
+    {
+        "content": "<p>One of cases which I found underdocumented in the spec is patient identifier handling. <br>\nPer smart on fhir: <a href=\"http://docs.smarthealthit.org/authorization/scopes-and-launch-context/#standalone-apps\" target=\"_blank\" title=\"http://docs.smarthealthit.org/authorization/scopes-and-launch-context/#standalone-apps\">http://docs.smarthealthit.org/authorization/scopes-and-launch-context/#standalone-apps</a><br>\nIf I launch my application externally from EHR and attempt to access patient data in read only mode I have to specify <code>patient/Patient.read</code> scope, but beside that there is a point about <code>launch/patient</code>scope</p>\n<blockquote>\n<p>Need patient context at launch time (FHIR Patient resource)</p>\n</blockquote>\n<p>Arent these two are same, or very similar concept?</p>\n<p>I would like also to share some observation about \"Launch context arrives with your access_token\"</p>\n<blockquote>\n<p>Once an app is authorized, the token response will include any context data the app requested</p>\n</blockquote>\n<p>This paragraph claims that token endpoint response, upon successful auth request, will have \"patient\" attribute. This single point blows up 95% of auth provider implementations at the start because most of them do not expect any extensions at this level.  If <code>patient</code>would be returned in token body this would cause no issues as token claims are extensible by definition.</p>\n<p>Does anyone know how implementation of these looks a like in real life?</p>",
+        "id": 153951006,
+        "sender_full_name": "Łukasz Dywicki",
+        "timestamp": 1522959346
+    },
+    {
+        "content": "<p>Maybe this can clear up some of the confusion:</p>\n<p><code>patient/Patient.read</code> is the scope that gives read access to Patient resource(s) that the patient has access to (oftentimes it's just the one Patient resource representing the patient)<br>\n<code>launch/patient</code> tells the server that you want a patient context during launch/auth. While these often go together, they are logically separate concepts.</p>\n<p>\"Launch context arrives with your access_token\": if you specify <code>launch/patient</code> as one of your scopes, the response from the auth server could be something like: <code>{\"access_token\": \"abc\", \"expires_in\": 1800, \"patient\": \"123\"}</code>. This means you expect a standard OAuth2 token response and in addition are given the patient id with the <code>patient</code> key.</p>\n<p>Does this help?</p>",
+        "id": 153951147,
+        "sender_full_name": "Pascal Pfiffner",
+        "timestamp": 1523004341
+    },
+    {
+        "content": "<p>In Vonk we indeed require a \"patient\":\"123\" claim if there is any patient/... scope. Otherwise I think a user/... scope would be more applicable.</p>",
+        "id": 153951226,
+        "sender_full_name": "Christiaan Knaap",
+        "timestamp": 1523039271
+    },
+    {
+        "content": "<p>As <span class=\"user-mention\" data-user-id=\"195497\">@Łukasz Dywicki</span> mentioned before, most auth providers will not support returning <code>\"patient\": \"123\"</code> alongside the <code>access_token</code> because it's not part of the standard OAuth protocol. Adding the <code>patient</code> information as a claim to the <code>access_token</code> or <code>id_token</code> would make more sense, since it's (a) already supported by the OAuth standard and (b) secure because the <code>patient</code> context will be part of a signed JWT token (making it tamper proof). Currently, the spec leaves the app exposed to man-in-the-middle attacks. Any proxy can inspect the response from the /token endpoint and change the value of <code>patient</code> without any evidence of the tampering, because the value not signed by the Auth Server. Does anyone know if this topic has been discussed previously?</p>",
+        "id": 217823883,
+        "sender_full_name": "Emil Diaz",
+        "timestamp": 1606257956
+    },
+    {
+        "content": "<p>Thanks for mentioning me <span class=\"user-mention\" data-user-id=\"366787\">@Emil Diaz</span> , indeed adding extra attributes to standard OIDC/oauth endpoint is pretty tough but I learned how to overcome it at least with OIDC server I worked with back then. Its unfortunate that spec requires such way cause it increases maintenance cost.<br>\nSo far I had no other feedback than yours in this regard, but on other hand I did not \"push\" for more answers.</p>",
+        "id": 217824636,
+        "sender_full_name": "Łukasz Dywicki",
+        "timestamp": 1606258428
+    },
+    {
+        "content": "<blockquote>\n<p>Adding the patient information as a claim to the access_token or id_token</p>\n</blockquote>\n<p>That would preclude the use of opaque access tokens and force the clients to know how to unpack and interpret them</p>\n<blockquote>\n<p>Any proxy can inspect the response from the /token endpoint and change the value of patient</p>\n</blockquote>\n<p>What would an attacker have achieved doing that? (beside breaking the app - that can be done as easily corrupting the access token)</p>",
+        "id": 217825245,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1606258876
+    },
+    {
+        "content": "<blockquote>\n<blockquote>\n<p>Adding the patient information as a claim to the access_token or id_token</p>\n</blockquote>\n</blockquote>\n<blockquote>\n<p>That would preclude the use of opaque access tokens and force the clients to know how to unpack and interpret them</p>\n</blockquote>\n<p>That's whole point of using JWT as a token format - it is a signed response whereas oauth server response is secured as long as we have SSL. I have no doubts that all production environments will have it.</p>\n<blockquote>\n<blockquote>\n<p>Any proxy can inspect the response from the /token endpoint and change the value of patient</p>\n</blockquote>\n</blockquote>\n<blockquote>\n<p>What would an attacker have achieved doing that? (beside breaking the app - that can be done as easily corrupting the access token)</p>\n</blockquote>\n<p>It is open for man-in-the-middle attacks (when ss is gonel), cause you can't verify signature of response.</p>",
+        "id": 217825792,
+        "sender_full_name": "Łukasz Dywicki",
+        "timestamp": 1606259279
+    },
+    {
+        "content": "<p>For Keycloak you can use custom extension: <a href=\"https://igia.github.io/docs/igia-keycloak~introduction\">https://igia.github.io/docs/igia-keycloak~introduction</a> - it allows to add more attributes to token endpoint. Stolen from here: <a href=\"#narrow/stream/179170-smart/topic/Keycloak.20for.20SMART.20authz/near/214317543\">https://chat.fhir.org/#narrow/stream/179170-smart/topic/Keycloak.20for.20SMART.20authz/near/214317543</a></p>",
+        "id": 217826233,
+        "sender_full_name": "Łukasz Dywicki",
+        "timestamp": 1606259598
+    },
+    {
+        "content": "<p>Well, the app is already expected to request the <code>openid profile|fhirUser</code> scopes in order to determine the identity of the user and the URL of the FHIR resource that represents the user on the EHR: <br>\n<a href=\"http://www.hl7.org/fhir/smart-app-launch/scopes-and-launch-context/index.html#scopes-for-requesting-identity-data\">http://www.hl7.org/fhir/smart-app-launch/scopes-and-launch-context/index.html#scopes-for-requesting-identity-data</a></p>\n<p>That token is not opaque and could have also been used to add an additional <code>patient</code> claim to provide the launch context. </p>\n<p><span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span> I think you're correct, in that the attack surface is small here, since you wouldn't be able to leak data, only break the app. But wouldn't the app rather receive the patient context from the EHR in a form it can trust?</p>",
+        "id": 217827579,
+        "sender_full_name": "Emil Diaz",
+        "timestamp": 1606260487
+    },
+    {
+        "content": "<blockquote>\n<p>have no doubts that all production environments will have it.</p>\n</blockquote>\n<p>No: this is CMS:  <code> \"access_token\": \"X7WVkgCCl3SoCnb4NkR7EhbHZzXBKN\",</code></p>\n<blockquote>\n<p>But wouldn't the app rather receive the patient context from the EHR in a form it can trust?</p>\n</blockquote>\n<p>At the cost of having to handle and validate JWTs instead of just reading a property? I'd say no</p>",
+        "id": 217827696,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1606260598
+    },
+    {
+        "content": "<blockquote>\n<p>the app is already expected to request the <code>openid profile|fhirUser</code> scopes in order to determine the identity of the user</p>\n</blockquote>\n<p>Yes, but most apps do not need the identity of the user (and there are servers that actually do not even implement <code>openid fhirUser</code>)</p>",
+        "id": 217828114,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1606260856
+    },
+    {
+        "content": "<blockquote>\n<p>Yes, but most apps do not need the identity of the user (and there are servers that actually do not even implement <code>openid fhirUser</code>)</p>\n</blockquote>\n<p>Ah, that's the piece of information that was missing for me. I was under the impression that servers are required to implement these scope in order to claim conformance. Thanks for the clarification!</p>",
+        "id": 217828323,
+        "sender_full_name": "Emil Diaz",
+        "timestamp": 1606261055
+    },
+    {
+        "content": "<blockquote>\n<p>that servers are required to implement these scope in order to claim conformance</p>\n</blockquote>\n<p>They are required, but some still don't support it (and most apps don't care)</p>",
+        "id": 217828397,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1606261111
+    },
+    {
+        "content": "<p>As a quick note <span class=\"user-mention\" data-user-id=\"366787\">@Emil Diaz</span> and <span class=\"user-mention\" data-user-id=\"195497\">@Łukasz Dywicki</span> , I originally had some of the same questions about the /token behavior as you when i was getting started- as I'm also working with an authz server that would typically put this sort of data in a JWT.  </p>\n<p>I spoke with a colleague of mine who is very familiar with the OAuth2 specification and it's history, and he pointed out to me that this behavior is very much in line with the OAuth2 specification.  <br>\nLooking at section 4.1.4 there is an example of additional parameters in the /token response (<a href=\"https://tools.ietf.org/html/rfc6749#section-4.1.4\">https://tools.ietf.org/html/rfc6749#section-4.1.4</a>) - so having that extra patient id alongside the access_token is very much allowed in OAuth2 and is a valid way of communicating application level data when an opaque token is in use. <br>\nIt's not really meant for access control though- the FHIR API still needs to apply proper API security once the access_token is introspected. So the worst thing an attacker could do is mess up the application display if they were to manipulate it.</p>\n<p>In a nutshell, the SMART spec I've found to be very, very true to the OAuth2 specification as stated in RFC6749, and in the few areas I've found conflicts with my authz server's behavior, it's because of newer developments that have came out a bit later (like PKCE), or it's because my particular authz server has an opinion over/above the actual OAuth2 specification (like using JWTs).  I hope that's helpful!</p>",
+        "id": 217830897,
+        "sender_full_name": "Dan Cinnamon",
+        "timestamp": 1606263074
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"361257\">@Dan Cinnamon</span> Thanks for the additional context! That's exactly what I'm finding right now, our Auth managed service provider restricts this behavior today, likely for the reasons I mentioned above. I will point them to the RFC section you mentioned and see what they say.</p>",
+        "id": 217831269,
+        "sender_full_name": "Emil Diaz",
+        "timestamp": 1606263399
+    }
+]

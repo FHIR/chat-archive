@@ -1,0 +1,124 @@
+---
+layout: page
+title: "FHIR Chat  · &quot;slicing&quot; for &quot;*.extension&quot; in complex-type vs resource · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html">&quot;slicing&quot; for &quot;*.extension&quot; in complex-type vs resource</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="169370914"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/169370914" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ivan Dubrov <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#169370914">(Jul 01 2019 at 06:13)</a>:</h4>
+<p>While staring at StructureDefinition's I found one detail which I am now curious about.</p>
+<p>All <code>.extension</code> fields on resources do not have "slicing" element defined on them, but all similarly defined fields on complex type do have it.</p>
+<p>For example, check these two:<br>
+1. <a href="http://hl7.org/fhir/patient.profile.json.html" target="_blank" title="http://hl7.org/fhir/patient.profile.json.html">http://hl7.org/fhir/patient.profile.json.html</a> <code>Patient.contact.extension</code> element (no <code>slicing</code> field)<br>
+2. <a href="http://hl7.org/fhir/timing.profile.json.html" target="_blank" title="http://hl7.org/fhir/timing.profile.json.html">http://hl7.org/fhir/timing.profile.json.html</a> <code>Timing.repeat.extension</code> element (<code>slicing</code> is defined).<br>
+Both Patient.contact and Timing.repeat "inherit" this field from Element.extension, which has "slicing" defined on it.</p>
+<p>Why is that?</p>
+
+
+
+<a name="169399033"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/169399033" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#169399033">(Jul 01 2019 at 14:16)</a>:</h4>
+<p>Slicing is declared for extension as part of DomainResource and Element and gets inherited by downstream resources and profiles, so it doesn't need to be re-declared.</p>
+
+
+
+<a name="169457496"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/169457496" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ivan Dubrov <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#169457496">(Jul 02 2019 at 06:50)</a>:</h4>
+<p>Right, but isn't the purpose of "snapshot" is to define everything that system needs to know in order to interpret StructureDefinition?</p>
+<p>The issue I'm having currently is that:</p>
+<p>1. Composition does not define "slicing" on "Composition.extension" element (<a href="https://www.hl7.org/fhir/composition.profile.json.html" target="_blank" title="https://www.hl7.org/fhir/composition.profile.json.html">https://www.hl7.org/fhir/composition.profile.json.html</a>).<br>
+2. Some profile on Composition adds a slice to that "Composition.extension" element, for example, <a href="https://www.hl7.org/fhir/catalog.profile.json.html" target="_blank" title="https://www.hl7.org/fhir/catalog.profile.json.html">https://www.hl7.org/fhir/catalog.profile.json.html</a> adds "Composition.extension:ValidityPeriod" in its "differential".<br>
+.</p>
+<p>So, for system to generate "snapshot" for this "catalog" profile (this is the code I'm currently writing), I would expect it should be enough to have "snapshot" for "Composition" (base) and "differential" for "catalog" profile.</p>
+<p>However, this is not the case -- I also need to analyze these "inherited" elements, so I effectively need DomainResource "snapshot" + Composition "snapshot" + catalog "differential", which is not ideal (and then again, for some reason datatypes declare that "slicing" explicitly).</p>
+
+
+
+<a name="169483986"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/169483986" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#169483986">(Jul 02 2019 at 14:11)</a>:</h4>
+<p>The snapshot for Composition should include Composition.extension with slicing declared.  So long as you have the snapshot of the parent model, you should have everything you need.</p>
+
+
+
+<a name="169514497"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/169514497" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ivan Dubrov <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#169514497">(Jul 02 2019 at 20:03)</a>:</h4>
+<p>Right, but that's not the case: <a href="https://www.hl7.org/fhir/composition.profile.json.html" target="_blank" title="https://www.hl7.org/fhir/composition.profile.json.html">https://www.hl7.org/fhir/composition.profile.json.html</a> (search for "Composition.extension").</p>
+<p>Though, I realized I need to pull other definitions anyways since profile can restrict fields of embedded data types (for example, <a href="http://hl7.org/fhir/vitalspanel.profile.json.html" target="_blank" title="http://hl7.org/fhir/vitalspanel.profile.json.html">http://hl7.org/fhir/vitalspanel.profile.json.html</a> places a constraint on Observation.code.coding, which comes from CodeableConcept and is not present in the Observation definition), so this missing "slicing" is fine -- I can pull it from the "base" element (DomainResource.extension).</p>
+
+
+
+<a name="169522311"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/169522311" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#169522311">(Jul 02 2019 at 21:51)</a>:</h4>
+<p>Hmm.  That seems like an issue with snapshot generation.  Hopefully <span class="user-mention" data-user-id="191316">@Grahame Grieve</span> can comment when he gets a chance to be online.</p>
+
+
+
+<a name="169609903"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/169609903" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#169609903">(Jul 03 2019 at 23:32)</a>:</h4>
+<p>well, I'm not sure. we do say that there's some magic in the slicing of extensions, but I think that it would be consistent with the decision we made about slicing choices that the snapshot should be specific. No one has commented on my proposed test cases yet...</p>
+
+
+
+<a name="169611445"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/169611445" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#169611445">(Jul 04 2019 at 00:07)</a>:</h4>
+<p>I did...</p>
+
+
+
+<a name="169611511"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/169611511" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#169611511">(Jul 04 2019 at 00:09)</a>:</h4>
+<p>so you did. On my task list for today maybe</p>
+
+
+
+<a name="169622430"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/169622430" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> David Hay <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#169622430">(Jul 04 2019 at 05:41)</a>:</h4>
+<p>today? in the outback? with all that glorious scenery around you? (Almost as nice as NZ)...</p>
+
+
+
+<a name="169630908"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/169630908" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#169630908">(Jul 04 2019 at 08:49)</a>:</h4>
+<p>well, 4wd was in for new windscreen, so tried to get it done while waiting but the build server crashed</p>
+
+
+
+<a name="169678000"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/169678000" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#169678000">(Jul 05 2019 at 00:50)</a>:</h4>
+<p>well, first we need a task for FHIR-I to approve to fix R4 for this when I do the R4 technical corrections in a few weeks time</p>
+
+
+
+<a name="169678009"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/169678009" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#169678009">(Jul 05 2019 at 00:51)</a>:</h4>
+<p>second, do we need to do anything about this in the test cases?</p>
+
+
+
+<a name="171653713"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/171653713" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eric Haas <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#171653713">(Jul 25 2019 at 00:19)</a>:</h4>
+<p>would it make sense to have a markdown option for the narrative.  It would mean that markdown FHIR used would have to support the xhtml though which it cuyx</p>
+
+
+
+<a name="171653926"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/171653926" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#171653926">(Jul 25 2019 at 00:24)</a>:</h4>
+<p>I'd consider that a breaking change - which would be problematic given that narrative is normative...</p>
+
+
+
+<a name="171764904"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/%22slicing%22%20for%20%22%2A.extension%22%20in%20complex-type%20vs%20resource/near/171764904" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/.22slicing.22.20for.20.22*.2Eextension.22.20in.20complex-type.20vs.20resource.html#171764904">(Jul 26 2019 at 11:02)</a>:</h4>
+<p>if we had commonmark now, we would not have had xhtml in the resources. Too late now, I think....</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

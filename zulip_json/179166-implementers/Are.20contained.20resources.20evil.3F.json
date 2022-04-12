@@ -1,0 +1,194 @@
+[
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191319\">James Agnew</span> <a href=\"#narrow/stream/179166-implementers/topic/Profiles.20requiring.20meta.2Eprofile.20with.20version/near/227613261\">said</a>:</p>\n<blockquote>\n<p>Not to change the subject here but that example just says to me that the MedicationRequest resource is fundamentally broken, if we have a common scenario like this one that can only be achieved using contained resources. IMO even extensions on the MedicationRequest would be vastly preferable to contained elements, which satisfy the \"modelling purity\" crowd but are horribly hostile to implementers.</p>\n</blockquote>\n<p>I don't understand this.  Why are contained resources problematic for implementers?  It reflects existing design.  If what you've got in your database is a recipe stored with your prescription, you're going to have to ship it around 1..1 with a prescription.  While we <em>could</em> define a complex extension that duplicates all of the information in the Medication resource, I don't understand how that's somehow better than just leveraging the existing data model and saying \"do this same thing, but treat it as contained\".  Can you expand <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span>?</p>",
+        "id": 227615645,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1614180566
+    },
+    {
+        "content": "<p>Do you have context behind this point. However I have viewed using contained as difficult for developers, especially on resources being used as events and in workflow.<br>\nMost contained examples I've seen have been trying to follow restful paradigm when really message interactions should have been used. For UK events we can do away with contained by using reference identifiers instead.</p>",
+        "id": 227619813,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1614182009
+    },
+    {
+        "content": "<p>Heh, fair question. My main issues are these:</p>\n<ol>\n<li>\n<p>They suck for client developers. The fact that instead of a clean and consistent pattern (thing A here refers to thing B over there) you have the possibility of a second pattern (thing A refers to a different part of thing A where they are tied together via a non-globally-unique ID so you need to iterate over the list of those things until you find one that has a matching ID) is just unpleasant code to actually write.</p>\n</li>\n<li>\n<p>They suck SO BAD for human eyeballing of resources. The second contained resources come into play, a resource goes from being easy to grok at a glance to being almost impossible to follow unless you have a giant monitor and great eyes. All of the advantages of FHIR's clean and shallow structure are instantly out the window.</p>\n</li>\n<li>\n<p>Indexing them is really hard to get right as a server developer. It has to be telling that absolutely no servers other than Grahame's have implemented support for indexing them (although HAPI and many of the others are now being forced to because the IGs went ahead and mandated support despite a complete lack of capability from the available tooling)</p>\n</li>\n<li>\n<p>They are easily misused. I know others have had different experiences, but my own experience is that \"in the wild\" I would say that 90% of the contained resources I've seen do not pass the actual criteria of \"only use this if you can't assign an independent identity\". People quite commonly use contained resources as a way of turning any resource into a Bundle resource.</p>\n</li>\n</ol>",
+        "id": 227620280,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1614182147
+    },
+    {
+        "content": "<p>Sorry, thought my quote included a link to the original stream: <a href=\"#narrow/stream/179166-implementers/topic/Profiles.20requiring.20meta.2Eprofile.20with.20version\">https://chat.fhir.org/#narrow/stream/179166-implementers/topic/Profiles.20requiring.20meta.2Eprofile.20with.20version</a></p>",
+        "id": 227622601,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1614182708
+    },
+    {
+        "content": "<p>So I'm currently writing a guide where we made a conscious decision to use contained resources.  We have a system that is registering Organizations and those Organizations can have sub-Organizations and a set of HealthcareServices.  Normally, this would be a set of Organization, OrganizationAffiliation, and HealthcareService instances in a Bundle and that was how we had it modelled at first. But we switched to contained because:<br>\n1) The HealthcareService and sub-Organization instances didn't have a life of their own.  Even though they represented separate Organizations, the architecture of the system was that if I deleted the parent Organization, I had to delete the sub-Organizations, OrganizationAffiliations, and HealthcareServices.  As opposed to just leaving the sub-Organizations alone and just deleting the sub-Organizations, OrganizationAffiliations and HealthcareServices.<br>\n2) Again, the architecture of the system meant that if two different parent Organizations had a relationship to the same sub-Organization, they didn't search for and re-use that Organization, they actually just sent new information for the sub-Organization.  And that new information could actually be new.  Even if two different organizations had the same business identifier, it was possible for contact information, name, address, telephones, to actually be different if the organization was widespread.  The business identifiers weren't down at a sub-department level but the rest of the Organization information was.</p>\n<p>Given those two points, we decided that we needed to send the resources as a set of contained resource on the parent organization.  If we were designing the system from scratch, we wouldn't do this and we would actually impose some rules around the re-use of the child organizations.  But since we are architecting a system to replace and co-exist with an existing system, we are unable to do that.</p>\n<p>So although we <em>could</em> force an independent existence to our contained resources, it didn't make sense for our system to do so - it in fact would cause more work for the clients and system if we did.  Am I saying that every IGuide author puts this level of thought into the decision?  No, but let's make sure that we don't paint too broad a brush over authors who do. :)</p>",
+        "id": 227628189,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1614184323
+    },
+    {
+        "content": "<p>I agree with Jean and can see good uses for contained. And when deciding if they are evil we need to consider if the alternatives are worse.</p>",
+        "id": 227630814,
+        "sender_full_name": "Rik Smithies",
+        "timestamp": 1614185194
+    },
+    {
+        "content": "<p>Contained is a necessary evil - interoperability is full of those..</p>",
+        "id": 227633738,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1614186145
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> </p>\n<ol>\n<li>\n<p>There are 3 possibilities - data is always referenced, data is always contained, or data could be either.  Most \"real\" implementations will fall into one of the first two buckets.  The pain really only manifests in the last.  (Indexing the contained resources by id is a super simple thing to do, so I don't understand the pain of iteration?)  If you have a situation where sometimes you've got a 'partial' non-independent resource and sometimes you've got a proper reference to an independent object, then you've got real complexity, either because your business space is hard, or because you're trying to be a generic system that supports a variety of architectures.  The pain isn't coming from 'contained', it's coming from the architectural reality of varying data</p>\n</li>\n<li>\n<p>There are four things that interfere with readability - contained resources, fat narrative, base64-encoded data and Bundles where you've got a super-large set of content.  Yes, those suck to read raw.  But that doesn't mean we take those features away because they suck for humans to scan.  If you've got a decent JSON or XML viewer, it's easy enough to collapse those sections (they're all nicely isolated), so I don't know I see this as a huge issue.  Also, on the balance side, with non-contained, if there's a reference, you've got to go look it up.  With contained, that's an easier process.  (Not that that's a reason to contain or not contain, just a consideration on 'easier to read'.)</p>\n</li>\n<li>\n<p>Again, I think this is an issue with \"generic\" struggling with different architectures.  If I've got a database that stores prescriber license number as part of the prescription, my indexing is easy.  If I've got a database that stores prescriber as a foreign key to a separate table that is indexed by license number, my indexing is easy.  In the real world, there are systems with both designs.  If I need to accommodate both types of data, then yes, my life gets hard.  But that's not because of 'contained' but because of the need to support the mix of contained and non-contained</p>\n</li>\n<li>\n<p>Yup.  That's a problem.  However, all sorts of things are subject to abuse too.  Custom extensions being used when there's a standard extension or core element or Observation that should be used instead; people doing <em>horrible</em> things with custom codes (changing meaning, not defining namespaces, etc.), abusing meta.profile.  It's hard to stop abuse other than education and documentation.  But the fact something can be abused doesn't mean that use-case that drives its existence is invalid.  Maybe we should have a \"suspect elements\" report that gets generated on IGs we publish that highlights elements commonly abused (meta.profile, all extensions, all contained resources) so that we can more efficiently review and scan for improper designs?</p>\n</li>\n</ol>",
+        "id": 227635169,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1614186619
+    },
+    {
+        "content": "<p>Without knowing more about the Jean's system, I'm not sure if it is relevant - but how do I look for a local sub-organization?</p>\n<p>Many servers do not support search on contained*, so I'm stuck pulling down all of the organizations and searching through them myself.  What's worse, without an indexing structure I have to pull <em>all</em> of them and search through <em>every</em> sub-organization to discover this.</p>\n<p>*(1)as James mentioned<br>\n*(2)having glanced at this recently, I'm not sure this is defined well enough that it will be implemented consistently (when it is implemented)</p>\n<p>Since I took long enough to type this, I can factor in <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>'s most recent message too =).  I feel like you are vastly understating the issue of \"generic\".  Nobody wants to build in custom support for every IG based on its containment rules.  Contained takes a resource and adds \"sub content\", which can be of <em>any</em> resource type, which IGs then add things like SearchParameters and Operations to.  It essentially creates an additional relation map rooted in every resource.  I think this is even more complicated if you consider facade servers, since they need to map their internal structures to FHIR as an additional step as well.</p>",
+        "id": 227644204,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1614189820
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"222054\">Gino Canessa</span> <a href=\"#narrow/stream/179166-implementers/topic/Are.20contained.20resources.20evil.3F/near/227644204\">said</a>:</p>\n<blockquote>\n<p>Without knowing more about the Jean's system, I'm not sure if it is relevant - but how do I look for a local sub-organization?</p>\n<p>Many servers do not support search on contained*, so I'm stuck pulling down all of the organizations and searching through them myself.  What's worse, without an indexing structure I have to pull <em>all</em> of them and search through <em>every</em> sub-organization to discover this.</p>\n</blockquote>\n<p>For our system capabilities, you don't.  That was also one of the factors that went into our architecture decision.  The HealthcareService, OrganizationAffiliation, sub-Organizations are really just additional information about the parent Organization.  We did try and take into account what FHIR servers can do with contained resources when we made our decision.</p>",
+        "id": 227645286,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1614190254
+    },
+    {
+        "content": "<p>Good to know!  If every IG took this much care, we probably wouldn't be having this discussion  =)</p>",
+        "id": 227646399,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1614190632
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191319\">James Agnew</span> <a href=\"#narrow/stream/179166-implementers/topic/Are.20contained.20resources.20evil.3F/near/227620280\">said</a>:</p>\n<blockquote>\n<ol start=\"2\">\n<li>They suck SO BAD for human eyeballing of resources. The second contained resources come into play, a resource goes from being easy to grok at a glance to being almost impossible to follow unless you have a giant monitor and great eyes. All of the advantages of FHIR's clean and shallow structure are instantly out the window.</li>\n</ol>\n</blockquote>\n<p>I wonder if SAFIR (Quebec) has ever contacted you before designing their <em>ProcedureRequest</em> based CRDS solution with tons of contained resources!</p>",
+        "id": 227670149,
+        "sender_full_name": "Shamil Nizamov",
+        "timestamp": 1614199842
+    },
+    {
+        "content": "<p>As a follow-up (<span class=\"user-mention\" data-user-id=\"192166\">@Jean Duteau</span>), does the IG surface any of that information via 'other' methods (e.g., Search Parameters, Operations, etc.)?</p>",
+        "id": 227672417,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1614200648
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> for all the reasons you've said, we detest contained resources, no question about that. But the problem that forced them to exist is going to create all those problems no matter what we do</p>",
+        "id": 227681140,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1614204154
+    },
+    {
+        "content": "<p>Sure - To be clear I'm not arguing they should go away. Mostly that we should be questioning their use more..</p>\n<p>The classic use case I use when teaching FHIR is \"i have a bunch of lab tests but I only know the patient's name and not an identifier for them, so a contained resource is a good way to keep the name with the observation\". That use case makes perfect sense, and I can't think of any less messy way to do it. Truthfully I've never seen this happen in practice, but I assume it must happen occasionally..</p>\n<p>For the \"i have a medication order and the exact blend of ingredients is unique to the order\", I still feel like that sounds like a massive shortcoming of the medicationrequest resource if we need a contained resource for a routine scenario. We should address that shortcoming rather than accepting contained resources as the \"right way\".</p>\n<p>Jean's scenario I don't even know what to make of.. In that case contained resources aren't even following Lloyd's stated hard rule about when it's appropriate to use a contained resource, they're being used to imply a workflow about when parents and children should be automatically deleted. I have no doubt the use case is valid - it's crazy to me though that contained resources are the right solution.</p>",
+        "id": 227685351,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1614205577
+    },
+    {
+        "content": "<p>At least what I've found is that more and more there are a number of FHIR-related specifications out there. For instance DaVinci handles a lot of Provider-Payer interactions. In those cases a Bundle or Parameters object encapsulates the same business functionality that you're going for by that kind of contained usage. DaVinci is just one example and not every use case would be solved. However, I've noticed a fair number of things have started popping up for specific \"business transactions\"</p>",
+        "id": 227686282,
+        "sender_full_name": "Matt Ping",
+        "timestamp": 1614206008
+    },
+    {
+        "content": "<blockquote>\n<p>Mostly that we should be questioning their use more..</p>\n</blockquote>\n<p>Amen. <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> we should make this part of a standard FMG review of an IG. I should add 'use of contained resources' to the IG QA report. What's an example of an IG that uses contained resources?</p>",
+        "id": 227686584,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1614206162
+    },
+    {
+        "content": "<p><a href=\"http://build.fhir.org/ig/HL7/fhir-spl/branches/main/index.html\">http://build.fhir.org/ig/HL7/fhir-spl/branches/main/index.html</a></p>",
+        "id": 227687744,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1614206624
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191319\">James Agnew</span> <a href=\"#narrow/stream/179166-implementers/topic/Are.20contained.20resources.20evil.3F/near/227685351\">said</a>:</p>\n<blockquote>\n<p>Sure - To be clear I'm not arguing they should go away. Mostly that we should be questioning their use more..</p>\n<p>Jean's scenario I don't even know what to make of.. In that case contained resources aren't even following Lloyd's stated hard rule about when it's appropriate to use a contained resource, they're being used to imply a workflow about when parents and children should be automatically deleted. I have no doubt the use case is valid - it's crazy to me though that contained resources are the right solution.</p>\n</blockquote>\n<p>I agree with you.  As I said, we started with a Bundle of resources.  But then we realized that the existing operations that we were trying to replicate didn't even acknowledge the presence of those child resources.  Clients don't just update the contact info on a child organization.  They update the parent organization and include the child organization details.<br>\nTo be even mind-blowing, we actually have one operation where you do send us a Bundle of Organizations and OrganizationAffiliations where the relationship <em>is</em> managed independently.  And within that Bundle, the \"participatingOrganizations\" (to use OrgAffiliation speak) have contained resources.<br>\nLike I said, we did put a lot of thought into making the decision to use contained resources and realized that it is the right tool for our problem.</p>",
+        "id": 227688847,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1614207175
+    },
+    {
+        "content": "<p>In general, IGs should not be <em>forcing</em> content to be contained unless it's for something esoteric like \"anonymized submissions\" where containment is part of the process.  They might require support for containment where the source systems can be expected to not have independent identity for the resource in question.</p>",
+        "id": 227698412,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1614212200
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> Can we flag all three trouble spots I listed?  contained resources, examples with profile declarations (or profiles that force values for meta.profile), and a list of extensions defined?</p>",
+        "id": 227698581,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1614212313
+    },
+    {
+        "content": "<p>We can make those IG rules, but what about the core spec? We have in the core spec some resources that require/stimulate contained resources even in normal usage.</p>",
+        "id": 227715454,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1614226716
+    },
+    {
+        "content": "<p>how so?</p>",
+        "id": 227715748,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1614227051
+    },
+    {
+        "content": "<p><a href=\"#narrow/stream/179308-BRR--.20Pharmacy.20model/topic/Ingredient\">https://chat.fhir.org/#narrow/stream/179308-BRR--.20Pharmacy.20model/topic/Ingredient</a></p>",
+        "id": 227720339,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1614231007
+    },
+    {
+        "content": "<p>oh. well, a design trade-off, rather than any specific things we say about contained resources</p>",
+        "id": 227722217,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1614232903
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> We are working on those two scenarios (unsolicited-observation and prescription-order) at the moment. <br>\nWe are classing both as FHIR Events. It's not clear whether FHIR http or Message is the preferred style. <br>\nAs FHIR Messaging, the preference appears to be FHIR Message with a single focus resource and Patient is either referenced (via identifier) or is included in the Bundle.<br>\nIf majority want Patient included with the event, it's likely we will settle on FHIR Message for events.</p>",
+        "id": 227737204,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1614243840
+    },
+    {
+        "content": "<p>It's patient identifiers causing the move towards Messaging (and is the primary reason for contained). </p>\n<p>Would it not be easier to change the cardinality of FHIR Reference.identifier from 1..1 to 1..* ?</p>",
+        "id": 227737649,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1614244098
+    },
+    {
+        "content": "<p>Certainly my point here is that we shouldn't just accept contained resources as a \"design tradeoff\". </p>\n<p>For all the points I listed, I personally consider them to be completely hostile to implementors. Sure they are a last resort in some cases and we can't do away with them, but if our core models require their use in order to model a common scenario, that on its own should be a signal to the author of the core models that they need to go back to the drawing board.</p>",
+        "id": 227747723,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1614249605
+    },
+    {
+        "content": "<p>though \"require\" is not the right word for <span class=\"user-mention\" data-user-id=\"191832\">@Jose Costa Teixeira</span> 's case.  The general tradeoffs make contained resources easier in this particular case. But not at all necessary. I think.</p>",
+        "id": 227757539,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1614255429
+    },
+    {
+        "content": "<p>The use-case in IHE for XDS/MHD where contained resources are required are where mostly where the contained resource data is desired to be kept at a the values that were known at the time the DocumentReference was created. (e.g. SourcePatientInfo), where as the subject is intended to point to a maintained identity. The second has a similar need for \"at the time\" characteristic, but also the use-cases tend to not have full details, usually just an identifier (which could have been reference.identiifer) but might have more (so contained).<br>\nI support IG warning flags, that I can override with purpose.</p>",
+        "id": 227765760,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1614259461
+    },
+    {
+        "content": "<p>and we have had enough pushback that there is a named Option in MHD for \"UnContained\", for use in a community where these data are managed and it is desired to be managed.</p>",
+        "id": 227765981,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1614259562
+    },
+    {
+        "content": "<p>If the desire is to know a state in time, that's what vread and versioned resources are for. You reference the version of the resource that was in play at the time, NOT copy that data into a .contained resource. Harder yes, but that's what it's for.</p>",
+        "id": 227785018,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1614266951
+    }
+]

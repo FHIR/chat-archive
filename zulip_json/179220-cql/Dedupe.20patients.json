@@ -1,0 +1,68 @@
+[
+    {
+        "content": "<p>This is a follow-up from external discussion. I have a use case where a patient receives care twice in a clinic but also registers twice, so is seen as a different person in clinical records. Our service (OpenCR) can create a third Patient record that has links to the others, so we have a master patient ID. I'd like to help to understand how to union across all patients linked to that master patient ID. An example master patient id resource is here: <a href=\"https://github.com/intrahealth/simple-hiv-ig/blob/master/opencr/opencr_goldenrecord.json\">https://github.com/intrahealth/simple-hiv-ig/blob/master/opencr/opencr_goldenrecord.json</a> <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> <span class=\"user-mention\" data-user-id=\"378988\">@Jenny Thompson</span></p>",
+        "id": 267631692,
+        "sender_full_name": "Richard Stanley",
+        "timestamp": 1641928813
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194192\">@Richard Stanley</span>  -- is there a potential problem with \"deep hierarchies\" being created over time? I'm just thinking that, if this scenario happens <strong>again</strong>, then <em>another</em> golden ID will be created that will now need to reference the \"old golden ID\", plus the new dupe... and now there is the start of a hierarchy.</p>",
+        "id": 267726613,
+        "sender_full_name": "Derek Ritz",
+        "timestamp": 1641995567
+    },
+    {
+        "content": "<p>Great question. The way our record linkage works is that there isn't a nesting of golden IDs. So, no, I don't think it will be an issue but I don't know about other implementations of patient registries.</p>",
+        "id": 267750123,
+        "sender_full_name": "Richard Stanley",
+        "timestamp": 1642005495
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"194192\">@Richard Stanley</span> , with apologies for the delays here, there are two approaches to following patient links like this. The first is to related context retrieves to access the information from related patients:</p>\n<div class=\"codehilite\"><pre><span></span><code>library PatientLinks\n\nusing FHIR version &#39;4.0.1&#39;\n\ninclude FHIRHelpers version &#39;4.0.1&#39;\n\ncontext Patient\n\ndefine RelatedPatients:\n  Patient P\n    return (P.link L where L.type = &#39;seealso&#39; return L.other)\n\ndefine AllProcedures:\n  [Procedure]\n    union [RelatedPatients -&gt; Procedure]\n</code></pre></div>",
+        "id": 269190428,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1643069008
+    },
+    {
+        "content": "<p>The second is to use an <code>unfiltered</code> context:</p>\n<div class=\"codehilite\"><pre><span></span><code>library PatientLinksUnfiltered\n\nusing FHIR version &#39;4.0.1&#39;\n\ninclude FHIRHelpers version &#39;4.0.1&#39;\n\ncontext Unfiltered\n\ndefine AllPatientProcedures:\n  from [Patient] P, [Procedure] PR\n    where PR.subject = P.reference()\n      or PR.subject in (P.link L where L.type = &#39;seealso&#39; return L.other)\n</code></pre></div>",
+        "id": 269190539,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1643069079
+    },
+    {
+        "content": "<p>Unfortunately, the Java engine does not currently have support for related-context retrieves, and the support for <code>unfiltered</code> context is limited, so there is some implementation work to be done before either of these approaches would work in the Java stack (and likely the JavaScript stack as well).</p>",
+        "id": 269190733,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1643069230
+    },
+    {
+        "content": "<p>So it is possible to express de-duplication queries, but evaluating them will take some work.</p>",
+        "id": 269190766,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1643069272
+    },
+    {
+        "content": "<p>Thanks so very much <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span>!</p>",
+        "id": 269199108,
+        "sender_full_name": "Richard Stanley",
+        "timestamp": 1643076064
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> - a quick follow up to this, I am interested in running CQL queries using the execution service using the unfiltered context rather than the patient context (for example querying all patients with a given condition code), is there a way to not just query for one patient id?</p>",
+        "id": 269605592,
+        "sender_full_name": "KC",
+        "timestamp": 1643303861
+    },
+    {
+        "content": "<p>CQL does support expressing these types of queries with the <code>Unfiltered</code> context, but the execution stacks currently don't support this very well. For example, running this library in the Atom plugin:</p>\n<div class=\"codehilite\" data-code-language=\"cql\"><pre><span></span><code>library UnfilteredScratchpad\n\nusing FHIR version '4.0.1'\n\ninclude FHIRHelpers version '4.0.1'\n\ncontext Unfiltered\n\ndefine Patients: [Patient]\n</code></pre></div>\n<p>Gives the error <code>UnknownType: Could not resolve type Unfiltered.</code>, the IDE plugins just don't know how to run Unfiltered context queries yet. It's an area we would certainly welcome contributions on. In the case of the file-based providers that the IDE plugins are using, it would probably be pretty straightforward to support, but we just haven't gotten to that yet.</p>",
+        "id": 269781924,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1643395038
+    },
+    {
+        "content": "<p>Thanks for the response - makes sense I just want to confirm!</p>",
+        "id": 269789048,
+        "sender_full_name": "KC",
+        "timestamp": 1643397952
+    }
+]

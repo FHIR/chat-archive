@@ -1,0 +1,94 @@
+---
+layout: page
+title: "FHIR Chat  · maven deps, projects and shading · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/maven.20deps.2C.20projects.20and.20shading.html">maven deps, projects and shading</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="207135201"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/maven%20deps%2C%20projects%20and%20shading/near/207135201" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/maven.20deps.2C.20projects.20and.20shading.html#207135201">(Aug 17 2020 at 12:10)</a>:</h4>
+<p>Hi HAPI team - I've been puzzling with the hapi fhir starter project and I have a finding as well as a question for you guys <span class="user-mention" data-user-id="191319">@James Agnew</span> &amp; co:</p>
+<p>1) I've made a PR (<a href="https://github.com/jvitrifork/hapi-fhir-jpaserver-starter/tree/spring-pr">https://github.com/jvitrifork/hapi-fhir-jpaserver-starter/tree/spring-pr</a>) that enables the use of spring boot as an example application that sets a spring profile based on the contents of the property file. Everything works like a charm when using the regular docker build scripts. However, when I start to debug the application (which was the entire purpose of doing this), I get runtime errors (caused by: java.lang.NoClassDefFoundError: org/apache/lucene/document/Field$Index) - probably because of the shading stuff that you are working on as well as mismatch betweeen lucene, ES and hibernate (what a dangerous cocktail). How should I proceed? It's reproducible as easy as cloning the branch backingt the PR and running the Application.java</p>
+<p>2) You guys seem to maintain a spring boot project yourself at <a href="https://github.com/jamesagnew/hapi-fhir/tree/master/hapi-fhir-spring-boot">https://github.com/jamesagnew/hapi-fhir/tree/master/hapi-fhir-spring-boot</a>. Why not merge the efforts instead of maintaining examples different places?</p>
+
+
+
+<a name="207137959"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/maven%20deps%2C%20projects%20and%20shading/near/207137959" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/maven.20deps.2C.20projects.20and.20shading.html#207137959">(Aug 17 2020 at 12:42)</a>:</h4>
+<p>A couple of points here:</p>
+<ul>
+<li>
+<p>The shading is definitely a bad mix, but it's not intended to be a long term solution. We are in an annoying spot right now where the terminology services are written using Hibernate Search, which only supports ES 5, but we needed ES 6+ features in order to make $LastN support performant. Our hope was to use the lastn project to determine whether we were comfortable working without Hibernate Search entirely and at this point I'd say we are so we will likely stop using it in the future and just interact with ElasticSearch directly for all features. No timelines for this work yet, but it is definitely planned.</p>
+</li>
+<li>
+<p>The Boot stuff is a 3rd party contribution, and unfortunately the contributor has not been able to maintain it. We don't use Boot at all so we don't have any insights into how to troubleshoot it. At this point, just keeping it passing the unit tests is a challenge- we'd welcome someone who wanted to put some love into it.</p>
+</li>
+</ul>
+
+
+
+<a name="207182414"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/maven%20deps%2C%20projects%20and%20shading/near/207182414" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/maven.20deps.2C.20projects.20and.20shading.html#207182414">(Aug 17 2020 at 18:51)</a>:</h4>
+<p>Hmmmm .... okay. Well, another thing I needed to wrap my head around was the use of the new BulkExport job. From what I can see, all configurations extending/using the BaseConfig now needs to support or disable spring batch jobs because of <a href="https://github.com/jamesagnew/hapi-fhir/blob/1fadaeeff5872127d09253db96683e8078cdede9/hapi-fhir-jpaserver-base/src/main/java/ca/uhn/fhir/jpa/config/BaseConfig.java#L131">https://github.com/jamesagnew/hapi-fhir/blob/1fadaeeff5872127d09253db96683e8078cdede9/hapi-fhir-jpaserver-base/src/main/java/ca/uhn/fhir/jpa/config/BaseConfig.java#L131</a></p>
+<p>Would you consider adding spring profiles to the configuration as well? That would have eased the transition so that it would have been something that you actively needed to add.</p>
+
+
+
+<a name="207240067"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/maven%20deps%2C%20projects%20and%20shading/near/207240067" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/maven.20deps.2C.20projects.20and.20shading.html#207240067">(Aug 18 2020 at 09:34)</a>:</h4>
+<p>What's the issue with batch jobs?</p>
+<p>FWIW the jobs aren't new, and it wouldn't be good to run a server with them turned off. What's new is us using Spring Batch to run them (they were run using their own threadpools before). </p>
+<p>I think in 5.1.0 you could get away with disabling Spring Batch and you'd just have a server where Bulk Export silently failed, but our aim is to move all of the server's long running processes into Spring Batch.</p>
+
+
+
+<a name="207244301"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/maven%20deps%2C%20projects%20and%20shading/near/207244301" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/maven.20deps.2C.20projects.20and.20shading.html#207244301">(Aug 18 2020 at 10:34)</a>:</h4>
+<p>The  is no issue with Batch jobs in general, and I applaude the use of Spring Batch jobs. I was simply annoyed about the fact that Spring Boot started them without my intervention (which is not something you guys are hit by since you don't do Spring Boot). I also found that I could just disable them in the end, which is fine for 5.1.0, since only the BulkExport job uses it, which I do not currently use.</p>
+
+
+
+<a name="207244382"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/maven%20deps%2C%20projects%20and%20shading/near/207244382" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/maven.20deps.2C.20projects.20and.20shading.html#207244382">(Aug 18 2020 at 10:35)</a>:</h4>
+<p><span class="user-mention" data-user-id="191319">@James Agnew</span> have you made any thoughts about how not to run them in parallel in a cloud setup  - I presume that only single server needs to run them</p>
+
+
+
+<a name="207251505"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/maven%20deps%2C%20projects%20and%20shading/near/207251505" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/maven.20deps.2C.20projects.20and.20shading.html#207251505">(Aug 18 2020 at 12:14)</a>:</h4>
+<p>Yup, we do have plans to implement a clustered job executor- Although our advanced clustering features are in Smile CDR.</p>
+
+
+
+<a name="207258894"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/maven%20deps%2C%20projects%20and%20shading/near/207258894" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/maven.20deps.2C.20projects.20and.20shading.html#207258894">(Aug 18 2020 at 13:28)</a>:</h4>
+<p>makes sense - I guess we'll just extend the systemProvider to be able to start jobs then.</p>
+
+
+
+<a name="207258984"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/maven%20deps%2C%20projects%20and%20shading/near/207258984" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/maven.20deps.2C.20projects.20and.20shading.html#207258984">(Aug 18 2020 at 13:29)</a>:</h4>
+<p><span class="user-mention" data-user-id="191319">@James Agnew</span> any chance that I can make you have a look at <a href="https://github.com/hapifhir/hapi-fhir-jpaserver-starter/pull/126">https://github.com/hapifhir/hapi-fhir-jpaserver-starter/pull/126</a> ?</p>
+
+
+
+<a name="207825148"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/maven%20deps%2C%20projects%20and%20shading/near/207825148" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/maven.20deps.2C.20projects.20and.20shading.html#207825148">(Aug 24 2020 at 09:51)</a>:</h4>
+<p>strike that <span class="user-mention" data-user-id="191319">@James Agnew</span>  - would you have a look at <a href="https://github.com/hapifhir/hapi-fhir-jpaserver-starter/pull/125">https://github.com/hapifhir/hapi-fhir-jpaserver-starter/pull/125</a> and <a href="https://github.com/hapifhir/hapi-fhir-jpaserver-starter/pull/127">https://github.com/hapifhir/hapi-fhir-jpaserver-starter/pull/127</a> ?</p>
+
+
+
+<a name="208186420"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/maven%20deps%2C%20projects%20and%20shading/near/208186420" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jens Villadsen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/maven.20deps.2C.20projects.20and.20shading.html#208186420">(Aug 27 2020 at 07:41)</a>:</h4>
+<p><span class="user-mention" data-user-id="191319">@James Agnew</span> ?</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

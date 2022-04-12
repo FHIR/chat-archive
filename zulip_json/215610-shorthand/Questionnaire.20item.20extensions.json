@@ -1,0 +1,170 @@
+[
+    {
+        "content": "<p>I am trying to use this extension <a href=\"http://build.fhir.org/ig/HL7/sdc/StructureDefinition-sdc-questionnaire-behave-definitions.html#Questionnaire.item.extension:unitOption\">http://build.fhir.org/ig/HL7/sdc/StructureDefinition-sdc-questionnaire-behave-definitions.html#Questionnaire.item.extension:unitOption</a> on a questionnaire.item.item:</p>\n<div class=\"codehilite\"><pre><span></span><code>Alias: $sdc-questionnaire-unitOption = http://hl7.org/fhir/StructureDefinition/questionnaire-unitOption\n...\n* item[0].item[0].extension[$sdc-questionnaire-unitOption].valueCoding = #d\n</code></pre></div>\n\n\n<p>And get the \"does not exist\" failure:</p>\n<div class=\"codehilite\"><pre><span></span><code>error The element or path you referenced does not exist: item.item[1].extension[$sdc-questionnaire-unitOption].valueCoding\n</code></pre></div>\n\n\n<p>But it works if I use it on the 1st layer, e.g.:</p>\n<div class=\"codehilite\"><pre><span></span><code>* item.extension[$sdc-questionnaire-unitOption].valueCoding = #d\n</code></pre></div>\n\n\n<p>Any ideas?</p>",
+        "id": 211952827,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1601576635
+    },
+    {
+        "content": "<p>This is in an <code>Instance</code> not a <code>Profile</code>, right?</p>",
+        "id": 211957450,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1601578583
+    },
+    {
+        "content": "<p>Correct, I am making an instance of a Questionnaire</p>",
+        "id": 211958844,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1601579212
+    },
+    {
+        "content": "<p>OK.  So I'm guessing that this instance is based on a profile that declares the extension on <code>item</code>?  Because if I try it with <code>InstanceOf: Questionnaire</code>,  then even the \"1st layer\" example doesn't work.  It has to be an instance of a profile that declares that extension on <code>item</code>.</p>\n<p>I discovered that if I updated the profile to include:</p>\n<div class=\"codehilite\"><pre><span></span><code>* item.item.extension contains $sdc-questionnaire-unitOption named sdc 0..1\n</code></pre></div>\n\n\n<p><em>then</em> your original example worked too.</p>\n<p>So the extension in the profile isn't propagating to the recursive <code>item</code> children.  At one point it was unclear if it should because the FHIR doc was ambiguous about that.</p>\n<p>So this leads to two more questions:</p>\n<ol>\n<li>Shouldn't you be able to use an extension in an instance even if that extension isn't declared in the profile?  I think yes, but obviously SUSHI thinks no.  <span class=\"user-mention\" data-user-id=\"191447\">@Mark Kramer</span> ?  <span class=\"user-mention\" data-user-id=\"239822\">@Nick Freiter</span>?  Would you agree that you should be able to do <code>* somepath.extension[http://example.org/arbitraryextension].valueString = \"Foo\"</code> in an instance of even a base resource?</li>\n<li>Should extension declarations propagate through <em>contentreferences</em>?  I'll have to try to dig up some old threads to see if we resolved that.</li>\n</ol>",
+        "id": 211961600,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1601580368
+    },
+    {
+        "content": "<p>OK.  Looks like the answer to #2 is <a href=\"#narrow/stream/179252-IG-creation/topic/Clarification.20on.20contentReference/near/204963141\">yes, it should propagate</a>.</p>",
+        "id": 211962126,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1601580613
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span>  -- incidentally, when I try this one <a href=\"http://hl7.org/fhir/StructureDefinition/questionnaire-unitOption\">http://hl7.org/fhir/StructureDefinition/questionnaire-unitOption</a> I have the same problem (only working on <code>item</code> and fails on <code>item.item</code>). In this case, they specify the extension on Questionnaire.item and Questionnaire.item.item.</p>",
+        "id": 211962435,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1601580773
+    },
+    {
+        "content": "<p>(e.g. see the context as specified -- <a href=\"https://www.hl7.org/fhir/extension-questionnaire-unitoption.json.html\">https://www.hl7.org/fhir/extension-questionnaire-unitoption.json.html</a>)</p>",
+        "id": 211962777,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1601580927
+    },
+    {
+        "content": "<p>It should be possible to add ad hoc extensions to an instance, certainly.</p>",
+        "id": 211962935,
+        "sender_full_name": "Mark Kramer",
+        "timestamp": 1601580989
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191782\">@Brian Kaney</span> -- I meant declared on the profile itself -- not via the extension context.  For example, this is the FSH I used to test it:</p>\n<div class=\"codehilite\"><pre><span></span><code>Alias: $sdc-questionnaire-unitOption = http://hl7.org/fhir/StructureDefinition/questionnaire-unitOption\n\nProfile: MyQuestionnaireProfile\nParent: Questionnaire\n* item.extension contains $sdc-questionnaire-unitOption named sdc 0..1\n* item.item.extension contains $sdc-questionnaire-unitOption named sdc 0..1\n\nInstance: MyQuestionnaire\nInstanceOf: MyQuestionnaireProfile\n* item.extension[$sdc-questionnaire-unitOption].valueCoding = #d\n* item[0].text = &quot;A&quot;\n* item[0].item[0].text = &quot;B&quot;\n* item[0].item[0].extension[$sdc-questionnaire-unitOption].valueCoding = #d\n</code></pre></div>\n\n\n<p>Again, not saying this is how it <em>should</em> be -- just saying how it currently appears to be working.</p>",
+        "id": 211962990,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1601581011
+    },
+    {
+        "content": "<p>Right. I think the question here is more of a general profiling one and not a sushi one. I would have expected the behavior to automatically apply to all nested children. Then, if you want to constrain to a particular level you would create an invariant.</p>\n<p>The way it is now, you end up with things like <a href=\"http://hl7.org/fhir/StructureDefinition/questionnaire-unitOption\">http://hl7.org/fhir/StructureDefinition/questionnaire-unitOption</a> where it seems to arbitrarily go 2-levels deep...</p>",
+        "id": 211963827,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1601581423
+    },
+    {
+        "content": "<p>Questionnaire.item, PlanDef.action, RequestGroup.action, etc.</p>",
+        "id": 211963951,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1601581474
+    },
+    {
+        "content": "<p>Just in reference to the question of adding extensions on an <code>Instance</code> that do not exist on the corresponding profile, that is definitely a bug. If you do the following:</p>\n<div class=\"codehilite\"><pre><span></span><code>Instance: MyQ\nInstanceOf: Questionnaire\n* extension[us-core-race].id = &quot;string&quot;\n* item[0].extension[us-core-race].id = &quot;string&quot;\n* item[0].item[0].extension[us-core-race].id = &quot;string&quot;\n</code></pre></div>\n\n\n<p>the first line works correctly, while the second two fail.</p>",
+        "id": 211964546,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1601581754
+    },
+    {
+        "content": "<p>Tracked here: <a href=\"https://github.com/FHIR/sushi/issues/621\">https://github.com/FHIR/sushi/issues/621</a></p>",
+        "id": 211966495,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1601582631
+    },
+    {
+        "content": "<p>I am still having problems on this, and deeply nested structure more generally..</p>\n<p>I feel like there is misunderstanding (likely me being confused) on profiling deeply nested structures. I see this sort of problem present with Questionnaire.item, QuestionnaireResponse.item, PlanDefinition.action, RequestGroup.action, etc. Initially (from before), I would have thought when you define an extension to Questionnaire.item, it should apply to all <code>*.item</code>, no matter how deep. And if you want to constrain to a certain depth, you would add an invariant rule. But this does not seem to be the case? Right?</p>\n<p>Here is an example today (sushi 0.16.0 and IGPublisher v1.1.39). Looking at <a href=\"https://www.hl7.org/fhir/questionnaire-profiles.html\">https://www.hl7.org/fhir/questionnaire-profiles.html</a>. We see some extensions only applied to <code>.item</code> (e.g. does <code>maxSize</code> really only apply if the item at root level? is this really the intention of the author of the extension?) While others are on <code>.item</code> and <code>.item.item</code> (for instance, <code>questionnaire-minOccurs</code>, why only one-nesting, why not two or more?). So what I find myself doing, in the case of <code>minValue</code> where I need it to be nested (e.g. the item is in a group), is explicitly adding (via sushi):</p>\n<div class=\"codehilite\"><pre><span></span><code>Profile: AdvancedQuestionnaire\nParent: Questionnaire\n* item.item.extension contains\n  minValue named minValue\n  0..1 MS\n</code></pre></div>\n<p>This passes sushi build just fine, but then IGPublisher gives me an error:</p>\n<div class=\"codehilite\"><pre><span></span><code>Questionnaire/MyQuestionnaire: Questionnaire.item[0].item[0]    error   The extension http://hl7.org/fhir/StructureDefinition/minValue is not allowed to be used at this point (allowed = e:Questionnaire.item; this element is [[Questionnaire.item.item, BackboneElement.item, BackboneElement])\n</code></pre></div>\n<p>This leads me to creating a new duplicate extension but with a slightly different name, like <code>myMinValue</code>. Is there a better way to do this? I hope!</p>",
+        "id": 216143049,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1604956087
+    },
+    {
+        "content": "<p>I see that it should propagate, from <a href=\"#narrow/stream/179252-IG-creation/topic/Clarification.20on.20contentReference/near/204963141\">https://chat.fhir.org/#narrow/stream/179252-IG-creation/topic/Clarification.20on.20contentReference/near/204963141</a> .. (if so, why do we see explicitly profiled <code>.item.item</code>?). </p>\n<p>But in any case, the tooling fails if I only add to the root (sushi error):</p>\n<div class=\"codehilite\"><pre><span></span><code>Profile: AdvancedQuestionnaire\nParent: Questionnaire\n* item.extension contains\n  minValue named minValue\n  0..1 MS\n\nInstance: MyQuestionnaire\nInstanceOf: AdvancedQuestionnaire\n* item.item.extension[minValue].valueInteger = 130\n</code></pre></div>\n<p>Fails sushi build with:</p>\n<div class=\"codehilite\"><pre><span></span><code>The element or path you referenced does not exist: item.item.extension[minValue].valueInteger\n  File: /Users/bkaney/code/myig/fsh/test.fsh\n  Line: 25\n</code></pre></div>",
+        "id": 216144371,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1604956913
+    },
+    {
+        "content": "<p>Back on my hobbyhorse here about nested structures...</p>\n<p>Is this a feature/bug in FSH or FHIR to have to explicitly define depth? From before, <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> said \"the extension automatically applies to the recursive instances\"[1], so it looks like a bug?</p>\n<p><a href=\"/user_uploads/10155/Oe8UoWcCTqRUCVQ8crOhnpkA/image.png\">image.png</a> </p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/Oe8UoWcCTqRUCVQ8crOhnpkA/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/Oe8UoWcCTqRUCVQ8crOhnpkA/image.png\"></a></div><p>[1]:<a href=\"#narrow/stream/179252-IG-creation/topic/Clarification.20on.20contentReference/near/204963141\">https://chat.fhir.org/#narrow/stream/179252-IG-creation/topic/Clarification.20on.20contentReference/near/204963141</a></p>",
+        "id": 220379149,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1608302471
+    },
+    {
+        "content": "<p>Thanks for bringing this up again <span class=\"user-mention\" data-user-id=\"191782\">@Brian Kaney</span>.  I think we lost the thread on this one, and for that I apologize.  I'll add it to our backlog -- but given the time of year, it probably won't get scheduled for someone to actually do until after January 4.</p>",
+        "id": 220386064,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1608305794
+    },
+    {
+        "content": "<p>NP! I am generally confused as to what the behavior is supposed to be in FHIR, let alone FSH...</p>",
+        "id": 220386412,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1608305933
+    },
+    {
+        "content": "<p>It's still not totally clear to me exactly what constraints do and don't get inherited by recursive content references, but as you noted, Grahame at least confirmed that extensions <em>do</em> carry over -- so we'll make that happen.</p>",
+        "id": 220386504,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1608305974
+    },
+    {
+        "content": "<p>Right, but if that's the case, why do we see explicit nesting specified in the FHIR spec (<a href=\"https://www.hl7.org/fhir/questionnaire-profiles.html\">https://www.hl7.org/fhir/questionnaire-profiles.html</a>)?</p>\n<p><a href=\"/user_uploads/10155/8dn4sugsajZuM_AQr5nG51IZ/image.png\">image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/8dn4sugsajZuM_AQr5nG51IZ/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/8dn4sugsajZuM_AQr5nG51IZ/image.png\"></a></div>",
+        "id": 220386770,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1608306075
+    },
+    {
+        "content": "<p>¯\\_(ツ)_/¯</p>",
+        "id": 220386859,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1608306112
+    },
+    {
+        "content": "<blockquote>\n<p>¯\\_(ツ)_/¯</p>\n</blockquote>\n<p>correct!</p>",
+        "id": 220386987,
+        "sender_full_name": "Brian Kaney",
+        "timestamp": 1608306147
+    },
+    {
+        "content": "<p><a href=\"https://github.com/FHIR/sushi/issues/699\">SUSHI #699</a></p>",
+        "id": 220387102,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1608306191
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> Stumbled over this topic &amp; fell right into the same confusions everyone else, so sorry if am repeating old stuff here <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span> My use case is also that I have a profile on QuestionnaireI and want to add a given extension to <code>Questionnaire.item</code>, <code>Questionnaire.item.item</code> etc. recursively. The extension has both <code>Questionnaire.item</code> and <code>Questionnaire.item.item</code> as allowed context. Adding the extension to only <code>Questionnaire.item</code> in FSH does not propagate them - at least when I look at the generated profile in firely Forge, it does not show the extension on <code>item/item</code>. Conversely, explicitly adding the extension to <code>Questionnaire.item.item</code> in addition causes Forge to give a warning about the generated profile: </p>\n<blockquote>\n<p>Message : If the element definition has a contentReference, it cannot have type, defaultValue, fixed, pattern, example, minValue, maxValue, maxLength, or binding.</p>\n</blockquote>\n<p>I saw that you have a non-FHS solution for this <a href=\"#narrow/stream/179252-IG-creation/topic/Clarification.20on.20contentReference\">this IG creation thread</a>. But I am not sure how to achieve this in FSH - is that possible or are there other approaches?</p>",
+        "id": 243767372,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1624531476
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span> -- we added support for this in <a href=\"https://github.com/FHIR/sushi/releases/tag/v2.0.0-beta.1\">SUSHI 2.0.0 Beta 1</a> (release notes have some details).  But basically, you will do something like this to set it up:</p>\n<div class=\"codehilite\"><pre><span></span><code>* Questionnaire.item ^type.profile = http://example.org/StructureDefinition/MyQuestionnaire\n* Questionnaire.item ^type.profile.extension.url = http://hl7.org/fhir/StructureDefinition/elementdefinition-profile-element\n* Questionnaire.item ^type.profile.extension.valueString = &quot;Questionnaire.item&quot;\n</code></pre></div>\n<p>Then constrain <code>Questionnaire.item</code> further as you wish.  That said, I don't know if the constraints (like item.extensions that you add) will actually be visible in rendered views of <code>Questionnaire.item.item</code> in Forge or in the documentation produced by the publisher.  This is a fairly advanced feature.  In SUSHI, however, when we do any processing on <code>Questionnaire.item.item</code> (or further sub-items), we'll recognize the constraints as being there and act appropriately.</p>",
+        "id": 243779643,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1624538765
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span>! I will look forward to 2.0, then, and keep the declaration in the profile to the top <code>item</code> level for simplicity (seeing how tooling support for full recursion seems limited ATM).</p>",
+        "id": 243792917,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1624544365
+    },
+    {
+        "content": "<p>OK.  Just in case it is not clear, however, you can use SUSHI 2.0.0 beta 1 now.  Instructions for installing it are in the release notes (as well as how to tell IG Publisher to use it in auto builds).</p>",
+        "id": 243795907,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1624545638
+    },
+    {
+        "content": "<p>Ah, OK <span aria-label=\"thumbs up\" class=\"emoji emoji-1f44d\" role=\"img\" title=\"thumbs up\">:thumbs_up:</span></p>",
+        "id": 243798465,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1624546644
+    }
+]

@@ -1,0 +1,104 @@
+[
+    {
+        "content": "<p>I've been taking a close look at some chained search cases recently. In the search spec there's a section:</p>\n<p>Advanced Search Note: Where a chained parameter searches a resource reference that may have more than one type of resource as its target, the parameter chain may end up referring to search parameters with the same name on more than one kind of resource at once. Servers SHOULD reject a search where the logical id refers to more than one matching resource across different types. For example, the client has to specify the type explicitly using the syntax in the second example above.</p>\n<p>I think what this is saying is that if I search DiagnosticReport?subject.name=Peter, and the inner part of the chain finds matching resources for name=Peter <em>that have colliding IDs</em>, e.g. Patient/123 and Location/123, it SHOULD reject the search.</p>\n<p>But why? It could simply return all DiagnosticReport resources that refer to either of those two distinct resources. What's problematic about this case?</p>",
+        "id": 263365971,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1638397172
+    },
+    {
+        "content": "<p>Good question. We have similar language earlier on the search page:</p>\n<blockquote>\n<p>servers SHOULD reject a search where the logical id refers to more than one matching resource across different types. In order to allow the client to perform a search in these situations the type is specified explicitly:</p>\n</blockquote>\n<p>which applies even to non-chaining scenarios. I assume you have the same concern with this too?</p>",
+        "id": 263366526,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1638397477
+    },
+    {
+        "content": "<p>Yes, I assume this must have come from the same motivation - in this case we're telling people not to do ?my-reference-param=123 without specifying either :type=123 or type/123. This query cannot be validated up front - whether there are colliding resource IDs depends on the data. But if we've successfully executed the query to the point of realizing that this is the case, why not return the results?</p>",
+        "id": 263367003,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1638397780
+    },
+    {
+        "content": "<p>The <a href=\"https://github.com/HL7/fhir/blob/6bf66c167ce30cc7fe9398849a898c25880cdb92/source/search.html#L375-L382\">original language</a> (earliest git history I have on search.html is 2014) was designed to allow static evaluation (not dependent on server state):</p>\n<blockquote>\n<p>Where a chained parameter searches a resource reference that may have more than one <br>\ndifferent type of resource as its target, the parameter chain may end up referring <br>\nto search parameters with the same name on more than one kind of resource at once. <br>\nThe parameter names defined in FHIR have consistent types wherever they are used. <br>\nImplementers defining their own names need to be sure that they do not create <br>\nunprocessable combinations. Servers SHOULD reject queries chained queries<br>\nthat lead to disjoint types along the path (e.g. the client has to specify<br>\nthe type explicitly using the syntax in the second example above).</p>\n</blockquote>\n<p>I'm trying to figure we changed this...</p>",
+        "id": 263367327,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1638397962
+    },
+    {
+        "content": "<p>or alternately, don't let queries cross resource types like this regardless of whether colliding IDs actually exist - but that ship has presumably sailed long ago</p>",
+        "id": 263367362,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1638397980
+    },
+    {
+        "content": "<p>Yeah, \"regardless of whether colliding IDs exist\" was the original language and intent. <a href=\"https://github.com/HL7/fhir/commit/144919d370f07e3796a40643a18b1c10d029fb0b\">https://github.com/HL7/fhir/commit/144919d370f07e3796a40643a18b1c10d029fb0b</a> is where the spec changed, based on...</p>",
+        "id": 263367613,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1638398125
+    },
+    {
+        "content": "<p><a href=\"http://jira.hl7.org/browse/FHIR-8370\">FHIR-8370</a></p>",
+        "id": 263367640,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1638398139
+    },
+    {
+        "content": "<p>I don't think the spec updates in <a href=\"https://github.com/HL7/fhir/commit/144919d370f07e3796a40643a18b1c10d029fb0b\">that commit</a> actually reflected the documented resolution in <a href=\"http://jira.hl7.org/browse/FHIR-8370\">FHIR-8370</a>, FWIW.</p>",
+        "id": 263367752,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1638398197
+    },
+    {
+        "content": "<p>I agree we're in a weird place right now <span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span>.  Pragmatically I think:</p>\n<ol>\n<li>\n<p>We should allow <code>Observation?subject.lastUpdated=gt2021</code> and stuff like it, no matter what type <code>subject</code> has. There are legit use cases for this.</p>\n</li>\n<li>\n<p>We should disallow <code>Observation?subject=123</code> -- it's not really a coherent query, and likely to cause surprises.</p>\n</li>\n</ol>",
+        "id": 263368390,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1638398623
+    },
+    {
+        "content": "<p>But extra pragmatically: we should remove both prohibitions, because they're confusing and hard to disentangle.</p>",
+        "id": 263368489,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1638398677
+    },
+    {
+        "content": "<p>Hmm - I thought the wording was intending to state that one can't assume a parameter (even if it has the same name) to have the same semantics across different resource types. As such referring to e.g. <a href=\"http://subject.name\">subject.name</a> when there are multiple resource types that match subject  is problematic.</p>",
+        "id": 263403027,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1638431940
+    },
+    {
+        "content": "<p>Searching across multiple types by parameter(s) having the same name is explicitly allowed when using parameters that list multiple types in SearchParameter.base, see <a href=\"http://hl7.org/fhir/http.html#vsearch\">http://hl7.org/fhir/http.html#vsearch</a> - the Google implementation doesn't do this but it's a precedent for why <a href=\"http://subject.name\">subject.name</a> might be allowed.</p>\n<p>I think the most plausible path forward is to remove both prohibitions because they're confusing and not what appears to have been intended (because queries can't be statically validated). Switching to a different set of prohibitions would be nice but potentially breaking.</p>",
+        "id": 263482651,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1638470603
+    },
+    {
+        "content": "<p>I had long assumed (from the original wording) that the intent was to avoid the potential complexity of dealing with diverging branches for multi-chained queries. You could reach a point where a specified search param is not valid for one branch/path where it is for another.</p>",
+        "id": 264173609,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1638978119
+    },
+    {
+        "content": "<p>Agree on the problem statement and proposed solution, Paul!  Are you willing to create a Jira issue for this and link back to discussion here?</p>",
+        "id": 264174114,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1638978311
+    },
+    {
+        "content": "<p>i.e. - what do you do with this? <br>\nObservation.subject.birthdate=2011</p>",
+        "id": 264174974,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1638978636
+    },
+    {
+        "content": "<p>Assuming you mean <code>Observation?subject.birthdate=2011</code>: With the prohibitions removed, servers would be free to process that and return results for any linked resources with a <code>birthdate</code> search param that matches. (Servers could also refuse, and require clients to ask for something explicit like <code>Observation?subject:Patient.birthdate=2021</code>.)</p>",
+        "id": 264209047,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1638992468
+    },
+    {
+        "content": "<p>Correct, Josh - that's what I meant.  <br>\nRenee has a good point too regarding differing semantics for search parameters with the same name. I don't know if anything like that exists - i.e. two resources have the same search parameter name with a different search parameter type. </p>\n<p>I'm also trying to conceive if there are cases where multi-chained paths/branches could diverge and rejoin (requiring de-duplication), create a loop, or other such things.  Again, not sure if that's possible. </p>\n<p>Anyway, I don't disagree with loosening the language - just thinking out loud where there may be difficult cases which led to the restriction.</p>",
+        "id": 264233111,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1639004189
+    }
+]

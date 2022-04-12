@@ -1,0 +1,62 @@
+[
+    {
+        "content": "<p>using the model I can easily list all the objects props using...</p>\n<p>for i in [type]().elementProperties():<br>\n    print(i)</p>\n<p>e.g.   <br>\n(ignoring my r4 hack for _elements)</p>\n<div class=\"codehilite\"><pre><span></span>for i in p.elementProperties():\n    print(i[0])\n\nid\nimplicitRules\n_implicitRules\nlanguage\n_language\nmeta\ncontained\nextension\nmodifierExtension\ntext\nactive\n_active\naddress\nbirthDate\ncommunication\ncontact\ndeceasedBoolean\n_deceasedBoolean\ndeceasedDateTime\ngender\n_gender\ngeneralPractitioner\nidentifier\nlink\nmanagingOrganization\nmaritalStatus\nmultipleBirthBoolean\n_multipleBirthBoolean\nmultipleBirthInteger\n_multipleBirthInteger\nname\nphoto\ntelecom\n</pre></div>\n\n\n<p>but I would like to know if there is a simple way to do something like...</p>\n<p>for i in [type].[element].elementProperties():<br>\n    print(i)</p>\n<div class=\"codehilite\"><pre><span></span>(Note this is desired but  does not work like this!!)\nfor i in p.name.elementProperties():\n    print(i[0])\n\nCoding\ntext\n\nfor j in p.name.Coding.elementProperties():\n   print (j[0])\n\ncode\ndisplay\ntext\n\n~~~~\n</pre></div>",
+        "id": 155272041,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1547660214
+    },
+    {
+        "content": "<p>like using namedTuple or something?</p>",
+        "id": 155272254,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1547660396
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 155272750,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1547660783
+    },
+    {
+        "content": "<p>What I'm looking for is a way to list the \"snapshot of element\" recursing through the elements until I get to the primitives.  I've done this using the bracket notation but would like to know if there is an easier way.</p>",
+        "id": 155312717,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1547703404
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span>from fhirclient.models import patient as P\n\ndef get_eps(name,o,depth=0):\n    print(&#39;--&#39;*depth, name)\n    print(&#39;--&#39;,&#39;id&#39;) if depth == 0 else False\n    for i,j,k,l,m,n in o.elementProperties():\n        if i in [&#39;extension&#39;,&#39;modifierExtension&#39;,&#39;assigner&#39;,&#39;id&#39;] :\n            continue\n        if i ==&#39;contained&#39;:\n            print(&#39;--&#39;,i)\n            continue\n        try:\n            get_eps(i,k(), depth+1) if k() else print(&#39;--&#39;*(depth+1),j)\n        except AttributeError:\n            pass\n\np = P.Patient()\nget_eps(p.resource_type,p)\n</pre></div>",
+        "id": 155317761,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1547712025
+    },
+    {
+        "content": "<p>gives you </p>\n<div class=\"codehilite\"><pre><span></span> Patient\n-- id\n-- implicitRules\n-- language\n-- meta\n---- lastUpdated\n---- profile\n---- security\netc...\n~~~\n</pre></div>",
+        "id": 155317799,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1547712099
+    },
+    {
+        "content": "<p>here is a more flexible version that allows you to list all elements in dot notation or snake case.</p>\n<div class=\"codehilite\"><pre><span></span>from fhirr4models import observation as O   # my R4 model library which includes a fhir primitive hack\n\nrecursives = [&#39;extension&#39;,&#39;modifierExtension&#39;,&#39;assigner&#39;]\nroot_ignore = [&#39;contained&#39;,&#39;implicitRules&#39;,&#39;language&#39;,&#39;meta&#39;,&#39;extension&#39;,&#39;modifierExtension&#39;,&#39;text&#39;]\ndatatype_ignore = [&#39;id&#39;,&#39;userSelected&#39;, &#39;version&#39;]\nignore_fhirprimitive = True\ndelimiter = &#39;.&#39;\nlist_notation =&#39;[0]&#39;\n\ndef get_eps(element,path, level = 0):\n    print(path)\n\n    for i,j,k,l,m,n in element.elementProperties():\n        if level &gt; 0 and (i in recursives):  # ignore recursive elements except for root level\n            continue\n        elif level == 0 and i in root_ignore:  # ignore these root elements\n            continue\n        elif level &gt; 0 and i in datatype_ignore:  # ignore these datatype elements\n            continue\n        elif i.startswith(&#39;_&#39;) and ignore_fhirprimitive:  # ignore _elements\n            continue\n\n        try:\n            get_eps(element=k(),path=f&#39;{path}{delimiter}{i}{list_notation}&#39; if l else f&#39;{path}{delimiter}{i}&#39;,level = level +1)\n        except AttributeError:\n            pass\n\na = O.Observation()\nget_eps(element=a,path=a.resource_type,level=0)\n</pre></div>",
+        "id": 156490821,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1548006567
+    },
+    {
+        "content": "<p>will give you...</p>\n<div class=\"codehilite\"><pre><span></span>Observation\nObservation.id\nObservation.basedOn[0]\nObservation.basedOn[0].display\nObservation.basedOn[0].identifier\nObservation.basedOn[0].identifier.period\nObservation.basedOn[0].identifier.period.end\nObservation.basedOn[0].identifier.period.start\nObservation.basedOn[0].identifier.system\nObservation.basedOn[0].identifier.type\nObservation.basedOn[0].identifier.type.coding[0]\nObservation.basedOn[0].identifier.type.coding[0].code\nObservation.basedOn[0].identifier.type.coding[0].display\nObservation.basedOn[0].identifier.type.coding[0].system\nObservation.basedOn[0].identifier.type.text\nObservation.basedOn[0].identifier.use\nObservation.basedOn[0].identifier.value\nObservation.basedOn[0].reference\n....\n</pre></div>",
+        "id": 156490891,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1548006664
+    },
+    {
+        "content": "<p>Cool, how do you work the extensions that are on the model (eg working group, etc) versus those that are potentially available (extension-definitions.json); the way I see it the defined elements (ie Observations.extensions = []) could be 'hard-coded' with the values - you'd need to load the extension definitions to get what the class attribute should be called and multiplicity, but then instantiate it as an extension.Extension instance?</p>",
+        "id": 156773236,
+        "sender_full_name": "Geoff Low",
+        "timestamp": 1548337898
+    },
+    {
+        "content": "<p>I omitted the extensions since they recurse reaching a recursion limit in the script but you certainly could add them in as you describe.</p>",
+        "id": 156783421,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1548345652
+    }
+]

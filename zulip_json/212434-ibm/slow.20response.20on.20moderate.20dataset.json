@@ -1,0 +1,86 @@
+[
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191676\">@Lee Surprenant</span> I'm seeing unusual slowness in responses, I'm wondering if I missed anything or whether you have any rough performance numbers? I understand Derby DB will be slow, but not sure if the numbers observed below are \"normal\".<br>\nHere are the details:<br>\n- The FHIR server was deployed with the default configurations (Derby DB), on a server with 8 CPU and 32G memory (hmm, did not explicitly set -Xmx).<br>\n- Uploaded some 300K resources, most of which are observations, total json data size ~300MB, took less than an hour to load<br>\nOn the API calls, however, the responses were surprisingly slow:<br>\n- Getting (well, searching/retrieving) 1 (out of 300K observations), took 12 seconds: <a href=\"https://localhost:9443/fhir-server/api/v4/Observation?_count=1\" target=\"_blank\" title=\"https://localhost:9443/fhir-server/api/v4/Observation?_count=1\">https://localhost:9443/fhir-server/api/v4/Observation?_count=1</a>; repeat the same request multiple times and the response times were comparable. <br>\n- Getting  1 (out of 45) patient was ok, took some 250ms: <a href=\"https://localhost:9443/fhir-server/api/v4/Patient?_count=1\" target=\"_blank\" title=\"https://localhost:9443/fhir-server/api/v4/Patient?_count=1\">https://localhost:9443/fhir-server/api/v4/Patient?_count=1</a><br>\n- Getting 1 (out of ~3000) condition was not too bad, took some 400ms: <a href=\"https://localhost:9443/fhir-server/api/v4/Condition?_count=1\" target=\"_blank\" title=\"https://localhost:9443/fhir-server/api/v4/Condition?_count=1\">https://localhost:9443/fhir-server/api/v4/Condition?_count=1</a><br>\n- Searching (and get 1) observation of a given patient, took 22 seconds: <a href=\"https://localhost:9443/fhir-server/api/v4/Observation?_count=1&amp;subject=Patient/xxxx\" target=\"_blank\" title=\"https://localhost:9443/fhir-server/api/v4/Observation?_count=1&amp;subject=Patient/xxxx\">https://localhost:9443/fhir-server/api/v4/Observation?_count=1&amp;subject=Patient/xxxx</a><br>\n- Getting an observation by id, took ~700ms: <a href=\"https://localhost:9443/fhir-server/api/v4/Observation/8850efc8-c110-4e8b-a035-36f5e138e5db\" target=\"_blank\" title=\"https://localhost:9443/fhir-server/api/v4/Observation/8850efc8-c110-4e8b-a035-36f5e138e5db\">https://localhost:9443/fhir-server/api/v4/Observation/8850efc8-c110-4e8b-a035-36f5e138e5db</a></p>",
+        "id": 180524434,
+        "sender_full_name": "Xiaocheng Luan",
+        "timestamp": 1573570779
+    },
+    {
+        "content": "<p>thanks Xiaocheng, we'll have a look.  agree those numbers look bad.  we'll try running a similar test against Derby and Db2 and report back.</p>",
+        "id": 180547414,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573584372
+    },
+    {
+        "content": "<p>in the meantime, if you are curious to poke around, you can enable logging on our persistence layer to see the exact SQL getting executed.  as you might expect, Getting by an id should be little more than a straight select from the corresponding table, so i'd be curious how long it takes if we execute the SQL directly (e.g. via the derby <code>ij</code> tool or similar)</p>",
+        "id": 180547751,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573584577
+    },
+    {
+        "content": "<p>Hi Xiaocheng, Did you use embedded derby? by default we set 4GB in jvm.options.  If you used the Derby network server, it's default is 512M, you'd want to increase this.</p>",
+        "id": 180619092,
+        "sender_full_name": "Paul Bastide",
+        "timestamp": 1573647246
+    },
+    {
+        "content": "<p>hi XiaoCheng, we had some similar bad performance results when using derby, I would suggest you to try db2. you can use the db2 docker image here <a href=\"https://hub.docker.com/r/ibmcom/db2\" target=\"_blank\" title=\"https://hub.docker.com/r/ibmcom/db2\">https://hub.docker.com/r/ibmcom/db2</a> for your testing, and make sure to use the the 90-day trail license to remove the memory limitation.  I had created 300K observations and patients with db2, and all my search tests were finished in just few seconds. let us know if you need some help to set up db2 for your fhir server.</p>",
+        "id": 180636336,
+        "sender_full_name": "Albert(Xu) Wang",
+        "timestamp": 1573658396
+    },
+    {
+        "content": "<p>Given this good feedfack on the poor performance of derby, we just added the following line in the docs: <br>\n<a href=\"https://github.com/IBM/FHIR/pull/404/files\" target=\"_blank\" title=\"https://github.com/IBM/FHIR/pull/404/files\">https://github.com/IBM/FHIR/pull/404/files</a></p>",
+        "id": 180637664,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573659105
+    },
+    {
+        "content": "<blockquote>\n<p>in the meantime, if you are curious to poke around, you can enable logging on our persistence layer to see the exact SQL getting executed.  as you might expect, Getting by an id should be little more than a straight select from the corresponding table, so i'd be curious how long it takes if we execute the SQL directly (e.g. via the derby <code>ij</code> tool or similar)</p>\n</blockquote>\n<p>Will do when I get a chance and report back, thanks for the response.</p>",
+        "id": 180639448,
+        "sender_full_name": "Xiaocheng Luan",
+        "timestamp": 1573660023
+    },
+    {
+        "content": "<blockquote>\n<p>hi XiaoCheng, we had some similar bad performance results when using derby, I would suggest you to try db2. you can use the db2 docker image here <a href=\"https://hub.docker.com/r/ibmcom/db2\" target=\"_blank\" title=\"https://hub.docker.com/r/ibmcom/db2\">https://hub.docker.com/r/ibmcom/db2</a> for your testing, and make sure to use the the 90-day trail license to remove the memory limitation.  I had created 300K observations and patients with db2, and all my search tests were finished in just few seconds. let us know if you need some help to set up db2 for your fhir server.</p>\n</blockquote>\n<p>Thanks for sharing the experience, and thanks for the tips.</p>",
+        "id": 180639614,
+        "sender_full_name": "Xiaocheng Luan",
+        "timestamp": 1573660089
+    },
+    {
+        "content": "<blockquote>\n<p>Hi Xiaocheng, Did you use embedded derby? by default we set 4GB in jvm.options.  If you used the Derby network server, it's default is 512M, you'd want to increase this.</p>\n</blockquote>\n<p>Yes, we use derby, and everything default. I just checked the process it's using 4GB, so should be reasonable.</p>",
+        "id": 180639750,
+        "sender_full_name": "Xiaocheng Luan",
+        "timestamp": 1573660185
+    },
+    {
+        "content": "<p>Thanks for the answers, <span class=\"user-mention\" data-user-id=\"246296\">@Albert(Xu) Wang</span> , <span class=\"user-mention\" data-user-id=\"192632\">@Paul Bastide</span> . For whatever reason \"quote and reply\" within your messages put my responses under Lee's message.</p>",
+        "id": 180640181,
+        "sender_full_name": "Xiaocheng Luan",
+        "timestamp": 1573660423
+    },
+    {
+        "content": "<blockquote>\n<p>For whatever reason \"quote and reply\" within your messages put my responses under Lee's message.</p>\n</blockquote>\n<p>thats just how zulip works...no subthreads like slack has</p>",
+        "id": 180642967,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573661815
+    },
+    {
+        "content": "<p>hi XiaoCheng, we have just added a new testng test here <a href=\"https://github.com/IBM/FHIR/blob/master/fhir-server-test/src/test/java/com/ibm/fhir/server/test/SearchPerformaceTest.java\" target=\"_blank\" title=\"https://github.com/IBM/FHIR/blob/master/fhir-server-test/src/test/java/com/ibm/fhir/server/test/SearchPerformaceTest.java\">https://github.com/IBM/FHIR/blob/master/fhir-server-test/src/test/java/com/ibm/fhir/server/test/SearchPerformaceTest.java</a>  <a href=\"/user_uploads/10155/Rql3k1UETyR_cKPn0oUyQhaT/Screen-Shot-2019-11-13-at-8.44.27-AM.png\" target=\"_blank\" title=\"Screen-Shot-2019-11-13-at-8.44.27-AM.png\">Screen-Shot-2019-11-13-at-8.44.27-AM.png</a>  and the test results of db2 with 300K observations and patients.</p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/Rql3k1UETyR_cKPn0oUyQhaT/Screen-Shot-2019-11-13-at-8.44.27-AM.png\" target=\"_blank\" title=\"Screen-Shot-2019-11-13-at-8.44.27-AM.png\"><img src=\"/user_uploads/10155/Rql3k1UETyR_cKPn0oUyQhaT/Screen-Shot-2019-11-13-at-8.44.27-AM.png\"></a></div>",
+        "id": 180655551,
+        "sender_full_name": "Albert(Xu) Wang",
+        "timestamp": 1573669160
+    },
+    {
+        "content": "<p>Albert, those results were from running the db2 container like you mentioned earlier in the thread?  What were the limits there again?  4GB of RAM?</p>",
+        "id": 180658751,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573671113
+    },
+    {
+        "content": "<p>this is the instruction about how to use db2 docker container for integration test, the limitation is removed by enabling the 90 dail trail license in <a href=\"http://create-database.sh\" target=\"_blank\" title=\"http://create-database.sh\">create-database.sh</a>.   <a href=\"https://github.com/IBM/FHIR/blob/master/fhir-install/README-DB2.md\" target=\"_blank\" title=\"https://github.com/IBM/FHIR/blob/master/fhir-install/README-DB2.md\">https://github.com/IBM/FHIR/blob/master/fhir-install/README-DB2.md</a></p>",
+        "id": 180982474,
+        "sender_full_name": "Albert(Xu) Wang",
+        "timestamp": 1574042774
+    }
+]

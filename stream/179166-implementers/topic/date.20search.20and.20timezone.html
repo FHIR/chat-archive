@@ -1,0 +1,48 @@
+---
+layout: page
+title: "FHIR Chat  · date search and timezone · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/date.20search.20and.20timezone.html">date search and timezone</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153929734"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/date%20search%20and%20timezone/near/153929734" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jorge de la Garza <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/date.20search.20and.20timezone.html#153929734">(Jan 19 2018 at 21:22)</a>:</h4>
+<p>For the purpose of search, my FHIR server indexes all searchable date-time values in a resource as UTC. So if a resource contains a value "2016-07-11T23:13:06-04:00", the value I index is "2016-07-12T03:13:06Z". Note the date change.  If a timestamp has no UTC offset, my server assumes its own offset.</p>
+<p>This works out well because I do the same normalization on date search param values (convert to UTC, assuming the server's own offset if none is given), which makes my server's internal query straightforward.  This is causing me problems, though, when the search date has no time.  One would expect the search "2016-07-11" to return a resource with the value given above, because the original event (presumably) happened on that date in the place where it happened.  However the way my search is implemented (basically, scan the index for values starting with "2016-07-11"), it is <em>not</em> returning that resource.</p>
+<p>"2016-07-11" is an implicit range: 2016-07-11T00:00:00 to 2016-07-11T23:59:59.  So I could map a search for "eq2016-07-11" to "ge2016-07-11T00:00:00&amp;le2016-07-11T23:59:59".  <strong>But then what UTC offset do I use?</strong>  I mentioned above using my server's own offset in cases where one is not given, but that's really just a best guess.  That will only work in scenarios where the server, data providers, clients, and end users are all in the same time zone.  Of course if that were the case, then there'd be no point in dealing with time zones at all.  Perhaps I should be indexing both the original time without offset ("2016-07-11T23:13:06") as well as the UTC time ("2016-07-12T03:13:06Z")?  Then if a search only contains a date I compare against the original time, and if it contains a date and time, I compare to the UTC time?  The drawback to that would be an increase to the size of my indices.  Not the worst thing in the world, just something to consider.</p>
+<p>Any guidance on how to handle this?  How do other servers deal with this?</p>
+
+
+
+<a name="153929739"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/date%20search%20and%20timezone/near/153929739" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/date.20search.20and.20timezone.html#153929739">(Jan 19 2018 at 21:39)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> <span class="user-mention" data-user-id="191328">@Ewout Kramer</span> <span class="user-mention" data-user-id="191319">@James Agnew</span> This looks like a fun one...</p>
+
+
+
+<a name="153929741"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/date%20search%20and%20timezone/near/153929741" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Silva <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/date.20search.20and.20timezone.html#153929741">(Jan 19 2018 at 21:45)</a>:</h4>
+<p><span class="user-mention" data-user-id="192535">@Jorge de la Garza</span>  - I don't have a specific answer for FHIR but I've seen this problem with other implementations.   What I have seen done is that date-only values can be stored in the server as UTC-adjusted midnight values.   For example, a EDT midnight value would be stored as the next day plus 0400 hours (with all other components of the date/time at zero).    Note the other problem with this approach is that the midnight-normalized date needs to be with respect to the timezone of the person who created the date; what if this is a distributed system with users in many different time zones?</p>
+
+
+
+<a name="153929767"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/date%20search%20and%20timezone/near/153929767" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/date.20search.20and.20timezone.html#153929767">(Jan 20 2018 at 05:27)</a>:</h4>
+<p>for now, I am just assuming that search dates are in the timezone of the client. The tricky thing that I have not handled at all is that some date/times are clearly absolute, but most are relative. E.g. something that happened at 9am for the patient is 9am irrespective of the timezone I or the patient are in now</p>
+
+
+
+<a name="153929779"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/date%20search%20and%20timezone/near/153929779" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Silva <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/date.20search.20and.20timezone.html#153929779">(Jan 20 2018 at 15:53)</a>:</h4>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span>  - and the problem with 9am in the timezone where the patient was at the time it happened is problematic because of multiple things; most of them due to timezones being a relatively political thing.   This means the system performing a query needs to normalize time based on the timezone in effect AT the time the event occurred.   For example, the timezone switch-over date in the US has changed many times over the last few decades (to say nothing about the timezone boundaries changing).    Of course there are many corner-cases as well such as what happens when a patient encounter crosses timezone boundaries or occurs during the 'witching hours' when the timezone switched between daylight saving and standard time -- none of this is easy to deal with.  (Yeh, time [no pun intended] to "repeal" timezone laws! :-) )</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

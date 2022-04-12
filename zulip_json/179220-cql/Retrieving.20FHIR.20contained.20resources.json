@@ -1,0 +1,110 @@
+[
+    {
+        "content": "<p>Hey CQL team. Is there a mechanism to retrieve information from contained resources from a query request. Something like <code>define \"Aspirin MedRequests\" [MedicationRequest: medication.code in \"acetylsalicylic acid\"]</code> if the MedicationRequest has a medication reference set?</p>",
+        "id": 172224125,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1564668776
+    },
+    {
+        "content": "<p>does this help: <a href=\"http://hl7.org/fhir/search.html#contained\" target=\"_blank\" title=\"http://hl7.org/fhir/search.html#contained\">http://hl7.org/fhir/search.html#contained</a></p>",
+        "id": 172418278,
+        "sender_full_name": "David Hay",
+        "timestamp": 1564860574
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"194612\">@Michael Riley</span> -- if you strictly adhere to the defined FHIR models in CQL, then I think the only valid approach is via a subquery.  It's more complicated (and less efficient) than I prefer, but I think it's the only way that will work using a strict interpretation of the model.  Here is an example of your expression using that approach (and supporting both medication as a code and as a reference):</p>\n<div class=\"codehilite\"><pre><span></span>define &quot;Aspirin Medications&quot;:\n  [Medication: &quot;acetylsalicylic acid&quot;]\n\ndefine &quot;Aspirin MedRequests&quot;:\n  [MedicationRequest] R\n  let\n    MedCode: FHIRHelpers.ToConcept(R.medication as FHIR.CodeableConcept),\n    MedRef: (R.medication as FHIR.Reference).reference\n  where\n    MedCode in &quot;acetylsalicylic acid&quot;\n    or exists ((&quot;Aspirin Medications&quot;) M where M.id = MedRef or EndsWith(MedRef, &#39;/&#39; + M.id))\n</pre></div>\n\n\n<p>Note: I haven't tested the above in a run-time environment, but it does compile w/ CQL-to-ELM.</p>",
+        "id": 172506484,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1565013675
+    },
+    {
+        "content": "<p>That said, I have seen cases where authors have treated the default membership operator for <code>MedicationRequest</code> as if it is a FHIR query on <code>MedicationRequest.medication</code> -- in which case you can just use `[MedicationRequest: \"acetylsalicylic acid\"].  But this is not the standardized model, so it would require special support from the execution engine (and you would need to make sure the CQL-to-ELM is not in strict mode).  If you want your CQL to be portable and to work across various execution environments, I wouldn't recommend that approach.</p>",
+        "id": 172506749,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1565013886
+    },
+    {
+        "content": "<p>Last, <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> is working on something called QUICK FHIR (or something like that).  It's an alternate, simpler to use, FHIR model for CQL.  I think it may abstract these sorts of issues from the author -- but you'd need to talk to Bryn to get the details.</p>",
+        "id": 172506880,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1565013964
+    },
+    {
+        "content": "<p>Wow this is exactly what I was looking for. Although it seems like  you need to pull the medication resource set from a previous query, before getting the medicationrequest resource. We might have MedRequests with a heterogenous set of CodeableConcepts vs Refences here. I assume that casting with the 'as' command fails silently in the cases where it's not relevant?</p>",
+        "id": 172513392,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1565019180
+    },
+    {
+        "content": "<p>You can put the medication resource set subquery in the same query, but I think it would be less efficient in some execution implementations:</p>\n<div class=\"codehilite\"><pre><span></span>define &quot;Aspirin MedRequests&quot;:\n  [MedicationRequest] R\n  let\n    MedCode: FHIRHelpers.ToConcept(R.medication as FHIR.CodeableConcept),\n    MedRef: (R.medication as FHIR.Reference).reference\n  where\n    MedCode in &quot;acetylsalicylic acid&quot;\n    or exists ([Medication: &quot;acetylsalicylic acid&quot;] M where M.id = MedRef or EndsWith(MedRef, &#39;/&#39; + M.id))\n</pre></div>\n\n\n<p>The <code>as</code> expression will result in <code>null</code> if the actual type does not match the cast type.  See: <a href=\"https://cql.hl7.org/03-developersguide.html#casting\" target=\"_blank\" title=\"https://cql.hl7.org/03-developersguide.html#casting\">https://cql.hl7.org/03-developersguide.html#casting</a></p>\n<p>In CQL, nulls tend to propagate, so often it ends up working the way you want in cases like this.</p>\n<p>For example, if a <code>MedicationRequest</code> instance has a <code>medicationReference</code>, then <code>MedCode</code> will be <code>null</code> -- and since <code>null in \"acetylsalicylic acid\"</code> results in <code>null</code>, that first part in the <code>where</code> clause will not be satisfied (which is right).</p>\n<p>Similarly, if a <code>MedicationRequest</code> instance has a <code>medicationCode</code>, then <code>MedRef</code> will be <code>null</code> -- and since <code>M.id = null</code> will always result in <code>null</code> and <code>EndsWith(null, '/' + M.id)</code> will also always result in <code>null</code>, that 2nd clause in the <code>where</code> will never be satisfied when <code>MedRef</code> is <code>null</code> (which is also right).</p>",
+        "id": 172514590,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1565020140
+    },
+    {
+        "content": "<p>This is awesome thank you so much! Makes perfect sense to me, it's just CQL that's way more clever than I'm normally writing :)</p>",
+        "id": 172516874,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1565021930
+    },
+    {
+        "content": "<p>It looks right to me, but like I said, I haven't fully tested it -- so let's hope it works! ;-)</p>",
+        "id": 172517058,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1565022045
+    },
+    {
+        "content": "<p>I was able to have this evaluate for medicationRequest, but what do I do in the case of a list of references? For example, what if I want to compare an Encounter's diagnosis reference to a set of conditions I've allready pulled?</p>\n<div class=\"codehilite\"><pre><span></span>define &quot;ChlamydiaDiagnosis&quot;: [Condition: Code in &quot;Chlamydia_Codes&quot;]\ndefine &quot;ChlamydiaEncounters&quot;:\n[Encounter] Encounters\nwhere exists (&quot;ChlamydiaDiagnosis&quot; cond EndsWith(Encounters.diagnosis.condition.reference, &#39;/&#39; + cond.id))\n</pre></div>\n\n\n<p>This line returns an error of</p>\n<div class=\"codehilite\"><pre><span></span> Error [16:1]: Expected a list with at most one element, but found a list with multiple elements.\n</pre></div>\n\n\n<p>Since Encounter.diagnosis.condition.reference is a list of references, instead of a singular reference, how do I splay out that list to be used in this context? I think I use the <code>ForEach</code> evaluator, but I can't find a good example of how to use it.</p>",
+        "id": 172698318,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1565199485
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span></p>",
+        "id": 172699341,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1565200169
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194612\">@Michael Riley</span> and <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span>  -- I'm already in the middle of working this out.  Stand by.</p>",
+        "id": 172699873,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1565200502
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194612\">@Michael Riley</span> -- this can actually be accomplished using a single query and the <code>with</code> construct:</p>\n<div class=\"codehilite\"><pre><span></span>define &quot;ChlamydiaEncounters&quot;:\n  [Encounter] Encounter\n    with [Condition: code in &quot;Chlamydia_Codes&quot;] ChlamydiaDiagnosis\n    such that exists (\n      (Encounter.diagnosis.condition.reference) ref\n        where EndsWith(ref, &#39;/&#39; + ChlamydiaDiagnosis.id)\n    )\n</pre></div>\n\n\n<p>This essentially says to query over each encounter and each chlamydia condition, looking for encounters such that it's dx reference ends with a chlamydia condition's id.</p>\n<p>For more on the <code>with</code> construct: <a href=\"https://cql.hl7.org/02-authorsguide.html#relationships\" target=\"_blank\" title=\"https://cql.hl7.org/02-authorsguide.html#relationships\">https://cql.hl7.org/02-authorsguide.html#relationships</a></p>",
+        "id": 172701037,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1565201210
+    },
+    {
+        "content": "<p>The subquery actually needs to use the encounter refs as its source, since they are a list within a single encounter.  Since we use <code>with</code> on the chlamydia conditions, we don't need to worry about the \"listness\" of the conditions, as the iteration over that is built into the <code>with</code> construct.</p>",
+        "id": 172701246,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1565201371
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> Thank you so much, this worked for me. I didn't really understand the with clause very well.<br>\n I know the retrieve evaluator doesn't have a great mechanism for doing this, but if we could have the retrieve evaluator use either references, or construct a reference from a resource, that would be incredible.<br>\nSimply put, being able to do something like<br>\n<code>define \"ChalmydiaEncounters\":[Encounter: diagnosis references \"ChlamydiaDiagnosis\"]</code><br>\nto just pull resources that link against other resources would be really big for these non-patient-links. FHIR has some robust querying capability, I feel like CQL isn't leveraging it to the fullest.</p>",
+        "id": 172702176,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1565202098
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"194612\">@Michael Riley</span> -- agreed that something like that would be way cool.  One of the reasons that CQL doesn't leverage all of FHIR is that CQL is built to be data model agnostic.  It needs to support <em>any</em> data model, not just FHIR -- so building in FHIR-specific features wouldn't really support that aim.  That said, alternate data models could be designed that are based on FHIR but expose properties in a way that makes traversing references and leveraging queries easier.  I don't know if <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> has any of the in mind for QUICK FHIR, but I'm tagging him just in case.</p>",
+        "id": 172702860,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1565202638
+    },
+    {
+        "content": "<p>Yeah, I completely understand the independent data model complication. It's pretty brilliant that the java engine can rely on commonly used interfaces like \"iterable\" to help facilitate the execution engine, or resolve a type. However, a referencing relationship seems like something everyone would want. Everyone's using a database, almost everyone's database is relational. Some way to explicitedly call out to those relations would be useful.</p>",
+        "id": 172703832,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1565203367
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194612\">@Michael Riley</span> , this is an area that we've spent a lot of time thinking about, but there are several potential ways it could be addressed, all with different levels of effort in different areas of the spec/tooling, and different resulting impacts on the implementation.</p>\n<p>The most transparent way would be to actually use the ELM to detect these types of patterns when they are used within a given expression and within the data provider actually support a kind of rewrite that would push the \"include\" into the request and transform the \"child retrieves\" into a reference to a materialized result of the child retrieve. This approach, as you can imagine, would require a fairly sophisticated provider, but it's possible without any change to the translator or the model info. As a con, it does require authors to use certain patterns to access data.</p>\n<p>As Chris alluded to, we've also considered how we might make this transparent behind the model. The idea is that for reference-valued elements in FHIR, the model info element would be class-valued, rather than reference-valued, and it would be up to the data-access layer to resolve that (typically by fetching the instance pointed to by the reference, but you could imagine a more sophisticated implementation along the lines of the previous approach as well).</p>\n<p>These are just potential approaches at this point though, because they require quite a bit of effort to really get working. We have taken steps towards it though in the latest STU with the introduction of RelationshipInfo. Now the model can at least describe how classes in the model are related to eachother.</p>",
+        "id": 172807654,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1565302230
+    }
+]

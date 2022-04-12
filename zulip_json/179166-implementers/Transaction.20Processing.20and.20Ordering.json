@@ -1,0 +1,86 @@
+[
+    {
+        "content": "<p>Hi implementers! At this week's FHIR-I call we were working on a ticket about how transactions are processed (spec: <a href=\"https://www.hl7.org/fhir/http.html#trules\">here</a>, ticket <a href=\"https://jira.hl7.org/browse/FHIR-34060\">here</a>) and needed some community feedback.</p>\n<p>In order to clarify some language and requirements for transactions, the group wanted to get more feedback about how people are using them today - specifically in the context of request ordering/resolution.  This is for both servers (how things <em>are</em> implemented) and clients that use transactions (how clients <em>expect</em> things to be implemented).</p>\n<p>Some notes about the spec:</p>\n<ol>\n<li>This area is normative, but has a lot of 'room' in the language - we're hoping to clarify/narrow so that servers and clients have more aligned expectations and implementations.</li>\n<li>The spec is explicit that the order of requests in a transaction is irrelevant.  One of the reasons for creating transactions was to handle cases where two resources refer to each other and need to be created together.  This implies that the server is required to sort out all necessary ordering for their own purposes (e.g., if the implementation needs a Patient before and Encounter and they are both present, the order in the transaction doesn't matter), but may not be clear.  The key language is: <code>The outcome of processing the transaction SHALL NOT depend on the order of the resources in the transaction.</code>.</li>\n<li>The spec defines an order for processing based on HTTP verbs: <code>DELETE</code>, <code>POST</code>, <code>PUT</code> and/or <code>PATCH</code>, <code>GET</code> and/or <code>HEAD</code>, conditional reference resolution.</li>\n</ol>\n<p>Some questions:</p>\n<ol>\n<li>Did you know about that ordering, and if so, do you follow/expect it?</li>\n<li>\n<p>Are searches supported in transactions? If so, do POST-based searches happen early (after delete) and do GET-based searches happen late (after all delete/post/put/patch/etc.)?<br>\n2.a. Bonus for clients: if you are using this, are you depending on it? E.g., issuing a search before and after creates/updates to see what happens?</p>\n</li>\n<li>\n<p>Are operations supported in transactions? If so, what are your rules around when they are applied - e.g., POST is before PUT, but if an operation requires a resource that is created 'later' in the process ordering, does it pass/fail?<br>\n3.a. Bonus for servers: if you support operations, when do you do them?  E.g., do you perform operations and then POST-based creates, creates and then operations, or some other ordering?</p>\n</li>\n</ol>\n<p>Tagging people that were involved with the discussion and/or that I thought would have an opinion (sorry if I got any wrong or missed anyone! =) <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> <span class=\"user-mention\" data-user-id=\"193430\">@Alexander Zautke</span> <span class=\"user-mention\" data-user-id=\"194452\">@Bas van den Heuvel</span> <span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span> <span class=\"user-mention\" data-user-id=\"192685\">@Vassil Peytchev</span> <span class=\"user-mention\" data-user-id=\"195075\">@Brendan Kowitz</span> <span class=\"user-mention\" data-user-id=\"241501\">@Caitlin Voegele</span> <span class=\"user-mention\" data-user-id=\"191676\">@Lee Surprenant</span> <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> </p>\n<p>Thanks!</p>",
+        "id": 260820545,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1636474227
+    },
+    {
+        "content": "<p>On question #1: some translations of v2 to FHIR definitely depend on the order of processing of the HTTP verbs.</p>",
+        "id": 260953158,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1636528503
+    },
+    {
+        "content": "<p>how so?</p>",
+        "id": 260961828,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1636535252
+    },
+    {
+        "content": "<p>Note that I think that the bit about which verbs to process in which order is advice to servers, not mandatory - that is 'if you process in this order', then you'll meet the rule 'order doesn't matter' (except for reconciling references in advance). but it's possible that defining the order somehow defines something extra over 'The outcome of processing the transaction SHALL NOT depend on the order of the resources in the transaction' - if it does, what?</p>",
+        "id": 260962005,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1636535362
+    },
+    {
+        "content": "<p>Of course our current documentation, which provides a specific order of verbs,  defines something extra beyond the basic prohibition of \"SHALL NOT depend on the order of the resources in the transaction\" --  for example,  <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> imagine if we did not include any more specific guidance. Server A might decide to process DELETEs before GETs, and Server B  might decide to process GETs before DELETEs.  Neither server would violate the basic prohibition, because neither server would produce different results in the face of differently ordered transaction request bundles.  But interoperability across servers would be poor.</p>",
+        "id": 261002957,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1636556905
+    },
+    {
+        "content": "<p>Yes, it can also change the results on a simple transaction with one delete and one create.  One order removes a previous record and add the new one.  A different order either fails (record exists) or adds the record then deletes it.</p>\n<p>If the server is re-ordering requests in the bundle, then having a defined order is necessary.  What that order is will change where people draw boundaries around the number of transactions.</p>\n<p>edit: The alternative is to say they are processed in-order, but that servers need to handle forward references.  I have no doubt that is a significant breaking change and off the table - just noting to have it out in the open.</p>",
+        "id": 261007090,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1636558639
+    },
+    {
+        "content": "<p>The Google implementation does not support searches or operations in transactions, so that part isn't relevant for us. We do follow the order of processing, except that conditional references are evaluated first - before the transaction starts. Because of asynchronous indexing, we don't have a practical way to do a search that takes into account changes happening inside the current transaction.</p>",
+        "id": 261011634,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1636560438
+    },
+    {
+        "content": "<p>I've been meaning to double-check on some of the finer details, but let me at least get this out there before I forget.</p>\n<blockquote>\n<ol>\n<li>Did you know about that ordering, and if so, do you follow/expect it?</li>\n</ol>\n</blockquote>\n<p>yes, we’re aware of it and try to follow it</p>\n<blockquote>\n<ol start=\"2\">\n<li>Are searches supported in transactions?</li>\n</ol>\n</blockquote>\n<p>yes, but not sure how i feel about it</p>\n<blockquote>\n<ol start=\"3\">\n<li>Are operations supported in transactions?</li>\n</ol>\n</blockquote>\n<p>yes.  they weren't initially but it was a common user request so we did it.  not sure how i feel about this one either</p>\n<p>net:  I think we follow the method-based ordering from the spec, but i agree that leads to 'interesting' behavior that you touch on well with your sub-questions...will stay tuned</p>",
+        "id": 261014593,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1636561599
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191372\">René Spronk</span> <a href=\"#narrow/stream/179166-implementers/topic/Transaction.20Processing.20and.20Ordering/near/260953158\">said</a>:</p>\n<blockquote>\n<p>On question #1: some translations of v2 to FHIR definitely depend on the order of processing of the HTTP verbs.</p>\n</blockquote>\n<p>My understanding from discussion in <a href=\"#narrow/stream/179188-v2-to.20FHIR/topic/Messaging.20to.20REST.20API.20conversion\">v2 to FHIR</a>  was that you can't (in practice) do v2-to-FHIR using transactions.  Or maybe I'm just not understanding how you could execute the query/match/create/update/delete pattern for a segment in a transaction.</p>",
+        "id": 261140389,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1636640943
+    },
+    {
+        "content": "<p>As usual it depends one wishes to do. Messaging uses snapshots, and of one has  single source of truth for e.g. GT1 or AL1 segments, one can simply rip/replace any existing corresponding FHIR resources with whatever is contained in a v2 message. <br>\nIf one has multiple source systems, it gets a bit tricky, but using Provenance helps with the replacement of snapshots: rip/replace just those FHIR resources that were derived from v2 messages that were derived from v2 messages from the same sender as a later update v2 message. </p>\n<p>The way that is suggested in the aformentioned v2 to FHIR stream tries to merge all sorts of resources on the FHIR side (merge the content of existing resources with updates via v2, potentially from multiple sources). No way you could do that with a transaction (unless you had an operation to hide such logic, and invoke it from the transaction).</p>",
+        "id": 261150793,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1636646180
+    },
+    {
+        "content": "<p>For the rip/replace, I'm not sure how you'd do the \"rip\" part.  Conditional delete doesn't work since you don't know what you are deleting yet.  You need to do a search first, get the list of resources to delete, then submit them for deletion.  So you'd need, at a minimum, a search for every resource type + the transaction.  I don't think you can take the results of a search and delete them in a single transaction bundle right?</p>",
+        "id": 261164838,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1636652862
+    },
+    {
+        "content": "<p>Other than an operation.</p>",
+        "id": 261164859,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1636652876
+    },
+    {
+        "content": "<p>Coming back to the original proposal of the ticket: Do we think that changing the list to contain FHIR interactions would be too much?</p>",
+        "id": 261975584,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1637262853
+    },
+    {
+        "content": "<p>To answer the questions for Firely Server:</p>\n<ol>\n<li>Yes, it's implemented according to the order mentioned in the spec.</li>\n<li>Searches with POST and GET are supported. They are sorted according to the spec and no-one complained about until now.</li>\n<li>Same for operations, there is no special handling to figure out when the operation should be performed.</li>\n</ol>",
+        "id": 261975909,
+        "sender_full_name": "Alexander Zautke",
+        "timestamp": 1637262978
+    }
+]

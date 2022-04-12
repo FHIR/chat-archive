@@ -1,0 +1,74 @@
+---
+layout: page
+title: "FHIR Chat  · Failing validation of DocRef.status in HAPI 4.2 · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Failing.20validation.20of.20DocRef.2Estatus.20in.20HAPI.204.2E2.html">Failing validation of DocRef.status in HAPI 4.2</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="216623184"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Failing%20validation%20of%20DocRef.status%20in%20HAPI%204.2/near/216623184" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Failing.20validation.20of.20DocRef.2Estatus.20in.20HAPI.204.2E2.html#216623184">(Nov 13 2020 at 15:02)</a>:</h4>
+<p>Hi <span aria-label="wave" class="emoji emoji-1f44b" role="img" title="wave">:wave:</span> I'm moving some validation code from HAPI 4.2 to 5.1. Now when I try to validate an STU3 DocumentReference, I always get the error</p>
+<div class="codehilite"><pre><span></span><code>The value provided (&#39;current&#39;) is not in the value set http://hl7.org/fhir/ValueSet/document-reference-status (http://hl7.org/fhir/ValueSet/document-reference-status), and a code is required from this value set) (error message = Validation failed)
+</code></pre></div>
+<p>even thought I set the status in the resource using the matching enum ( <code>Enumerations.DocumentReferenceStatus</code>). I have added both <code>DefaultProfileValidationSupport</code> and <code>CommonCodeSystemsTerminologyService</code> to my validation chain (see code below). Debugging in, I see that in <code>org.hl7.fhir.common.hapi.validation.support#validateCodeInValueSet</code>, none of the validation supports return <code>true</code> for <code>isValueSetSupported</code>, hence <code>null</code> is returned. This <code>null</code>, in turn, is converted to an error in <code>org.hl7.fhir.common.hapi.validation.validator#convertValidationResult</code>. </p>
+<p>Any idea why this is happening? Here is the (effective) code reproducing what I am doing (in Kotlin, hence no <code>new</code> operators for creation etc. - hope it is still Java-readable <span aria-label="smile" class="emoji emoji-1f642" role="img" title="smile">:smile:</span> ):</p>
+<div class="codehilite" data-code-language="Kotlin"><pre><span></span><code> <span class="k">val</span> <span class="py">fhirContext</span> <span class="p">=</span> <span class="n">FhirContext</span><span class="p">.</span><span class="n">forDstu3</span><span class="p">()</span>
+ <span class="k">val</span> <span class="py">defaultValidationSupport</span> <span class="p">=</span> <span class="n">DefaultProfileValidationSupport</span><span class="p">(</span><span class="n">fhirContext</span><span class="p">)</span>
+ <span class="k">val</span> <span class="py">commonCodeSystemValidationSupport</span> <span class="p">=</span> <span class="n">CommonCodeSystemsTerminologyService</span><span class="p">(</span><span class="n">fhirContext</span><span class="p">)</span>
+ <span class="k">val</span> <span class="py">validationSupportChain</span> <span class="p">=</span> <span class="n">ValidationSupportChain</span><span class="p">(</span><span class="n">defaultValidationSupport</span><span class="p">,</span> <span class="n">commonCodeSystemValidationSupport</span><span class="p">)</span>
+ <span class="c1">// Create a HAPI FhirInstanceValidator and register it to a validator</span>
+ <span class="k">val</span> <span class="py">instanceValidatorMod</span> <span class="p">=</span> <span class="n">FhirInstanceValidator</span><span class="p">(</span><span class="n">validationSupportChain</span><span class="p">)</span>
+ <span class="n">validator</span> <span class="p">=</span> <span class="n">HapiContext</span><span class="p">.</span><span class="n">stu3Context</span><span class="p">.</span><span class="n">newValidator</span><span class="p">()</span>
+ <span class="k">val</span> <span class="py">valResult</span> <span class="p">=</span> <span class="n">validator</span><span class="p">.</span><span class="n">validateWithResult</span><span class="p">(</span><span class="n">resource</span><span class="p">)</span> <span class="c1">// resporce has status set to Enumerations.DocumentReferenceStatus.CURRENT</span>
+</code></pre></div>
+
+
+
+<a name="216877796"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Failing%20validation%20of%20DocRef.status%20in%20HAPI%204.2/near/216877796" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Failing.20validation.20of.20DocRef.2Estatus.20in.20HAPI.204.2E2.html#216877796">(Nov 16 2020 at 14:29)</a>:</h4>
+<p>For reference, this is how I construct the STU3 DocumentReference that triggers the above error (again in Kotlin, so no <code>new</code> and direct property assignment instead of getters and setters):</p>
+<div class="codehilite" data-code-language="Kotlin"><pre><span></span><code><span class="k">val</span> <span class="py">resource</span> <span class="p">=</span> <span class="n">DocumentReference</span><span class="p">()</span>
+<span class="n">resource</span><span class="p">.</span><span class="n">status</span> <span class="p">=</span> <span class="n">Enumerations</span><span class="p">.</span><span class="n">DocumentReferenceStatus</span><span class="p">.</span><span class="n">CURRENT</span>
+<span class="k">val</span> <span class="py">coding</span> <span class="p">=</span> <span class="n">Coding</span><span class="p">()</span>
+<span class="n">coding</span><span class="p">.</span><span class="n">system</span> <span class="p">=</span> <span class="s">"http://loinc.org"</span>
+<span class="n">coding</span><span class="p">.</span><span class="n">code</span> <span class="p">=</span> <span class="s">"789-8"</span>
+<span class="n">resource</span><span class="p">.</span><span class="n">type</span> <span class="p">=</span> <span class="n">CodeableConcept</span><span class="p">(</span><span class="n">coding</span><span class="p">)</span>
+<span class="n">resource</span><span class="p">.</span><span class="n">indexed</span> <span class="p">=</span> <span class="n">Date</span><span class="p">()</span>
+</code></pre></div>
+
+
+
+<a name="217976769"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Failing%20validation%20of%20DocRef.status%20in%20HAPI%204.2/near/217976769" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Failing.20validation.20of.20DocRef.2Estatus.20in.20HAPI.204.2E2.html#217976769">(Nov 26 2020 at 08:46)</a>:</h4>
+<p>(additions to my last msg: I forgot to add this but I also set the <code>content</code> element so the resource is overall valid)</p>
+<p>I'm seeing the same for R4. Debugging, I see the same problem: none of the validation supports know <em>http://hl7.org/fhir/ValueSet/document-reference-status</em> (<code>isValueSetSupported()</code> returns <code>false</code> for all supports I added). That, in turn, is interpreted by the validation engine as an invalid code <em>error</em> because it is a required code binding.</p>
+<p>This looks like a bug to me - I would have expected the DefaultProfileValidationSupport to be able to validate this as it says that it supports "FHIR built-in vocabulary (ValueSet and CodeSystem resources)."</p>
+
+
+
+<a name="217983569"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Failing%20validation%20of%20DocRef.status%20in%20HAPI%204.2/near/217983569" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Failing.20validation.20of.20DocRef.2Estatus.20in.20HAPI.204.2E2.html#217983569">(Nov 26 2020 at 10:02)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="194703">@Morten Ernebjerg</span> , i think you missed to  add the InMemoryTerminologyServerValidationSupport to the ValidationChain?</p>
+
+
+
+<a name="217984887"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Failing%20validation%20of%20DocRef.status%20in%20HAPI%204.2/near/217984887" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Failing.20validation.20of.20DocRef.2Estatus.20in.20HAPI.204.2E2.html#217984887">(Nov 26 2020 at 10:17)</a>:</h4>
+<p><span class="user-mention" data-user-id="191451">@Patrick Werner</span> Yes, that was it! - thank you, saved my day <span aria-label="tada" class="emoji emoji-1f389" role="img" title="tada">:tada:</span> I think I was throw off by the statement in the documentation about   DefaultProfileValidationSupport supporting "FHIR built-in vocabulary (ValueSet and CodeSystem resources)."</p>
+
+
+
+<a name="217986181"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Failing%20validation%20of%20DocRef.status%20in%20HAPI%204.2/near/217986181" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Patrick Werner <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Failing.20validation.20of.20DocRef.2Estatus.20in.20HAPI.204.2E2.html#217986181">(Nov 26 2020 at 10:33)</a>:</h4>
+<p>Yeah, this module contains them, applying them is done by the InMemoryTermSupport</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

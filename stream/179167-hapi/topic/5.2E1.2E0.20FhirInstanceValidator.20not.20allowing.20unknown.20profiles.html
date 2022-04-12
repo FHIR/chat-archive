@@ -1,0 +1,68 @@
+---
+layout: page
+title: "FHIR Chat  · 5.1.0 FhirInstanceValidator not allowing unknown profiles · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/5.2E1.2E0.20FhirInstanceValidator.20not.20allowing.20unknown.20profiles.html">5.1.0 FhirInstanceValidator not allowing unknown profiles</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="211606538"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/5.1.0%20FhirInstanceValidator%20not%20allowing%20unknown%20profiles/near/211606538" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Juuso Oksanen <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/5.2E1.2E0.20FhirInstanceValidator.20not.20allowing.20unknown.20profiles.html#211606538">(Sep 29 2020 at 11:09)</a>:</h4>
+<p>Hi.</p>
+<p>We ran to an issue where the FhirInstanceValidator (and by proxy ValidatorWrapper and InstanceValidator) always considers an unknown profile reference as IssueType.ERROR.</p>
+<p>The following culprit seems to be the lines 182-184 in the ValidatorWrapper-class:</p>
+<div class="codehilite"><pre><span></span><code>        if (message.endsWith(&quot;&#39; could not be resolved, so has not been checked&quot;) &amp;&amp; next.getLevel() == ValidationMessage.IssueSeverity.WARNING) {
+            next.setLevel(ValidationMessage.IssueSeverity.ERROR);
+        }
+</code></pre></div>
+
+
+<p>FhirInstanceValidator has a method we can use in the registration process called setErrorForUnknownProfiles(boolean errorForUnknownProfiles), but this set boolean is not accessed or referred anywhere in the business logic of the FhirInstanceValidator/ValidatorWrapper/InstanceValidator-class. The boolean is simply set as a value for the new instance of ValidatorWrapper and InstanceValidator.</p>
+<p>I believe I can deal with this error by handling this validation result specifically after all the validations have been run.</p>
+<p>However, is this behavior intended for the FhirInstanceValidator?</p>
+
+
+
+<a name="213125441"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/5.1.0%20FhirInstanceValidator%20not%20allowing%20unknown%20profiles/near/213125441" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eeva Turkka <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/5.2E1.2E0.20FhirInstanceValidator.20not.20allowing.20unknown.20profiles.html#213125441">(Oct 13 2020 at 08:36)</a>:</h4>
+<p>I wrote a junit test for this, and as you say it looks like the setErrorForUknownProfiles doesn't seem to do anything, the test fails with the profile error.</p>
+<div class="codehilite"><pre><span></span><code>@Test
+public void validateResource() throws  IOException {
+
+    FhirContext r4Context = FhirContext.forR4();
+
+    FhirValidator validator = new FhirValidator(r4Context);
+
+    ValidationSupportChain validationSupportChain = new ValidationSupportChain(
+        new DefaultProfileValidationSupport(r4Context),
+        new InMemoryTerminologyServerValidationSupport(r4Context),
+        new CommonCodeSystemsTerminologyService(r4Context),
+        new SnapshotGeneratingValidationSupport(r4Context));
+
+    FhirInstanceValidator instanceValidator = new FhirInstanceValidator(validationSupportChain);
+    validator.registerValidatorModule(instanceValidator);
+    instanceValidator.setErrorForUnknownProfiles(false);
+
+    ValidationResult res = validator.validateWithResult(new  Observation().setStatus(ObservationStatus.FINAL).setCode(new CodeableConcept(new Coding(&quot;baz&quot;, &quot;baa&quot;, &quot;123&quot;))).setMeta(new Meta().addProfile(&quot;http://foobar&quot;)));
+
+    assertEquals(&quot;Profile reference &#39;http://foobar&#39; could not be resolved, so has not been checked&quot;, res.getMessages().get(0));
+    assertEquals(1, res.getMessages().size());
+    assertTrue(res.isSuccessful());
+}
+</code></pre></div>
+
+
+
+<a name="227625125"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/5.1.0%20FhirInstanceValidator%20not%20allowing%20unknown%20profiles/near/227625125" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ken Sinn <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/5.2E1.2E0.20FhirInstanceValidator.20not.20allowing.20unknown.20profiles.html#227625125">(Feb 24 2021 at 16:17)</a>:</h4>
+<p>Wondering if there have been any updates on this, and whether there is a way to circumvent errors being thrown for unknown/unresolvable profile URLs during validation. Does this behaviour also apply for unknown/unresolvable extension URLs?</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

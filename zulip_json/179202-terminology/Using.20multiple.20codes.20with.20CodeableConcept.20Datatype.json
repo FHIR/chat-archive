@@ -1,0 +1,254 @@
+[
+    {
+        "content": "<p>See US Core <a href=\"http://build.fhir.org/ig/HL7/US-Core/conformance-expectations.html#using-multiple-codes-with-codeableconcept-datatype\">http://build.fhir.org/ig/HL7/US-Core/conformance-expectations.html#using-multiple-codes-with-codeableconcept-datatype</a><br>\nIt talks about using multiple codes within a CodeableConcept?<br>\nIt talks about \"alternate codes\" called \"translations\", but its not clear to me which item of the coding array is \"standard\" (aka \"primary\" or not \"alternate\").  Presumably code.coding[0] is the primary code, and others are \"translations\", but that is not explicit as far as I can tell.  Apparently the \"primary\" code is from a required or extensible value set, and alternate or translations would not be in that value set.  But what if the value set includes multiple code systems where a code for the same concept exists in two or more of the code systems; if the value set has 2 code systems, either code (or both?) can be \"primary\".  US Core says \"These translations may be equivalent or narrower in meaning\" to the standard concept (primary) code.  If the value set contains 2 codes (e.g.,CVX and SNOMED), how would you know which one is narrower in meaning from another?  Why can't a \"translation\" or alternate code have a broader meaning that the primary code?  For COVID-19 vaccines, CVX is narrower than SNOMED.  207 is Moderna and 208 is Pfizer, but both are mRNA.  SNOMED 1119349007 is for mRNA, so it could represent either Moderna or Pfizer.  If SNOMED is not specified in the value set (which uses CVX), what is wrong with having code.coding[0] be CVX and code.coding[1] be a broader SNOMED code?</p>\n<p>Given this:<br>\n  \"vaccineCode\": {<br>\n    \"coding\": [<br>\n      {<br>\n        \"code\": \"207\",<br>\n        \"system\": \"<a href=\"http://hl7.org/fhir/sid/cvx\">http://hl7.org/fhir/sid/cvx</a>\"<br>\n      },<br>\n      {<br>\n        \"code\": \"XM5JC5\",<br>\n        \"system\": \"<a href=\"http://id.who.int/icd11/mms\">http://id.who.int/icd11/mms</a>\"<br>\n      },<br>\n      {<br>\n        \"code\": \"1119349007\",<br>\n        \"system\": \"<a href=\"http://snomed.info/sct\">http://snomed.info/sct</a>\"<br>\n      }<br>\n    ]<br>\n  }<br>\nCan you tell which codes are in the value set and which are not?<br>\nIs it still called a translation if it is in the value set?</p>",
+        "id": 236395626,
+        "sender_full_name": "Paul Denning",
+        "timestamp": 1619552110
+    },
+    {
+        "content": "<p>There is no notion of 'primary' - the code you're looking for could appear anywhere in the list.  (And it's non-conformant to insist that 'your' code appear in a particular place in the order.)  A given instance could comply with numerous profiles, each of which might require a coding from a particular value set to be present.  Some profiles might require that codings from multiple value sets be present.  To validate, you need to check all the codings to see if any of them are valid within the value set(s) you happen to care about.</p>",
+        "id": 236397214,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1619552840
+    },
+    {
+        "content": "<p>There <em>is</em> an ability to flag one of the codings as \"user-specified\" - i.e. the specific code the user picked from the user interface (if that happened at all).  Other than that, there's no mechanism to determine what codes are broader vs. narrower other than the receiving system's knowledge of the codes in question.</p>",
+        "id": 236397359,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1619552907
+    },
+    {
+        "content": "<p>Thanks for the clarifications.<br>\nSo if CVX is \"required\" binding strength, the coding above would be valid because it contains the 207 CVX code, and the ICD11 and SNOMED are ok even though they are conceptually broader and not in the required value set?</p>",
+        "id": 236398226,
+        "sender_full_name": "Paul Denning",
+        "timestamp": 1619553313
+    },
+    {
+        "content": "<p>yes. And the question of broader vs narrower is explicitly dealt with:</p>\n<blockquote>\n<p>Each coding (also referred to as a 'translation') is a representation of the concept as described above and may have slightly different granularity due to the differences in the definitions of the underlying codes</p>\n</blockquote>",
+        "id": 236398448,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1619553406
+    },
+    {
+        "content": "<p>There can actually be a pretty broad difference in granularity.  Having one coding that says \"antibiotic\" and one that says \"APO Amoxicillin 10 mg tablets, batch 1234\" is completely fair game.</p>",
+        "id": 236402737,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1619555333
+    },
+    {
+        "content": "<p>One thing we're looking at now is including vaccine manufacturer along with the CVX code. The CVX code identifies the vaccine product, but not <em>necessarily</em> the manufacturer (though it does implicitly for the COVID vaccines currently).</p>\n<p>Some possible code systems, like GTIN, would identify both the vaccine product and manufacturer. It sounds like including both CVX and GTIN in <code>vaccineCode</code> makes sense based on the above.</p>\n<p>But for CVX, the manufacturer counterpart is <a href=\"https://www2a.cdc.gov/vaccines/iis/iisstandards/vaccines.asp?rpt=mvx\">MVX</a>, which literally just identifies the manufacturer (<code>MVX#MOD</code> = Moderna). Does this also make sense as part of the <code>vaccineCode</code>?</p>\n<p>(<code>Immunization.manufacturer</code> is another option, but this is a reference rather than a CodeableConcept, and it seems strange to give up the benefits of terminology validation since we have a code system for manufacturer.)</p>\n<p>/cc <span class=\"user-mention\" data-user-id=\"194174\">@Paul Denning</span> <span class=\"user-mention\" data-user-id=\"194164\">@Neelima Karipineni</span></p>",
+        "id": 236746649,
+        "sender_full_name": "Max Masnick",
+        "timestamp": 1619730560
+    },
+    {
+        "content": "<p>Sounds like Immuniation.manufacturer should change to CodeableReference in R5.  In R4, you could use an extension.  Vaccine manufacturer codes definitely <em>don't</em> belong in Immunization.vaccineCode.</p>",
+        "id": 236747873,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1619730930
+    },
+    {
+        "content": "<p>I agree with Lloyd on that.  I looked at MVX again when I updated CVX in <a href=\"http://tx.fhir.org\">tx.fhir.org</a> - and MVX is pretty clearly an <strong>identifier</strong> system rather than a code system (although in the past both of them have typically tended to be lumped together in the \"code system\" bin).</p>",
+        "id": 236748929,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1619731190
+    },
+    {
+        "content": "<p>In that case, it could go into Reference.identifier</p>",
+        "id": 236749881,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1619731449
+    },
+    {
+        "content": "<p>I thought about using an extension, but that uses up a lot of our very limited payload to fit inside a QR code:</p>\n<div class=\"codehilite\"><pre><span></span><code>&quot;extension&quot;:[{&quot;url&quot;:&quot;code&quot;,&quot;valueCodeableConcept&quot;:{&quot;coding&quot;:[{&quot;system&quot;:&quot;http://hl7.org/fhir/sid/mvx&quot;,&quot;code&quot;:&quot;MOD&quot;}]}}]\n</code></pre></div>\n<p>vs</p>\n<div class=\"codehilite\"><pre><span></span><code>{&quot;system&quot;:&quot;http://hl7.org/fhir/sid/mvx&quot;,&quot;code&quot;:&quot;MOD&quot;}\n</code></pre></div>",
+        "id": 236749921,
+        "sender_full_name": "Max Masnick",
+        "timestamp": 1619731461
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194164\">@Neelima Karipineni</span> identified <code>Reference.identifier</code> as an option, but then we lose terminology validation, right?</p>",
+        "id": 236750075,
+        "sender_full_name": "Max Masnick",
+        "timestamp": 1619731510
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191320\">Lloyd McKenzie</span> <a href=\"#narrow/stream/179202-terminology/topic/Using.20multiple.20codes.20with.20CodeableConcept.20Datatype/near/236747873\">said</a>:</p>\n<blockquote>\n<p>Sounds like Immuniation.manufacturer should change to CodeableReference in R5.  In R4, you could use an extension.  Vaccine manufacturer codes definitely <em>don't</em> belong in Immunization.vaccineCode.</p>\n</blockquote>\n<p>What's the mechanism for suggesting this change? Jira issue against FHIR Core, R5? If so I can log an issue.</p>",
+        "id": 236750353,
+        "sender_full_name": "Max Masnick",
+        "timestamp": 1619731615
+    },
+    {
+        "content": "<p>I agree with Lloyd that Reference.identifier would be a better choice - and avoids the extension overhead issue.  I agree that identifier systems probably aren't being validated - that may be something that we will need have addressed.</p>",
+        "id": 236750401,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1619731646
+    },
+    {
+        "content": "<p>Ok, we will go with <code>Reference.identifier</code> until R5. Thank you both!!!</p>",
+        "id": 236750548,
+        "sender_full_name": "Max Masnick",
+        "timestamp": 1619731714
+    },
+    {
+        "content": "<p>Actually, it would make sense in R5 too - if we're dealing with an identifier system rather than a code system.  Though the fact that the list of 'allowed' identifiers will probably be published like a CodeSystem might make CodeableReference make sense in R5.  In any case, submit a change request and the group can talk about it.</p>",
+        "id": 236752939,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1619732958
+    },
+    {
+        "content": "<p>Folks MVX is actually a controlled list of \"scoping identifiers.\" I think we <em>do</em> want it verified. I'd suggest we treat this as a code system since I suspect it is not really <em>instance</em> identifiers because multiple manufacturing instances are all scoped by the same MVX code. So, would you still want to use .identifier?</p>",
+        "id": 236754343,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1619733769
+    },
+    {
+        "content": "<blockquote>\n<p>MVX is pretty clearly an identifier system rather than a code system</p>\n</blockquote>\n<p>technically, this is a case of what ISO 701 calls an 'appelation' - there is one instance of each concept, and it may be treated as either an identifier system or a code system. In this case, I think it should be a code system</p>",
+        "id": 236757898,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1619735822
+    },
+    {
+        "content": "<p>This brings up something I meant to talk about before. Given that much of the overhead of a FHIR resource is URIs, I've thought before that for a QR code, we could define a special JSON variant where we use something like @cvx in place of the full URL, and that we have a single QR Code IG that defines a list of special URL tokens like that. </p>\n<p><code>@sct | @loinc | @ucum | @cvx | @rxnorm | @fhir-sd-[X} | @v2-[x] | @v3[X} | @tho-c-[X} | </code></p>\n<p>I've thought about this specifically for QR Codes since you really are space limited; An alternative is not to use JSON, but something specifically denser. But maybe json + url tokens is dense enough?</p>",
+        "id": 236758377,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1619736079
+    },
+    {
+        "content": "<p>I can see some argument for this.  Common usage and precedent certainly could be a reason to move it to or keep it in the code system bucket.  And the practical reason of validating it using the current machinery also could push it that way.  Are those your reasons, or are there others?</p>",
+        "id": 236759409,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1619736733
+    },
+    {
+        "content": "<p>year - practicality. Also vaccine + manufacturer behaves quite a lot like another pattern: modality + body part. These are sometimes pre-coordinate and sometimes in separate elements.</p>",
+        "id": 236759519,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1619736808
+    },
+    {
+        "content": "<p>With DEFLATE-compressed JSON (or DEFLATE-compressed CBOR), repeated URLs that share a common base compress quite well, but lots of unique text does poorly. It's helpful to run some tests to develop intuition. If we really want these contextual expansions, JSON-LD has a built-in mechanism (but this kind of thing gets complex quickly)</p>",
+        "id": 236764079,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619739774
+    },
+    {
+        "content": "<p>So if MVX is considered a code system, what are the implications for sticking it in <code>Immunization.manufacturer</code> vs. in <code>Immunization.vaccineCode</code>?</p>",
+        "id": 236768652,
+        "sender_full_name": "Max Masnick",
+        "timestamp": 1619742940
+    },
+    {
+        "content": "<p>For the purposes of the SMART Health Card Vaccination use case, the concept of a \"vaccine\" is defined by what information is necessary for a Verifier of the SMART Health Card to determine if the person receiving a specific vaccine is considered vaccinated. In other words, the data identifying the vaccine has to be specific enough to distinguish two vaccines that would potentially be treated differently by Verifiers.</p>\n<p>This data definitely will need to include more than just \"mRNA vaccine for COVID\" -- this is not sufficient because the Pfizer and Moderna vaccines have different timelines for the 2nd dose, and boosters will also come into question. Verifiers will need to know this info because they might accept two Pfizer doses spaced by 21 days, but not two Moderna doses spaced by 21 days.</p>\n<p>Right now CVX indicates manufacturer implicitly, but this may not always be the case: in the future, multiple manufacturers will make the \"COVID-19, mRNA, LNP-S, PF, 100 mcg/ 0.5 mL dose\" vaccine (CVX <code>207</code>) since <a href=\"https://investors.modernatx.com/news-releases/news-release-details/statement-moderna-intellectual-property-matters-during-covid-19\">Moderna is allowing others to use their IP</a>. This is how other vaccines work with CVX -- see the influenza CVX for example. But if for some reason a specific manufacturer's vaccine is shown to be ineffective, Verifiers will want to be able to take this into consideration. So manufacturer is explicitly part of our concept of \"vaccine\" for our use case.</p>\n<p><strong>Given all this, and that ideally MVX should be treated as a code system, does <code>Reference.identifier</code> still make the most sense?</strong></p>\n<p>Re: extensions, in addition to the payload size concerns, I think we want to avoid extensions if possible because they increase complexity for implementers (especially those new to FHIR, which we expect will be a number of our implementers).</p>",
+        "id": 236769985,
+        "sender_full_name": "Max Masnick",
+        "timestamp": 1619744080
+    },
+    {
+        "content": "<p>Reference.identifier is semantically correct.  CodeableReference will be better in R5</p>",
+        "id": 236770460,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1619744509
+    },
+    {
+        "content": "<p>Yes, agree - I think that's still the answer.</p>",
+        "id": 236822230,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1619783150
+    },
+    {
+        "content": "<p>If someone creates a Jira ticket to make .manufacturer a CodeableReference for R5, I'll add it to the agenda for the PUbic Health WG Immunization call on May 21st (<a href=\"http://www.hl7.org/concalls/CallDetails.cfm?concall=54996\">http://www.hl7.org/concalls/CallDetails.cfm?concall=54996</a>). We'll be talking about other manufacturer related changes and all are welcome to come and discuss.</p>",
+        "id": 236831930,
+        "sender_full_name": "Craig Newman",
+        "timestamp": 1619788504
+    },
+    {
+        "content": "<p><a href=\"https://jira.hl7.org/browse/FHIR-32031\">https://jira.hl7.org/browse/FHIR-32031</a> created</p>",
+        "id": 236842033,
+        "sender_full_name": "Paul Denning",
+        "timestamp": 1619792664
+    },
+    {
+        "content": "<p>Thank you. I added it to the agenda for May.</p>",
+        "id": 236873929,
+        "sender_full_name": "Craig Newman",
+        "timestamp": 1619804524
+    },
+    {
+        "content": "<p>I'm fine with this approach, and making MVX a code system.</p>",
+        "id": 236911771,
+        "sender_full_name": "Robert McClure",
+        "timestamp": 1619821383
+    },
+    {
+        "content": "<p>I'll work on adding support for MVX as a code system on <a href=\"http://tx.fhir.org\">tx.fhir.org</a>.</p>",
+        "id": 236934914,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1619842098
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span> was this support for MVX added? I don't see it in the list of terminologies supported when I do <a href=\"http://tx.fhir.org/r4/metadata?mode=terminology\">http://tx.fhir.org/r4/metadata?mode=terminology</a>, If not, can you comment as to when you think it might be added?</p>",
+        "id": 237695703,
+        "sender_full_name": "Carol Macumber",
+        "timestamp": 1620321322
+    },
+    {
+        "content": "<p>It's not there yet.  I can probably get to it by tomorrow for my part.  Then once that's done, Grahame will need to push it to the <a href=\"http://tx.fhir.org\">tx.fhir.org</a> server.</p>",
+        "id": 237735719,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1620337583
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179202-terminology/topic/Using.20multiple.20codes.20with.20CodeableConcept.20Datatype/near/236758377\">said</a>:</p>\n<blockquote>\n<p>This brings up something I meant to talk about before. Given that much of the overhead of a FHIR resource is URIs, I've thought before that for a QR code, we could define a special JSON variant where we use something like @cvx in place of the full URL, and that we have a single QR Code IG that defines a list of special URL tokens like that. </p>\n<p><code>@sct | @loinc | @ucum | @cvx | @rxnorm | @fhir-sd-[X} | @v2-[x] | @v3[X} | @tho-c-[X} | </code></p>\n<p>I've thought about this specifically for QR Codes since you really are space limited; An alternative is not to use JSON, but something specifically denser. But maybe json + url tokens is dense enough?</p>\n</blockquote>\n<p>That would be especially nice if we add AIR <a href=\"https://www.humanservices.gov.au/organisations/health-professionals/enablers/air-vaccine-code-formats\">https://www.humanservices.gov.au/organisations/health-professionals/enablers/air-vaccine-code-formats</a> as considered <a href=\"http://build.fhir.org/ig/dvci/vaccine-credential-ig/branches/vaccine-tx-improvements/StructureDefinition-vaccination-credential-immunization.html#identifying-vaccines\">here</a> (PR <a href=\"https://github.com/dvci/vaccine-credential-ig/pull/132\">here</a> )</p>\n<p>and even nicer if @air could be a tiny url (but I guess if the actual URL for @air or @sct etc is in an IG and not in the QR code FHIR bundle a tiny url is not needed)</p>",
+        "id": 237826547,
+        "sender_full_name": "Paul Denning",
+        "timestamp": 1620395706
+    },
+    {
+        "content": "<p>The MVX code system (CodeSystem resource) has been added to the packages repository.  It now needs to be loaded by Grahame on <a href=\"http://tx.fhir.org\">tx.fhir.org</a> (that should happen soon).</p>",
+        "id": 240895872,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1622524563
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191405\">@Rob Hausam</span>  I don't see MVX listed here <a href=\"http://tx.fhir.org/r4/metadata?mode=terminology\">http://tx.fhir.org/r4/metadata?mode=terminology</a>? Am i looking in the wrong place?</p>",
+        "id": 242657471,
+        "sender_full_name": "Carol Macumber",
+        "timestamp": 1623703899
+    },
+    {
+        "content": "<p>No, you're looking in the right place, <span class=\"user-mention\" data-user-id=\"195036\">@Carol Macumber</span>.  There is a step between getting the content committed to repository (which has been done) and when it is loaded and becomes available in <a href=\"http://tx.fhir.org\">tx.fhir.org</a>, which at preseent I don't have control over (and I can't do anything further with it to make that happen or speed it up).</p>",
+        "id": 242671090,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1623712892
+    },
+    {
+        "content": "<p>published</p>",
+        "id": 242672881,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1623714527
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"195036\">@Carol Macumber</span> Confirming that MVX is now available as a code system on <a href=\"http://tx.fhir.org\">tx.fhir.org</a>.</p>",
+        "id": 243008622,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1623932285
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179202-terminology/topic/Using.20multiple.20codes.20with.20CodeableConcept.20Datatype/near/236757898\">said</a>:</p>\n<blockquote>\n<p>a special JSON variant where we use something like @cvx in place of the full URL</p>\n</blockquote>\n<p>Any more thought on this? Looks a lot like JSON-LD, which could be useful for a variety of things.</p>",
+        "id": 258406759,
+        "sender_full_name": "Jay Lyle",
+        "timestamp": 1634750195
+    },
+    {
+        "content": "<p>if you're interested in json-ld you should have a look at what the RDF group is doing, but json-ld raises many challenging issues that are outside the scope of a spec.</p>",
+        "id": 258413582,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1634752546
+    },
+    {
+        "content": "<p>but no, doing something like @cvx didn't get any traction</p>",
+        "id": 258413607,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1634752557
+    }
+]

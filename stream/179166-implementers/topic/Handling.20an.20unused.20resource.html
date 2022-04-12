@@ -1,0 +1,62 @@
+---
+layout: page
+title: "FHIR Chat  · Handling an unused resource · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20an.20unused.20resource.html">Handling an unused resource</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153989863"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Handling%20an%20unused%20resource/near/153989863" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Reinhold <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20an.20unused.20resource.html#153989863">(Aug 21 2018 at 19:50)</a>:</h4>
+<p>I suppose there is no good answer to this problem but I have a situation where a transaction Bundle contains several resources using conditional create transactions. These resources reference another resource using a create transaction. Now it could be that all of the conditional creates are handled using a 200 (not a 201) meaning the resource is already present and no change to that resource is made. This leaves the resource using the create transaction. Since all the other resources did not get created, I would like to avoid uploading this resource since it will serve no purpose.</p>
+<p>One might quickly say how can the conditional creates not create new resources since the reference to this other resource has to be different? So there is no way this should arise. Well, that all depends upon the conditional create 'condition'! The reference is not part of what is being used to identify the conditional create.</p>
+<p>For those that have to fortitude to read on, here is the actual case:<br>
+The resources being uploaded using conditional creates are Observations from a Personal Health Device (PHD). PHDs can be naughty and send old data repeatedly. The conditional create assures previously uploaded data is not made into a new resource. However, these resources also reference a special Observation called the Coincident Time Stamp Observation. PHDs can also be very bad about having good time. So the NTP synchronized  gateway corrects the time stamps based upon the <em>difference</em> between the current time of the PHD and that of the Gateway. This coincident time stamp is referenced by the measurement Observation.</p>
+<p>If the upload is done later and the PHD sends the same data again, the coincident time stamp resource will be different because it is taken at a different time. However, the difference will not be. So the reference to the coincident time stamp is not included in what defines the measurement. Thus the conditional create will stop the duplicate measurements, but the coincident time stamp will be new and it will be created. The downside is that it will not be referenced by anything and by itself it serves no purpose. I would like it NOT to be created (without having to look at the response).</p>
+<p>If anyone has some ideas on how to solve this, I would be most appreciative!</p>
+
+
+
+<a name="153989875"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Handling%20an%20unused%20resource/near/153989875" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20an.20unused.20resource.html#153989875">(Aug 21 2018 at 20:46)</a>:</h4>
+<p>umm, isn't that Bundle.timestamp?</p>
+
+
+
+<a name="153989877"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Handling%20an%20unused%20resource/near/153989877" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Reinhold <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20an.20unused.20resource.html#153989877">(Aug 21 2018 at 20:51)</a>:</h4>
+<blockquote>
+<p>umm, isn't that Bundle.timestamp?</p>
+</blockquote>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span>  Not sure how the time stamp of the Bundle will help. What I would like to tell the server is that if none of the resources in the Bundle reference  the 'coincident time stamp' resource, don't create it. But I am sure that is not possible. So I need to figure out another way to accomplish it.</p>
+
+
+
+<a name="153989882"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Handling%20an%20unused%20resource/near/153989882" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20an.20unused.20resource.html#153989882">(Aug 21 2018 at 21:09)</a>:</h4>
+<p>I don't understand. if none of the reference it, don't put it in there?</p>
+
+
+
+<a name="153989907"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Handling%20an%20unused%20resource/near/153989907" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Reinhold <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20an.20unused.20resource.html#153989907">(Aug 21 2018 at 21:58)</a>:</h4>
+<blockquote>
+<p>I don't understand. if none of the reference it, don't put it in there?</p>
+</blockquote>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span> It's a conditional create for the measurement Observation resources . I do not know if the resource already exists on the server. If it does not exist, the resource will be created. Then the coincident time stamp resource WILL be useful. A possible solution that is difficult to implement on a low-end remote gateway is to get the response from the upload. If all the measurement resources return with a 200, then the coincident time stamp resource can be deleted (if one has the permission to delete the resource). A 201 on the other hand, means leave the coincident time stamp resource on the server.</p>
+
+
+
+<a name="153989911"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Handling%20an%20unused%20resource/near/153989911" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Handling.20an.20unused.20resource.html#153989911">(Aug 21 2018 at 22:04)</a>:</h4>
+<p>not sure I follow...  if none of the resources in the Bundle reference the 'coincident time stamp' resource, don't put it in the bundle</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

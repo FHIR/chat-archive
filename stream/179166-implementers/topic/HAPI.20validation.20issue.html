@@ -1,0 +1,316 @@
+---
+layout: page
+title: "FHIR Chat  · HAPI validation issue · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HAPI.20validation.20issue.html">HAPI validation issue</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153969887"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HAPI%20validation%20issue/near/153969887" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Aditya Joshi <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HAPI.20validation.20issue.html#153969887">(Jun 14 2018 at 13:58)</a>:</h4>
+<p>Hi All,<br>
+Need help on below issue.</p>
+<p>For Observation resource (STU 3), there is one constraint mentioned -</p>
+<p><a href="https://www.hl7.org/implement/standards/fhir/observation.html" target="_blank" title="https://www.hl7.org/implement/standards/fhir/observation.html">https://www.hl7.org/implement/standards/fhir/observation.html</a> </p>
+<p><strong>obs-7: If code is the same as a component code then the value element associated with the code SHALL NOT be present (expression : value.empty() or code!=component.code)</strong></p>
+<p>In my understanding it means if Observation.code (which means Observation.code.coding.code) is equal to component.code ( which means Observation.component.code.coding.code) then there must not be Observation.value element. </p>
+<p>But when I try to validate this, I am not getting correct results.</p>
+<p><strong>Scenario 1: Error with HAPI code</strong></p>
+<p>Actual FHIR Json Resource:</p>
+<div class="codehilite"><pre><span></span>        {
+             &quot;resourceType&quot;: &quot;Observation&quot;,
+                &quot;identifier&quot;: [
+                    {
+                        &quot;system&quot;: &quot;http://partners.org/schema/ABC/LabTest&quot;,
+                        &quot;value&quot;: &quot;45454545&quot;
+                    }
+                ],
+                &quot;status&quot;: &quot;final&quot;,
+                &quot;category&quot;: [
+                    {
+                        &quot;coding&quot;: [
+                            {
+                                &quot;system&quot;: &quot;http://hl7.org/fhir/observation-category&quot;,
+                                &quot;code&quot;: &quot;laboratory&quot;,
+                                &quot;display&quot;: &quot;Laboratory&quot;
+                            }
+                        ]
+                    }
+                ],
+                &quot;code&quot;: {
+                    &quot;coding&quot;: [
+                        {
+                            &quot;system&quot;: &quot;http://loinc.org&quot;,
+                            &quot;code&quot;: &quot;2823-3&quot;,
+                            &quot;display&quot;: &quot;Potassium [Moles/volume] in Serum or Plasma&quot;
+                        }
+                    ],
+                    &quot;text&quot;: &quot;K&quot;
+                },
+                &quot;effectiveDateTime&quot;: &quot;2014-04-02T07:49:00+05:30&quot;,
+                &quot;valueQuantity&quot;: {
+                    &quot;value&quot;: 100,
+                    &quot;unit&quot;: &quot;mmol/L&quot;
+                },
+                &quot;specimen&quot;: {
+                    &quot;identifier&quot;: {
+                        &quot;system&quot;: &quot;http://mysystem.org/schema/ABC/Specimen&quot;,
+                        &quot;value&quot;: &quot;4547667&quot;
+                    }
+                },
+                &quot;referenceRange&quot;: [
+                    {
+                        &quot;text&quot;: &quot;3.4-4.8&quot;
+                    }
+                ]
+        }
+</pre></div>
+
+
+<p>HAPI code used:</p>
+<p>FhirContext context = FhirContext.forDstu3();<br>
+        FhirValidator validator = context.newValidator();<br>
+        validator.setValidateAgainstStandardSchema(true);<br>
+        validator.setValidateAgainstStandardSchematron(true); </p>
+<p>Error Log:</p>
+<div class="codehilite"><pre><span></span>ValidationResult{messageCount=1, isSuccessful=false, description=&#39;ERROR - [error] Observation @ /*:Observation[namespace-uri()=&#39;http://hl7.org/fhir&#39;][1]; Test=not(exists(f:*[starts-with(local-name(.), &#39;value&#39;)])) or not(count(for $coding in f:code/f:coding return parent::*/f:component/f:code/f:coding[f:code/@value=$coding/f:code/@value and f:system/@value=$coding/f:system/@value])=0); Message=obs-7: If code is the same as a component code then the value element associated with the code SHALL NOT be present - Observation @ /*:Observation[namespace-uri()=&#39;http://hl7.org/fhir&#39;][1]&#39;}
+</pre></div>
+
+
+<p>Note- I tried above example to validate on below Public servers and did not get any error-<br>
+<a href="http://test.fhir.org/r4" target="_blank" title="http://test.fhir.org/r4">http://test.fhir.org/r4</a></p>
+<p><a href="http://fhir.hl7fundamentals.org/baseDstu3" target="_blank" title="http://fhir.hl7fundamentals.org/baseDstu3">http://fhir.hl7fundamentals.org/baseDstu3</a> (used $validate operation)</p>
+<p><strong>Scenario 2: Error</strong> Using some other public fhir test server and other Observation resource examples to compare how other test servers behaves for this issue</p>
+<p>Observation Resource with only one component. This is giving error related to above constraint.</p>
+<div class="codehilite"><pre><span></span>{
+  &quot;resourceType&quot;: &quot;Observation&quot;,
+  &quot;id&quot;: &quot;blood-pressure&quot;,
+  &quot;meta&quot;: {
+    &quot;profile&quot;: [
+      &quot;http://hl7.org/fhir/StructureDefinition/vitalsigns&quot;
+    ]
+  },
+  &quot;identifier&quot;: [
+    {
+      &quot;system&quot;: &quot;urn:ietf:rfc:3986&quot;,
+      &quot;value&quot;: &quot;urn:uuid:187e0c12-8dd2-67e2-99b2-bf273c878281&quot;
+    }
+  ],
+  &quot;status&quot;: &quot;final&quot;,
+  &quot;category&quot;: [
+    {
+      &quot;coding&quot;: [
+        {
+          &quot;system&quot;: &quot;http://hl7.org/fhir/observation-category&quot;,
+          &quot;code&quot;: &quot;vital-signs&quot;,
+          &quot;display&quot;: &quot;Vital Signs&quot;
+        }
+      ]
+    }
+  ],
+  &quot;code&quot;: {
+    &quot;coding&quot;: [
+      {
+        &quot;system&quot;: &quot;http://loinc.org&quot;,
+        &quot;code&quot;: &quot;85354-9&quot;,
+        &quot;display&quot;: &quot;Bood pressure panel with all children optional&quot;
+      }
+    ],
+    &quot;text&quot;: &quot;Blood pressure systolic &amp; diastolic&quot;
+  },
+  &quot;subject&quot;: {
+    &quot;reference&quot;: &quot;Patient/example&quot;
+  },
+  &quot;effectiveDateTime&quot;: &quot;2012-09-17&quot;,
+   &quot;valueQuantity&quot;: {
+        &quot;value&quot;: 60,
+        &quot;unit&quot;: &quot;mmHg&quot;,
+        &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,
+        &quot;code&quot;: &quot;mm[Hg]&quot;
+      },
+  &quot;component&quot;: [
+    {
+      &quot;code&quot;: {
+        &quot;coding&quot;: [
+          {
+            &quot;system&quot;: &quot;http://loinc.org&quot;,
+            &quot;code&quot;: &quot;8480-6&quot;,
+            &quot;display&quot;: &quot;Systolic blood pressure&quot;
+          }
+        ]
+      },
+      &quot;valueQuantity&quot;: {
+        &quot;value&quot;: 107,
+        &quot;unit&quot;: &quot;mmHg&quot;,
+        &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,
+        &quot;code&quot;: &quot;mm[Hg]&quot;
+      }
+    }
+  ]
+}
+</pre></div>
+
+
+<p>I am validating resouce using $validate opeartion. Here is the query (using POST)-<br>
+<a href="http://fhir.hl7fundamentals.org/baseDstu3/Observation/$validate" target="_blank" title="http://fhir.hl7fundamentals.org/baseDstu3/Observation/$validate">http://fhir.hl7fundamentals.org/baseDstu3/Observation/$validate</a></p>
+<p>Above resource in POST body. </p>
+<p>But Observation.code is not equal to Observation.component.code in above case.</p>
+<p><strong>Server response</strong>- see the last error, rest warnings are fine, I do understand what they are</p>
+<div class="codehilite"><pre><span></span>{
+    &quot;resourceType&quot;: &quot;OperationOutcome&quot;,
+    &quot;text&quot;: {
+        &quot;status&quot;: &quot;generated&quot;,
+        &quot;div&quot;: &quot;&lt;div xmlns=\&quot;http://www.w3.org/1999/xhtml\&quot;&gt;&lt;h1&gt;Operation Outcome&lt;/h1&gt;&lt;table border=\&quot;0\&quot;&gt;&lt;tr&gt;&lt;td style=\&quot;font-weight: bold;\&quot;&gt;WARNING&lt;/td&gt;&lt;td&gt;[Observation]&lt;/td&gt;&lt;td&gt;&lt;pre&gt;All observations should have a performer&lt;/pre&gt;&lt;/td&gt;\n\t\t\t\t\t\n\t\t\t\t\n\t\t\t&lt;/tr&gt;\n\t\t\t&lt;tr&gt;\n\t\t\t\t&lt;td style=\&quot;font-weight: bold;\&quot;&gt;INFORMATION&lt;/td&gt;\n\t\t\t\t&lt;td&gt;[Observation]&lt;/td&gt;\n\t\t\t\t\n\t\t\t\t\t\n\t\t\t\t\t\n\t\t\t\t\t\t&lt;td&gt;&lt;pre&gt;All observations should have a performer&lt;/pre&gt;&lt;/td&gt;\n\t\t\t\t\t\n\t\t\t\t\n\t\t\t&lt;/tr&gt;\n\t\t\t&lt;tr&gt;\n\t\t\t\t&lt;td style=\&quot;font-weight: bold;\&quot;&gt;ERROR&lt;/td&gt;\n\t\t\t\t&lt;td&gt;[Observation]&lt;/td&gt;\n\t\t\t\t\n\t\t\t\t\t\n\t\t\t\t\t\n\t\t\t\t\t\t&lt;td&gt;&lt;pre&gt;If code is the same as a component code then the value element associated with the code SHALL NOT be present [value.empty() or code!=component.code]&lt;/pre&gt;&lt;/td&gt;\n\t\t\t\t\t\n\t\t\t\t\n\t\t\t&lt;/tr&gt;\n\t\t&lt;/table&gt;\n\t&lt;/div&gt;&quot;
+    },
+    &quot;issue&quot;: [
+        {
+            &quot;severity&quot;: &quot;warning&quot;,
+            &quot;code&quot;: &quot;processing&quot;,
+            &quot;diagnostics&quot;: &quot;All observations should have a performer&quot;,
+            &quot;location&quot;: [
+                &quot;Observation&quot;
+            ]
+        },
+        {
+            &quot;severity&quot;: &quot;information&quot;,
+            &quot;code&quot;: &quot;processing&quot;,
+            &quot;diagnostics&quot;: &quot;All observations should have a performer&quot;,
+            &quot;location&quot;: [
+                &quot;Observation&quot;
+            ]
+        },
+        {
+            &quot;severity&quot;: &quot;error&quot;,
+            &quot;code&quot;: &quot;processing&quot;,
+            &quot;diagnostics&quot;: &quot;If code is the same as a component code then the value element associated with the code SHALL NOT be present [value.empty() or code!=component.code]&quot;,
+            &quot;location&quot;: [
+                &quot;Observation&quot;
+            ]
+        }
+    ]
+}
+</pre></div>
+
+
+<p><strong>Note</strong>- I tried above example to validate on below Public servers and did not get any error-<br>
+<a href="http://test.fhir.org/r4" target="_blank" title="http://test.fhir.org/r4">http://test.fhir.org/r4</a></p>
+<p><strong>Scenario 3: When I use both components, error went away. </strong></p>
+<div class="codehilite"><pre><span></span>{
+  &quot;resourceType&quot;: &quot;Observation&quot;,
+  &quot;id&quot;: &quot;blood-pressure&quot;,
+  &quot;meta&quot;: {
+    &quot;profile&quot;: [
+      &quot;http://hl7.org/fhir/StructureDefinition/vitalsigns&quot;
+    ]
+  },
+  &quot;identifier&quot;: [
+    {
+      &quot;system&quot;: &quot;urn:ietf:rfc:3986&quot;,
+      &quot;value&quot;: &quot;urn:uuid:187e0c12-8dd2-67e2-99b2-bf273c878281&quot;
+    }
+  ],
+  &quot;status&quot;: &quot;final&quot;,
+  &quot;category&quot;: [
+    {
+      &quot;coding&quot;: [
+        {
+          &quot;system&quot;: &quot;http://hl7.org/fhir/observation-category&quot;,
+          &quot;code&quot;: &quot;vital-signs&quot;,
+          &quot;display&quot;: &quot;Vital Signs&quot;
+        }
+      ]
+    }
+  ],
+  &quot;code&quot;: {
+    &quot;coding&quot;: [
+      {
+        &quot;system&quot;: &quot;http://loinc.org&quot;,
+        &quot;code&quot;: &quot;85354-9&quot;,
+        &quot;display&quot;: &quot;Bood pressure panel with all children optional&quot;
+      }
+    ],
+    &quot;text&quot;: &quot;Blood pressure systolic &amp; diastolic&quot;
+  },
+  &quot;subject&quot;: {
+    &quot;reference&quot;: &quot;Patient/example&quot;
+  },
+  &quot;effectiveDateTime&quot;: &quot;2012-09-17&quot;,
+   &quot;valueQuantity&quot;: {
+        &quot;value&quot;: 60,
+        &quot;unit&quot;: &quot;mmHg&quot;,
+        &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,
+        &quot;code&quot;: &quot;mm[Hg]&quot;
+      },
+  &quot;component&quot;: [
+    {
+      &quot;code&quot;: {
+        &quot;coding&quot;: [
+          {
+            &quot;system&quot;: &quot;http://loinc.org&quot;,
+            &quot;code&quot;: &quot;8480-6&quot;,
+            &quot;display&quot;: &quot;Systolic blood pressure&quot;
+          }
+        ]
+      },
+      &quot;valueQuantity&quot;: {
+        &quot;value&quot;: 107,
+        &quot;unit&quot;: &quot;mmHg&quot;,
+        &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,
+        &quot;code&quot;: &quot;mm[Hg]&quot;
+      }
+    },
+    {
+      &quot;code&quot;: {
+        &quot;coding&quot;: [
+          {
+            &quot;system&quot;: &quot;http://loinc.org&quot;,
+            &quot;code&quot;: &quot;8462-4&quot;,
+            &quot;display&quot;: &quot;Diastolic blood pressure&quot;
+          }
+        ]
+      },
+      &quot;valueQuantity&quot;: {
+        &quot;value&quot;: 60,
+        &quot;unit&quot;: &quot;mmHg&quot;,
+        &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,
+        &quot;code&quot;: &quot;mm[Hg]&quot;
+      }
+    }
+  ]
+}
+</pre></div>
+
+
+<p><strong>Scenario 4: when no component, no error on baseDSTU3 server but error with HAPI code</strong></p>
+<p>I am really not clear on this constraint, what it really meant. and why I am getting error when there is one component  but codes are different. </p>
+<p>Thanks for your help.</p>
+<p>Regards,<br>
+Aditya Joshi</p>
+
+
+
+<a name="153969946"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HAPI%20validation%20issue/near/153969946" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Eric Haas <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HAPI.20validation.20issue.html#153969946">(Jun 14 2018 at 18:40)</a>:</h4>
+<p>your interpretation is correct.  if  code = A and component.code = A then there is no value, component.values are allowed.</p>
+
+
+
+<a name="153969956"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HAPI%20validation%20issue/near/153969956" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Aditya Joshi <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HAPI.20validation.20issue.html#153969956">(Jun 14 2018 at 19:14)</a>:</h4>
+<p>Thanks Eric for confirmation. So, do you think that issue I have posted is due to HAPI validator. For the Json I have posted this issue must not come from validator.</p>
+
+
+
+<a name="153973290"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HAPI%20validation%20issue/near/153973290" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christiaan Knaap <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HAPI.20validation.20issue.html#153973290">(Jul 04 2018 at 04:36)</a>:</h4>
+<p>For comparison you can also try to validate it using the .NET validator. You can use the .NET validator with the <a href="https://github.com/ewoutkramer/Furore.Fhir.ValidationDemo" target="_blank" title="https://github.com/ewoutkramer/Furore.Fhir.ValidationDemo">ValidationDemo</a> or by invoking the <a href="http://docs.simplifier.net/vonk/features/validation.html#validate-on-the-resourcetype-level" target="_blank" title="http://docs.simplifier.net/vonk/features/validation.html#validate-on-the-resourcetype-level">$validate operation</a> on Vonk (<a href="http://vonk.fire.ly" target="_blank" title="http://vonk.fire.ly">vonk.fire.ly</a>)</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

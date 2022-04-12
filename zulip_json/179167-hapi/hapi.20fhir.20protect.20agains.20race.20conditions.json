@@ -1,0 +1,86 @@
+[
+    {
+        "content": "<p>Hi, we're running into an issue with HAPI FHIR where multiple resources are created with the same identifier, even though we're doing a condition create  with the header <code>If-None-Exist</code>.  We believe the issue is because of a race condition where we're sending multiple create requests simultaneously, so HAPI is not able to reliably synchronously find the existing resource for a given identifier, and thus ends up creating multiple duplicates.</p>\n<p>We've made changes to the code so it's sending the requests synchronously to prevent this particular issue. But the root cause of the issue is still not solved because there could potentially be multiple processes writing to the HAPI server and we can't guarantee the order of operations.</p>\n<p>What is the best practice for protecting against race conditions? Is it possible to manually enforce uniqueness constraints at the db level in HAPI?</p>",
+        "id": 240119267,
+        "sender_full_name": "Pengyu Wang",
+        "timestamp": 1621894257
+    },
+    {
+        "content": "<p>The hapi-fhir documentation describes several mechanisms for control of Search Result Caching.<br>\n<a href=\"https://hapifhir.io/hapi-fhir/docs/server_jpa/configuration.html\">https://hapifhir.io/hapi-fhir/docs/server_jpa/configuration.html</a><br>\nI'd suggest trying the options mentioned there, such as using <code>myDaoConfig.setReuseCachedSearchResultsForMillis(null);</code> or setting a <code>Cache-Control: no-cache</code> HTTP request header.</p>",
+        "id": 240126535,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1621899203
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191926\">Joel Schneider</span> <a href=\"#narrow/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions/near/240126535\">said</a>:</p>\n<blockquote>\n<p>The hapi-fhir documentation describes several mechanisms for control of Search Result Caching.<br>\n<a href=\"https://hapifhir.io/hapi-fhir/docs/server_jpa/configuration.html\">https://hapifhir.io/hapi-fhir/docs/server_jpa/configuration.html</a><br>\nI'd suggest trying the options mentioned there, such as using <code>myDaoConfig.setReuseCachedSearchResultsForMillis(null);</code> or setting a <code>Cache-Control: no-cache</code> HTTP request header.</p>\n</blockquote>\n<p>Thank you for the reply. But I think you misunderstood the problem. The issue was not caused by hapi-fhir caching the search results. I'm not manually checking the existence of a resource before creating it.</p>",
+        "id": 240142040,
+        "sender_full_name": "Pengyu Wang",
+        "timestamp": 1621917921
+    },
+    {
+        "content": "<p>Not speaking for HAPI, but from my own general experience - this is a hard problem to solve on the server side without severe performance implications such as serializing all persistence operations.</p>\n<p>It's not really any different than if your client was directly searching the database for existing records on multiple threads - each thread could find no record existing and create it and since the Identifier \"attribute\" doesn't have a unique constraint it would not be caught. </p>\n<p>It is the client that has the real context of what constitutes a duplicate in this case. </p>\n<p>I have a similar client/problem and what I do is use a striped locking mechanism on the identifiers I am using for uniqueness to ensure no two threads process the same resource at the same time without preventing other resources from being processed in parallel.</p>",
+        "id": 240184754,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1621948364
+    },
+    {
+        "content": "<p>... I suppose the server could use a similar striped locking mechanism on the contents of the 'If-None-Exist' header when it is present, but there would still be holes in it such as if a different client creates the resource without the header. It would tighten the window of opportunity, but not eliminate the possibility.</p>",
+        "id": 240189877,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1621950585
+    },
+    {
+        "content": "<p>If you wan't to guard the server against such race conditions there's a feature in HAPI using SearchParameters (yes, search parameters - keep reading). What you can do is that you can create a SearchParameter instance on the server that uses the magic of <a href=\"https://github.com/hapifhir/hapi-fhir/blob/2ba100576263f07e8733b733d90ca8046ae33da4/hapi-fhir-base/src/main/java/ca/uhn/fhir/util/HapiExtensions.java#L102\">https://github.com/hapifhir/hapi-fhir/blob/2ba100576263f07e8733b733d90ca8046ae33da4/hapi-fhir-base/src/main/java/ca/uhn/fhir/util/HapiExtensions.java#L102</a> that basically creates a unique index in the database on whatever datafield you would like. With this enabled, the database will actually guard you against such duplicates. Using that, you are on your own, but it works with a minimal effort. It won't however be portable onto other FHIR solutions but it will work for any HAPI FHIR-based solutions that runs on top of the HAPI FHIR JPA stack</p>",
+        "id": 240263801,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1621985994
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191427\">@Jens Villadsen</span>  Thank you for the answer. I found this link (<a href=\"https://www.smilecdr.com/our-blog/custom-search-parameters-in-hapi-fhir\">https://www.smilecdr.com/our-blog/custom-search-parameters-in-hapi-fhir</a>) on how to create a custom search parameter. Am I understanding this correctly that I need to:</p>\n<ol>\n<li>Create an extension with the <code>EXT_SP_UNIQUE</code> url</li>\n<li>Create a SearchParameter and add the extension to it</li>\n<li>Do the above when initializing the server</li>\n</ol>\n<p>I'm using the hapi fhir jpaserver starter and I added the following to <code>JpaRestfulServer.java</code> in the <code>initialize</code> method:</p>\n<div class=\"codehilite\"><pre><span></span><code>    @Override\n    protected void initialize() throws ServletException {\n        super.initialize();\n\n        // Add your own customization here\n        Extension ext = new Extension();\n        ext.setUrl(HapiExtensions.EXT_SP_UNIQUE);\n\n        SearchParameter customSearchParam = new SearchParameter();\n        customSearchParam\n            .addBase(&quot;Appointment&quot;)\n            .setCode(&quot;uniqueIdentifier&quot;)\n            .setType(Enumerations.SearchParamType.TOKEN)\n            .setTitle(&quot;Unique Identifier&quot;)\n            .setStatus(Enumerations.PublicationStatus.ACTIVE)\n            .addExtension(ext);\n\n        IGenericClient client = getFhirContext().newRestfulGenericClient(&quot;http://localhost:3000&quot;);\n        client.create().resource(customSearchParam).execute();\n    }\n</code></pre></div>\n<p>But when I start the server I got the error </p>\n<div class=\"codehilite\"><pre><span></span><code>2021-06-18 22:24:23.716 [main] ERROR o.a.c.c.C.[Tomcat].[localhost].[/] [DirectJDKLog.java:175] Servlet.init() for servlet [jpaRestfulServer] threw exception\nca.uhn.fhir.rest.server.exceptions.ResourceNotFoundException: HTTP 404\n</code></pre></div>\n<p>What am I missing here?</p>",
+        "id": 243230637,
+        "sender_full_name": "Pengyu Wang",
+        "timestamp": 1624080449
+    },
+    {
+        "content": "<p>Looks like you are starting a client within your server before the service is actually started</p>",
+        "id": 243233151,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1624085099
+    },
+    {
+        "content": "<p>instantiate your client outside the bootstrappning of your server and you should be fine</p>",
+        "id": 243243230,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1624099297
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191427\">@Jens Villadsen</span> i created a custom search parameter on the patient identifer and it seems to be working as intended when i bulk inserted multiple patients into a single partition (I have partitioning enabled on the server). However, the uniqueness constraint seemed to be applied across partitions as well. When I tried to create a patient resource in a different partition but with the same identifier, the server doesn't allow me to do it and I got the error <code>Can not create resource of type Patient as it would create a duplicate unique index matching query</code>. Is there a way to make this constraint only apply to resources within a partition? Meaning I should be able to create Patient with identifier 123 in multiple partitions, but in each partition there should only be one such patient? Detaild description of this issue is posted <a href=\"#narrow/stream/179167-hapi/topic/Unique.20search.20parameter.20constraint.20applied.20across.20partitions/near/245783105\">here</a></p>",
+        "id": 245755981,
+        "sender_full_name": "Pengyu Wang",
+        "timestamp": 1626127302
+    },
+    {
+        "content": "<p>I don't believe that is a feature of HAPI. You could proceed the hack'ish way and make a compound identifier consisting of the partition Id and the patient identifier.</p>",
+        "id": 245794275,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1626165880
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191427\">@Jens Villadsen</span> and <span class=\"user-mention\" data-user-id=\"403495\">@Pengyu Wang</span>  I was able to successfully create a custom search parameter and it does guard against race conditions as was noted, however when I try to retrieve any resource using an http GET of the form <a href=\"http://localhost:3111/my-fhir/v1/Patient?identifier=1555667\">http://localhost:3111/my-fhir/v1/Patient?identifier=1555667</a> zero records are returned where one was returned before introducing the search parameter.</p>\n<p>I use the following:</p>\n<p>{<br>\n  \"resourceType\": \"SearchParameter\",<br>\n  \"meta\": {<br>\n    \"lastUpdated\": \"2021-05-02T10:43:02.162-04:00\",<br>\n    \"tag\": [ {<br>\n      \"system\": \"<a href=\"https://my.health.com/x/Onc1C\">https://my.health.com/x/Onc1C</a>\",<br>\n      \"code\": \"34a800fa-bba9-4cb9-77ed-0aa4d0eecef2\",<br>\n      \"display\": \"FHIR Implementation Team\"<br>\n    } ]<br>\n  },<br>\n  \"extension\": [<br>\n    {<br>\n      \"url\": \"<a href=\"http://hapifhir.io/fhir/StructureDefinition/sp-unique\">http://hapifhir.io/fhir/StructureDefinition/sp-unique</a>\",<br>\n      \"valueBoolean\": true<br>\n    }<br>\n  ],<br>\n  \"url\": \"<a href=\"http://health.com/fhir/SearchParameter/uniq-patient-identifier\">http://health.com/fhir/SearchParameter/uniq-patient-identifier</a>\",<br>\n  \"name\": \"unique-patient-identifier\",<br>\n  \"status\": \"active\",<br>\n  \"description\": \"A unique patient identifier\",<br>\n  \"code\": \"unique-patient-identifier\",<br>\n  \"base\": [<br>\n    \"Patient\"<br>\n  ],<br>\n  \"type\": \"token\",<br>\n  \"expression\": \"Patient\",<br>\n  \"component\": [<br>\n    {<br>\n      \"definition\": \"<a href=\"http://hl7.org/fhir/SearchParameter/patient-identifier\">http://hl7.org/fhir/SearchParameter/patient-identifier</a>\",<br>\n      \"expression\": \"Patient\"<br>\n    }<br>\n  ]<br>\n}</p>\n<p>In order to retrieve any resource I have to include the system with the identifier.  So the GET looks like <a href=\"http://localhost:3111/my-fhir/v1/Patient?identifier=urn:uuid:2.16.840.1.113883.4.349|1555667\">http://localhost:3111/my-fhir/v1/Patient?identifier=urn:uuid:2.16.840.1.113883.4.349|1555667</a></p>\n<p>Is there anyway to change the search parameter so that the resource can be retrieved as it was before?<br>\nThanks.</p>",
+        "id": 267244054,
+        "sender_full_name": "Joe Atterberry",
+        "timestamp": 1641590290
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"378195\">@Joe Atterberry</span> is it safe to assume that the patients only have one identifier therefore you don't care about the system? if so have you tried adding an expression to the search parameter?  try adding <code>\"expression\":\"Patient.identifier.value\"</code> to the unique patient  sp</p>",
+        "id": 267488872,
+        "sender_full_name": "Pengyu Wang",
+        "timestamp": 1641843467
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191427\">@Jens Villadsen</span>  <span class=\"user-mention\" data-user-id=\"403495\">@Pengyu Wang</span> Yes, that is correct.   I tried using what you suggested.  I substituted \"expression\":\"Patient with \"expression\":Patient.identifer.value\" and I still need to include the system in order to retrieve the record.  I did check the HFJ_IDX_CMP_STRING_UNIQ table where the expressions are kept and IDX_STRING column includes the system.</p>\n<p>Patient?identifier=urn%3Auuid%3A2.16.840.1.113883.4.349%7C1555667</p>",
+        "id": 267946392,
+        "sender_full_name": "Joe Atterberry",
+        "timestamp": 1642116244
+    }
+]

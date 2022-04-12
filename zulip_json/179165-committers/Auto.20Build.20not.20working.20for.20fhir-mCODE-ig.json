@@ -1,0 +1,554 @@
+[
+    {
+        "content": "<p>We've just setup a new IG at <a href=\"https://github.com/HL7/fhir-mCODE-ig\" target=\"_blank\" title=\"https://github.com/HL7/fhir-mCODE-ig\">https://github.com/HL7/fhir-mCODE-ig</a></p>\n<p>It's configured for the auto build, but it doesn't seem that builds are going through.  I've also tried triggering builds manually and get this response: <code>{\"org\":\"HL7\",\"repo\":\"fhir-mCODE-ig\",\"branch\":\"master\"}</code>.  Still, however, I see no evidence of the build actually running.</p>\n<p>Is there a way to debug this further?  I can build the IG locally.  <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>?</p>",
+        "id": 166817124,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559138009
+    },
+    {
+        "content": "<p>BTW -- I've seen _other_ builds go through after triggering mine, so I don't believe it is a systemic issue with the auto build.</p>",
+        "id": 166817231,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559138060
+    },
+    {
+        "content": "<p>We don't have a good transparent way to enable you to debug, but I'll see what's happening in the logs. (BTW <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> I'm always happy to get you onboarded into the k8s cluster where we manage this infra if you ever want/need to poke around.)</p>",
+        "id": 166855237,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559162670
+    },
+    {
+        "content": "<p>I re-triggered the github webhook to kick off another build (equivalent to what you already did by manual triggering). Things crank along pretty well for the first couple of minutes, with build.log showing lines like</p>\n<div class=\"codehilite\"><pre><span></span>No value set at Extension.valueCodeableConcept (url = &#39;http://hl7.org/fhir/ValueSet/service-category&#39;)\nNo value set at Extension.valueCodeableConcept (url = &#39;http://hl7.org/fhir/ValueSet/service-type&#39;)\nNo value set at Extension.valueCodeableConcept (url = &#39;http://hl7.org/fhir/ValueSet/service-type&#39;)\nNo value set at Extension.extension-type.valueCodeableConcept (url = &#39;http://hl7.org/fhir/ValueSet/research-study-objective-type&#39;)\nNo value set at Extension.extension-type.valueCodeableConcept (url = &#39;http://hl7.org/fhir/ValueSet/research-study-objective-type&#39;)\nNo value set at Extension.extension-type.valueCodeableConcept (url = &#39;http://hl7.org/fhir/ValueSet/udi-entry-type&#39;)\nNo value set at Extension.extension-type.valueCodeableConcept (url = &#39;http://hl7.org/fhir/ValueSet/udi-entry-type&#39;)\nNo value set at Extension.valueCodeableConcept (url = &#39;https://www.ncbi.nlm.nih.gov/clinvar&#39;)\nNo value set at Extension.valueCodeableConcept (url = &#39;https://www.ncbi.nlm.nih.gov/clinvar&#39;)\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 49755003\n</pre></div>",
+        "id": 166855473,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559162867
+    },
+    {
+        "content": "<p>Will see where this blows up.</p>",
+        "id": 166855482,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559162878
+    },
+    {
+        "content": "<p>I see, simple as:</p>\n<div class=\"codehilite\"><pre><span></span>Start Time:               Wed, 29 May 2019 12:59:11 +0000\nActive Deadline Seconds:  1800s\nPods Statuses:            0 Running / 0 Succeeded / 1 Failed\n</pre></div>",
+        "id": 166855920,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559163148
+    },
+    {
+        "content": "<p>We set a 30-minute deadline for all jobs at:</p>\n<p><a href=\"https://github.com/FHIR/auto-ig-builder/blob/master/triggers/ig-commit-trigger/job.json#L11\" target=\"_blank\" title=\"https://github.com/FHIR/auto-ig-builder/blob/master/triggers/ig-commit-trigger/job.json#L11\">https://github.com/FHIR/auto-ig-builder/blob/master/triggers/ig-commit-trigger/job.json#L11</a></p>",
+        "id": 166855937,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559163162
+    },
+    {
+        "content": "<p>we can't get an error message when that limit is hit?</p>",
+        "id": 166855959,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559163180
+    },
+    {
+        "content": "<p>We should definitely look into this; the challenge right now is that jobs are killed from outside the container where they run (it's an external process doing the watching/killing, which has no context about what the job is doing; it just enforces a timer using k8s internals).</p>",
+        "id": 166856011,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559163224
+    },
+    {
+        "content": "<p>So the best way to get this behavior would be to wrap our job runner explicitly...</p>",
+        "id": 166856029,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559163238
+    },
+    {
+        "content": "<p>Do you know how long this build is expected to take <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span>? I don't think we've come close to the current deadline with other IGs, so this is new territory.</p>",
+        "id": 166856103,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559163265
+    },
+    {
+        "content": "<p>mCode is that big? why?</p>",
+        "id": 166856317,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559163406
+    },
+    {
+        "content": "<p>It looks like the slow thing is stuff like...</p>\n<div class=\"codehilite\"><pre><span></span>-tx cache miss: $expand on Include 25 codes from http://snomed.info/sct\n-tx cache miss: $expand on Include 3 codes from http://unitsofmeasure.org\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 272485000\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 42343007\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 698247007\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 368009\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 39785005\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 400047006\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 38341003\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 44695005\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 118940003\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 413839001\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 73211009\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 40930008\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 42399005\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 235856003\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 13200003\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 86406008\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 3723001\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 64779008\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 414916001\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 89362005\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 237840007\n-tx cache miss: $expand on Include from http://snomed.info/sct where concept is-a 271737000\n</pre></div>",
+        "id": 166856467,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559163525
+    },
+    {
+        "content": "<p>build took 1:45 for me</p>",
+        "id": 166856502,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559163557
+    },
+    {
+        "content": "<p>whoops - ran the wrong guide :-(</p>",
+        "id": 166856535,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559163600
+    },
+    {
+        "content": "<p>5:37 for me</p>",
+        "id": 166857102,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559163962
+    },
+    {
+        "content": "<p>Is that with a bunch of cached terminology files present in your local filesystem?</p>",
+        "id": 166857153,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559163981
+    },
+    {
+        "content": "<p>Because the slow part looks like all these \"tx cache miss\" steps (it's making very slow progress).</p>",
+        "id": 166857178,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559164002
+    },
+    {
+        "content": "<p>Sorry -- replied when filtered to only my mentions, so missed most of the conversation... Let me try again...</p>",
+        "id": 166857337,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559164136
+    },
+    {
+        "content": "<p>The first run without a cache takes a while, but I've still never had it take 30+ minutes.  I've checked in the <code>txCache</code>, so not sure about all those misses -- unless there is a dependency between the cache and the version of the publisher?  I think I built the cache using a publisher that is a week or two old.</p>",
+        "id": 166857623,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559164344
+    },
+    {
+        "content": "<p>no dependency. I don't understand why it's a problem</p>",
+        "id": 166857792,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559164478
+    },
+    {
+        "content": "<p>I have to run to a 7th grade chorus concert (wish me luck), but I'll kick off a local build later to see how long it takes for me.  Just to have another data point.  Thanks for looking at this <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> and <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> -- we really appreciate it!</p>",
+        "id": 166857835,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559164521
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> -- when you run it are you sitting right across the room from the terminology server? ;-)</p>",
+        "id": 166857873,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559164556
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> where do this cache miss notifications appear in the log? I don't get them...</p>",
+        "id": 166857881,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559164561
+    },
+    {
+        "content": "<p>I'm sitting right across the cloud from the server, just like everyone else. I don't get those cache misses</p>",
+        "id": 166858016,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559164652
+    },
+    {
+        "content": "<p>They appear in my <code>build.log</code> file, which includes all the stdout and stderr of the java process.</p>",
+        "id": 166859116,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559165707
+    },
+    {
+        "content": "<p>I mean, what other log entries preceed them  - I'm trying to place them in the build sequence</p>",
+        "id": 166859743,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559166223
+    },
+    {
+        "content": "<p>I'm updating the build system to push logs before a build is killed -- stand by :)</p>",
+        "id": 166862388,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559168262
+    },
+    {
+        "content": "<p>It'll take a bit...</p>",
+        "id": 166862392,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559168270
+    },
+    {
+        "content": "<p>In the meantime: I'm seeing stuff like: <a href=\"https://gist.github.com/jmandel/653a2463153f0b3892eb25e6c73f8247\" target=\"_blank\" title=\"https://gist.github.com/jmandel/653a2463153f0b3892eb25e6c73f8247\">https://gist.github.com/jmandel/653a2463153f0b3892eb25e6c73f8247</a></p>",
+        "id": 166862456,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559168318
+    },
+    {
+        "content": "<p>(Somehow, <a href=\"https://github.com/FHIR/auto-ig-builder/commit/9b63dbd144696de944cf87a768bf1ed027e5ff45\" target=\"_blank\" title=\"https://github.com/FHIR/auto-ig-builder/commit/9b63dbd144696de944cf87a768bf1ed027e5ff45\">making the in-build timeouts work</a> meant upgrading jdk8-&gt;jdk12 and python2-&gt;3 :p)</p>",
+        "id": 166862531,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559168382
+    },
+    {
+        "content": "<p>okay, building now and should die + send a notification in ~25 min, with full logs. <span aria-label=\"fingers crossed\" class=\"emoji emoji-1f91e\" role=\"img\" title=\"fingers crossed\">:fingers_crossed:</span></p>",
+        "id": 166864394,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559170142
+    },
+    {
+        "content": "<p>FYI -- just pulled master for fhir-mCODE-ig and built w/ the latest IG publisher.  No cache misses and finished in 00:04:14.0187sec on my 2016 Macbook Pro.</p>",
+        "id": 166872340,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559179776
+    },
+    {
+        "content": "<p>Realized that was with old output still in the path, so <code>git clean -xfd</code> to clear all uncommitted and ignored files, and ran it again to be sure.  This time was even better: 00:03:59.0590sec.</p>",
+        "id": 166872883,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559180412
+    },
+    {
+        "content": "<p>Hmm. I was ble to reproduce the long build times from my laptop-- though I didn't let it go to completion so I'll take some detailed timing tomorrow.</p>",
+        "id": 166873554,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559181252
+    },
+    {
+        "content": "<p>When you say \"no cache misses\", what does that mean in terms of *where\" cache hits are occurring? Is this something local or is this a hit in the server? (I'm assuming it can't be local because you should not have any cache files locally after a clean )</p>",
+        "id": 166873643,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559181367
+    },
+    {
+        "content": "<p>cache files are not deleted by clean - they are committed it github to keep the build times down</p>",
+        "id": 166874158,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559182054
+    },
+    {
+        "content": "<p>the files in /txCache.. for some reason, it seems as though the caching algorithm is not working for mCode...</p>",
+        "id": 166874217,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559182118
+    },
+    {
+        "content": "<p>Right, since the <code>txCache</code> is committed I was definitely using the cache.</p>\n<blockquote>\n<p>for some reason, it seems as though the caching algorithm is not working for mCode...</p>\n</blockquote>\n<p>It seems that there aren't a ton of IGs out there still being built off DSTU2, and even fewer built off Argonaut.  It seemed like we were the guinea pigs for several DSTU2/Argonaut issues in the IG Publisher.  Is it possible that mCODE is having some one-off problems due to it's DSTU2-ishness?</p>",
+        "id": 166875508,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559183899
+    },
+    {
+        "content": "<p>no. you and I are having no problem, and the caching algorithm is all R5 infrastructure</p>",
+        "id": 166875925,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559184531
+    },
+    {
+        "content": "<p>it smells like a linux thing right now. You building on windows or OSX?</p>",
+        "id": 166875937,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559184549
+    },
+    {
+        "content": "<p>OSX</p>",
+        "id": 166876318,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559185120
+    },
+    {
+        "content": "<p>I have an idea why the cache might not be working on Linux.  Windows and Mac use case-insensitive file systems by default -- so if you ask for file <code>abc.txt</code>, but it's really called <code>ABC.txt</code>, both Windows and Mac will happily give it to you.  Linux, on the other hand, uses a case-sensitive file system so will report that <code>abc.txt</code> does not exist.  My guess is that the cache manager might be looking up cache files using a different case than they're actually stored on disk.  Just a hunch that would explain the cache misses.</p>",
+        "id": 166876748,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559185821
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> -- is it possible that could happen?</p>",
+        "id": 166876771,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559185887
+    },
+    {
+        "content": "<p>of course, that was the first thing I thought of. I cannot see any grounds for that in the code</p>",
+        "id": 166876820,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559185933
+    },
+    {
+        "content": "<p>you have the name of the folder correct in the ig.json, the file names are hard coded</p>",
+        "id": 166876828,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559185967
+    },
+    {
+        "content": "<p>I should have known -- one step ahead of me!  Oh well...</p>",
+        "id": 166876965,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559186169
+    },
+    {
+        "content": "<p>Actually, probably 2 or 3 steps ahead of me. <span aria-label=\"stuck out tongue wink\" class=\"emoji emoji-1f61c\" role=\"img\" title=\"stuck out tongue wink\">:stuck_out_tongue_wink:</span></p>",
+        "id": 166876969,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559186198
+    },
+    {
+        "content": "<p>it's possible it's a character set issue? I'm going to add some debugging...</p>",
+        "id": 166877053,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559186366
+    },
+    {
+        "content": "<p>ok <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> and <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> please run the new IG publisher (0.9.21) locally, and paste this bit of the log here:</p>",
+        "id": 166879809,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559190581
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span>Load Terminology Cache from C:\\work\\org.hl7.fhir.igs\\fhir-mCODE-ig\\txCache       (09.0082sec)\n - load all-systems.cache......done\n - load condition-category.cache..done\n - load https___ncit.nci.nih.gov.cache....done\n - load icd-10-cm.cache.....done\n - load lang.cache..done\n - load loinc.cache....................done\n - load mcode-basic-resource-type.cache..done\n - load snomed.cache........................................................................................done\n - load ucum.cache...........done\n - load usmcodeshrcorecsResearchSubjectTerminationReasonCS.cache..done\n - load usmcodeshrcorecsSettingCS.cache..done\n</pre></div>",
+        "id": 166879811,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559190599
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span>$ grep -ri &quot;load term&quot; -A 100  build.log\n\nLoad Terminology Cache from /scratch/ig-build-temp-KKFBIZ/repo/txCache           (23.0354sec)\nConnect to Terminology Server at http://tx.fhir.org                              (23.0355sec)\n-tx cache miss: Connect to http://tx.fhir.org/r2\nInitialization complete                                                          (24.0867sec)\nLoad Content                                                                     (24.0867sec)\ncreate package file at /scratch/ig-build-temp-KKFBIZ/repo/output/package.tgz\nProcessing Conformance Resources                                                 (32.0134sec)\nprocess type: NamingSystem                                                       (32.0134sec)\nprocess type: CodeSystem                                                         (32.0135sec)\nprocess type: ValueSet                                                           (32.0135sec)\nprocess type: ConceptMap                                                         (32.0136sec)\nprocess type: DataElement                                                        (32.0136sec)\nprocess type: StructureDefinition                                                (32.0136sec)\nprocess type: OperationDefinition                                                (32.0137sec)\nprocess type: SearchParameter                                                    (32.0137sec)\nprocess type: CapabilityStatement                                                (32.0138sec)\n</pre></div>",
+        "id": 166914676,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559228137
+    },
+    {
+        "content": "<p>(Also, the cache files are... interesting. Why not json?)</p>",
+        "id": 166914819,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559228223
+    },
+    {
+        "content": "<p>Mine looks more like Grahame's:</p>\n<div class=\"codehilite\"><pre><span></span>Load Terminology Cache from /Users/cmoesel/dev/HL7/fhir-mCODE-ig/txCache         (07.0828sec)\n - load lang.cache..done\n - load all-systems.cache......done\n - load usmcodeshrcorecsResearchSubjectTerminationReasonCS.cache..done\n - load icd-10-cm.cache.....done\n - load ucum.cache...........done\n - load loinc.cache....................done\n - load condition-category.cache..done\n - load usmcodeshrcorecsSettingCS.cache..done\n - load snomed.cache........................................................................................done\n - load https___ncit.nci.nih.gov.cache....done\n - load mcode-basic-resource-type.cache..done\nConnect to Terminology Server at http://tx.fhir.org                              (08.0213sec)\n-tx cache miss: Connect to http://tx.fhir.org/r2\nInitialization complete                                                          (09.0413sec)\n</pre></div>",
+        "id": 166926857,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559236537
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> so weird because very standard java File.list() is not seeing the files that exist:</p>\n<div class=\"codehilite\"><pre><span></span>    <span class=\"k\">for</span> <span class=\"o\">(</span><span class=\"n\">String</span> <span class=\"n\">fn</span> <span class=\"o\">:</span> <span class=\"k\">new</span> <span class=\"n\">File</span><span class=\"o\">(</span><span class=\"n\">folder</span><span class=\"o\">).</span><span class=\"na\">list</span><span class=\"o\">())</span> <span class=\"o\">{</span>\n      <span class=\"k\">if</span> <span class=\"o\">(</span><span class=\"n\">fn</span><span class=\"o\">.</span><span class=\"na\">endsWith</span><span class=\"o\">(</span><span class=\"s\">&quot;.cache&quot;</span><span class=\"o\">)</span> <span class=\"o\">&amp;&amp;</span> <span class=\"o\">!</span><span class=\"n\">fn</span><span class=\"o\">.</span><span class=\"na\">equals</span><span class=\"o\">(</span><span class=\"s\">&quot;validation.cache&quot;</span><span class=\"o\">))</span> <span class=\"o\">{</span>\n</pre></div>",
+        "id": 166953090,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559257307
+    },
+    {
+        "content": "<p>in your case, folder is /scratch/ig-build-temp-KKFBIZ/repo/txCache - that exists, yes?</p>",
+        "id": 166953146,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559257335
+    },
+    {
+        "content": "<p>Yes it does.</p>",
+        "id": 166953164,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559257372
+    },
+    {
+        "content": "<p>so how could that code not find any files?</p>",
+        "id": 166953186,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559257404
+    },
+    {
+        "content": "<p>Hmm.</p>",
+        "id": 166953262,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559257467
+    },
+    {
+        "content": "<p>well <code>txCache</code> starts out empty.</p>",
+        "id": 166953387,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559257587
+    },
+    {
+        "content": "<p>... because?</p>",
+        "id": 166953395,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559257615
+    },
+    {
+        "content": "<p>I'm wondering that.</p>",
+        "id": 166953397,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559257619
+    },
+    {
+        "content": "<p>but if it's empty, that will be why that code doesn't see any files..</p>",
+        "id": 166953416,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559257640
+    },
+    {
+        "content": "<p>yes...</p>",
+        "id": 166953421,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559257646
+    },
+    {
+        "content": "<p>so it gets emptied.</p>",
+        "id": 166953432,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559257666
+    },
+    {
+        "content": "<p>About 30 seconds in.</p>",
+        "id": 166953468,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559257682
+    },
+    {
+        "content": "<p>So immediately post-clone: </p>\n<div class=\"codehilite\"><pre><span></span>bash-4.2# find . | grep -i txCache\n./ig-build-temp-ARCYSH/repo/txCache\n./ig-build-temp-ARCYSH/repo/txCache/snomed.cache\n./ig-build-temp-ARCYSH/repo/txCache/lang.cache\n./ig-build-temp-ARCYSH/repo/txCache/usmcodeshrcorecsSettingCS.cache\n./ig-build-temp-ARCYSH/repo/txCache/icd-10-cm.cache\n./ig-build-temp-ARCYSH/repo/txCache/https___ncit.nci.nih.gov.cache\n./ig-build-temp-ARCYSH/repo/txCache/version.ctl\n./ig-build-temp-ARCYSH/repo/txCache/usmcodeshrcorecsResearchSubjectTerminationReasonCS.cache\n./ig-build-temp-ARCYSH/repo/txCache/loinc.cache\n./ig-build-temp-ARCYSH/repo/txCache/condition-category.cache\n./ig-build-temp-ARCYSH/repo/txCache/ucum.cache\n./ig-build-temp-ARCYSH/repo/txCache/all-systems.cache\n./ig-build-temp-ARCYSH/repo/txCache/mcode-basic-resource-type.cache\n</pre></div>",
+        "id": 166953493,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559257706
+    },
+    {
+        "content": "<p>Then:</p>\n<div class=\"codehilite\"><pre><span></span>bash-4.2# find . | grep -i txCache\n</pre></div>",
+        "id": 166953497,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559257716
+    },
+    {
+        "content": "<p>Then:</p>\n<div class=\"codehilite\"><pre><span></span>bash-4.2# find . | grep -i txCache\n./ig-build-temp-ARCYSH/repo/txCache\n./ig-build-temp-ARCYSH/repo/txCache/version.ctl\n</pre></div>",
+        "id": 166953502,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559257725
+    },
+    {
+        "content": "<p>hmm. O</p>",
+        "id": 166953515,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559257745
+    },
+    {
+        "content": "<p>So that's a lead for you :)</p>",
+        "id": 166953516,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559257745
+    },
+    {
+        "content": "<p>I'll investigate</p>",
+        "id": 166953532,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559257775
+    },
+    {
+        "content": "<p>ok so this turns out to be my fault. The publisher does clear the cache on the ci-build. I've pared that back to leave snomed/loinc cache in place</p>",
+        "id": 166956041,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559260766
+    },
+    {
+        "content": "<p>ok wel, let's try again iwht the new version of the ig publisher</p>",
+        "id": 166961066,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559267006
+    },
+    {
+        "content": "<p>I just triggered a new build since I saw that Grahame announced a new publisher.  Let's see what happens!</p>",
+        "id": 166965495,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559273335
+    },
+    {
+        "content": "<p>Haha, I did the same, right about when you did. Indeed let's see.</p>",
+        "id": 166965586,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559273492
+    },
+    {
+        "content": "<p>so did I. I don't see any success or failure</p>",
+        "id": 166965867,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559273987
+    },
+    {
+        "content": "<p>Ha.  I saw no comments about this in the past 2 hours, so I figured I should just go ahead and do it.  I guess we're all pretty synchronized at this point.  That said, 20 minutes later and no build notification yet...  That 30 minute clock is ticking...</p>",
+        "id": 166966299,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559274655
+    },
+    {
+        "content": "<p>I submitted 2 hours ago</p>",
+        "id": 166966312,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559274674
+    },
+    {
+        "content": "<p>(Well, the whole systems appears to be down -- looking now.)</p>",
+        "id": 166996621,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559309291
+    },
+    {
+        "content": "<p>Yeah, my attempt to pretty up the notification output yesterday resulted in an error.</p>",
+        "id": 166996810,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559309414
+    },
+    {
+        "content": "<p>OK, rebuilding now <a href=\"https://github.com/FHIR/auto-ig-builder/commit/3b3d2a55619702945b75ae6a3ff96715c40441a3\" target=\"_blank\" title=\"https://github.com/FHIR/auto-ig-builder/commit/3b3d2a55619702945b75ae6a3ff96715c40441a3\">after that fix</a></p>",
+        "id": 166997034,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559309573
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> ...  are you having fun yet? ;-)</p>",
+        "id": 166997197,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559309674
+    },
+    {
+        "content": "<p>Always :)</p>",
+        "id": 166997569,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559309943
+    },
+    {
+        "content": "<p>Well that wasn't <a href=\"http://build.fhir.org/ig/HL7/fhir-mCODE-ig/branches/master/build.log\" target=\"_blank\" title=\"http://build.fhir.org/ig/HL7/fhir-mCODE-ig/branches/master/build.log\">exactly fast</a> but it was way faster :)</p>",
+        "id": 166998327,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559310509
+    },
+    {
+        "content": "<p>(And it finished.)</p>",
+        "id": 166998335,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1559310513
+    },
+    {
+        "content": "<p>it's about as fast as I expected</p>",
+        "id": 166998932,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559311023
+    },
+    {
+        "content": "<p>leaving the snomed &amp; loinc expansions in place but forcing the rest to be redone</p>",
+        "id": 166998948,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559311039
+    },
+    {
+        "content": "<p>thanks</p>",
+        "id": 166998956,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1559311046
+    },
+    {
+        "content": "<p>Yes, thank you both.  I really appreciate your time and dedication in getting this resolved (and in everything else you do!).</p>",
+        "id": 166999690,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559311491
+    },
+    {
+        "content": "<p>If I were going to be at dev days (but I'm not), I'd buy you both a beer or seven.  But hey, it's the thought that matters, right?</p>",
+        "id": 166999765,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1559311535
+    },
+    {
+        "content": "<p>Thank you, <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>  and <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>  for fixing this. I will be at DevDays so the beer is on my for this fix!</p>",
+        "id": 167090042,
+        "sender_full_name": "Mark Kramer",
+        "timestamp": 1559423766
+    }
+]

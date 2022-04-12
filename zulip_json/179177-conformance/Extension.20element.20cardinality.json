@@ -1,0 +1,104 @@
+[
+    {
+        "content": "<p>When I make one specific extension mandatory (<code>1..*</code>), the cardinality of the extension element remains the default <code>0..*</code>. For example: See <code>Subscription.criteria.extension:trigger-description</code> and <code>Subscription.criteria.extension</code> in <a href=\"http://fhir.org/guides/argonaut/scheduling/StructureDefinition-argo-sub-notif.html\">StructureDefinition-argo-sub-notif</a>.</p>\n<p>Intuitively one would say that this means: IF you are adding any extension, you should at least have one <code>trigger-description</code> in there. While the current behavior of validators (.NET and Java) just seems to ignore the cardinality of the <code>.extension</code> element and throw an error when you do not provide one.</p>\n<p>The IG publisher seems to not render the <code>.extension</code> cardinality, the <a href=\"https://simplifier.net/packages/fhir.argonaut.scheduling/1.0.0/files/118316\">.NET Simplifier.net renderer</a> doesn't render it if it hasn't been changed (which Forge doesn't let the user do) in that profile.</p>\n<p>Should we make clear in the spec that the cardinality of <code>.extension</code> is ignored? We couldn't find it mentioned.<br>\nShould we going forward remove it from snapshot generation?</p>",
+        "id": 225540922,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1612789620
+    },
+    {
+        "content": "<p>Hmmm...  SUSHI automatically aggregates extension cardinalities to the base extension element.  So if you say <code>extension:race</code> is <code>1:1</code>, SUSHI automatically bumps <code>extension</code> to <code>1..*</code>.  It does the same for slices; if you say <code>component:systolic</code> is <code>1..1</code> and <code>component:diastolic</code> is <code>1..1</code>, SUSHI automatically bumps <code>component</code> to <code>2..*</code>.  Is this incorrect?</p>\n<p>I thought that if you wanted to say that a specific extension is required only if any extension is present, you would have to use an <code>invariant</code>; e.g., <code>extension.exists() implies extension(\"http://hl7.org/fhir/us/core/StructureDefinition/us-core-race\").exists()</code>.</p>",
+        "id": 225544729,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1612791478
+    },
+    {
+        "content": "<p>The more general question is indeed on any slicing. Currently, <a href=\"https://simplifier.net/TouchstoneDemoproject/PatientMandatoryExtensions-duplicate-2/~overview\">even if <code>Patient.identifier</code> is <code>0..*</code> and you have a slice <code>Patient.identifier:bsn</code> with cardinality <code>1..1</code></a> the .NET validator <a href=\"https://simplifier.net/touchstonedemoproject/patient01-noextensions/$validate\">will still return an error if you do not provide the <code>bsn</code> slice</a>. Forge will allow you to edit the cardinality of <code>Patient.identifier</code> to match your intentions, but as we see it might not serve any other purpose than visual.</p>",
+        "id": 225545159,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1612791697
+    },
+    {
+        "content": "<p>The question indeed came up whether Forge should calculate those combined cardinalities for you and whether it would matter. Or whether we should just not render them in our rendering, since they seem to be ignored.</p>",
+        "id": 225545579,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1612791895
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> Indeed, that's also what <span class=\"user-mention\" data-user-id=\"193430\">@Alexander Zautke</span> suggested, the 'IF any, then at least one of X'-case should be done with an invariant. Which would at least allow us to assume we don't need to support that with cardinalities and should be able to calculate a combined cardinality.</p>",
+        "id": 225545796,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1612792012
+    },
+    {
+        "content": "<p>OK, I think I misunderstood your original message, <span class=\"user-mention\" data-user-id=\"203235\">@Ward Weistra</span>, but I get it now.  It sounds like at least a few of us are on the same page here, but we need it spelled out in a more official capacity as well as some guidance re: whether we <em>need</em> to put aggregate cardinalities in the differential (and/or snapshot) or if that aggregation is implicit and does not need to be explicitly recorded in the differential/snapshot.  Is that right?</p>",
+        "id": 225546561,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1612792381
+    },
+    {
+        "content": "<p>That's it <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span>. Calculate just for display but ignored, calculate and use or just leave out.<br>\nI'd like to hear the behavior and intentions of the Java stack in validating, snapshot generating and rendering of these situations so we can align.</p>",
+        "id": 225547171,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1612792679
+    },
+    {
+        "content": "<p>well, I thought that I had a test to check this- the minimum cardinality of an element is the sum of the minimum cardinalities of it's slices. And if a slice is mandatory, an overall minimum cardinality of the element = 0 doesn't override the fact that the slice is mandatory; it's just an error.</p>",
+        "id": 225619392,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1612823591
+    },
+    {
+        "content": "<p>that's why I don't render the cardinality of the root for extensions - it's not expected to say anything interesting. But the maximum can; I'll review how this works</p>",
+        "id": 225619613,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1612823692
+    },
+    {
+        "content": "<p>Thanks for the confirmation, <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> -- I for one am glad that we implemented it correctly!  Less work for me! ;-)</p>",
+        "id": 225690154,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1612877931
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>. Based on that we plan to:</p>\n<ul>\n<li>Start calculating the min cardinality for extensions array in Forge, like <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> is doing. (Even though tooling currently generally seems to ignore it, it's the right thing going forward)</li>\n<li>Continue to render the slice entry cardinality, because of consistency and that it can provide extra information.</li>\n<li>Likely continue the current behavior in validation (consider a slice mandatory with a min cardinality of 1, even if entry slice has min cardinality of 0) for backwards compatibility. Unless current tests and stack alignment say differently.</li>\n</ul>\n<p>Btw, the Argonaut examples I referred to above are from 2018 apparently, so it might well not be representative of the current validation/snapshot generation behavior and sure is not for rendering.</p>",
+        "id": 225724988,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1612891415
+    },
+    {
+        "content": "<p>Perhaps we should add to <a href=\"http://hl7.org/fhir/R4/profiling.html#slice-cardinality\">http://hl7.org/fhir/R4/profiling.html#slice-cardinality</a>:</p>\n<ul>\n<li>The sum of the minimum cardinalities must be less or equal to <strong><code>m</code> and</strong> <code>n</code></li>\n</ul>\n<p>(I'd also like to clarify the first bullet there, if I'm reading it right, to:</p>\n<ul>\n<li>Each slice's maximum cardinality cannot be larger than <code>n</code>)</li>\n</ul>",
+        "id": 225811416,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1612949204
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"372944\">@Firely Bot</span> issue create \"Add clarity on cardinality of sliced element\"</p>\n<p>Add to <a href=\"http://hl7.org/fhir/R4/profiling.html#slice-cardinality\">http://hl7.org/fhir/R4/profiling.html#slice-cardinality</a>:</p>\n<ul>\n<li>The sum of the minimum cardinalities must be less or equal to <strong><code>m</code> and</strong> <code>n</code></li>\n</ul>\n<p>Clarify the first bullet point to:</p>\n<ul>\n<li>Each slice's maximum cardinality cannot be larger than <code>n</code></li>\n</ul>",
+        "id": 225996588,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1613053140
+    },
+    {
+        "content": "<p>Select the issue type from <a href=\"https://jira.hl7.org/projects/FHIR\">project FHIR</a> you want to report:</p>\n<p><a href=\"https://jira.hl7.org/secure/CreateIssueDetails!init.jspa?pid=10405&amp;description=%0AAdd+to+http%3A%2F%2Fhl7.org%2Ffhir%2FR4%2Fprofiling.html%23slice-cardinality%3A%0A%2A+The+sum+of+the+minimum+cardinalities+must+be+less+or+equal+to+%2A%2A%60m%60+and%2A%2A+%60n%60%0A%0AClarify+the+first+bullet+point+to%3A%0A%2A+Each+slice%27s+maximum+cardinality+cannot+be+larger+than+%60n%60%0A%0A_Reported+from+Zulip+topic+%5BExtension+element+cardinality%7Chttps%3A%2F%2Fchat.fhir.org%2F%23narrow%2Fstream%2F179177%2Ftopic%2FExtension%2520element%2520cardinality%2Fnear%2F1613053140%5D+with+Firely+Bot._&amp;summary=Add+clarity+on+cardinality+of+sliced+element&amp;issuetype=10600\">Change Request</a>, <a href=\"https://jira.hl7.org/secure/CreateIssueDetails!init.jspa?pid=10405&amp;description=%0AAdd+to+http%3A%2F%2Fhl7.org%2Ffhir%2FR4%2Fprofiling.html%23slice-cardinality%3A%0A%2A+The+sum+of+the+minimum+cardinalities+must+be+less+or+equal+to+%2A%2A%60m%60+and%2A%2A+%60n%60%0A%0AClarify+the+first+bullet+point+to%3A%0A%2A+Each+slice%27s+maximum+cardinality+cannot+be+larger+than+%60n%60%0A%0A_Reported+from+Zulip+topic+%5BExtension+element+cardinality%7Chttps%3A%2F%2Fchat.fhir.org%2F%23narrow%2Fstream%2F179177%2Ftopic%2FExtension%2520element%2520cardinality%2Fnear%2F1613053140%5D+with+Firely+Bot._&amp;summary=Add+clarity+on+cardinality+of+sliced+element&amp;issuetype=10800\">Technical Correction</a>, <a href=\"https://jira.hl7.org/secure/CreateIssueDetails!init.jspa?pid=10405&amp;description=%0AAdd+to+http%3A%2F%2Fhl7.org%2Ffhir%2FR4%2Fprofiling.html%23slice-cardinality%3A%0A%2A+The+sum+of+the+minimum+cardinalities+must+be+less+or+equal+to+%2A%2A%60m%60+and%2A%2A+%60n%60%0A%0AClarify+the+first+bullet+point+to%3A%0A%2A+Each+slice%27s+maximum+cardinality+cannot+be+larger+than+%60n%60%0A%0A_Reported+from+Zulip+topic+%5BExtension+element+cardinality%7Chttps%3A%2F%2Fchat.fhir.org%2F%23narrow%2Fstream%2F179177%2Ftopic%2FExtension%2520element%2520cardinality%2Fnear%2F1613053140%5D+with+Firely+Bot._&amp;summary=Add+clarity+on+cardinality+of+sliced+element&amp;issuetype=10801\">Question</a> or <a href=\"https://jira.hl7.org/secure/CreateIssueDetails!init.jspa?pid=10405&amp;description=%0AAdd+to+http%3A%2F%2Fhl7.org%2Ffhir%2FR4%2Fprofiling.html%23slice-cardinality%3A%0A%2A+The+sum+of+the+minimum+cardinalities+must+be+less+or+equal+to+%2A%2A%60m%60+and%2A%2A+%60n%60%0A%0AClarify+the+first+bullet+point+to%3A%0A%2A+Each+slice%27s+maximum+cardinality+cannot+be+larger+than+%60n%60%0A%0A_Reported+from+Zulip+topic+%5BExtension+element+cardinality%7Chttps%3A%2F%2Fchat.fhir.org%2F%23narrow%2Fstream%2F179177%2Ftopic%2FExtension%2520element%2520cardinality%2Fnear%2F1613053140%5D+with+Firely+Bot._&amp;summary=Add+clarity+on+cardinality+of+sliced+element&amp;issuetype=10802\">Comment</a></p>\n<p><em>Don't have an HL7 Jira account yet? <a href=\"https://jira.hl7.org/secure/CreateIssue.jspa?pid=11200&amp;issuetype=11300\">Create one for free.</a></em></p>",
+        "id": 225996591,
+        "sender_full_name": "Firely Bot",
+        "timestamp": 1613053142
+    },
+    {
+        "content": "<p><a href=\"http://jira.hl7.org/browse/FHIR-31054\">FHIR#31054</a></p>",
+        "id": 225996935,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1613053279
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"372944\">@Firely Bot</span> issue show <a href=\"http://jira.hl7.org/browse/FHIR-31054\">FHIR-31054</a></p>",
+        "id": 226322419,
+        "sender_full_name": "Ward Weistra",
+        "timestamp": 1613333394
+    },
+    {
+        "content": "<p><strong><a href=\"https://jira.hl7.org/browse/FHIR-31054\">FHIR-31054 Add clarity on cardinality of sliced element</a></strong><br>\nStatus: <strong>Triaged</strong>, Type: <strong>Technical Correction</strong></p>",
+        "id": 226322420,
+        "sender_full_name": "Firely Bot",
+        "timestamp": 1613333396
+    }
+]

@@ -1,0 +1,92 @@
+[
+    {
+        "content": "<p>Hi there !<br>\n<a href=\"/user_uploads/10155/hSaG-_l1x7tgyHf8Q2xF_GC7/drt-1.xml\">drt-1.xml</a></p>\n<p>I'm trying to validate the attached observation file . Both Java validator and hapi server (<a href=\"https://hapi.fhir.org/baseR4/Observation/$validate\">https://hapi.fhir.org/baseR4/Observation/$validate</a>)<br>\nstate about 2 violated rules : drt-1 and qty-3 when examining Observation.effective.ofType(Timing).repeat.bounds.ofType(Duration).</p>\n<p><strong>drt-1</strong> rule dictates \"There SHALL be a code if there is a value and it SHALL be an expression of time. If system is present, it SHALL be UCUM\"<br>\nMy boundsDuration look as below , and as I understand it doesn't violates what the rule dictates. however Java validator and hapi server consider it as violation . What I'm missing here ?<br>\n&lt;effectiveTiming&gt;<br>\n&lt;repeat&gt;<br>\n&lt;boundsDuration&gt;<br>\n&lt;value value=\"10\"/&gt;<br>\n&lt;unit value=\"day\"/&gt;<br>\n&lt;code value=\"d\"/&gt;<br>\n&lt;/boundsDuration&gt;<br>\n&lt;/repeat&gt;<br>\n&lt;/effectiveTiming&gt;</p>\n<p><strong>qty-3</strong> rule<br>\nAccording to observation.sch (schematron definition for observation ) qty-3 rule is not defined on effectiveTiming/f:repeat/f:boundsDuration at all . So how come the rule is violated ?</p>\n<p>I would appreciate if you could enlighten me what I' missing here .<br>\nThanks ,<br>\nIlia</p>",
+        "id": 276562290,
+        "sender_full_name": "Ilia Kaplan",
+        "timestamp": 1648172737
+    },
+    {
+        "content": "<p><a href=\"http://hl7.org/fhir/R4/datatypes.html#quantity\">qty-3</a> requires that system be present when code is.</p>\n<p><a href=\"http://hl7.org/fhir/R4/datatypes.html#Duration\">drt-1</a> does not mention that in its text, but does include it in its FHIRPath</p>\n<blockquote>\n<p>There SHALL be a code if there is a value and it SHALL be an expression of time. If system is present, it SHALL be UCUM.  </p>\n</blockquote>\n<blockquote>\n<p>code.exists() implies ((system = %ucum) and value.exists())</p>\n</blockquote>\n<p>You need to include the system</p>\n<blockquote>\n<p>&lt;value value=\"10\"/&gt;<br>\n&lt;unit value=\"day\"/&gt;<br>\n&lt;system value=\"http://unitsofmeasure.org\"/&gt;<br>\n&lt;code value=\"d\"/&gt;</p>\n</blockquote>",
+        "id": 276563329,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1648173762
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 276563528,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1648173920
+    },
+    {
+        "content": "<p><strong>qty-3</strong> -  I'm aware of \"system to be present when code is\"  requirement of qty-3  . What I can't understand is why it's fired on <br>\nf:Observation/f:effectiveTiming/f:repeat/f:boundsDuration . I mean this rule even not defined for f:Observation/f:effectiveTiming/f:repeat/f:boundsDuration, only <strong>drt-1</strong> supposed to be validated when examining this Xpath . <br>\nsee attached <a href=\"/user_uploads/10155/uusgOSJA3q6gx3k37HJu7bee/observation.sch\">observation.sch</a></p>\n<p><strong>drt-1</strong> - Looking into FHIRPath makes it more clear - the system should be present . What is misleading here is schematron definition <br>\n(f:code or not(f:value)) and (not(exists(f:system)) or f:system/@value='<a href=\"http://unitsofmeasure.org\">http://unitsofmeasure.org</a>')<br>\nthat defines system as optional element. Then the question is what should be the source of truth when it comes to validation: <br>\nFHIRPath or schematron ?</p>",
+        "id": 276565028,
+        "sender_full_name": "Ilia Kaplan",
+        "timestamp": 1648175638
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"475403\">@Ilia Kaplan</span> <br>\n<strong>qty-3</strong> duration inherits from quantity, see <a href=\"http://hl7.org/fhir/R4/datatypes.html#QuantityVariations\">http://hl7.org/fhir/R4/datatypes.html#QuantityVariations</a></p>\n<p><strong>drt-1</strong> FHIRPath is what is in formal definitions, e.g. of <a href=\"http://hl7.org/fhir/R4/duration.profile.xml.html\">duration</a> . FHIRPath is more expressive than Schematron and the Schematrons are generated from the FHIRPath.</p>\n<p>Have you seen <a href=\"https://hl7.org/fhir/R4/validation.html\">https://hl7.org/fhir/R4/validation.html</a>  and <a href=\"https://hl7.org/fhir/R4/conformance-rules.html#constraints\">https://hl7.org/fhir/R4/conformance-rules.html#constraints</a> ?</p>",
+        "id": 276578220,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1648186224
+    },
+    {
+        "content": "<p>Hi <br>\nI've seen those pages , but some essential things are still unclear for me.<br>\nGiven the attached sample  - how the rule defined on quantity datatype is validated ?</p>\n<ul>\n<li>Is it defined in some sort of another schematron file ? where the validator has to access in order  to check it  </li>\n<li>how the validators actually knows that in Observation/f:effectiveTiming/f:repeat/f:boundsDuration it has to check not only the schematron based rules  but also to expand its search to the rules defined on datatype level ?</li>\n</ul>",
+        "id": 276955071,
+        "sender_full_name": "Ilia Kaplan",
+        "timestamp": 1648525720
+    },
+    {
+        "content": "<p>The <a href=\"https://hl7.org/fhir/R4/validation.html#jar\">validator</a> does not use Schematron, or any of the other  validation methods. It is written in Java and the source is in <a href=\"https://github.com/hapifhir/org.hl7.fhir.core\">GitHub</a> if you want to see the details. I just use it. <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span></p>",
+        "id": 276959147,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1648530940
+    },
+    {
+        "content": "<p>If using Schematron and not the HL7 validator, the fully generated Schematron sets the context for each element and lists all inherited invariants.</p>",
+        "id": 277009911,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1648562969
+    },
+    {
+        "content": "<p>The validator always checks both element and type constraints.</p>",
+        "id": 277074612,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1648594080
+    },
+    {
+        "content": "<p>Hi again <br>\nthank you for the clarifications . </p>\n<p>Our team has started to work on building FHIR validator which is based on Schematron , and I have some concerns if we adopt the right approach. </p>\n<ol>\n<li>\n<p>Is Schematron validation reliable in a long term perspective ? I noticed this warning message on hapi page <br>\n<a href=\"https://hapifhir.io/hapi-fhir/docs/validation/schema_validator.html\">https://hapifhir.io/hapi-fhir/docs/validation/schema_validator.html</a></p>\n</li>\n<li>\n<p>Is it correct assumption that most of the FHIR providers just use Java validator or something that's built on top of it ?</p>\n</li>\n<li>\n<p>The drt-1 issue mentioned above basically claims that Schematron is not  really source of truth when it comes to validation . FHIRPath definition of the rule is more reliable . If that's the case - to what extent we can trust schematron  ? BTw , is there any repository of rules expressed using FHIRPath like schematron files ?</p>\n</li>\n<li>\n<p>Is there any way to validate inherited rules as it's required in case of qty-3 mentioned above? <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> what is fully generated Schematron ? I have Schematron files per resource and fhir-invariants.sch.  I couldn't find anything in these files that can invoke <strong>qty-3</strong> on f:Observation/f:effectiveTiming/f:repeat/f:boundsDuration </p>\n</li>\n<li>\n<p>Schematron validation has no coverage for validating system codes and resources (ex. \"Unable to resolve resource\" ). <br>\nValidating system codes and resources  seem to be much more wider and complicated rather than validating schematron rules. <br>\nCould you point me to some resources that guide how to approach these topics ?</p>\n</li>\n</ol>",
+        "id": 277915358,
+        "sender_full_name": "Ilia Kaplan",
+        "timestamp": 1649179897
+    },
+    {
+        "content": "<ol>\n<li>Schematron is incapable of checking value sets, certain types of invariants, resolving references, and doing a number of other things.  Also, it obviously only works on XML and well over 50% of FHIR instances are JSON.  In short, Schematron can work for the things it's good at, but unless there's a reason you <em>must</em> use Schematron, you're probably better starting with the existing Java or .NET validator</li>\n<li>Most systems do their own validation based on business rules plus, possibly some light-weight schema validation to do a sanity check.  However, for those systems that do full validation, then yes, either the Java or .NET validator as the most common foundation.  (Writing a FHIR validator is a <em>lot</em> of work and hard to get right - slicing can be downright miserable, so leveraging existing work often makes more sense than rolling your own.)</li>\n<li>Existing models are supposed to be expressed in both FHIRPath and XPath.  However, the requirement for XPath is being dropped in R5.  And in practice, some invariants simply can't be expressed in XPath (e.g. anything that depends on 'resolve()').  And I know of a number of IGs that just fill the XPath for their invariants with 'true()' and don't bother - even if the invariant <em>could</em> be expressed in XPath because the XPath isn't visible in their specs and it's their belief that no-one cares.  (And few people know how to write XPath 2.)  The fact that XPath errors get picked up this late is a symptom of the fact that XPath/Schematron aren't widely used</li>\n<li>The generated schematron files are <em>supposed</em> to handle this.  However, it's possible they don't and no-one's noticed.  You could file a change request and we can fix it as a tooling bug.</li>\n<li>If you mean \"how to approach these topics using schematron\", the answer is 'no'.  XPath has no capability to do it.  That's one of the reasons we chose to create FHIRPath.  (Lack of library support for XPath 2, need to support other syntaxes, and a few other considerations came into play too.)</li>\n</ol>",
+        "id": 277940022,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1649191110
+    },
+    {
+        "content": "<p>In 5. I meant how tp approach value sets, resolving references and other things that can't be covered by Schematron</p>",
+        "id": 277972568,
+        "sender_full_name": "Ilia Kaplan",
+        "timestamp": 1649217038
+    },
+    {
+        "content": "<p>You'll need to do them by writing code - or you could just leverage one of the existing open-source validators.  What is your objective in writing your own?</p>",
+        "id": 277972964,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1649217600
+    },
+    {
+        "content": "<p>writing my own was not my decision , I tend to think that leveraging existing code for validator will require less effort and it eventually will do better job</p>",
+        "id": 277977352,
+        "sender_full_name": "Ilia Kaplan",
+        "timestamp": 1649223217
+    },
+    {
+        "content": "<p>I would agree.  There's a <em>lot</em> of development effort that's gone into the existing ones.  If you decide (or are told) that you must create your own, do check out the test cases, which are maintained here: <a href=\"https://github.com/FHIR/fhir-test-cases/tree/master/validator\">https://github.com/FHIR/fhir-test-cases/tree/master/validator</a></p>",
+        "id": 278023549,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1649251950
+    }
+]

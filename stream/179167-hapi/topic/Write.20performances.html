@@ -1,0 +1,44 @@
+---
+layout: page
+title: "FHIR Chat  · Write performances · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Write.20performances.html">Write performances</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="270051503"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Write%20performances/near/270051503" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jason Paumier <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Write.20performances.html#270051503">(Jan 31 2022 at 15:42)</a>:</h4>
+<p>Hello!</p>
+<p>I'm currently working on an ETL to load data into a hapi fhir jpa server. Basically, the "load" part is a kafka consumer based on <a href="https://github.com/hapifhir/hapi-fhir-jpaserver-starter">https://github.com/hapifhir/hapi-fhir-jpaserver-starter</a>. What it does is that it consumes an event which contains a json, builds a resource and then I <code>dao.update()</code> to upsert it into the DB. Everything is on GitHub here (<a href="https://github.com/arkhn/fhir-river/blob/main/hapi-loader/src/main/java/com/arkhn/hapi/loader/ResourceConsumer.java">https://github.com/arkhn/fhir-river/blob/main/hapi-loader/src/main/java/com/arkhn/hapi/loader/ResourceConsumer.java</a>) if you want to have a look at it.<br>
+The problem I have is that it will only process around 30K events per minute (500 events per second). I've seen this benchmark (<a href="https://www.smilecdr.com/benchmarking-smile-cdr">https://www.smilecdr.com/benchmarking-smile-cdr</a>) where 12K resources are processed per seconds and tried to tweak the parameters I could but it's still way slower.<br>
+Do you have any idea about how I could improve that?</p>
+
+
+
+<a name="270235830"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Write%20performances/near/270235830" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Write.20performances.html#270235830">(Feb 01 2022 at 16:03)</a>:</h4>
+<p>A few quick thoughts: </p>
+<ul>
+<li>The biggest bang for your buck is to bundle resources together into FHIR transactions. Your total resources ingested per second will be vastly higher if you are performing FHIR transactions with 1000 resources each than it will be if you ingest them one at a time.</li>
+<li>Make sure your kafka consumer has mlutiple processing threads. You want to totally saturate your CPU and IO if you can.</li>
+<li>Depending on the patterns of your source data, using Kafka partition keys can be very helpful in making sure that you aren't ingesting conflicting data concurrently, which really hurts performance (e.g. two threads trying to create the same patient at the same time)</li>
+<li>Look at the suggested performance settings linked to from the blog post. They are all described in terms of Smile CDR settings, but they are all just setting config options on HAPI FHIR DaoConfig and ModelConfig settings under the hood. Thngs like mass ingestion mode, and disabling deletes can be a big help for performance.</li>
+<li>Tune your search parameters. No point in leaving SPs enabled if you know you're never going to use them.</li>
+<li>Try taking a thread dump so see what your system is actually doing during ingestion. It can be informative to discover that (for example) you are only actually using one processing thread when you thought you had more, or most of your threads are blocked waiting for DB connections because the pool is too small, or everyone is validating and validation is slow, etc</li>
+</ul>
+
+
+
+<a name="270957441"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Write%20performances/near/270957441" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jason Paumier <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Write.20performances.html#270957441">(Feb 07 2022 at 10:21)</a>:</h4>
+<p>Thanks a lot, I'll try all of that!</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

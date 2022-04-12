@@ -1,0 +1,177 @@
+---
+layout: page
+title: "FHIR Chat  · Representing Complex DataTypes in defintion-based extraction · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Representing.20Complex.20DataTypes.20in.20defintion-based.20extraction.html">Representing Complex DataTypes in defintion-based extraction</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="181167647"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Representing%20Complex%20DataTypes%20in%20defintion-based%20extraction/near/181167647" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gabriela Brown <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Representing.20Complex.20DataTypes.20in.20defintion-based.20extraction.html#181167647">(Nov 20 2019 at 00:00)</a>:</h4>
+<p>Definition-based extraction directs us to "fill in the Questionnaire.definition to point to the resource or profile element that Questionnaire item corresponds to ... The definition SHALL have the full canonical URL of the resource (or profile) followed by '#' followed by the snapshot.path of the element the Questionnaire item corresponds to."</p>
+<p>This makes sense to me with <code>Patient.active</code>, for example:</p>
+<div class="codehilite"><pre><span></span>{
+  &quot;resourceType&quot;: &quot;Questionnaire&quot;,
+  &quot;extension&quot;: [
+    {
+      &quot;url&quot;: &quot;http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-itemContext&quot;,
+      &quot;valueExpression&quot;: {
+            &quot;expression&quot;: &quot;Patient&quot;,
+            &quot;language&quot;: &quot;application/x-fhir-query&quot;
+          }
+    }
+  ],
+  &quot;item&quot;: [
+    {
+      &quot;linkId&quot;: &quot;patient-active&quot;,
+      &quot;definition&quot;: &quot;http://hl7.org/fhir/StructureDefinition/Patient#Patient.active&quot;,
+      &quot;type&quot;: &quot;boolean&quot;,
+      &quot;required&quot;: false,
+      &quot;repeats&quot;: false
+    }
+  ]
+}
+</pre></div>
+
+
+<p>But I'm not sure what to do in the case of <code>Patient.name</code>. The complex data type <code>HumanName</code> doesn't have a direct mapping to an available <code>item.type</code>, and would require several pieces of information to answer anyways. But the snapshot.path on <code>Patient</code> doesn't go into the fields of <code>HumanName</code>, so we shouldn't (?) reference these from a Patient definition path:</p>
+<div class="codehilite"><pre><span></span>{
+  &quot;id&quot; : &quot;Patient.name&quot;,
+  &quot;path&quot; : &quot;Patient.name&quot;,
+    ...
+  &quot;min&quot; : 0,
+  &quot;max&quot; : &quot;*&quot;,
+  &quot;base&quot; : {
+    &quot;path&quot; : &quot;Patient.name&quot;,
+    &quot;min&quot; : 0,
+    &quot;max&quot; : &quot;*&quot;
+  },
+  &quot;type&quot; : [{
+    &quot;code&quot; : &quot;HumanName&quot;
+  }],
+    ...
+}
+</pre></div>
+
+
+<p>Does it make sense to do something like map the complex type to a "group", and then have the nested questions specify definitions on the complex type definition? e.g.</p>
+<div class="codehilite"><pre><span></span>{
+  &quot;resourceType&quot;: &quot;Questionnaire&quot;,
+  &quot;extension&quot;: [
+    {
+      &quot;url&quot;: &quot;http://hl7.org/fhir/uv/sdc/StructureDefinition/sdc-questionnaire-itemContext&quot;,
+      &quot;valueExpression&quot;: {
+            &quot;expression&quot;: &quot;Patient&quot;,
+            &quot;language&quot;: &quot;application/x-fhir-query&quot;
+          }
+    }
+  ],
+  &quot;item&quot;: [
+    {
+      &quot;linkId&quot;: &quot;patient-name&quot;,
+      &quot;definition&quot;: &quot;http://hl7.org/fhir/StructureDefinition/Patient#Patient.name&quot;,
+      &quot;type&quot;: &quot;group&quot;,
+      &quot;repeats&quot;: false,
+      &quot;item&quot;: [
+        {
+          &quot;linkId&quot;: &quot;humanname-given&quot;,
+          &quot;definition&quot;: &quot;http://hl7.org/fhir/StructureDefinition/HumanName#HumanName.given&quot;,
+              &quot;type&quot;: &quot;string&quot;,
+              &quot;required&quot;: &quot;false&quot;,
+              &quot;repeats&quot;: &quot;true
+        },
+        ...
+      ]
+    }
+  ]
+}
+</pre></div>
+
+
+<p>It's still unclear how you would designate a complex type element as required with this set up, because what does it mean for a group to be "required"?</p>
+<p>Thoughts?</p>
+
+
+
+<a name="181179745"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Representing%20Complex%20DataTypes%20in%20defintion-based%20extraction/near/181179745" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Representing.20Complex.20DataTypes.20in.20defintion-based.20extraction.html#181179745">(Nov 20 2019 at 04:50)</a>:</h4>
+<p>if you want to pre-populate like this, I think you need to use the SDC facilities around variables</p>
+
+
+
+<a name="181234950"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Representing%20Complex%20DataTypes%20in%20defintion-based%20extraction/near/181234950" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gabriela Brown <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Representing.20Complex.20DataTypes.20in.20defintion-based.20extraction.html#181234950">(Nov 20 2019 at 18:27)</a>:</h4>
+<p>In this case I'm not trying to pre-populate a QuestionnaireResponse item with initialValue or initialExpression, I still want the user to supply the information that goes into the <a href="http://Patient.name" target="_blank" title="http://Patient.name">Patient.name</a> element. I guess another way of phrasing is, "how would I write a Questionnaire such that when definition-based extraction is run on a completed QuestionnaireResponse, an element with a complex type like <a href="http://Patient.name" target="_blank" title="http://Patient.name">Patient.name</a> can be captured?"</p>
+
+
+
+<a name="181237242"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Representing%20Complex%20DataTypes%20in%20defintion-based%20extraction/near/181237242" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Representing.20Complex.20DataTypes.20in.20defintion-based.20extraction.html#181237242">(Nov 20 2019 at 18:56)</a>:</h4>
+<p>You'd have to break it into multiple questions and the population process would map those into the individual elements</p>
+
+
+
+<a name="181272680"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Representing%20Complex%20DataTypes%20in%20defintion-based%20extraction/near/181272680" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gabriela Brown <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Representing.20Complex.20DataTypes.20in.20defintion-based.20extraction.html#181272680">(Nov 21 2019 at 03:15)</a>:</h4>
+<p>What definition path would you put on the item that's collecting a value for <code>Patient.name.family</code>?</p>
+
+
+
+<a name="181277327"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Representing%20Complex%20DataTypes%20in%20defintion-based%20extraction/near/181277327" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Representing.20Complex.20DataTypes.20in.20defintion-based.20extraction.html#181277327">(Nov 21 2019 at 05:21)</a>:</h4>
+<p>that path</p>
+
+
+
+<a name="181574410"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Representing%20Complex%20DataTypes%20in%20defintion-based%20extraction/near/181574410" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gabriela Brown <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Representing.20Complex.20DataTypes.20in.20defintion-based.20extraction.html#181574410">(Nov 21 2019 at 19:17)</a>:</h4>
+<p>Right, this totally makes sense as a way to refer to that element, but it's not a <code>snapshot path</code>, is it? Or if it is, where is <code>snapshot path</code> defined? I'm taking it to mean a path that exists on a snapshot element of a resource StructureDefinition, which <code>Patient.name.family</code> is not.</p>
+<p>Thank you for being patient with me :)</p>
+
+
+
+<a name="181611785"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Representing%20Complex%20DataTypes%20in%20defintion-based%20extraction/near/181611785" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Representing.20Complex.20DataTypes.20in.20defintion-based.20extraction.html#181611785">(Nov 22 2019 at 05:45)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> why did we say 'snapshot' path? I can't think that this is useful - all it can do is confuse people like this?</p>
+
+
+
+<a name="181613066"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Representing%20Complex%20DataTypes%20in%20defintion-based%20extraction/near/181613066" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Representing.20Complex.20DataTypes.20in.20defintion-based.20extraction.html#181613066">(Nov 22 2019 at 06:23)</a>:</h4>
+<p>Perhaps to reflect that you have access to all of the paths in the snapshot, not just the differential?  Given you can drill deeper than the  snapshot, agree it's confusing.</p>
+
+
+
+<a name="181617474"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Representing%20Complex%20DataTypes%20in%20defintion-based%20extraction/near/181617474" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Representing.20Complex.20DataTypes.20in.20defintion-based.20extraction.html#181617474">(Nov 22 2019 at 08:12)</a>:</h4>
+<p>guess we should make a task to clarify that then</p>
+
+
+
+<a name="181629296"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Representing%20Complex%20DataTypes%20in%20defintion-based%20extraction/near/181629296" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Representing.20Complex.20DataTypes.20in.20defintion-based.20extraction.html#181629296">(Nov 22 2019 at 11:28)</a>:</h4>
+<p><span class="user-mention" data-user-id="197081">@Gabriela Brown</span> Are you able to submit a change request asking us to clarify the current language?</p>
+
+
+
+<a name="181668769"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Representing%20Complex%20DataTypes%20in%20defintion-based%20extraction/near/181668769" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gabriela Brown <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Representing.20Complex.20DataTypes.20in.20defintion-based.20extraction.html#181668769">(Nov 22 2019 at 19:19)</a>:</h4>
+<p>yep, will do! Thanks, this is helpful.</p>
+
+
+
+<a name="181670668"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Representing%20Complex%20DataTypes%20in%20defintion-based%20extraction/near/181670668" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gabriela Brown <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Representing.20Complex.20DataTypes.20in.20defintion-based.20extraction.html#181670668">(Nov 22 2019 at 19:44)</a>:</h4>
+<p>Hm, so I was just reading <a href="https://www.hl7.org/fhir/questionnaire.html#definition" target="_blank" title="https://www.hl7.org/fhir/questionnaire.html#definition">https://www.hl7.org/fhir/questionnaire.html#definition</a>, which has some relevant info that I'll include in the ticket but think is worth posting here too:</p>
+<p>"The url refers to an ElementDefinition in StructureDefinition, and always starts with the canonical URL for the target resource. When referring to a StructureDefinition, a fragment identifier is used to specify the element definition by its id (<a href="http://Element.id" target="_blank" title="http://Element.id">Element.id</a>). E.g. <a href="http://hl7.org/fhir/StructureDefinition/Observation#Observation.value[x]" target="_blank" title="http://hl7.org/fhir/StructureDefinition/Observation#Observation.value[x]">http://hl7.org/fhir/StructureDefinition/Observation#Observation.value[x]</a>. In the absence of a fragment identifier, the first/root element definition in the target is the matching element definition."</p>
+<p>This "fragment identifier" isn't really mentioned anywhere else in the specification that I can find, but suggests constraining to the "snapshot path" as well.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

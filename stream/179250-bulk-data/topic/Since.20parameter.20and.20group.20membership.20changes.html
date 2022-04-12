@@ -1,0 +1,444 @@
+---
+layout: page
+title: "FHIR Chat  · Since parameter and group membership changes · bulk data"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/index.html">bulk data</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html">Since parameter and group membership changes</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="177566606"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/177566606" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Hawes <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#177566606">(Oct 07 2019 at 22:23)</a>:</h4>
+<p>Greetings. I want the group's advice about a bulk data export scenario. First, a little background, CMS is setting up regular bulk data exports of our claims information (see the DPC and BCDA posts elsewhere in this forum).  For each client, we define a group for bulk-export. We are expecting our clients to call our bulk-export endpoint weekly to get the latest information for a group. The first time a client calls CMS, they receive the full dataset of their group. After the first export,  clients only need the updates to a group's dataset. A export with a _since parameter is well suited for this use-case, only exporting data that has changed after the passed in timestamp,  it does include information that the client already has. Because we an append-only dataset, we expect this optimization to make our exports a couple of orders of magnitude faster. </p>
+<p>The problem that I've run into is what to do when a group's roster changes. Specifically, how can a client get the initial full dataset for only new members of a group? A _since export only includes resources that have a lastUpdated time after the supplied since parameter. A full export would include the new member's resources, but it is very inefficient because the number is of new members is small. One solution would be to use a synchronous method to get an individual member's resource. Another solution would be for clients to request a full export periodically. Both of these solutions are inefficient. I want to offer an export operation that includes all resources updated since a timestamp and every resource that belongs to a new member since a timestamp. </p>
+<p>So, has anybody run into this problem? It seems to have been discussed a little on subscriptions and since parameter interaction. Thanks in advance for any advice.</p>
+
+
+
+<a name="177578782"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/177578782" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#177578782">(Oct 08 2019 at 02:21)</a>:</h4>
+<p>Very good point...no idea about a solution though</p>
+
+
+
+<a name="177580128"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/177580128" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#177580128">(Oct 08 2019 at 02:58)</a>:</h4>
+<p>Google has encountered a pattern like that, often posed as:</p>
+<p>My app/ML model/dataset/whatever has access to only patients currently admitted to facility X, and I subscribe to or periodically export changes to those patients. When an admission happens I want to go get all of the historical record for the patient that I newly gained access to.</p>
+<p>In this context we lean towards "subscribe to patient admissions, call synchronous patient-everything" because the flow of data is near-real-time and the rate of patients appearing is reasonably low. For weekly updates this is not going to work.</p>
+<p>There is a related problem in subscriptions of "I want to subscribe to the event that I gain access to a resource that I did not previously have access to" which applies this question to a push instead of pull relationship. (And its troublesome converse "...that I <em>lose</em> access to a resource...")</p>
+
+
+
+<a name="177580383"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/177580383" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#177580383">(Oct 08 2019 at 03:03)</a>:</h4>
+<p>I have a fairly clear idea for to making Group/$export do what you want, but it requires that your Group has a properly maintained Group.member.period for every member.</p>
+<p>When doing Group/$export?_since=T, for each member if period.start &lt; T you export Patient/$everything?_since=T, and if period.start &gt;=T you just export Patient/$everything because it's a new addition. This gets you what you want in one go.</p>
+
+
+
+<a name="177582709"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/177582709" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Hawes <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#177582709">(Oct 08 2019 at 04:10)</a>:</h4>
+<blockquote>
+<p>I have a fairly clear idea for to making Group/$export do what you want, but it requires that your Group has a properly maintained Group.member.period for every member.</p>
+<p>When doing Group/$export?_since=T, for each member if period.start &lt; T you export Patient/$everything?_since=T, and if period.start &gt;=T you just export Patient/$everything because it's a new addition. This gets you what you want in one go.</p>
+</blockquote>
+<p>Thanks Paul. You are right that is what I want for semantics of the operation, but returning a resource with a lastUpdated value before the since parameter would be incompatible with the export spec. Here's the line that I'm looking at</p>
+<blockquote>
+<p>Resources will be included in the response if their state has changed after the supplied time (e.g. if Resource.meta.lastUpdated is later than the supplied _since time).</p>
+</blockquote>
+<p>To me, this description means that I can't return everything for a new member and still be compatible with the spec. What to do?</p>
+
+
+
+<a name="177608667"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/177608667" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Paul Church <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#177608667">(Oct 08 2019 at 12:36)</a>:</h4>
+<p>Yes, to be clear I am suggesting a way that the spec could be changed or extended, not how it currently is.</p>
+
+
+
+<a name="177614151"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/177614151" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#177614151">(Oct 08 2019 at 13:34)</a>:</h4>
+<p>Change the specs</p>
+
+
+
+<a name="177614442"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/177614442" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michele Mottini <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#177614442">(Oct 08 2019 at 13:36)</a>:</h4>
+<p>The export system would need to know when patient have been added to the group, but that's should not be too difficult</p>
+
+
+
+<a name="177871785"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/177871785" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#177871785">(Oct 11 2019 at 02:15)</a>:</h4>
+<p>I agree that it is worth describing thks functionality specifically in the next version of the $export specification and would welcome a PR + GForge tracker.</p>
+<p>I should also note that the proposed solution would not <em>technically</em> violate what we have written today, since:</p>
+<blockquote>
+<p>Resources will be included in the response if their state has changed after the supplied time (e.g. if Resource.meta.lastUpdated is later than the supplied _since time).</p>
+</blockquote>
+<p>says "included in the response if" and not "only if". It seems like an over-read, but we do have precedent for saying that it is okay for servers to return more data than a client requested (e.g., additional operation outcomes on a search; or as we said in Sync for Science, it''s okay for a server to return results from a wider range of time than the client requests).</p>
+
+
+
+<a name="177906086"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/177906086" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Yunwei Wang <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#177906086">(Oct 11 2019 at 13:21)</a>:</h4>
+<blockquote>
+<p>but we do have precedent for saying that it is okay for servers to return more data than a client requested (e.g., additional operation outcomes on a search; or as we said in Sync for Science, it''s okay for a server to return results from a wider range of time than the client requests).</p>
+</blockquote>
+<p>That is a headache for client and testing system because I cannot validate if server's export satisfied value in _since parameter.</p>
+
+
+
+<a name="177910304"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/177910304" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#177910304">(Oct 11 2019 at 14:12)</a>:</h4>
+<p>Yeah, that's true. You have the output's "request" property at least</p>
+
+
+
+<a name="177910415"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/177910415" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#177910415">(Oct 11 2019 at 14:13)</a>:</h4>
+<p>(And less of a headache than having no efficient way to get the data.)</p>
+
+
+
+<a name="177989308"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/177989308" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Hawes <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#177989308">(Oct 12 2019 at 13:45)</a>:</h4>
+<blockquote>
+<p>I should also note that the proposed solution would not <em>technically</em> violate what we have written today, since:</p>
+<blockquote>
+<p>Resources will be included in the response if their state has changed after the supplied time (e.g. if Resource.meta.lastUpdated is later than the supplied _since time).</p>
+</blockquote>
+<p>says "included in the response if" and not "only if". It seems like an over-read, but we do have precedent for saying that it is okay for servers to return more data than a client requested (e.g., additional operation outcomes on a search; or as we said in Sync for Science, it''s okay for a server to return results from a wider range of time than the client requests).</p>
+</blockquote>
+<p><span class="user-mention" data-user-id="191864">@Isaac Vetter</span> I'm wondering what the EPIC bulk-export client would do if a bulk-export end-point returned more than what was requested per Josh's interpretation.</p>
+
+
+
+<a name="196214150"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196214150" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Snook <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196214150">(May 04 2020 at 17:35)</a>:</h4>
+<p>I'd like to revive this thread... :)</p>
+<p>BCDA is looking at experimental ways to simplify the problem Rick posed many months ago; and hopefully through experimentation, user feedback, and feedback from the FHIR community we can iterate and come to a solution.</p>
+<p>We currently provide <code>/Patient</code>, which allows an authorized user to request bulk data for all patients associated with their organization.  The mapping of patients-to-organization is handled by an ETL process that our system executes on a monthly basis.  We are looking for ways to utilize <code>_since</code> in a world wear group rosters change monthly.</p>
+<p>We currently offer an experimental group identifier called "all", which essentially does exactly what the <code>/Patient</code> endpoint does - it retrieves data for all patients associated with the requesting organization.    \We are experimenting with a new group ID called "new", which would perform a grouping for patients after a request is made by an authorized organization.  The "new" group identifier would compare the patients from the current month's ETL load against the patients from the previous month's ETL load, and only include the "new" patients (i.e., exist in this month's load but not last month's load) in the bulk export job.  This provides a way for users of the API to "slim down" the bulk data requested, in situations where only new patient data is needed.  Note that we intend to use this in conjunction with <code>_since</code>, where <code>_since</code> would be used to retrieve newer claims data and <code>/Group/new</code> would be used to retrieve newer patients attributed to the calling organization.</p>
+<p>We are aware of this statement from the Bulk FHIR Spec: "Note: How these Groups are defined is specific to each FHIR system’s implementation.".... but we do want to make sure we are building something that does not stray from the spec.</p>
+<p>We are looking to the FHIR community to provide comments/feedback on this approach, from a FHIR-compliance perspective.  We are especially interested in hearing comments about our approach of creating simple group identifiers </p>
+<p>I can provide more clarification in our approach if necessary, just let me know where that might be.</p>
+<p>Thanks in advance.  Your input is greatly appreciated.</p>
+
+
+
+<a name="196216107"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196216107" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jenni Syed <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196216107">(May 04 2020 at 17:52)</a>:</h4>
+<p>I'm actually curious why this would vary to far from what we have said about _lastUpdated or challenges in subscription. IE: the current parameters (eg: _since) apply to the "new" state. This would result in you getting data from new patients but honoring the _since...</p>
+
+
+
+<a name="196216213"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196216213" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jenni Syed <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196216213">(May 04 2020 at 17:53)</a>:</h4>
+<p>The approach above isn't much different than requiring the caller (if they use _since) to occasionally download the full set of data on occasion. Group membership is only one tiny reason that what is included in the data may change from call to call</p>
+
+
+
+<a name="196216307"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196216307" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jenni Syed <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196216307">(May 04 2020 at 17:54)</a>:</h4>
+<p>security and other things that you don't typically trigger alerts on are another, more tricky reason</p>
+
+
+
+<a name="196216463"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196216463" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jenni Syed <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196216463">(May 04 2020 at 17:55)</a>:</h4>
+<p>Your approach does allow for a much smaller amount of data - but I think there may be other reasons they need the "full" set. Also, just because a patient has been added to a group I don't think it implies that the caller should be authorized to all previous data through the lifetime of the patient</p>
+
+
+
+<a name="196216582"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196216582" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jenni Syed <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196216582">(May 04 2020 at 17:56)</a>:</h4>
+<p>eg: as a payor, insuring a new member who is 80 yrs old, why should I get data prior to that time they were added?</p>
+
+
+
+<a name="196219294"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196219294" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196219294">(May 04 2020 at 18:16)</a>:</h4>
+<p><span class="user-mention" data-user-id="268217">@Matt Snook</span>  good timing! The issue of obtaining historical data on patients added to a group is one of the enhancements to the bulk IG we're focusing on this year in the Argonaut bulk data working group. I put together a straw man proposal around extending the meaning of the _since param that we discussed at the meeting last week (issue: <a href="https://github.com/HL7/bulk-data/issues/65" title="https://github.com/HL7/bulk-data/issues/65">https://github.com/HL7/bulk-data/issues/65</a> , proposal: <a href="https://github.com/HL7/bulk-data/pull/68/files" title="https://github.com/HL7/bulk-data/pull/68/files">https://github.com/HL7/bulk-data/pull/68/files</a> , meeting notes: <a href="https://bit.ly/argo20-bulk" title="https://bit.ly/argo20-bulk">https://bit.ly/argo20-bulk</a> ). As a follow-up, I'm writing up an alternate proposal the doesn't require the server to maintain a history of group membership that we'll be discussing at the next meeting (either next Thursday or two weeks after that depending on the FHIR Connectathon schedule - details will be posted to the Argonaut announcement thread above). Perhaps you could join the call to talk through your use case?</p>
+
+
+
+<a name="196219312"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196219312" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196219312">(May 04 2020 at 18:17)</a>:</h4>
+<p>Regarding the "all" group, why not just use the patient endpoint, since all requests are filtered by what the user is allowed to access?</p>
+
+
+
+<a name="196219318"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196219318" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196219318">(May 04 2020 at 18:17)</a>:</h4>
+<p>There was discussion around some of this during the <a href="https://github.com/argonautproject/2020#projects" title="https://github.com/argonautproject/2020#projects">Argonaut Bulk Data</a> call last week (<a href="https://docs.google.com/document/d/1HMpeT9Um22d8yggHq__hJ3e_dwyPUVSA_5J0NI-GxPw/edit" title="https://docs.google.com/document/d/1HMpeT9Um22d8yggHq__hJ3e_dwyPUVSA_5J0NI-GxPw/edit">notes</a>).</p>
+<p>The <a href="https://github.com/HL7/bulk-data/issues/65" title="https://github.com/HL7/bulk-data/issues/65">filed issue against the spec</a> uses the case where someone is added to the group, but their newest data is before your last <code>_since</code> (e.g., checking today (May 4), last check was April 27, the patient was added this past week, but newest data is from April 24).</p>
+<p>Keeping in mind that Bulk Data is generally concerned with large scales (e.g., millions of records and/or several GB of data), there is a consensus that the spec should clarify this with a 'standard process' for handling it.</p>
+<p>Can read the notes to check, but I believe that (and please jump in if I'm wrong):</p>
+<ul>
+<li>This is common enough to warrant handling</li>
+<li>It could be handled purely by clients, but:<ul>
+<li>There is a lot of complexity to handling this properly, which may not be reasonable in some implementations</li>
+<li>There are more clients than servers, so this will result in more repeated work (and opportunities to get wrong)</li>
+</ul>
+</li>
+<li>It probably should be handled by servers, but:<ul>
+<li>Servers cannot be expected to track the dataset for every query in order to compare in the future</li>
+<li>This is particularly problematic around <code>characteristic</code> groups (e.g., groups that are only instantiated during requests to resolve them)</li>
+</ul>
+</li>
+</ul>
+<p>Other than the last point, I think a subscription would actually work to bridge the gap (e.g., notify me when group membership changes, so that I can build a list of changed patients).  That last point doesn't work with subscriptions unless we define it somehow (e.g., instantiate a group over some period and build a change notification based on that?).   That last one may be worth bringing up for subscriptions during the connectathon as well.</p>
+
+
+
+<a name="196219377"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196219377" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196219377">(May 04 2020 at 18:17)</a>:</h4>
+<p>Also, if we went with a structure like "Group/new", then users with access to more than one group wouldn't be able to see additions to a specific group, right?</p>
+
+
+
+<a name="196219380"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196219380" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196219380">(May 04 2020 at 18:17)</a>:</h4>
+<p>Lol for hitting enter the same time as Dan, as well.</p>
+
+
+
+<a name="196219528"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196219528" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196219528">(May 04 2020 at 18:18)</a>:</h4>
+<p>Ha, at least we didn't contradict each other!</p>
+
+
+
+<a name="196219602"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196219602" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196219602">(May 04 2020 at 18:19)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191414">Dan Gottlieb</span> <a href="#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196219528" title="#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196219528">said</a>:</p>
+<blockquote>
+<p>Ha, at least we didn't contradict each other!</p>
+</blockquote>
+<p>Hmm... let me edit <span aria-label="wink" class="emoji emoji-1f609" role="img" title="wink">:wink:</span></p>
+
+
+
+<a name="196220122"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196220122" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196220122">(May 04 2020 at 18:23)</a>:</h4>
+<p><span class="user-mention" data-user-id="191356">@Jenni Syed</span> agree that whether a user gets historical data on patients added to a group certainly depends on the business rules involved, but this has been a challenge in implementations and is forcing clients have to download many gb of data on each request just to find the small set of new data being sent for this reason.</p>
+
+
+
+<a name="196221647"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196221647" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jenni Syed <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196221647">(May 04 2020 at 18:34)</a>:</h4>
+<p>I worry that the person being added (or removed?) is the "easy" problem to solve, but there are many "hidden" problems that servers may not be able to track which may require a client to download the full population sometimes - NOT every time</p>
+
+
+
+<a name="196221839"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196221839" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jenni Syed <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196221839">(May 04 2020 at 18:36)</a>:</h4>
+<p>I agree we should try to make it more performant/easy (noting that _since isn't a required parameter per spec nor per ONC regs), but I think we're going to find edge cases where this could get "fun" beyond just group membership</p>
+
+
+
+<a name="196221862"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196221862" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jenni Syed <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196221862">(May 04 2020 at 18:36)</a>:</h4>
+<p>IE: X Person was always part of the group, but this app didn't have privs to see them?</p>
+
+
+
+<a name="196223143"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196223143" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196223143">(May 04 2020 at 18:45)</a>:</h4>
+<p>Yeah, that wouldn't necessarily be addressed by the more robust _since approach (unless the server is sophisticated enough to consider privilege changes in the delta calculation). It should work with the other approach we discussed at the meeting of first querying for a list of patients in the group and then having the client restrict the full data query to a set of patients ids it hasn't seen before via a new "patient" param.</p>
+
+
+
+<a name="196223420"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196223420" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Gino Canessa <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196223420">(May 04 2020 at 18:46)</a>:</h4>
+<p>Agreed Jenni.  But if it's hard for this group of people, I wouldn't expect every individual implementer to get it right.<br>
+I like the security use case too, but Dan handily beat my reply this time  :-)</p>
+
+
+
+<a name="196312801"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196312801" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Snook <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196312801">(May 05 2020 at 14:12)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191414">Dan Gottlieb</span> <a href="#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196219377" title="#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196219377">said</a>:</p>
+<blockquote>
+<p>Also, if we went with a structure like "Group/new", then users with access to more than one group wouldn't be able to see additions to a specific group, right?</p>
+</blockquote>
+<p>Technically, in BCDA, users are Accountable Care Organizations (ACOs) and thus users have access to just one group -  the beneficiaries attributed to their ACO.  This is why a call to <code>/Patient</code> returns the same data as <code>/Group/all</code> (in our implementation, which is essentially why I'm looking for feedback on our approach).  Because of this "grouping" on an ACO basis, we were looking at making use of pre-defined group identifiers to group patients within the ACO based on their "newness" to the ACO, so that the workflow plays nicely with <code>_since</code>.  Thanks for giving this thread attention.</p>
+
+
+
+<a name="196357066"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196357066" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196357066">(May 05 2020 at 19:44)</a>:</h4>
+<p>I'm not sure I'm following <span class="user-mention" data-user-id="268217">@Matt Snook</span>  -- are you describing a behavior you think we might want to standardize through the Bulk Data IG? Is there a use case you're looking to handle that's not being addressed by the PRs currently being proposed? It'd be great if you can join next week's Argonaut call.</p>
+
+
+
+<a name="196693437"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196693437" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Snook <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196693437">(May 06 2020 at 20:35)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191315">Josh Mandel</span> <a href="#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196357066" title="#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196357066">said</a>:</p>
+<blockquote>
+<p>I'm not sure I'm following <span class="user-mention silent" data-user-id="268217">Matt Snook</span>  -- are you describing a behavior you think we might want to standardize through the Bulk Data IG? Is there a use case you're looking to handle that's not being addressed by the PRs currently being proposed? It'd be great if you can join next week's Argonaut call.</p>
+</blockquote>
+<p><span class="user-mention" data-user-id="191315">@Josh Mandel</span> I'm mainly interested in hearing comments/ feedback on the approach we are considering with a pre-defined group identifier called "new", which is used to only retrieve beneficiaries which are new this period (where "period" might be defined as 1 month).</p>
+
+
+
+<a name="196695408"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196695408" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196695408">(May 06 2020 at 20:51)</a>:</h4>
+<p><span class="user-mention" data-user-id="268217">@Matt Snook</span> What if an ACO forgets to pull data during a period? Or has an outage spanning the entire period?</p>
+
+
+
+<a name="196696733"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196696733" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Snook <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196696733">(May 06 2020 at 21:02)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="192789">Karl M. Davis</span> <a href="#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196695408" title="#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196695408">said</a>:</p>
+<blockquote>
+<p><span class="user-mention silent" data-user-id="268217">Matt Snook</span> What if an ACO forgets to pull data during a period? Or has an outage spanning the entire period?</p>
+</blockquote>
+<p>Great question.  I think, in that case, they would need to pull "all" data again if they'd like historical data for new beneficiaries.  Also, remember, the idea of "new" representing 1 month is just for purposes of discussion.  It could also mean "new this year" (for example) if we think that is a better approach for ACO's workflows.  The intent here is to see how these pre-defined group identifiers either stray or align with FHIR and the community.</p>
+
+
+
+<a name="196698267"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196698267" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Karl M. Davis <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196698267">(May 06 2020 at 21:13)</a>:</h4>
+<p>Okay. How would they determine, programmatically, that they need to do that? What code would they write to automatically say, "hey, looks like we need to pull all the data from scratch again -- let's do that"?</p>
+
+
+
+<a name="196699942"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196699942" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196699942">(May 06 2020 at 21:26)</a>:</h4>
+<p>In general we try not to assign any meaning to FHIR <code>Resource.id</code> values, since they're not always under a server's control (e.g., some architectures assign these randomly or through counters, etc).</p>
+
+
+
+<a name="196772857"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196772857" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196772857">(May 07 2020 at 13:51)</a>:</h4>
+<p><span class="user-mention" data-user-id="268217">@Matt Snook</span> - in terms of alternate options, the proposed spec changes outlined in <a href="https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763" title="https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763">https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763</a> are an attempt at a  generalizable approach to returning historical data for patients new to a group.</p>
+
+
+
+<a name="196772890"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196772890" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196772890">(May 07 2020 at 13:51)</a>:</h4>
+<p>Servers would be able to either return this data as part of the group export request based on the timestamp of the _since parameter and/or support a pattern where the client can determine which patients have been added to a group and request just their data.</p>
+
+
+
+<a name="196772932"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196772932" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196772932">(May 07 2020 at 13:51)</a>:</h4>
+<p>This has the advantages of not being tied to a particular time period and working on servers where a user can have access to more than one group. Would this approach work for your use case?</p>
+
+
+
+<a name="196774282"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196774282" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matt Snook <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196774282">(May 07 2020 at 14:01)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191414">Dan Gottlieb</span> <a href="#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196772857" title="#narrow/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes/near/196772857">said</a>:</p>
+<blockquote>
+<p><span class="user-mention silent" data-user-id="268217">Matt Snook</span> - in terms of alternate options, the proposed spec changes outlined in <a href="https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763" title="https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763">https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763</a> are an attempt at a  generalizable approach to returning historical data for patients new to a group.</p>
+</blockquote>
+<p>This approach is particularly interesting.  To clarify the meaning of this addition to the <code>_since</code> parameter:<br>
+<em>In the case of a Group level export, servers MAY return additional resources if the resource belongs to the patient compartment of a patient added to the Group after the supplied time (this behavior should be clearly documented by the server).</em></p>
+<p>I read this as, when <code>/Group</code> is called with a date specified in <code>_since</code>:</p>
+<ul>
+<li>then we return data for all patients in the specified group which have had data updated since the specified date</li>
+<li>we also, optionally, could return ALL data (including historical data prior to the specified date input in <code>_since</code> param) for any new patients added to the group after the specified date.  If we chose to optionally implement this strategy, the API should be heavily documented to clearly indicate the behavior.</li>
+</ul>
+<p>If that is the intended usage of this proposed addition, then I think it might work for our use case! I'd love to hear thoughts from <span class="user-mention" data-user-id="192789">@Karl M. Davis</span>  on this.</p>
+
+
+
+<a name="196893023"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196893023" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Hawes <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196893023">(May 08 2020 at 13:08)</a>:</h4>
+<p><span class="user-mention" data-user-id="191414">@Dan Gottlieb</span> At the CMS, our use-cases can have large groups (the largest I know of has &gt;1M members). The <code>patient</code> query parameter in the proposal seems very well suited for small lists of patients, but for medium-sized lists of patients, it will run against URL length limits.</p>
+<p>I suspect this issue come up in your discussion. What is the workgroup's thinking?</p>
+
+
+
+<a name="196893722"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196893722" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196893722">(May 08 2020 at 13:14)</a>:</h4>
+<p>The plan is to allow submissions via POST to accommodate larger payloads.</p>
+
+
+
+<a name="196893944"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196893944" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196893944">(May 08 2020 at 13:16)</a>:</h4>
+<p>It still limits us to what's reliably going to fit in a single http request body, but this seems workable. (To be clear though, CMS could implement the diff logic server side and save clients the trouble of computing/submitting a diff .)</p>
+
+
+
+<a name="196894638"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196894638" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Rick Hawes <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196894638">(May 08 2020 at 13:23)</a>:</h4>
+<p><span class="user-mention" data-user-id="191315">@Josh Mandel</span> Yes. A POST version of the request would be much more workable for large lists. Thanks for the quick response.</p>
+
+
+
+<a name="196895039"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196895039" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196895039">(May 08 2020 at 13:27)</a>:</h4>
+<p>The POST support Josh mentioned is in the proposal here: <a href="https://github.com/HL7/bulk-data/pull/71/files#diff-985cef1e2f9cd85436f27813aa6de763R56" title="https://github.com/HL7/bulk-data/pull/71/files#diff-985cef1e2f9cd85436f27813aa6de763R56">https://github.com/HL7/bulk-data/pull/71/files#diff-985cef1e2f9cd85436f27813aa6de763R56</a> and I outlined a few implementation questions around it in the pull request at <a href="https://github.com/HL7/bulk-data/pull/71" title="https://github.com/HL7/bulk-data/pull/71">https://github.com/HL7/bulk-data/pull/71</a>  .</p>
+
+
+
+<a name="196895234"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/196895234" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#196895234">(May 08 2020 at 13:29)</a>:</h4>
+<p>Also, when servers have a history of group changes, it may be cleaner to just supply this data based on the _since param as outlined at <a href="https://github.com/HL7/bulk-data/pull/71/files#diff-985cef1e2f9cd85436f27813aa6de763R121" title="https://github.com/HL7/bulk-data/pull/71/files#diff-985cef1e2f9cd85436f27813aa6de763R121">https://github.com/HL7/bulk-data/pull/71/files#diff-985cef1e2f9cd85436f27813aa6de763R121</a> rather than implementing the patient param and making clients track and request the history.</p>
+
+
+
+<a name="197577641"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/197577641" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Richard Braman <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#197577641">(May 14 2020 at 16:04)</a>:</h4>
+<p><span class="user-mention" data-user-id="191414">@Dan Gottlieb</span> I know AdHoc/CMS engineers are interested in continuing this discussion.  Is this something we can do during Connectathon or would next WG meeting be more appropriate?</p>
+
+
+
+<a name="197578797"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/197578797" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#197578797">(May 14 2020 at 16:12)</a>:</h4>
+<p><span class="user-mention" data-user-id="298995">@Richard Braman</span> thanks for following up! The current plan is to have this be the main topic of discussion at the next Argonaut meeting (two weeks from today), since a few of the folks involved are focusing on other Connectathon tracks.</p>
+
+
+
+<a name="197579457"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/197579457" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Dan Gottlieb <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#197579457">(May 14 2020 at 16:16)</a>:</h4>
+<p>That said, if the team has time, it might be worth using the connectathon to review the proposed spec changes at <a href="https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763">https://github.com/HL7/bulk-data/pull/71/files?short_path=985cef1#diff-985cef1e2f9cd85436f27813aa6de763</a> and the open questions at <a href="https://github.com/HL7/bulk-data/pull/71">https://github.com/HL7/bulk-data/pull/71</a> (possibly with some prototyping) to develop specific feedback based on your implementation.</p>
+
+
+
+<a name="206518883"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/206518883" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vladimir Ignatov <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#206518883">(Aug 10 2020 at 22:02)</a>:</h4>
+<p>I understand that POST was only added to handle large <code>patient</code> payloads but I think it may need a bit more details. Some questions that could use explicit answer in the spec are:</p>
+<ul>
+<li>Can I use the POST parameters for every export parameter, including <code>_since</code>, <code>_elements</code>, <code>_type</code>, etc?<br>
+    - If no, specify which parameters are allowed via POST<br>
+    - If yes<br>
+          - Can I mix POST and GET parameters, i.e. set some of them in the query string and others in the POST body?<br>
+          - Can I duplicate a parameter and specify it both in the query string and in the body<br>
+                - If no, return an error?<br>
+                - If yes, which one takes precedence?</li>
+</ul>
+
+
+
+<a name="206520494"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/206520494" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Josh Mandel <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#206520494">(Aug 10 2020 at 22:23)</a>:</h4>
+<p>I'm hoping the core FHIR operation semantics provides answers to most of these.</p>
+<ul>
+<li>
+<p>(Idempotent) Operations can be invoked by GET or POST, with the same parameters available in both. (Exception: parameters with complex types like <code>Reference</code> can't be passed via GET, so if you need them, you need POST.) </p>
+</li>
+<li>
+<p>Any given invocation is either via POST (in which case, parameters are passed in the body) or GET (in which case, parameters are passed in the URL). There's no splitting/mixing.</p>
+</li>
+</ul>
+
+
+
+<a name="206530533"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179250-bulk%20data/topic/Since%20parameter%20and%20group%20membership%20changes/near/206530533" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vladimir Ignatov <a href="https://fhir.github.io/chat-archive/stream/179250-bulk-data/topic/Since.20parameter.20and.20group.20membership.20changes.html#206530533">(Aug 11 2020 at 00:52)</a>:</h4>
+<p>Thanks Josh! I guess I'll have to get used to thinking of Bulk Data as part of FHIR :)</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p>Hi All, </p>\n<p>I am working on some queries from an EMR. Can you please advise if the below syntax would be valid for the following scenario: Return the identifier and specialty of a PractitionerRole and include the practitioner and location resource. <br>\n\"request\": {<br>\n\"method\": \"GET\",<br>\n\"url\": \"/PractitionerRole/_include:practitioner,location&amp;_elements:identifier,specialty\"<br>\n}</p>",
+        "id": 173568729,
+        "sender_full_name": "Madeline Hoskins",
+        "timestamp": 1566240710
+    },
+    {
+        "content": "<p>something like: <code>.../PractitionerRole?_include=PractitionerRole:practitioner&amp;_include=PractitionerRole:location</code> - I would not bother with <code>_elements</code>, it is not widely implemented and it is just an optimization,  you are going to get all elements (including those) if you do not specify it</p>",
+        "id": 173573173,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1566244111
+    },
+    {
+        "content": "<p>Thanks Michele. <br>\nAlso, for a Bundle with multiple entries or requests, how can I make sure the requests are made in the right order? Is this possible?</p>",
+        "id": 173573494,
+        "sender_full_name": "Madeline Hoskins",
+        "timestamp": 1566244331
+    },
+    {
+        "content": "<p>Not sure - what is the right order?<br>\nI'd suggest not to use a request bundle - it is another feature that is not widely implemented. Issue separate requests</p>",
+        "id": 173575445,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1566245749
+    },
+    {
+        "content": "<p>For example: I want to make sure that the first query is run before the last two. <br>\nThe first query finds the ServiceRequest for when the patientId = 123 and the response should include the Patient that represents the subject, PractitionerRole that represents the requester, PractitionerRole that represents the performer. <br>\nThe second query wants to include the resource referenced from the PractitionerRole.location field for the \"requester\" resource- so i need to be sure that the first query is run before jumping into the respective PractitionerRole resource that represents the requester. <br>\n{<br>\n    \"resourceType\": \"Bundle\",<br>\n    \"id\": \"bundle-request\",<br>\n    \"type\": \"batch\",<br>\n    \"entry\": [{<br>\n            \"request\": {<br>\n                \"method\": \"GET\",<br>\n                \"url\": \"/ServiceRequest?Patient=123&amp;_include:ServiceRequest:subject,&amp;_include:ServiceRequest:requester,&amp;_include:ServiceRequest:performer\"<br>\n            }<br>\n        },<br>\n        {<br>\n            \"request\": {<br>\n                \"method\": \"GET\",<br>\n                \"url\": \"/PractitionerRole?_include:PractitionerRole:location\"<br>\n            }<br>\n        },<br>\n        {<br>\n            \"request\": {<br>\n                \"method\": \"GET\",<br>\n                \"url\": \"/PractitionerRole?_include:PractitionerRole:practitioner,&amp;_include:PractitionerRole:location\"<br>\n            }<br>\n        }<br>\n    ]<br>\n}</p>",
+        "id": 173677279,
+        "sender_full_name": "Madeline Hoskins",
+        "timestamp": 1566321800
+    },
+    {
+        "content": "<p>A query like <code>/PractitionerRole?_include=PractitionerRole:location</code> returns ALL PractitionerRole resources. If you want to limit that to the PratictionerRoles returned by the first search you cannot use a bundle - you have to issue the first search request, extract the PractitionerRole ids and use those to do another search (or - better - directly extracts the Location ids and get those)</p>",
+        "id": 173677593,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1566322055
+    },
+    {
+        "content": "<p>Okay that makes sense. So i need multiple Bundles of requests? How would i a send a single request?</p>",
+        "id": 173678202,
+        "sender_full_name": "Madeline Hoskins",
+        "timestamp": 1566322412
+    },
+    {
+        "content": "<p>You could say SeviceRequest?patient=123&amp;_include=ServiceRequest:subject&amp;_include=ServiceRequest:requester&amp;_include=ServiceRequest:performer&amp;_include:iterate=Practitioner:location<br>\nHowever, that would give you the location of both requester and performer.  The only mechanism to get only the requester locations is to execute two independent requests.  There's no way to send a batch or transaction in which the parameters of one query are dependent on the results of a preceding query</p>",
+        "id": 173698325,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1566337074
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191912\">Michele Mottini</span> <a href=\"#narrow/stream/179166-implementers/topic/Bundle.20search.20request/near/173573173\" title=\"#narrow/stream/179166-implementers/topic/Bundle.20search.20request/near/173573173\">said</a>:</p>\n<blockquote>\n<p>something like: <code>.../PractitionerRole?_include=PractitionerRole:practitioner&amp;_include=PractitionerRole:location</code> - I would not bother with <code>_elements</code>, it is not widely implemented and it is just an optimization,  you are going to get all elements (including those) if you do not specify it</p>\n</blockquote>\n<p>We have one context in which medication orders link to patients, so the order screen and patient screen can be easily aligned with their resources using References. We have another context in which the order view contains a small number of identifying patient attributes (e.g., date of birth, ID). </p>\n<p>I was thinking of mixing  _include &amp; _elements:<br>\nGET [base]/MedicationOrder?status=\"Active\"&amp;_include=MedicationOrder:patient?_elements=birthDate,identifier?type=\"SSN\"</p>\n<p>Your comment suggests this may not be worthwhile, but if we're getting all the pharmacy orders for a location, all those patient records are going to be heavy. Is this still your impression?</p>",
+        "id": 189498194,
+        "sender_full_name": "Jay Lyle",
+        "timestamp": 1583161112
+    },
+    {
+        "content": "<p>That request gets all MedicationOrder with all their associated patient - yes, it is going to be heavy - and most actual server will reject it as too broad. Adding _elements would help reducing the amount of data to be returned, not much in term of the amount of data to find / extract, and again: most server do not implement _elements</p>",
+        "id": 189532338,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1583180609
+    },
+    {
+        "content": "<p>Also: <code>. . . .identifier?type=ssn</code> means search MedicationOrder by type, not return only the SSN identifiers, is that what you meant?</p>",
+        "id": 189532447,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1583180684
+    },
+    {
+        "content": "<p>Yes. This is for a pharmacy application, so the pharmacist can review the workload and select tasks. It should be restricted to specific clinics, which we might do with an operation, a compartment extension, or maybe just with custom code.</p>",
+        "id": 189551545,
+        "sender_full_name": "Jay Lyle",
+        "timestamp": 1583194521
+    }
+]

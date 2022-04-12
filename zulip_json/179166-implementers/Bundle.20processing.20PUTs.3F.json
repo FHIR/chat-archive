@@ -1,0 +1,128 @@
+[
+    {
+        "content": "<p>Trying to understand what is supposed to happen with FHIR bundle transactions with request.method=\"PUT\"  (<a href=\"https://www.hl7.org/fhir/http.html#transaction\" target=\"_blank\" title=\"https://www.hl7.org/fhir/http.html#transaction\">https://www.hl7.org/fhir/http.html#transaction</a>)</p>\n<p>If a client has, for example, a Lab value and is going to add this to a bundle along with the Patient resource, what should be used for the request values.   In other words, if my client doesn't necessarily know if the previous (e.g. prelim) verison of this Lab has been sent to the server or not should it use request.method=\"PUT\" and then should it encode both </p>\n<p>request.ifNoneExist=Observataion?Identifier=&lt;labId&gt;  and <br>\nrequest.ifMatch=Observation?Identifier=&lt;labid&gt; </p>\n<p>or does the client need to put the resource in the bundle twice, once with the request.method=\"POST\" and another with request.method=\"PUT\"</p>\n<p>(I can't 'read between the lines' in the batch processing page to understand what should or shouldn't be done in this case.)</p>\n<p>A related question, should a FHIR server support both ifNoneExist and ifMatch for the request.method=\"PUT\" or is this defined anywhere?</p>",
+        "id": 172061792,
+        "sender_full_name": "John Silva",
+        "timestamp": 1564510084
+    },
+    {
+        "content": "<p>It's totally fine to have both a PUT and a POST for the same thing with ifMatch for the PUT and ifNoneExist for the POST.  ifNoneExist would be odd to use for a PUT</p>",
+        "id": 172063329,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1564511200
+    },
+    {
+        "content": "<p>I think you want conditional update for this case: PUT Observation?Identifier=&lt;labid&gt;. In a bundle, request.method=\"PUT\" and request.url=\"Observation?Identifier=&lt;labid&gt;\". If the resource isn't found, it will be created.</p>",
+        "id": 172063395,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1564511258
+    },
+    {
+        "content": "<p>If-Match is specific to ETags to manage version contention, I don't think you can specify search parameters.</p>",
+        "id": 172063530,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1564511339
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  -- ok, but that would mean the FHIR client would have to have 2 entries for the same resource, one with POST and the other with PUT.    Also, this doesn't seem to be documented anywhere -- just your comments  (or suggestions) -- how is an implementer supposed to know how to deal with this?    Also, it is 'legal' or not for the PUT request to have both ifMatch and ifNoneExist?   The ifMatch would be used for the update whereas the ifNoneExist would be used for conditional create?  (or am I completely missing the intention of how batch processing is supposed to work?)</p>",
+        "id": 172074806,
+        "sender_full_name": "John Silva",
+        "timestamp": 1564519502
+    },
+    {
+        "content": "<p>ifMatch and ifNoneExist on the same thing I think would be 'anded' - so probably not the behavior you want.  I'm not sure if the approach of submit twice - once as an add and once as an update has been documented.  I'm also not totally sure how references would behave in that case as I think the ids need to be unique - but the references would need to point to \"whichever is successful\".  <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> ?</p>",
+        "id": 172076637,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1564520889
+    },
+    {
+        "content": "<p>We're running up against the limits of a transaction. I don't think it's possible</p>",
+        "id": 172076700,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1564520947
+    },
+    {
+        "content": "<p>So does this mean that this use case is NOT supported?   How is a FHIR client supposed to know if a FHIR server has a Obs (or any resource) already -- is the expectation that the FHIR client has to perform queries in order to determine how to construct a bundle?   That seems very inefficient (and problematic -- what if a resource was posted in between the time of the query and the posting of the bundle -- that's why the bundle is done transactionally -- to protect from this.)</p>\n<p>How do other deal with this?   I can't believe we're the first to have this use case or question about bundle transaction processing?</p>",
+        "id": 172079146,
+        "sender_full_name": "John Silva",
+        "timestamp": 1564523046
+    },
+    {
+        "content": "<p>What's wrong with conditional update? It does exactly the \"update if it exists, create if not\" in a single operation. Works the same in or out of a bundle.</p>\n<p>re: the interaction of if-match and if-none-exist - PUT doesn't allow if-none-exist; that's only allowed on POST. There is no operation that allows both if-match and if-none-exist, as per <a href=\"http://hl7.org/fhir/http.html#summary\" target=\"_blank\" title=\"http://hl7.org/fhir/http.html#summary\">http://hl7.org/fhir/http.html#summary</a></p>",
+        "id": 172079281,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1564523171
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span>  -- yes, I want to do a 'conditional update' but with the logic 'inside' of the bundle transaction.   The 'conditional update' seems to be an HTTP header on the POST (and experimental or TU according to this page:  <a href=\"https://www.hl7.org/fhir/http.html#ccreate\" target=\"_blank\" title=\"https://www.hl7.org/fhir/http.html#ccreate\">https://www.hl7.org/fhir/http.html#ccreate</a> )</p>",
+        "id": 172079573,
+        "sender_full_name": "John Silva",
+        "timestamp": 1564523464
+    },
+    {
+        "content": "<p>My interpretation of bundle handling is that if request.url is \"Observation?search-conditions\" it triggers conditional update in the transaction. There is a crucible conformance test case for this, XFER2. Conditional update is not based on an http header: <a href=\"https://www.hl7.org/fhir/http.html#cond-update\" target=\"_blank\" title=\"https://www.hl7.org/fhir/http.html#cond-update\">https://www.hl7.org/fhir/http.html#cond-update</a></p>\n<p>It's true that it's experimental and I don't know whether there's an answer exclusively in terms of normative functionality.</p>",
+        "id": 172080855,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1564524643
+    },
+    {
+        "content": "<p>You can't do both a create and a conditional update - so there's no way to say \"create this if it doesn't exist, update it if it does\".  You could use a PUT to do a create, but lots of servers won't support that.</p>",
+        "id": 172094238,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1564540283
+    },
+    {
+        "content": "<p>More specifically, if you do both a create and a conditional update (and have them set up so that only one occurs), your challenge is that if you have references to that newly updated/created thing, there's no way to have the reference point to \"whichever one succeeded\"</p>",
+        "id": 172094289,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1564540339
+    },
+    {
+        "content": "<p>A conditional update that finds no matches and is not provided with an id is treated as a create (a proper create, not an upsert). This is how you say \"create this if it doesn't exist, update it if it does\". The spec anticipates this exact situation.</p>\n<p>I was thinking about how to accomplish this without conditional update. The batch/transaction rules prohibit interdependencies within the bundle so there shouldn't be any legal two-operation solution. I think the only way is if the client generates a resource ID based on its own identifier scheme and the server allows upsert. Then you can PUT to that location and it will work either way, with no difficulty in resolving references.</p>",
+        "id": 172096357,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1564543769
+    },
+    {
+        "content": "<p>Transaction doesn't prohibit dependencies</p>",
+        "id": 172098558,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1564547554
+    },
+    {
+        "content": "<p>The challenge with the PUT approach is lots of servers don't allow clients to determine resource ids.  If a server does, you're golden.  If not, you have a problem.</p>",
+        "id": 172098572,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1564547590
+    },
+    {
+        "content": "<p>One issue I see with FHIR conditional update is, that in case the resource already exists, you will just override it with your version, loosing any previous state. So if you don't know wether the resource exists on the server, you also don't know it's state, if it exists. </p>\n<p>The use case I can see here, is a client which is the only source for resources in question but doesn't keep track of whether is has already put the resource into the FHIR server in question. Say a lab system which likes to put it's observations into a central FHIR server. <span class=\"user-mention\" data-user-id=\"194183\">@John Silva</span>  Is your use case like this?</p>",
+        "id": 172102154,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1564553912
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  - we have actually implemented client-specified id's since one of our FHIR clients needed it.   So, since we have then our FHIR Clients should be able to use the PUT (with ifMatch or ifNoneExist - still not clear on this) to do either a create (with client'specd id) ot update if the resource exists (based on ifMatch).</p>\n<p><span class=\"user-mention\" data-user-id=\"197470\">@Alexander Kiel</span>  - yes, our use case is that a Lab server is sending HL7 V2 messages and we have an interface engine that operates 'statelessly' (i.e. V2 msg in/map/FHIR out) so it doesn't know if the same Lab result has been sent previously, e.g. prelim result then final or final then corrected.   The good thing is that this doesn't typically happen with high-frequency monitoring-type (device) data that is only sent once; typically only human-entered data on a Lab system or EMR where it can be updated/corrected.</p>",
+        "id": 172113391,
+        "sender_full_name": "John Silva",
+        "timestamp": 1564566696
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194183\">@John Silva</span> The interface engine then sends the mapped FHIR resources to a FHIR server for storage?</p>",
+        "id": 172115090,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1564568369
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197470\">@Alexander Kiel</span>  - yes, V2 --&gt; map V2 segs to FHIR resources in bundle -&gt; store in FHIR server   (I would expect that this is a common pattern for anyone dealing with HL7 V2 \"legacy\" systems)</p>",
+        "id": 172119356,
+        "sender_full_name": "John Silva",
+        "timestamp": 1564573281
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194183\">@John Silva</span> Ok understand. But if you interface engine has no state than you also don't have any versionId vor the IfMatch header. So with client Id's you you'd use a PUT without any headers and it will create-or-update (upsert) or you can use FHIR conditional update with search parameters and also no headers. What is the reason you want to use headers like IfMatch or IfNoneExists?</p>",
+        "id": 172119688,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1564573605
+    }
+]

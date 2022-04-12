@@ -1,0 +1,68 @@
+[
+    {
+        "content": "<p>Hi, I have a CDS Hooks server that allows authors of services to specify rule logic that refers to the patient's age in different units.  For example, \"If the patient is older than 40 years...\" or \"If the patient is younger than 18 weeks...\", etc.  So I have to be able to calculate the patient's age in different units given their DOB.  In a majority of cases I would expect this to be straightforward, but there are some corner cases where perhaps I could come up with something reasonable, but I'm wondering if there is a recommended standard algorithm to do this.  Some of the cases I'm thinking of are:<br>\n-Leap day birthdays. For the purpose of calculating their age, should I treat their birthday on non-leap years as though it were March 1?<br>\n-How to calculate age in months. Does the age in months increment on the date anniversary of birth? i.e., if someone is born on 1/15, do they become one month old on 2/15, two months on 3/15, etc? If so, then how to handle birthdays on dates that are not common to all months (29, 30, 31)? Alternatively, I could treat a month as 30 days and calculate based on that, but then 12 months wouldn't add up to a year.</p>\n<p>More than answers to these particular questions, I'm wondering if there is an algorithm that HL7 either \"owns\" or recommends to calculate age.</p>",
+        "id": 243064400,
+        "sender_full_name": "Jorge de la Garza",
+        "timestamp": 1623955275
+    },
+    {
+        "content": "<p>The CQL specification considers Age a duration calculation, and specifies ISO-3601 compliant rules for that calculation: <a href=\"https://cql.hl7.org/05-languagesemantics.html#timing-calculations\">https://cql.hl7.org/05-languagesemantics.html#timing-calculations</a></p>",
+        "id": 243065165,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1623955597
+    },
+    {
+        "content": "<p>And a grundle of examples of calculating durations: <a href=\"https://cql.hl7.org/15-h-timeintervalcalculations.html\">https://cql.hl7.org/15-h-timeintervalcalculations.html</a></p>",
+        "id": 243065371,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1623955682
+    },
+    {
+        "content": "<p>Does it correctly handle TZ offset? ;-).    What if someone was born in the UK (00:00 offset) and they now live in the US (EDT - 04:00 offset); does the CQL duration logic handle that or does it normalize the date/times to UTZ before doing the Age calculation?</p>",
+        "id": 243073176,
+        "sender_full_name": "John Silva",
+        "timestamp": 1623958938
+    },
+    {
+        "content": "<p>From section 2 (Calculating Duration in Months) in the examples Bryn linked to, we have:<br>\n\"A month in CQL is defined as the duration of any time interval which starts at a certain time of day at a certain calendar day of the calendar month and ends at:<br>\n-The same time of day at the same calendar day of the ending calendar month, if it exists<br>\n-The same time of day at the immediately following calendar date of the ending calendar month, if the same calendar date of the ending month in the ending year does not exist.\"<br>\nWhat I think the second bullet is saying is that if a person is born on, for example, 3/31, then that person becomes one month old on 5/1 because there is no 4/31.  And then they would become two months old on 5/31.  Am I understanding that correctly?</p>",
+        "id": 243074560,
+        "sender_full_name": "Jorge de la Garza",
+        "timestamp": 1623959525
+    },
+    {
+        "content": "<p>Yes, that's correct</p>",
+        "id": 243086834,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1623964958
+    },
+    {
+        "content": "<p>As far as timezones, first, they only apply if doing calculations with DateTime values; calculations on Date values don't consider timezones. Second, the spec says generally that when doing calculations with DateTime values, timezone offsets should be normalized, but only when the comparison precision is hours or below (i.e. a time precision). So if I'm asking about duration in months, the two dates should not be normalized to the same timezone offset, but if I'm asking about age in minutes or hours, the dates should be normalized to the same timezone offset.</p>",
+        "id": 243087303,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1623965228
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span>  - even when doing month diffs the TZ offset matters if the 2 date/times aren't normalized to the same timezone, e.g. GMT (00:00).  [There are corner-cases where you can get an 'off by one' error.]  Of course birthDate is only a Date but for systems that use the birthDateTime extension TZ needs to be taken into account.</p>",
+        "id": 243104117,
+        "sender_full_name": "John Silva",
+        "timestamp": 1623976929
+    },
+    {
+        "content": "<p>I'd also expect that to be an opt in consideration for that. The number of cases where the time from that extension would be relevant would be very slim, and during those first few days. When you're into months area the date would be the expectation behaviour, and localizing the difference would be a surprising result.</p>",
+        "id": 243362044,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1624270388
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span> - I suppose the birthDateTime extension isn't used that frequently, but when it is, e.g. neonatal care, it is very important.  Typically in that environment hours are important, then days, weeks,  etc.</p>",
+        "id": 243396689,
+        "sender_full_name": "John Silva",
+        "timestamp": 1624288129
+    },
+    {
+        "content": "<p>So ideally, a patient's DOB would always be precise to at least the date (yyyy-mm-dd), but because patient.birthDate is of type \"date\", it can also be given as \"yyyy-mm\" or \"yyyy\". When patient.birthDate is less precise than yyyy-mm-dd, how shall age be calculated?  From reading through this link:<br>\n<a href=\"https://cql.hl7.org/05-languagesemantics.html\">https://cql.hl7.org/05-languagesemantics.html</a><br>\n(particularly section 5), it seems the CQL way to look at this is if, for example, a patient's birthdate is given as simply \"1956\", then their age in years on today's date, 2021-06-23, would be \"[64,65]\", which means that there is uncertainty as to whether their age is 64 or 65.  Even though there is uncertainty in the patient's age, some comparisons can still be resolved with certainty, for example, \"[64,65] &gt; 18\" would be true and \"[64,65] &gt; 85\" would be false.  However, for certain values on the right side of the inequality, the comparison evaluates to \"unknown (null)\", for example, \"[64,65] &gt;= 65\".<br>\nBut as a practical matter, when my rule engine evaluates the condition, \"The patient is 65 or older,\" it needs a result. Should I just treat an imprecise date as the first date in the specified period?  So \"1956\" would be treated as though it were \"1956-01-01\".  This would assure that \"older than\" conditions that are in the range of uncertainty would always return true, which is probably a good thing.  But the flip side of this is that \"younger than\" conditions in the range of uncertainty would always return false.  For example if the patient.birthDate is \"2003\" and the condition is, \"The patient is under 18\".  If I treat \"2003\" as \"2003-01-01\", then the condition will never be true after 2020, even though there is most likely a period in 2021 when the patient is under 18.<br>\nPerhaps what I should do is, when a comparison involving imprecise dates would return \"unknown (null)\", then for the purpose of evaluating the conditions of a rule, treat that as \"true\".  So if patient.birthDate is \"1956\", then the condition \"The patient is 65 or older\" would be true, and if patient.birthDate is \"2003\", then the condition \"The patient is under 18\" would also be true.  Any thoughts?</p>",
+        "id": 243678254,
+        "sender_full_name": "Jorge de la Garza",
+        "timestamp": 1624466235
+    }
+]

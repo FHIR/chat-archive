@@ -1,0 +1,56 @@
+[
+    {
+        "content": "<p>What's the proper cql framwork for doing exclusionary relationships? For example, let's say I'm in a patient context, and I have a condition A, but I want to check for exclusionary symptoms B for at least 30 days before the condition. I was thinking of using the exists clause, but I'm not sure how to extend this into a population context easily.</p>\n<p>Something like this</p>\n<div class=\"codehilite\"><pre><span></span><code>context Patient\n\ndefine &quot;exclusionexists&quot;:\n    [Condition: Code in &quot;ConditionCodesA&quot;] conditionA\n        with [Condition: Code in &quot;ConditionCodesB&quot;] conditionB\n              such that not conditionA.onset.start after 30 days conditionB.onset\n        return exists(conditionA)\n</code></pre></div>",
+        "id": 231492509,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1616514268
+    },
+    {
+        "content": "<p>I'm not sure if I'm understanding your question right, but it seems to me that you're probably close.  Perhaps you're just looking to wrap the exists around the whole thing rather in a <code>return</code> statement?  E.g.,</p>\n<div class=\"codehilite\"><pre><span></span><code>context Patient\n\ndefine &quot;exclusionexists&quot;:\n  exists(\n    [Condition: &quot;ConditionCodesA&quot;] conditionA\n      without [Condition: &quot;ConditionCodesB&quot;] conditionB\n      such that\n        (conditionB.onset.value as DateTime) occurs 30 days or more before (conditionA.onset.value as DateTime)\n  )\n</code></pre></div>\n<p>Again, I don't know if this is what you're looking for, but maybe it helps point you in the right direction.  It returns true only if there exists ConditionA <em>without</em> ConditionB onsetting 30 days or more before ConditionA.  Note that, for simplicity, it assumes the onset is available as a DateTime -- so you'd need to do further modification to handle other onset types (like Period).</p>",
+        "id": 231497826,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1616516000
+    },
+    {
+        "content": "<p>Hey Chris, yes you got the right idea. So this seems like the right nugget, but the thing I'm stuggling with is turning this into a population context, I only want to find the Patients that do not match this exclusion. Maybe another definition like this</p>\n<div class=\"codehilite\"><pre><span></span><code>context Patient\n\ndefine &quot;exclusionexists&quot;:\n  exists(\n    [Condition: &quot;ConditionCodesA&quot;] conditionA\n      without [Condition: &quot;ConditionCodesB&quot;] conditionB\n      such that\n        (conditionB.onset.value as DateTime) occurs 30 days or more before (conditionA.onset.value as DateTime)\n  )\n\ndefine &quot;PatientResourceMaybe&quot;:\n    if exclusionexists\n    then\n        return null\n    else\n        return [Patient]\n````\n\nNow moving this into a population context seems tricky.\n</code></pre></div>",
+        "id": 231503248,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1616517973
+    },
+    {
+        "content": "<p>For quality measures specifically, the Quality Measure IG (and HQMF that it's based on, really) define a set of population criteria to standardize the expression of quality measures and facilitate evaluation. For each type of measure calculation, the IG provides the population level expression in CQL: <a href=\"http://build.fhir.org/ig/HL7/cqf-measures/measure-conformance.html#342-measure-population-semantics\">http://build.fhir.org/ig/HL7/cqf-measures/measure-conformance.html#342-measure-population-semantics</a></p>",
+        "id": 231504063,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1616518258
+    },
+    {
+        "content": "<p>Ty Bryn so I think I got it. So I have a target condition, and a set of target exclusion conditions. In a population context, I could collect the exclusionary conditions if they exist, otherwise they would not exist.</p>\n<p>If the exclusionary condition exists, return that one. Otherwise return the original condition. Then I could get metrics by checking the number of original conditions, vs the number of exclusionary conditions. So I would know what percentage of the population had an exclusion, and which exclusions were most prevalent.</p>",
+        "id": 231506477,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1616519089
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194612\">@Michael Riley</span> Do you use a server that supports <a href=\"https://www.hl7.org/fhir/operation-measure-evaluate-measure.html\">$evaluate-measure</a>? If so you can stay in the Patient context and the server will return a MeasureReport containing the counts of the populations Bryn described.</p>",
+        "id": 231634154,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1616592913
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197470\">@Alexander Kiel</span> No unfortunately, it's going to be a standalone cql-engine-fhir instance to talk to FHIR servers that just support clinical resources like Conditions and Procedures. There won't be any measure support in the EHR. But yeah that's a great solution.</p>",
+        "id": 231828269,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1616688061
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194612\">@Michael Riley</span> I'm the lead developer of the open source FHIR Server <a href=\"https://github.com/samply/blaze\">Blaze</a> which implements $evalueate-measure. Because I like to compile a list of other CQL engines, do you have a link to the solution you use?</p>",
+        "id": 231829269,
+        "sender_full_name": "Alexander Kiel",
+        "timestamp": 1616688377
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"197470\">@Alexander Kiel</span> sorry for the late response, we use a modified DBCG web service to run fhir based cql. <a href=\"https://github.com/DBCG/cql_execution_service\">https://github.com/DBCG/cql_execution_service</a></p>",
+        "id": 233385185,
+        "sender_full_name": "Michael Riley",
+        "timestamp": 1617741786
+    }
+]

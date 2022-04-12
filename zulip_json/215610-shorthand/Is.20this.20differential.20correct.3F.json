@@ -1,0 +1,50 @@
+[
+    {
+        "content": "<p>I have an error when the publisher runs against my IG which I've raised in a different thread.  But I'm wondering if the differential that is being produced for my profile is correct.  Here is my FSH:</p>\n<div class=\"codehilite\"><pre><span></span><code>* careTeam MS\n* careTeam.extension contains CareTeamClaimScope named careTeamClaimScope 1..1 MS\n* careTeam.sequence MS\n* careTeam.provider MS\n* careTeam.provider only Reference(PASPractitioner or PASOrganization)\n* careTeam.role MS\n* careTeam ^slicing.discriminator.type = #value\n* careTeam ^slicing.discriminator.path = &quot;extension(&#39;http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-careTeamClaimScope&#39;).valueBoolean&quot;\n* careTeam ^slicing.rules = #open\n* careTeam ^slicing.description = &quot;Slice based on whether the care team member belongs to the overall claim or to an individual claim item.&quot;\n* careTeam contains OverallClaimMember 0..14 and ItemClaimMember 0..10\n</code></pre></div>\n<p>I also have the two different slice info that I didn't include.  Here is what I'm getting in the differential and it seems strange.</p>\n<p>For the extension:</p>\n<div class=\"codehilite\"><pre><span></span><code>      {\n        &quot;id&quot;: &quot;Claim.careTeam.extension&quot;,\n        &quot;path&quot;: &quot;Claim.careTeam.extension&quot;,\n        &quot;slicing&quot;: {\n          &quot;discriminator&quot;: [\n            {\n              &quot;type&quot;: &quot;value&quot;,\n              &quot;path&quot;: &quot;url&quot;\n            }\n          ],\n          &quot;ordered&quot;: false,\n          &quot;rules&quot;: &quot;open&quot;\n        },\n        &quot;min&quot;: 1\n      },\n      {\n        &quot;id&quot;: &quot;Claim.careTeam.extension:careTeamClaimScope&quot;,\n        &quot;path&quot;: &quot;Claim.careTeam.extension&quot;,\n        &quot;sliceName&quot;: &quot;careTeamClaimScope&quot;,\n        &quot;min&quot;: 1,\n        &quot;max&quot;: &quot;1&quot;,\n        &quot;type&quot;: [\n          {\n            &quot;code&quot;: &quot;Extension&quot;,\n            &quot;profile&quot;: [\n              &quot;http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-careTeamClaimScope&quot;\n            ]\n          }\n        ],\n        &quot;mustSupport&quot;: true\n      },\n</code></pre></div>\n<p>For the slices:</p>\n<div class=\"codehilite\"><pre><span></span><code>      {\n        &quot;id&quot;: &quot;Claim.careTeam:OverallClaimMember&quot;,\n        &quot;path&quot;: &quot;Claim.careTeam&quot;,\n        &quot;sliceName&quot;: &quot;OverallClaimMember&quot;,\n        &quot;min&quot;: 0,\n        &quot;max&quot;: &quot;14&quot;\n      },\n      {\n        &quot;id&quot;: &quot;Claim.careTeam:OverallClaimMember.extension:careTeamClaimScope&quot;,\n        &quot;path&quot;: &quot;Claim.careTeam.extension&quot;,\n        &quot;sliceName&quot;: &quot;careTeamClaimScope&quot;\n      },\n      {\n        &quot;id&quot;: &quot;Claim.careTeam:OverallClaimMember.extension:careTeamClaimScope.valueBoolean&quot;,\n        &quot;path&quot;: &quot;Claim.careTeam.extension.valueBoolean&quot;,\n        &quot;min&quot;: 0,\n        &quot;max&quot;: &quot;1&quot;,\n        &quot;patternBoolean&quot;: true\n      },\n</code></pre></div>\n<p>I will admit to not completely understanding how extensions and slicing interact in differentials, so I'm really just looking for confirmation that SUSHI is generating this correctly.</p>",
+        "id": 245459530,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1625845339
+    },
+    {
+        "content": "<p>To be honest, I'm not sure.  I don't know if each slice on <code>Claim.careTeam</code> should be redeclaring the <code>careTeamClaimScope</code> sliceName within their own slice or not (e.g., in your last code snippet, should that second element be there?).  I <em>think</em> it's right -- because technically a tool should be able to process a differential _without_ looking at the <code>id</code> (using <code>path</code> only) - which is why, in general, we need to declare slicenames in a differential even when they are inherited from a parent.  So I <em>think</em> that's right -- but it is kind of tricky.</p>\n<p>One thing that's not quite right is that you declare the discriminator type as <code>#value</code> but you're using <code>patternBoolean</code> to fix the value.  Although I think the FHIR core team is considering eliminating the distinction between <code>#value</code> and <code>#pattern</code> in R5, I think they need to match in R4.  So either change the discriminator type to <code>#pattern</code> or change the assignment to use <code>(exactly)</code> so that <code>fixedBoolean</code> is used rather than <code>patternBoolean</code>.</p>",
+        "id": 245462449,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1625846784
+    },
+    {
+        "content": "<p>Thanks for the info.  I did change that to (exactly) and it didn't make my error go away. :)  It is a strange difference for primitive types - saying that my boolean has to have a pattern of true is pretty much the same thing as saying it's fixed to true.</p>",
+        "id": 245463248,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1625847154
+    },
+    {
+        "content": "<p>After looking at the code, I think that the 2nd element you identified isn't correct:</p>\n<div class=\"codehilite\"><pre><span></span><code>      {\n        &quot;id&quot;: &quot;Claim.careTeam:OverallClaimMember.extension:careTeamClaimScope&quot;,\n        &quot;path&quot;: &quot;Claim.careTeam.extension&quot;,\n        &quot;sliceName&quot;: &quot;careTeamClaimScope&quot;\n      },\n</code></pre></div>\n<p>The code assumes that if there is a child element with a path that ends in '.extension' and has a 'sliceName', that it has a type with a profile:</p>\n<div class=\"codehilite\"><pre><span></span><code>StructureDefinition exsd = worker.fetchResource(StructureDefinition.class, t.getType().get(0).getProfile().get(0).getValue());\n</code></pre></div>\n<p>This is right for the first definition of the extension but, if it is looking here, it fails.</p>",
+        "id": 245464415,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1625847822
+    },
+    {
+        "content": "<p>I just overrode the profile and added in the type information to that extension declaration and the publisher processed the validation fine, so I think this is a SUSHI bug that I'll raise.</p>",
+        "id": 245467294,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1625849262
+    },
+    {
+        "content": "<p>Hmm... interesting... IMO, the type should not be necessary, as the type should fallback (or inherit) from the base element being sliced.  We've already declared the extension slice and its corresponding type.  I do not know why we need to declare the type <em>again</em>.  That said, this stuff is tricky, and perhaps the type is needed just to keep the tooling sane.  Thanks for logging the bug -- hopefully the fix is not too difficult!</p>\n<blockquote>\n<p>saying that my boolean has to have a pattern of true is pretty much the same thing as saying it's fixed to true</p>\n</blockquote>\n<p>I guess it depends on your definition of \"pretty much\".  Remember that in FHIR, primitives are still elements, capable of holding an <code>id</code> and <code>extension</code> -- so when you use <code>pattern</code>, you allow for the data to additionally carry an <code>id</code> or <code>extension</code>; when you use <code>fixed</code> you're saying those cannot be present.</p>",
+        "id": 245470100,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1625850513
+    },
+    {
+        "content": "<p>I always raised an issue on the publisher side in case that code should be changed.</p>",
+        "id": 245475536,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1625853115
+    },
+    {
+        "content": "<p>I think the element should be .value and the id should be .value:valueBoolean</p>",
+        "id": 245487418,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1625859287
+    }
+]

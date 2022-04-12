@@ -1,0 +1,104 @@
+[
+    {
+        "content": "<p>I'm having trouble wrapping my head around the CMS requirements as they pertain to the formulary APIs. <br>\nFirst off, can someone confirm that they are required at this time (for Medicare Part D plans, etc.)? </p>\n<p>Second, they are mentioned as part of the Patient Access APIs as others have pointed out, but from looking at the IG and this stream I understand they are patient agnostic and contain no PII. Is it reasonable/allowed under the CMS guidelines to host them only under an unauthenticated base URL separate from the Patient Access APIs. I assume so, but it's confusing that CMS lumps them in with Patient Access rather than Provider Directory or on their own making me question it.</p>",
+        "id": 268473754,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1642550176
+    },
+    {
+        "content": "<p>The enforcement of the regulation hinted at (CMS-9115-F - <a href=\"https://www.cms.gov/files/document/cms-9115-f.pdf\">https://www.cms.gov/files/document/cms-9115-f.pdf</a>) has varying enforcement dates based on the specific requirement. Formulary is listed as part of the Patient Access API and was required on 1/1/2021, but enforcement delayed until 7/1/2021. This page may be helpful: <a href=\"https://www.cms.gov/Regulations-and-Guidance/Guidance/Interoperability/index\">https://www.cms.gov/Regulations-and-Guidance/Guidance/Interoperability/index</a>.</p>\n<p>While the Da Vinci Drug Formulary IG does not include resources that are member specific, the IG does specify authenticated or non-authenticated methods of access (<a href=\"http://hl7.org/fhir/us/davinci-drug-formulary/use_cases_and_overview.html#access-methods\">http://hl7.org/fhir/us/davinci-drug-formulary/use_cases_and_overview.html#access-methods</a>). Authenticated access provides responses to queries that are specific to the member's coverage. Since the information is connected to a member through the interaction, it could be considered PHI (knowing who the member is along with their plan information).<br>\nAuthenticated access was added to the IG in response to the Formulary API being placed in the patient access API requirement of the regulation. <br>\nThe determination of which access method is sufficient to meet CMS requirements would probably be best answered by CMS.</p>",
+        "id": 268481581,
+        "sender_full_name": "Corey Spears",
+        "timestamp": 1642556117
+    },
+    {
+        "content": "<p>The Authenticated access guidance in the 1.1.0 IG is confusing (to me). (NOTE: it's also not present in the 1.0.1 IG version CMS references.)<br>\nIt says:<br>\n\"When accessing data through an authenticated API, the response depends on whether the member is currently enrolled in a plan and whether they are a member of a group.\"</p>\n<p>Is the FHIR server supposed to infer from the user's authenticated identity the user's plan/group rather than responding to the query as asked? Is an authenticated user not allowed to query for plan IDs that are not their own? i.e. not allow to \"shop\" or compare plans. Or am I misunderstanding the table? </p>\n<p>Thinking out loud - <br>\nAuthentication does not protect the communication of a query in any way. A bad actor could potentially snoop and see I am querying for a specific plan ID or drug whether I'm authenticated or not. Authentication just lets the server know what information it can return to me, essentially. </p>\n<p>If an app has authenticated access the Patient APIs it could query for things like my medications, my planID, etc. Then it could use that information to query the unauthenticated formulary APIs for non-protected data about various plans, covered drugs, etc. If the formulary APIs never respond with any member-specific information there is really no need for authenticated access to them and they could serve the 'shop for plans' and 'see what my plan covers' use-cases equally. </p>\n<p>What am I missing?</p>",
+        "id": 268564974,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1642609580
+    },
+    {
+        "content": "<p>That is correct, the idea is that the authenticated identity would be associated with a member's plan/group and there fore the user would have access to plan/group/formulary data related to their plan. This was included in the IG to bring it in line with the rest of the Patient Access API requirements and to provide data that is specific for the member. </p>\n<p>If a payer choses to offer a shopping experience, a user could access the non-authenticated API (How this is managed by the payer is out of scope of the IG).</p>\n<p>Usual exchange security protocols are required. For Formulary those are specified by HReX, which specifies the use of TLS (<a href=\"http://hl7.org/fhir/us/davinci-hrex/2020Sep/security.html\">http://hl7.org/fhir/us/davinci-hrex/2020Sep/security.html</a>)</p>",
+        "id": 268637159,
+        "sender_full_name": "Corey Spears",
+        "timestamp": 1642649909
+    },
+    {
+        "content": "<p>How does one link the Patient resource to a plan/group? I see some prior discussions when <span class=\"user-mention\" data-user-id=\"191676\">@Lee Surprenant</span>  posed a similar question, but no definitive answer. Is it the expectation that this is done outside of FHIR with special server-side business logic?</p>",
+        "id": 268720147,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1642696631
+    },
+    {
+        "content": "<p>A formulary and plan definitions are not linked to a patient. They exist outside of these blueprint resources. Later on when you have a coverage that links a member (patient) to a specific plan. Plan 1 which has formulary 1. Patient 1 buys Coverage from the insurer, Thus the member is linked to their plan via Coverage (member 1, Plan 1).</p>\n<p>I hope I got my terminology correct.</p>",
+        "id": 268720705,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1642696871
+    },
+    {
+        "content": "<p>Yes, this is correct. We have not included Coverage as the information contained is not a requirement of the regulation. As currently defined, the means in which to connect an authenticated identity to an InsurancePlan is not specified by the IG. The implementer can choose how they would like to make that happen.</p>",
+        "id": 268901896,
+        "sender_full_name": "Corey Spears",
+        "timestamp": 1642798528
+    },
+    {
+        "content": "<p>Thanks for engaging with me, <span class=\"user-mention\" data-user-id=\"191529\">@Corey Spears</span> . It seems this would all be simpler if the formulary APIs did not consider the authenticated user and just allowed apps to query for the (non-private) formulary data. Users could query for their current plan, a different plan, etc. Apps which are authenticated to the Patient APIs could fetch Coverage and MedicationXX data and use that info to query/compare different formularies. Other apps could compare across different plans (different payers perhaps) with no access to patient info at all and let the user filter for things that matter to them. </p>\n<p>It is stated here that formulary data is not PHI and should be 'widely available':<br>\n<a href=\"https://www.federalregister.gov/documents/2020/05/01/2020-05050/medicare-and-medicaid-programs-patient-protection-and-affordable-care-act-interoperability-and\">https://www.federalregister.gov/documents/2020/05/01/2020-05050/medicare-and-medicaid-programs-patient-protection-and-affordable-care-act-interoperability-and</a><br>\n\"In the proposed rule, we explained this included two types of information: personal health information that health care providers and health plans, or payers, must make available to an individual, such as their current and past medical conditions and care received; and information that is of general interest and should be widely available, such as plan provider networks, the plan's formulary, and coverage policies.\"</p>\n<p>It's just the statement here that muddles it by including it with Patient Access: <br>\n<a href=\"https://www.cms.gov/Regulations-and-Guidance/Guidance/Interoperability/index\">https://www.cms.gov/Regulations-and-Guidance/Guidance/Interoperability/index</a><br>\n\"Under the CMS Interoperability and Patient Access final rule, Part D Medicare Advantage plans must make formulary information available via the Patient Access API. \"</p>\n<p>But does that mean Formulary APIs MUST be authenticated and at the same base URL as Patient Access?</p>",
+        "id": 268906964,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1642801288
+    },
+    {
+        "content": "<p>The authenticated access has been identified as the method associated with the Patient Access API. A response to this question has been posted on theFAQ, which can be found here (question 6017):<br>\n<a href=\"https://confluence.hl7.org/display/DVP/CMS+Final+Rule+Questions+and+Answers+log\">https://confluence.hl7.org/display/DVP/CMS+Final+Rule+Questions+and+Answers+log</a></p>",
+        "id": 269806134,
+        "sender_full_name": "Corey Spears",
+        "timestamp": 1643405833
+    },
+    {
+        "content": "<p>Are you saying there's no requirement to publicly make the non-PHI data available?</p>",
+        "id": 269878685,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643479163
+    },
+    {
+        "content": "<p>Curious why this would be different here versus the public requirements for, say, provider directory and other non-PHI.</p>",
+        "id": 269878780,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643479213
+    },
+    {
+        "content": "<p>The response from CMS referenced states: </p>\n<p><em>\"The final rule does require that the formulary data specific to the patient in question be made available via the Patient Access API. As such, access to the formulary service when integrated with protected health information (PHI) or personally identifiable information (PII) as part of the Patient Access API shall be protected through an authorized, authenticated transaction.\"</em></p>\n<p>But there is a disconnect in that the Formulary APIs don't integrate with any PHI - you can't include any query parameters that contain PHI, and they don't return any PHI. </p>\n<p>Lacking an option through the APIs, the IG seems to suggest implementers should filter the data using some custom logic - presumably using the auth headers to determine the user, link to a plan, and filter the formulary request to that plan. </p>\n<p>But how does the server know when a request should use the custom logic vs execute the query as given? </p>\n<p>It feels un-FHIR-like.</p>",
+        "id": 270086748,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1643655944
+    },
+    {
+        "content": "<p>\"formulary data specific to the patient in question\" doesn't seem to describe the use case here though, agreed.</p>",
+        "id": 270091975,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643657912
+    },
+    {
+        "content": "<p>It'd be good to have a clear publication pattern for open (and potentially bulk) public data sets, similar to what's done for provider directories.</p>",
+        "id": 270092054,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643657944
+    },
+    {
+        "content": "<p>We did something similar for COVID vaccine appointment data at <a href=\"https://github.com/smart-on-fhir/smart-scheduling-links/blob/master/specification.md\">https://github.com/smart-on-fhir/smart-scheduling-links/blob/master/specification.md</a> (major pharmacies publishing slots in FHIR NDJSON files, which clients can statically fetch)</p>",
+        "id": 270092134,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1643657985
+    },
+    {
+        "content": "<p>We will discuss this in an upcoming PDEX leadership meeting.</p>",
+        "id": 270155925,
+        "sender_full_name": "Corey Spears",
+        "timestamp": 1643693679
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"191529\">@Corey Spears</span>, was the topic of the need for authenticated formulary access ever raised in a PDEX leadership meeting? </p>\n<p>As you can piece together from my prior posts on the topic, I don't understand the need for authenticated access to Formulary APIs. And if there is no need then I think the authenticated access guidance in the IG places unnecessary burden on implementers to create one-off, custom solutions. </p>\n<p>If I'm wrong (quite possible), I'd be appreciative if someone could explain the need.</p>",
+        "id": 277014807,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1648564838
+    }
+]

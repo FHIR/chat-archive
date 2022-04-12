@@ -1,0 +1,128 @@
+[
+    {
+        "content": "<p>Hi all, been discussing and looking at websockets and wanted to ping the channel for some feedback (please!).</p>\n<p>A few people have been asking for alignment with FHIRcast.  As I was documenting / testing, I realized that it won't be possible to align completely - a user may want notifications from 10 different subscriptions, which means the protocol needs to support multiple registrations over a single connection (requires decoupling the socket url from the subscription).</p>\n<p>So, my current proposal is:</p>\n<ul>\n<li>Servers maintain one or more websocket urls for subscriptions (advertised via CapabilityStatement?)</li>\n<li>Clients can connect to the websocket, but will receive no notifications</li>\n<li>Add an operation to subscriptions - something like <code>$getTempToken</code> (?) that clients call via REST to get a short-term use key for binding to that subscription.<ul>\n<li>Could also define a type-level variant that includes multiple id's in one call</li>\n<li>Token/key/whatever should expire no later than the user's token to ensure that notifications are only received while the user is authorized.</li>\n<li>Want to allow things like derived tokens, but also allow things like arbitrary guids that a server is keeping track of.</li>\n</ul>\n</li>\n<li>Clients connected via the websocket send the token/key to the server, which lets the server know which subscriptions the client is authorized for<ul>\n<li>The server SHOULD send a handshake/heartbeat message for each subscription (so the client can verify they are receiving what they think they are).</li>\n<li>The server MAY send a backlog of notifications, per subscription, either in a single notification bundle or as separate notifications.<ul>\n<li>This may include either notifications since the last client was connected, a fixed number of prior notifications (e.g., last 5), or a fixed duration worth of notifications (e.g., last hour).</li>\n<li>It is up to the server to determine if the client should be allowed those messages (if using this behavior).</li>\n<li>These may be duplicates of notifications received.</li>\n<li>These may not cover all notifications - clients are expected to have a REST-based mechanism for determining state while not connected.</li>\n</ul>\n</li>\n</ul>\n</li>\n<li>Clients need to periodically refresh their token via successive calls to the <code>$getTempToken</code> operation.</li>\n<li>Clients may send 'n' tokens to the server<ul>\n<li>Servers SHOULD only allow a single connection to be active at a given time (e.g., when a new token provided by a client, the server should stop sending notifications to the old one).</li>\n</ul>\n</li>\n<li>Notifications are sent by the server per configuration in the Subscription (e.g., notification bundles of the desired MIME format, payload content level, etc.).</li>\n</ul>\n<p>Key questions:</p>\n<ul>\n<li>Does this proposal/protocol (overall) make sense?<ul>\n<li>If not, what would you like to see?</li>\n</ul>\n</li>\n<li>How should the websocket url/s be advertised?</li>\n<li>Name suggestions for the operation.</li>\n</ul>\n<p>Thanks!</p>",
+        "id": 212320671,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1601913826
+    },
+    {
+        "content": "<p>I think my main concern is that we haven't had a lot of feedback except that webSockets aren't working great on the subscription side</p>",
+        "id": 212323865,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1601915236
+    },
+    {
+        "content": "<p>The FHIRCast protocol is a bit different in number of people connecting/what it's used for.</p>",
+        "id": 212323915,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1601915262
+    },
+    {
+        "content": "<p>IE: having 2 apps connect to a session is more common than 30+ that are listening to subscriptions</p>",
+        "id": 212324238,
+        "sender_full_name": "Jenni Syed",
+        "timestamp": 1601915422
+    },
+    {
+        "content": "<p>Yes.  During (in person) connectathons, it has come up several times - the idea of a web-based app using subscriptions for notifications.  But, other than saying people want it (and various opinions on how <em>not</em> to do it), I haven't gotten much back.</p>\n<p>As of now, I'm planning on marking the websocket section <code>Trial Use</code>, so that it doesn't hold up anything else.</p>\n<p>But, with all of that said, what is documented today doesn't align with current needs.  What I've written above is, I believe, in line with what we've tried out + what I've gotten back (<span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span> <span class=\"user-mention\" data-user-id=\"192685\">@Vassil Peytchev</span>).</p>",
+        "id": 212328878,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1601917748
+    },
+    {
+        "content": "<p>Re: number of apps and connections, there general expectation for Subscriptions (whether channel == Rest Hook, Web Socket, Email, or other) is that only a single client is receiving notifications for a given Subscription.</p>\n<p>Of course a single client may be receiving notifications for <em>many</em> Subscriptions, which is where multiplexing on a websocket really matters -- because maintaining lots of websockets from a single browser won't work.</p>",
+        "id": 212328890,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1601917751
+    },
+    {
+        "content": "<p>For Gino's questions above: it'd be good to clearly spell out:</p>\n<ul>\n<li>Naming suggestions. I'd suggest calling these short-lived tokens \"Web Socket Binding Tokens\", with an op like <code>/Subscription/:id/$wsBindingToken.get</code>. The response to this operation should include a binding token and ideally information about when it expires.</li>\n<li>How to bind a Subscription to a websocket? Right now this is documented as a WS message of <code>:bind $id</code>, but we'd want to switch to something like <code>:bind $wsBindingToken</code> -- the idea being that a binding token conveys the identity of a subscription together with the authorization to bind to it.</li>\n<li>\"The server SHOULD send a handshake/heartbeat message for each subscription\" -- ideally there'd be a handshake every time the subscription is <em>bound</em> to a websocket.</li>\n<li>\"Servers SHOULD only allow a single connection to be active at a given time\" -- yes; for clarity of terms, might say something like \"For any Subscription with a WS channel, servers SHOULD ensure that the subscription is never bound to more than one WS at a time.\"</li>\n<li>How should the websocket URL be discovered? <a href=\"https://www.hl7.org/fhir/extension-capabilitystatement-websocket.html\">https://www.hl7.org/fhir/extension-capabilitystatement-websocket.html</a> is what we're using now; is it failing us?</li>\n</ul>",
+        "id": 212329712,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1601918169
+    },
+    {
+        "content": "<p>Thanks for the feedback!</p>\n<ul>\n<li>Do we want to specifically call out <code>ws</code> in the call, or leave it open in case people want it for other things in the future?</li>\n<li>Do you think it should only be instance level, or are you ok with the complementary <code>/Subscription/$wsBindingToken.get?id=...</code> for multiple subscriptions in a single request?</li>\n<li>I think it would be good to either add some sort of parameter flag (e.g., <code>:bind --token $wsBindingToken</code>) or change the name (e.g., <code>:bind-with-token $wsBindingToken</code>) so it's explicit what we are calling (and to leave options for the future).</li>\n<li>Thanks for clarifying - I did intend a message for each subscription each time it is bound.</li>\n<li>Again, thank you for the clarification (re: single active channel)</li>\n<li>For websocket URL discovery, I don't think it's failing today.  I wanted to open it up in case people felt that it should be handled differently (e.g., as part of the response from getting the binding token).</li>\n</ul>",
+        "id": 212334115,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1601920551
+    },
+    {
+        "content": "<blockquote>\n<p>Do we want to specifically call out ws in the [operation name]</p>\n</blockquote>\n<p>I like the specificity of including <code>ws</code> in the name; I could imagine that other channels might have different constraints.</p>",
+        "id": 212341802,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1601924108
+    },
+    {
+        "content": "<blockquote>\n<p>Do you think it should only be instance level</p>\n</blockquote>\n<p>I think instance-level is the most important; I'd be happy to see a multi-cardinality type-level variant too.</p>",
+        "id": 212341866,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1601924142
+    },
+    {
+        "content": "<blockquote>\n<p>I think it would be good to either add some sort of parameter flag</p>\n</blockquote>\n<p>Agreed! I like the idea of a flat command (<code>:bind-with-token</code>)</p>",
+        "id": 212341970,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1601924180
+    },
+    {
+        "content": "<p>currently the websocket spec doesn't specify a keepalive Ping/Pong strategy to detect connection losses. I think this needs to be added to the spec. Otherwise i could loose my ws connection without noticing.</p>",
+        "id": 213780182,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1603112073
+    },
+    {
+        "content": "<p>In the r5 draft, <a href=\"http://build.fhir.org/subscription-definitions.html#Subscription.heartbeatPeriod\">http://build.fhir.org/subscription-definitions.html#Subscription.heartbeatPeriod</a> applies to websockets, right?</p>",
+        "id": 213785967,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1603114651
+    },
+    {
+        "content": "<p>Josh is correct - in my implementation I set the heartbeat to 60 seconds to keep all the middleware pieces alive.</p>",
+        "id": 213794148,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1603117947
+    },
+    {
+        "content": "<p>uh nice, sorry only looked at R4 (which was not best idea)</p>",
+        "id": 213794384,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1603118036
+    },
+    {
+        "content": "<p>No worries!</p>",
+        "id": 213794502,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1603118064
+    },
+    {
+        "content": "<p>I like the heartbeat in r5, but couldn't find the exact payload which is expected here. Is this to be intended to implemented like: <a href=\"https://tools.ietf.org/html/rfc6455#section-5.5.2\">https://tools.ietf.org/html/rfc6455#section-5.5.2</a> ?</p>",
+        "id": 213843649,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1603140569
+    },
+    {
+        "content": "<p>Is <code>pinging</code>from the client, with pong responses from the server intended to be supported?<br>\nedit: i don't think so as this is a functionality on a lower layer than FHIR and should be handled by the application server.</p>",
+        "id": 213843863,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1603140665
+    },
+    {
+        "content": "<p>I'm working on the documentation this week - currently the heartbeat is intended to match the behavior across all the channels - e.g., a notification with no events in it.</p>",
+        "id": 213845640,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1603141434
+    },
+    {
+        "content": "<p>We haven't discussed the reverse (pinging from a client to a server), but there hasn't been much discussion around websockets in general.  IIRC, the RFC you refer to is at the protocol level, and should be supported by that layer regardless.  The discussion so far has been at the application data level (e.g., textual data sent across the wire)</p>",
+        "id": 213846102,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1603141641
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 213929620,
+        "sender_full_name": "Patrick Werner",
+        "timestamp": 1603205110
+    }
+]

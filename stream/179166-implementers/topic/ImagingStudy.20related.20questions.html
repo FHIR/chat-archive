@@ -1,0 +1,178 @@
+---
+layout: page
+title: "FHIR Chat  · ImagingStudy related questions · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/ImagingStudy.20related.20questions.html">ImagingStudy related questions</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="241982778"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/ImagingStudy%20related%20questions/near/241982778" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Email Gateway <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/ImagingStudy.20related.20questions.html#241982778">(Jun 08 2021 at 20:40)</a>:</h4>
+<p>From: Olga Vovk &lt;<a href="mailto:ovovk@samvit-solutions.com">ovovk@samvit-solutions.com</a>&gt;<br>
+Dear all,<br>
+I have a few questions related to ImagingStudy resource. These questions inspired by trying to use FHIR in clinical research.<br>
+My questions are:<br>
+What would be the best way to capture in FHIR the following information:</p>
+<p>1.  A response of yes or no to indicate if an imaging agent was used in the imaging study. - with answers Yes, No, Unknown<br>
+  2.  A response to indicate if the imaging procedure was performed according to the protocol. - with answers Yes, No, Unknown<br>
+  3.  A response to indicate whether the imaging procedure started - - with answers Yes, No, Unknown<br>
+  4.  A response to indicate if diffusion or accumulation in a tissue or cells of an imaging agent not normal to it or in amounts above normal has occurred. - with answers Yes, No, Unknown</p>
+<p>All these responses came from common data elements, and some of them are also part of some research questionnaires.</p>
+<p>My question here is:</p>
+<p>1.  How can I capture this information in FHIR preserving both the context and semantics.<br>
+  2.  Should I resort myself to using Questionnaire and QuestionnaireResponce resources? If I want preserve semantics, I have a feeling I should better use ImagingStudy resource, but please advise.<br>
+  3.  Regarding #a and b, if I am using Questionnaire and QuestionnaireResponce resources (because it looks like an easy way, given the nature of these "Yes;No" questions), how can I link a given questionnaire/response to the particular ImagingStudy resource?<br>
+  4.  #c is absolutely necessary given that we are talking about research.</p>
+<p>Thank you!</p>
+<p>Olga Vovk<br>
+&lt;:3)))~~~~</p>
+
+
+
+<a name="242009989"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/ImagingStudy%20related%20questions/near/242009989" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/ImagingStudy.20related.20questions.html#242009989">(Jun 09 2021 at 01:58)</a>:</h4>
+<p>If you truly need things as Yes/No/Unknown, you're probably looking at a QuestionnaireResponse - as that's not the natural way most of this information would be captured.  However, you could auto-populate the answers in that QuestionnaireResponse from the relevant elements in the record (if available).  Provenance would allow you to indicate that certain answers had been derived from certain resources.</p>
+<ol>
+<li>By 'imaging agent' do you mean something like a contrast agent?  If so, that would be a MedicationAdministration with a 'partOf' relationship to the imaging Procedure</li>
+<li>That would probably be a complex extension on the 'instantiates' relationship - that extension would allow capture of exactly what deviation(s) had occurred - possibly pointing to a CarePlan or something.  Keep in mind that multiple protocols could be in play and failing to follow one might well mean adhering to another</li>
+<li>This would be driven by the Procedure.status</li>
+<li>This would be an Observation - or might need to be inferred from a set of Observations.</li>
+</ol>
+
+
+
+<a name="242010261"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/ImagingStudy%20related%20questions/near/242010261" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Elliot Silver <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/ImagingStudy.20related.20questions.html#242010261">(Jun 09 2021 at 02:03)</a>:</h4>
+<p>First off, I'd hesitate to use ImagingStudy for most of this. I tend to think of ImagingStudy as the results of a DICOM C-FIND, or as an index to the images. You <em>could</em> define extensions on ImagingStudy to capture most of this info, but I'd looke towards Procedure and Observation instead.</p>
+<p>For the captured data:</p>
+<ol>
+<li>I'm split on whether this is an Observation or an attribute of Procedure (and which attribute). I'm thinking it might be Procedure.used, with a codeable reference of the contrast agent or a code indicating no contrast.</li>
+<li>I think this is an Observation with the Procedure (not the Patient) as the subject. It also seems like a candidate for a standard extension on Procedure.</li>
+<li>If the Procedure.status is in-progress, on-hold, stopped, or completed, then it was started.</li>
+<li>I think this is an Observation with subject of the patient; focus, bodySite, or specimen of the particular tissue, and partOf of the procedure.</li>
+</ol>
+<p>For your questions:</p>
+<ol>
+<li>An Observation has a patient and/or a procedure; a Procedure has a patient -- that covers the context. The semantics should be covered by the code of the Observation, and the Observation value.</li>
+<li>If these are coming from a paper form, Questionnaire and QuestionnaireResponse aren't a bad option for an intermediate state, but to do something with the data, you'll probably want to keep going and convert the QR to the resources I suggest.</li>
+<li>There are ways to define the resource context of a Q/QR. Again, though, I would suggest that isn't where you want to stop.</li>
+<li>(I'm assuming #c means item 3) No, you could leave your results as QR, but that will make analysis more difficult, and will mean that this information can only be used in the context of that questionnaire, rather than making it available as a general observation.</li>
+</ol>
+
+
+
+<a name="242010856"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/ImagingStudy%20related%20questions/near/242010856" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Elliot Silver <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/ImagingStudy.20related.20questions.html#242010856">(Jun 09 2021 at 02:15)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> , I think capturing the info using QR makes sense, but I would use that to generate the other resources. I don't think you stop there. And, yes, some of the info could be pre-populated by the Questionnaire mechanism.</p>
+
+
+
+<a name="242061205"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/ImagingStudy%20related%20questions/near/242061205" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Olga Vovk <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/ImagingStudy.20related.20questions.html#242061205">(Jun 09 2021 at 13:05)</a>:</h4>
+<p>Dear Lloyd and Elliot,<br>
+Thank you so much for your time assessing my multiple questions and your answers. Much appreciated!<br>
+I will share them with  my research team,<br>
+Thank you!<br>
+Olga</p>
+
+
+
+<a name="242116252"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/ImagingStudy%20related%20questions/near/242116252" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Olga Vovk <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/ImagingStudy.20related.20questions.html#242116252">(Jun 09 2021 at 19:20)</a>:</h4>
+<p>Hi Lloyd and Elliot,<br>
+I have a follow up question,<br>
+You wrote:</p>
+<blockquote>
+<p><span class="user-mention silent" data-user-id="191320">Lloyd McKenzie</span> , I think capturing the info using QR makes sense, but I would use that to generate the other resources. I don't think you stop there. And, yes, some of the info could be pre-populated by the Questionnaire mechanism.<br>
+'''</p>
+<p>So, if, we are to proceed with using Questionnaire and QuestionnaireResource to capture "indicator" questions, then my next question is</p>
+<ol>
+<li>Which elements from these resources can be used to provide the reference back to the corresponding domain resource(s)?</li>
+</ol>
+<ul>
+<li>E.g. if I am asking a question “xx” in  a questionnaire X designed for a particular study Z, how can I link this particular Questionnaire and QuestinnaireResponce resources to this particular Z? Which elements should I use/refer to?</li>
+<li>Or. if I am asking a question in a questionnaire related/designed to a particular imaging study/imaging acquisition instance, how can I link it to a particular Imaging.Study resource? Which elements should I use/refer to?</li>
+</ul>
+<p>Thank you!!!<br>
+Olga</p>
+</blockquote>
+
+
+
+<a name="242118579"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/ImagingStudy%20related%20questions/near/242118579" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Elliot Silver <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/ImagingStudy.20related.20questions.html#242118579">(Jun 09 2021 at 19:39)</a>:</h4>
+<p>I think the Structured Data Capture implementation guide would be useful here. (<a href="http://build.fhir.org/ig/HL7/sdc/">http://build.fhir.org/ig/HL7/sdc/</a>) It describes the flow of finding a questionnaire, filling in a response, and extracting the data into resources. You probably need to look at launchContext, but I'll leave it to others to chime in on that detail.</p>
+
+
+
+<a name="242124404"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/ImagingStudy%20related%20questions/near/242124404" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Olga Vovk <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/ImagingStudy.20related.20questions.html#242124404">(Jun 09 2021 at 20:22)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191380">Elliot Silver</span> <a href="#narrow/stream/179166-implementers/topic/ImagingStudy.20related.20questions/near/242118579">said</a>:</p>
+<blockquote>
+<p>I think the Structured Data Capture implementation guide would be useful here. (<a href="http://build.fhir.org/ig/HL7/sdc/">http://build.fhir.org/ig/HL7/sdc/</a>) It describes the flow of finding a questionnaire, filling in a response, and extracting the data into resources. You probably need to look at launchContext, but I'll leave it to others to chime in on that detail.</p>
+</blockquote>
+<p>Hi Elliot,<br>
+Thank you so much for the reference to SDC.<br>
+I will definitely look into it,<br>
+Thank you!<br>
+Olga</p>
+
+
+
+<a name="242221590"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/ImagingStudy%20related%20questions/near/242221590" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Olga Vovk <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/ImagingStudy.20related.20questions.html#242221590">(Jun 10 2021 at 15:04)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="377694">Olga Vovk</span> <a href="#narrow/stream/179166-implementers/topic/ImagingStudy.20related.20questions/near/242061205">said</a>:</p>
+<blockquote>
+<p>Dear Lloyd and Elliot,</p>
+</blockquote>
+<p>Thank you so much for answering my questions and for your time.<br>
+I have more imaging study related questions. This time related o IV imaging contrast administration.<br>
+I need to be able to capture the following information in FHIR:</p>
+<ol>
+<li>[Was] IV contrast used for a given imaging acquisition? - answers Yes/No/Unknown</li>
+<li>Confirmation that the patient has no allergy to IV contrast agent. -  That ideally should be obtained prior to IV contrast agent administration, question 2.</li>
+<li>IV contrast name - answered if "Yes" was for #1</li>
+<li>Time when IV contrast administered, if "Yes" was for #1</li>
+<li>Amount of IV contrast injected</li>
+<li>Flow rate of IV contrast</li>
+<li>IV contrast concentration</li>
+<li>Location of injection site</li>
+<li>Was a test bolus performed? - answers Yes/No/Unknown</li>
+<li>What type of contrast bolus was administered?</li>
+<li>Bolus timing method. E.g. the method in which the imaging agent was administered intravenously over time. <br>
+and to capture it in a full context. </li>
+</ol>
+<p>I mean for the research purposes the question above needed to be captured in a context of <br>
+1.  A given ResearchStudy, and ResearchSubject.<br>
+2.  For a given imaging acquisition.<br>
+3.  In a context of a given condition/observation.<br>
+I believe MedicationAdministration resource could be a good choice to capture most of the questions above.</p>
+<p>My difficulty is in figuring out which other resources I need to use and fill out to in order to provide the full context/semantics.<br>
+Thank you!<br>
+Olga</p>
+
+
+
+<a name="242222885"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/ImagingStudy%20related%20questions/near/242222885" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/ImagingStudy.20related.20questions.html#242222885">(Jun 10 2021 at 15:12)</a>:</h4>
+<p>Agree that MedicationAdministration would be a good fit for most.  My recommendation would be to map what you can that's straightforward and ask on the <a class="stream" data-stream-id="179249" href="/#narrow/stream/179249-Medication">#Medication</a> stream if there are elements remaining you're not sure about</p>
+
+
+
+<a name="242224290"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/ImagingStudy%20related%20questions/near/242224290" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Olga Vovk <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/ImagingStudy.20related.20questions.html#242224290">(Jun 10 2021 at 15:23)</a>:</h4>
+<p>Hi Lloyd,<br>
+Thank you!<br>
+Will do,<br>
+Best,<br>
+Olga</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

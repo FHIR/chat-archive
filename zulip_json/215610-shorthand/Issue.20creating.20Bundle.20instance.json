@@ -1,0 +1,428 @@
+[
+    {
+        "content": "<p>I am trying to create an instance of a Bundle in FSH but I am getting errors in Sushi. Here is a fragment of my FSH file:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: RareDiseaseBundle\nInstanceOf: Bundle\nTitle: &quot;Rare Disease Bundle&quot;\n* type = #document\n* identifier.system = &quot;http://ga4gh.org/fhir/phenopackets/&quot;\n* identifier.value = &quot;1&quot;\n* entry[0].resource = RareDiseasePhenopacket\n* entry[1].resource = Proband\n</pre></div>\n\n\n<p>RareDiseasesPhenopacket is a Composition instance and Proband is a Patient instance. Here is the error message that I get:</p>\n<div class=\"codehilite\"><pre><span></span>error: mismatched input &#39;RareDiseasePhenopacket&#39; expecting {&#39;true&#39;, &#39;false&#39;, STRING, MULTILINE_STRING, NUMBER, CODE, DATETIME, TIME, REFERENCE}\n  File: /Users/met045/CSIRO/workspaces/projects/fhir-phenopackets/phenopackets-examples.fsh\n  Line: 128\n</pre></div>\n\n\n<p>Note that the entries are not references to the resources but the actual resources that are meant to be contained in the bundle. Is this supported by Sushi or am I missing something?</p>",
+        "id": 188350838,
+        "sender_full_name": "Alejandro Metke",
+        "timestamp": 1581911149
+    },
+    {
+        "content": "<p>SUSHI doesn't support that type of syntax. To SUSHI, <code>entry</code> is an array of type <code>Resource</code>, so each entry can only have the fields defined on <code>Resource</code> itself (<code>id</code>, <code>meta</code>, <code>implicitRules</code>, <code>language</code>). So a valid <code>Bundle</code> could look something like this:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: MyBundle\nInstanceOf: Bundle\n* entry[0].resource.id = &quot;resource-1&quot;\n* entry[1].resource.id = &quot;resource-2&quot;\n</pre></div>\n\n\n<p>This issue has also recently come up in the context of contained resources, <a href=\"#narrow/stream/215610-shorthand/topic/contained.20resources\" title=\"#narrow/stream/215610-shorthand/topic/contained.20resources\">https://chat.fhir.org/#narrow/stream/215610-shorthand/topic/contained.20resources</a>, and one of the approaches we are considering is the one you attempted to use here, allowing <code>Instances</code> to be inserted inline into another <code>Instance</code> that has a field of type <code>Resource</code>. It's helpful to see that that seemed like a natural approach for you.  But we are tracking this and plan to address it.</p>",
+        "id": 188375855,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1581944236
+    },
+    {
+        "content": "<p>It's interesting that no one has tried to do this yet until now, and in the last few days we've received reports from three separate people.  It sounds like we should try to fast-track a solution on this one.</p>",
+        "id": 188378247,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1581946499
+    },
+    {
+        "content": "<p>this = you mean contained resources?</p>",
+        "id": 188378337,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1581946583
+    },
+    {
+        "content": "<p>this = creating instances w/ inlined (not referenced) resources -- which applies to both <code>contained</code> as well a <code>bundle</code> entries.  I thinking whatever approach we use for one will likely apply to the other as well.</p>",
+        "id": 188378473,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1581946751
+    },
+    {
+        "content": "<p>that is the same thing, right?</p>",
+        "id": 188381432,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1581949322
+    },
+    {
+        "content": "<p>Both DomainResource and Bundle have elements whose type is Resource</p>",
+        "id": 188381496,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1581949355
+    },
+    {
+        "content": "<blockquote>\n<p>entry is an array of type Resource, </p>\n</blockquote>\n<p>Just being pedantic - entry is a Backbone element so the array type is not Resource - right? And you can set the other entry elements (I checked) :) ...</p>",
+        "id": 188396131,
+        "sender_full_name": "David Hay",
+        "timestamp": 1581961605
+    },
+    {
+        "content": "<p>Right -- the <code>resource</code> is actually a field in each bundle entry.</p>",
+        "id": 188397302,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1581962645
+    },
+    {
+        "content": "<p>Great! Glad that you are thinking about a way to address this. It's not critical for me at the moment but definitively a nice to have.</p>",
+        "id": 188410730,
+        "sender_full_name": "Alejandro Metke",
+        "timestamp": 1581978696
+    },
+    {
+        "content": "<p>So I've thought of this a bit more and wanted to get some input.  I'm thinking we probably want to support a by-reference approach (like <span class=\"user-mention\" data-user-id=\"191345\">@Alejandro Metke</span> tried to do) and an inline approach.</p>",
+        "id": 188584218,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582145573
+    },
+    {
+        "content": "<p>For the By-Reference approach, we'd also want a way to flag that the inlined instances should not result in indepedendent instances being exported (we only want the top-level instance), so maybe something like:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: ShortyBundle\nInstanceOf: Bundle\n* type = #collection\n* entry[0].resource = Shorty\n* entry[1].resource = Ick\n\nInstance: Shorty\nInlineInstanceOf: Patient\n* name[0].given[0] = &quot;Shorty&quot;\n* name[0].family = &quot;Fish&quot;\n\nInstance: Ick\nInlineInstanceOf: Condition\n* code = SCT#12345 &quot;Ick&quot;\n</pre></div>",
+        "id": 188584329,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582145660
+    },
+    {
+        "content": "<p>For the inline approach, we need a way to indicate to SUSHI what the inlined type is.  So maybe something like this:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: ShortyBundle\nInstanceOf: Bundle\n* type = #collection\n* entry[0].resource instanceOf Patient\n* entry[0].resource.id = &quot;Shorty&quot;\n* entry[0].resource.name[0].given[0] = &quot;Shorty&quot;\n* entry[0].resource.name[0].family = &quot;Fish&quot;\n* entry[1].resource instanceOf Condition\n* entry[1].resource.id = &quot;Ick&quot;\n* entry[1].resource.code = SCT#12345 &quot;Ick&quot;\n</pre></div>",
+        "id": 188584428,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582145751
+    },
+    {
+        "content": "<p>Both of these would also apply to things like <code>contained</code> -- but also in cases where you want an instance to use a profile as a path value (e.g., in an instance of Observation, make <code>valueQuantity</code> an instance of a specific profile on Quantity).</p>",
+        "id": 188584640,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582145900
+    },
+    {
+        "content": "<p>Anyway, feedback is welcome and appreciated.</p>",
+        "id": 188584714,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582145958
+    },
+    {
+        "content": "<p>I think you have this backwards:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: Ick\nInlineInstanceOf: Condition\n</pre></div>\n\n\n<p>It seems more clear as:</p>\n<div class=\"codehilite\"><pre><span></span>InlineInstance: Ick\nInstanceOf: Condition\n</pre></div>\n\n\n<p>Would <code>ContainedInstance</code> be better?</p>",
+        "id": 188585353,
+        "sender_full_name": "Mark Kramer",
+        "timestamp": 1582146411
+    },
+    {
+        "content": "<p>Which is the parent resource? It can't be Bundle...</p>",
+        "id": 188606924,
+        "sender_full_name": "David Hay",
+        "timestamp": 1582168279
+    },
+    {
+        "content": "<blockquote>\n<p>I think you have this backwards:</p>\n</blockquote>\n<p>Actually, the reason I suggested it that way was for consistency w/ how we're treating example.  I believe that the consensus was that:</p>\n<p>Conformance instances should be:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: MyCapabilityStatement\nInstanceOf: CapabilityStatement\n</pre></div>\n\n\n<p>and examples should be:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: MyCondition\nExampleOf: Condition\n</pre></div>\n\n\n<p>So... it seems like the consistent approach is that ALL instances are <code>Instance</code>s, but that the second keyword (<code>InstanceOf</code>, <code>ExampleOf</code>, <code>InlineInstanceOf</code>) indicates the context.</p>",
+        "id": 188607175,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582168736
+    },
+    {
+        "content": "<p>That said, we haven't implemented that for examples yet, so I am 100% fine with walking that back and changing it such that we have:</p>\n<div class=\"codehilite\"><pre><span></span>ConformanceInstance: MyCapabilityStatement\nInstanceOf: CapabilityStatement\n//...\n\nExample: MyCondition\nInstanceOf: Condition\n//...\n\nContainedInstance: MyContainedCondition\nInstanceOf: Condition\n//...\n</pre></div>\n\n\n<p>In fact, I think I personally prefer something like that (but can't decide exactly on the names <code>Instance</code> vs <code>ConformanceInstance</code> vs <code>Conformance</code> -- or <code>ContainedInstance</code> vs <code>Contained</code>)...</p>",
+        "id": 188607322,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582168993
+    },
+    {
+        "content": "<p>Another approach:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: MyCapabilityStatement\nInstanceOf: CapabilityStatement\nType: Conformance\n//...\n\nInstance: MyCondition\nInstanceOf: Condition\nType: Example\n//...\n\nInstance: MyContainedCondition\nInstanceOf: Condition\nType: Contained // or Inline\n//...\n</pre></div>\n\n\n<p>Oh.  I think I like that one best, even if it is more lines of FSH.  I feel like it is easier to remember.</p>",
+        "id": 188607398,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582169137
+    },
+    {
+        "content": "<p>I'd vote for that last syntax,. Maybe we make <code>Type: Example</code> the default? Since that has pretty much been the default so far.</p>",
+        "id": 188632051,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1582201212
+    },
+    {
+        "content": "<p>How can we make a contained resource inside a resource inside a bundle?</p>",
+        "id": 188632316,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582201483
+    },
+    {
+        "content": "<p>I think whatever syntax it is, must support that</p>",
+        "id": 188632321,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582201491
+    },
+    {
+        "content": "<p>must/should (but I think Must)</p>",
+        "id": 188632333,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582201506
+    },
+    {
+        "content": "<blockquote>\n<p>How can we make a contained resource inside a resource inside a bundle?</p>\n</blockquote>\n<p>I think either syntax (the by-reference or inline syntax) would support this.  You're just reapplying the same approach at a different level of the path.  Do you want an example, or does that make sense as I described it?</p>",
+        "id": 188637483,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582206102
+    },
+    {
+        "content": "<p>I struggle with the \"Type\". And where do we indicate what is it contained in?</p>",
+        "id": 188641214,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582208718
+    },
+    {
+        "content": "<p>Say we have a bundle of 2 prescriptions, each with contained medication</p>",
+        "id": 188641240,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582208742
+    },
+    {
+        "content": "<p>what will the fsh look like?</p>",
+        "id": 188641255,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582208756
+    },
+    {
+        "content": "<p>how do we say that prescription 1 has medication 1 and prescription 2 has medication 2?</p>",
+        "id": 188641324,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582208777
+    },
+    {
+        "content": "<p>I was thinking that this is done by nesting or pointing to the parent.</p>",
+        "id": 188641348,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582208800
+    },
+    {
+        "content": "<p>(in which case \"Type=contained\" is redundant, right?)</p>",
+        "id": 188641383,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582208822
+    },
+    {
+        "content": "<p>and actually while typing this i realized:</p>",
+        "id": 188641413,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582208848
+    },
+    {
+        "content": "<p>Yes, please give an example FSH (can be the example I mention). <br>\nNormally I would not ask that because it could be a lot of work to make and read those resources,  but that is no longer a big issue with FSH.</p>",
+        "id": 188641567,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582208954
+    },
+    {
+        "content": "<p>Which is really cool, and I'm grateful .You made it easier to share examples in FSH form, so yes, let's see it.</p>",
+        "id": 188641670,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582209007
+    },
+    {
+        "content": "<p>So if you use the proposed syntax that allows you to define a \"contained\" resource separately (with <code>Type: Contained</code>) -- that \"contained\" resource is re-usable.  <em>It</em> doesn't point to the instance that contains it.  Rather, the instance that contains it explicitly references it by name.  I can provide an example later, but right now have to head into some meetings.  That said, your question has given me another idea as well -- so I'll see if I can work that idea into the example too.</p>",
+        "id": 188642903,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582209684
+    },
+    {
+        "content": "<p>Also -- I think that since these instances can be used in <code>contained</code> (literally <em>contained</em>) as well as in other places that allow inline resource instances -- maybe it makes sense for the <code>Type</code> to be <code>Inline</code>, otherwise there might be confusion.</p>",
+        "id": 188644616,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582210657
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191832\">@Jose Costa Teixeira</span> -- here is an example of your scenario using one of the proposed syntaxes:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: PrescriptionBundle\nInstanceOf: Bundle\nType: Example\n* entry[0].resource = Prescription1\n* entry[1].resource = Prescription2\n// ... more rules\n\nInstance: Prescription1\nInstanceOf: MedicationRequest\nType: Inline\n* contained[0] = Medication1\n* medicationReference = &quot;#Medication1&quot;\n// ... more rules\n\nInstance: Prescription2\nInstanceOf: MedicationRequest\nType: Inline\n* contained[0] = Medication2\n* medicationReference = &quot;#Medication2&quot;\n// ... more rules\n\nInstance: Medication1\nInstanceOf: Medication\nType: Inline\n* code = RXNORM#12345\n// ... more rules\n\nInstance: Medication2\nInstanceOf: Medication\nType: Inline\n* code = RXNORM#67890\n// ... more rules\n</pre></div>",
+        "id": 188648129,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582212752
+    },
+    {
+        "content": "<p>Since all but the bundle have <code>Type: Inline</code> -- the only resource that is actually exported is the bundle -- but it has <code>Prescription1</code> and <code>Prescription2</code> inlined in the <code>entry.resource</code> array, <code>Medication1</code> inlined in <code>Prescription1</code>'s <code>contained</code> array, and <code>Medication2</code> inlined in <code>Prescription2</code>'s <code>contained</code> array.</p>",
+        "id": 188648342,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582212888
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 188648397,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582212916
+    },
+    {
+        "content": "<p>But this led me to the idea that this is needlessly verbose:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: Prescription1\nInstanceOf: MedicationRequest\nType: Inline\n* contained[0] = Medication1\n* medicationReference = &quot;#Medication1&quot;\n// ... more rules\n</pre></div>\n\n\n<p>We could support using the reference directly like this as well:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: Prescription1\nInstanceOf: MedicationRequest\nType: Inline\n* medicationReference = Medication1\n// ... more rules\n</pre></div>\n\n\n<p>SUSHI would be smart enough to see that <code>Medication1</code> has type <code>Inline</code>, so it would know to automatically add it to the <code>contained</code> array and make the reference a local reference to <code>Medication1</code>.</p>",
+        "id": 188648613,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582213045
+    },
+    {
+        "content": "<p>And... since no one asked... here is what that same scenario looks like using the syntax that defines all the inline resources inline in the FSH:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: PrescriptionBundle\nInstanceOf: Bundle\nType: Example\n* entry[0].resource instanceOf MedicationRequest\n* entry[0].resource.id = &quot;Prescription1&quot;\n* entry[0].resource.contained[0] instanceOf Medication\n* entry[0].resource.contained[0].id = &quot;Medication1&quot;\n* entry[0].resource.contained[0].code = RXNORM#12345\n// ... more entry[0].resource.contained[0] rules\n* entry[0].resource.medicationReference = &quot;#Medication1&quot;\n// ... more entry[0].resource rules\n* entry[1].resource instanceOf MedicationRequest\n* entry[1].resource.id = &quot;Prescription2&quot;\n* entry[1].resource.contained[0] instanceOf Medication\n* entry[1].resource.contained[0].id = &quot;Medication2&quot;\n* entry[1].resource.contained[0].code = RXNORM#67890\n// ... more entry[1].resource.contained[0] rules\n* entry[1].resource.medicationReference = &quot;#Medication2&quot;\n// ... more entry[1].resource rules\n</pre></div>",
+        "id": 188649531,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582213604
+    },
+    {
+        "content": "<p>Very interesting discussion.  Here's my take:<br>\n1) The \"Type\" keyword is much cleaner than trying to generalize \"InstanceOf\" to \"ExampleOf\", \"InlineInstanceOf\" etc. Thumbs up for \"Type\"<br>\n2) The inline syntax is just hard to read. I'm not in favor of introducing an \"instanceOf\" rule. Thumbs down on \"* foo instanceOf bar\"<br>\n3) I agree SUSHI should be smart enough to figure out the population of \"contained\" itself. Thumbs up on the direct assignment of an inline Type to a reference.</p>",
+        "id": 188650341,
+        "sender_full_name": "Mark Kramer",
+        "timestamp": 1582214054
+    },
+    {
+        "content": "<p>I'm personally in favor of the inline syntax if for no other reason than it is consistent with our approach elsewhere (we allow other things inline) and it allows for an instance in FSH to be fully self-contained.  I also feel like it would be useful elsewhere.</p>\n<p>Consider that there are other places where an author may want a specific property to be an instance of a profile, <em>not</em> an instance of the vanilla type declared by the property.  Here is a contrived example...  Imagine a user wants to create an instance of <code>Invoice</code>.  And in the invoice they are creating multiple <code>lineItem</code>s.  They want their instance to create instances of <code>USMoney</code> (a profile on <code>Money</code>) -- but <code>Invoice</code> only declares the field as normal <code>Money</code>.  Here is how they do it w/ the inline syntax:</p>\n<div class=\"codehilite\"><pre><span></span>* lineItem[0].priceComponent[0].amount instanceOf USMoney\n* lineItem[0].priceComponent[0].amount.value = 2.00\n* lineItem[1].priceComponent[0].amount instanceOf USMoney\n* lineItem[1].priceComponent[0].amount.value = 2.50\n* lineItem[2].priceComponent[0].amount instanceOf USMoney\n* lineItem[2].priceComponent[0].amount.value = 3.00\n</pre></div>\n\n\n<p>Without the inline syntax, they would need to create a separate <code>Instance:</code> entity for every single USDollar amount they want in that instance.  If they have 20 line items, that gets pretty cluttered.</p>",
+        "id": 188652708,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582215552
+    },
+    {
+        "content": "<p>That said, I had to talk <span class=\"user-mention\" data-user-id=\"239822\">@Nick Freiter</span> into the inline syntax too, and he's a pretty smart guy as well.  So... I realize that I may be in the minority on this one.  That being the case, unless others are clamoring for it, I'd propose we support the other (by-reference) syntax first and only support the inline-defined syntax if people start asking for it.</p>",
+        "id": 188652828,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1582215650
+    },
+    {
+        "content": "<p>on the subject of verbose...</p>",
+        "id": 188674413,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1582230422
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span>Instance: Prescription1\nInstanceOf: MedicationRequest\n</pre></div>",
+        "id": 188674416,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1582230427
+    },
+    {
+        "content": "<p>for any one used to text based languages, this is clunky. Why not</p>\n<div class=\"codehilite\"><pre><span></span>Instance Prescription of MedicationRequest?\n</pre></div>",
+        "id": 188674459,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1582230463
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span> your example seems to introduce one limitation - the contained resources cannot both be called Medication1 (which i presume is possible in FHIR)</p>",
+        "id": 188675475,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582231290
+    },
+    {
+        "content": "<p>this is not really important but makes me think: How will all of this work with resource versions?</p>",
+        "id": 188675498,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582231316
+    },
+    {
+        "content": "<p>in my IG i have a care plan with 3 versions - but this is not supported so I have to have 3 different care plan IDs</p>",
+        "id": 188675567,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582231355
+    },
+    {
+        "content": "<p>How much of this syntax breaks when we need to have multiple resource instances with id=careplan001 and versions 1, 2, 3.. ?</p>",
+        "id": 188675690,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582231446
+    },
+    {
+        "content": "<ol>\n<li>I think I like more the message when you went \"since no one asked\" <span class=\"user-mention\" data-user-id=\"191469\">@Chris Moesel</span></li>\n</ol>",
+        "id": 188675901,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582231601
+    },
+    {
+        "content": "<ol start=\"2\">\n<li>would it be interesting to do </li>\n</ol>\n<div class=\"codehilite\"><pre><span></span>* entry[0].resource.contained[0] instanceOf Medication alias Medication1\n</pre></div>\n\n\n<p>and then use that alias everywhere?</p>",
+        "id": 188675952,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582231649
+    },
+    {
+        "content": "<blockquote>\n<div class=\"codehilite\"><pre><span></span>Instance Prescription of MedicationRequest\n</pre></div>\n\n\n</blockquote>\n<p>I like this. I'd read it better if it were Prescription=instance(MedicationRequest) or Prescription=example(MedicationRequest) but I don't think that is how the shorthand grammar is being defined</p>",
+        "id": 188676268,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1582231856
+    },
+    {
+        "content": "<p>The verbosity, if it is that, comes from the structure of Shorthand items. Each item starts with a set of keyword declarations, followed by a set of rules. The declarations are the part that goes:</p>\n<div class=\"codehilite\"><pre><span></span>Instance: Foo\nInstanceOf: Bar\nDescription: &quot;Blah blah blah&quot;\n</pre></div>\n\n\n<p>These declarations set the stage for the defining the rules (statements that begin with a bullet *) that actually do the profiling, fixing, or binding.  It might not be the absolute most compact way to do things, but this basic arrangement is very clear to users.</p>",
+        "id": 188689915,
+        "sender_full_name": "Mark Kramer",
+        "timestamp": 1582241070
+    },
+    {
+        "content": "<p>I have this issue right now and I see talk of a solution, but I can't tell from browsing the issue log if this ever got added or if we are still discussing.  If this hasn't been added, is there a workaround on how to set the bundle.entry.resource to be different instances?</p>",
+        "id": 191894907,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1585234113
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"192166\">@Jean Duteau</span> -- support for inline instances (which is what you need here) will be in our next release of SUSHI.  We're aiming for tomorrow afternoon, although it might be early next week if we hit any snags. The basic approach is you define instances you want in the bundle the normal way but with this additional metadata: <code>Usage: #inline</code>.  Then in your bundle, you can say: <code>bundle.entry[0].resource = MyResource</code>.</p>",
+        "id": 191909461,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1585239406
+    },
+    {
+        "content": "<p>okay, i thought I might have to wait.  will this work if I want to have the instance exist as a separate example as well?  i.e. I have a Composition instance that I want to exist as a Composition example in my IG.  I also want to just have the Bundle include that already-defined Composition instance as one of its entries.</p>",
+        "id": 191909792,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1585239539
+    },
+    {
+        "content": "<p>Yes, in that case, you'd set the <code>Usage:</code> to <code>#example</code> and it would export as a separate example <em>and</em> be inlined in your bundle.</p>",
+        "id": 191910297,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1585239735
+    },
+    {
+        "content": "<p>muchas gracias!</p>",
+        "id": 191910459,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1585239807
+    },
+    {
+        "content": "<p>Hello,  i have understood how to create bundle with bundle.entry[0].resource = MyResource and inline instances but now i'm working on a bundle with sliced mandatory entries, one is patient and i'm trying this: bundle.entry[patient].resource = patient1 with an inline instance of Patient  profile. I receive the error: Cannot fix Resource value: patient1. Value does not match element type: Patient. Any idea what's wrong?</p>",
+        "id": 193414381,
+        "sender_full_name": "Etienne Cantineau",
+        "timestamp": 1586416690
+    },
+    {
+        "content": "<p>What you are trying to do makes sense, but isn't possible yet due to a limitation of SUSHI. We currently only support setting fixed inline instances on elements of type Resource, not specific sub-types of Resource, such as Patient in your case. We do plan to extend this so that we support setting inline instances to sub-types of Resource, but haven't been able to address it yet. I've created an issue here <a href=\"https://github.com/FHIR/sushi/issues/347\" title=\"https://github.com/FHIR/sushi/issues/347\">https://github.com/FHIR/sushi/issues/347</a> to track this task.</p>",
+        "id": 193442642,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1586435344
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"239822\">@Nick Freiter</span> Thank you for your answer. I'll follow that</p>",
+        "id": 193446497,
+        "sender_full_name": "Etienne Cantineau",
+        "timestamp": 1586437417
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"243697\">@Etienne Cantineau</span> - this is fixed in the newly released SUSHI 0.12.1.</p>",
+        "id": 194214114,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1586978097
+    },
+    {
+        "content": "<p>Thank you, it can now reach correctly my inline instances! That lead me to another problem! <br>\nI have my patient inline instance with Usage: #inline, i've read that it doesn't create xml/json files and then, i receive the message from the IG \"Publishing content failed: unable to find the source file for Patient/Patient1: not specified, so tried Patient-Patient1.xml, json etc\".<br>\nWhy is the publisher still looking for a file? Or am i missing something?<br>\nI didn't encounter that problem when i tested bundle creation because in my previous test without Usage keyword, sushi had created a json file of my patient instance.</p>",
+        "id": 194266474,
+        "sender_full_name": "Etienne Cantineau",
+        "timestamp": 1587022660
+    },
+    {
+        "content": "<p>It looks like the Patient1 resource is incorrectly being added by SUSHI to the ImplementationGuide.json file, even though it is specified as inline, I've logged this as an issue here <a href=\"https://github.com/FHIR/sushi/issues/366\" title=\"https://github.com/FHIR/sushi/issues/366\">https://github.com/FHIR/sushi/issues/366</a>. Sorry to fix one issue only to have you run into another, but thanks for reporting so we can fix this!</p>",
+        "id": 194292730,
+        "sender_full_name": "Nick Freiter",
+        "timestamp": 1587038613
+    },
+    {
+        "content": "<p>Ok, no problem, i'm not in a hurry!</p>",
+        "id": 194293636,
+        "sender_full_name": "Etienne Cantineau",
+        "timestamp": 1587039144
+    },
+    {
+        "content": "<p>The problem is well solved! I see that the inline instances are counted in the sushi results report,  maybe they shouldn't as they are not standalone files unlike the other resources of the report.</p>",
+        "id": 194651090,
+        "sender_full_name": "Etienne Cantineau",
+        "timestamp": 1587374731
+    },
+    {
+        "content": "<p>One more thing about these bundles: i got an error from the publisher \"org.hl7.fhir.exceptions.FHIRException: No fullUrl on entry #1 in Bundle slicedbundle1\". This element fullUrl is however 0..1. After investigations, i found i only get errors from the instances that have references. <br>\nIf i put in comment the lines where i use a reference, i don't get my error anymore.<br>\nYou can see the profile and example here: <a href=\"https://github.com/ec-ehealth/Bundle-example\" title=\"https://github.com/ec-ehealth/Bundle-example\">https://github.com/ec-ehealth/Bundle-example</a></p>",
+        "id": 194661767,
+        "sender_full_name": "Etienne Cantineau",
+        "timestamp": 1587381975
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"243697\">@Etienne Cantineau</span> -- it looks like the FHIR spec requires <code>fullUrl</code> in order to resolve relative references.  See: <a href=\"http://hl7.org/fhir/R4/bundle.html#references\" title=\"http://hl7.org/fhir/R4/bundle.html#references\">http://hl7.org/fhir/R4/bundle.html#references</a></p>\n<p>So, it looks like you'll need to add <code>fullUrl</code> values to your bundle as well...</p>",
+        "id": 194673382,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1587388822
+    },
+    {
+        "content": "<p>Ok thank you, i didn't know it was mandatory in that case. No problem, i'll add that!</p>",
+        "id": 194683233,
+        "sender_full_name": "Etienne Cantineau",
+        "timestamp": 1587393238
+    }
+]

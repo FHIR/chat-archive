@@ -1,0 +1,78 @@
+---
+layout: page
+title: "FHIR Chat  · Unique search parameter constraint applied across partitions · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unique.20search.20parameter.20constraint.20applied.20across.20partitions.html">Unique search parameter constraint applied across partitions</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="245783105"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unique%20search%20parameter%20constraint%20applied%20across%20partitions/near/245783105" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Pengyu Wang <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unique.20search.20parameter.20constraint.20applied.20across.20partitions.html#245783105">(Jul 13 2021 at 06:15)</a>:</h4>
+<h1>Background</h1>
+<p>I have created a search parameter on the patient resource to guarantee uniqueness on the patient identifier, thus preventing race conditions when bulk inserting resources. <a href="#narrow/stream/179167-hapi/topic/hapi.20fhir.20protect.20agains.20race.20conditions">See original post here</a>.</p>
+<p>However, I noticed during testing that the uniqueness constraint is applied across all partitions (I have partitioning enabled on the server). Here are the<code>SearchParameters</code> I created:</p>
+<div class="codehilite"><pre><span></span><code>{
+    &quot;resourceType&quot;: &quot;SearchParameter&quot;,
+    &quot;id&quot;: &quot;1&quot;,
+    &quot;title&quot;: &quot;Unique Identifier&quot;,
+    &quot;name&quot;: &quot;PatientUniqueIdentifier&quot;,
+    &quot;status&quot;: &quot;active&quot;,
+    &quot;code&quot;: &quot;uniquePatientIdentifier&quot;,
+    &quot;base&quot;: [
+        &quot;Patient&quot;
+    ],
+    &quot;type&quot;: &quot;token&quot;,
+    &quot;expression&quot;: &quot;Patient.identifier.where(system=&#39;external-patient&#39;)&quot;
+}
+</code></pre></div>
+<div class="codehilite"><pre><span></span><code>{
+    &quot;resourceType&quot;: &quot;SearchParameter&quot;,
+    &quot;id&quot;: &quot;2&quot;,
+    &quot;extension&quot;: [
+        {
+            &quot;url&quot;: &quot;http://hapifhir.io/fhir/StructureDefinition/sp-unique&quot;,
+            &quot;valueBoolean&quot;: true
+        }
+    ],
+    &quot;status&quot;: &quot;active&quot;,
+    &quot;code&quot;: &quot;patient-identifier&quot;,
+    &quot;base&quot;: [
+        &quot;Patient&quot;
+    ],
+    &quot;type&quot;: &quot;composite&quot;,
+    &quot;expression&quot;: &quot;Patient&quot;,
+    &quot;component&quot;: [
+        {
+            &quot;definition&quot;: &quot;SearchParameter/1&quot;,
+            &quot;expression&quot;: &quot;Patient&quot;
+        }
+    ]
+}
+</code></pre></div>
+<h1>Expected behavior</h1>
+<p>I should only be able to create one patient with identifier 123 in PARTITION-1, but I can also create a patient with the same identifier in PARTITION-2.</p>
+<h1>Actual outcome</h1>
+<p>When I create a patient with identifier 123 in PARTITION-1, it works. But when I try to create a patient with the same identifier in PARTITION-2, I got an error saying <code>The operation has failed with a unique index constraint failure.</code>. This is not the expected behavior because it may very well be likely that patients in different partitions have the same identifiers.</p>
+<h1>Investigation</h1>
+<p>After going through the source code, I believe the issue is <a href="https://github.com/hapifhir/hapi-fhir/blob/b934abb297a3d1cb7a981312fc59846762ea8e88/hapi-fhir-jpaserver-base/src/main/java/ca/uhn/fhir/jpa/dao/index/SearchParamWithInlineReferencesExtractor.java#L324">here</a>: when querying for existing indexed unique composite strings, it does not take the partition id into account, even though <code>partition_id</code> is a column in the <code>hfj_idx_cmp_string_uniq</code> table. </p>
+<p>My questions are:</p>
+<ol>
+<li>Is this the intended behavior (that the uniqueness constraint should apply across partitions) or is it a bug?</li>
+<li>How can I get around this issue?</li>
+</ol>
+
+
+
+<a name="246660865"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Unique%20search%20parameter%20constraint%20applied%20across%20partitions/near/246660865" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Aaron Kawalsky <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Unique.20search.20parameter.20constraint.20applied.20across.20partitions.html#246660865">(Jul 20 2021 at 22:58)</a>:</h4>
+<p><span class="user-mention" data-user-id="191319">@James Agnew</span> do you know if the above is intended behavior? We are considering putting up a pull request to change unique params to respect partition.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

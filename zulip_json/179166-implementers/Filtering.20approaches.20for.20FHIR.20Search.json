@@ -1,0 +1,44 @@
+[
+    {
+        "content": "<p>I've recently run across an interesting FHIR search design, and I'm interested if folks have opinions on this.</p>\n<p>Normally, when I think of searching for a patient's allergies, I think of something like this (I'm assuming an OAuth2 auth layer):<br>\n<strong>Option A:</strong></p>\n<div class=\"codehilite\"><pre><span></span><code>GET /AllergyInterance?patient=&lt;patient ID&gt;\nAuthorization: Bearer &lt;access token&gt;\n</code></pre></div>\n<p>With this approach, you first find the allergies for the patient, then apply any authorization rules (based on claims associated with the access token) that may further limit the results.</p>\n<p>However, this is something that was proposed as an alternative:<br>\n<strong>Option B:</strong></p>\n<div class=\"codehilite\"><pre><span></span><code>GET /AllergyInterance\nAuthorization: Bearer &lt;JWT access token with a claim identifying the patient via a business identifier&gt;\n</code></pre></div>\n<p>This approach uses a server wide search, and relies on authorization rules to filter data for the patient. Here, the server has two options for handling the search:</p>\n<ol>\n<li>Find all allergies in the system, then use authorization rules associated with the token to filter down to just the allergies that are authorized.</li>\n<li>Pre-process the access token claims to determine the patient, then find allergies for that patient.  Then apply authorization rules.</li>\n</ol>\n<p>Assuming that authorization rules are defined and applied correctly, the results returned for both Option A and Option B queries should be identical.  The Alissa Knight report makes me nervous here, but really BOLA issues probably have similar impact for all options.  The performance for B1 and B2 <em>may</em> be very different, but performance for B2 should be similar to A.</p>\n<p>The context here is a patient-facing app (PHR) ecosystem.  The <em>reason</em> this second option is being proposed is because the authorization server is not aware of the patient FHIR ID at the time the authorization flow occurs.</p>\n<p>I have two questions:</p>\n<ul>\n<li>Do folks have any general opinions about doing the system-wide search and relying on access token based authorization filtering to limit the response to data about a specific patient?</li>\n<li>For other server implementers that have both a SMART auth server and FHIR API server, how do you manage the FHIR patient ID such that you can return it as the \"patient\" context parameter alongside the access token in the /token response?  Epic's authorization and API servers are very tightly coupled, so we \"just have it\".  But if anyone has an authorization server that is decoupled from the API server, it seems like you'd need to have something in place to populate the SMART patient context param with the FHIR ID from your API server at the time you issue access tokens.</li>\n</ul>",
+        "id": 263488653,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1638473250
+    },
+    {
+        "content": "<p>in my system, I inspect the token before performing any search to decide what the compartment limitations associated with it are - if any - and restrict search results accordingly. So it's kind of a bit of half way between your approaches</p>",
+        "id": 263492441,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1638475037
+    },
+    {
+        "content": "<p>like your system, my resource server and authorization server are tightly bound, so the authorization server asks the user to agree to a scope (though they may be constrained in their choices) when they go through the OAuth process, and the scopes are informed by the resources available</p>",
+        "id": 263492613,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1638475108
+    },
+    {
+        "content": "<p>Smart App Launch says that the details of this are a private negotiation between resource and authorization server</p>",
+        "id": 263492663,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1638475136
+    },
+    {
+        "content": "<p>the Heart/UMA specs standardise this interface (and do other things too) so you should look at what that does</p>",
+        "id": 263492757,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1638475189
+    },
+    {
+        "content": "<p>same here (as Grahame's setup)</p>",
+        "id": 263492760,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1638475191
+    },
+    {
+        "content": "<p>The Google implementation is pretty similar to Grahame's setup. Our reference configuration is one where all access using SMART auth goes through a proxy that ensures the requests reach the resource server with a SMART patient context. The resource server limits the search to the specified patient context. I don't think we have a pattern yet where the OAuth scopes available are directly informed by the resources on the server - we assume that the auth server knows those patient IDs out of band.</p>",
+        "id": 263495988,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1638476807
+    }
+]

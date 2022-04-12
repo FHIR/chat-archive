@@ -1,0 +1,59 @@
+---
+layout: page
+title: "FHIR Chat  · coremif generation · terminology / utg"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/194616-terminology-/-utg/index.html">terminology / utg</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/194616-terminology-/-utg/topic/coremif.20generation.html">coremif generation</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="206602102"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/194616-terminology%20/%20utg/topic/coremif%20generation/near/206602102" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ted Klein <a href="https://fhir.github.io/chat-archive/stream/194616-terminology-/-utg/topic/coremif.20generation.html#206602102">(Aug 11 2020 at 17:10)</a>:</h4>
+<p>So after a bunch of discussion and work with Lloyd on this, it is apparent there are several items that must be addressed.  Notably, at least one of the decisions that Ted made with <span class="user-mention" data-user-id="191316">@Grahame Grieve</span> in Melbourne in February turns out to be untenable and will prevent being able to generate a usable coremif from the UTG v3 content.    I will include here the email from <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>  on items that must be addressed.   We will likely need to create the needed extensions for the formal naming support for code system and value set resources after all.   These probably want to be created in the UTG IG itself, where the other extensions needed for MIF generation were created.   But I have limited knowledge and expertise on these so we may need to wait for Lloyd to return from holiday to proceed.    In the meantime I will work on the missing import data for the items that we did create but for some reason were not imported (although the documentation claims they were).    The email information on this item is:               Two issues with MIF conversion (as discussed by Skype):</p>
+<ol>
+<li>The decision was made to <em>not</em> propagate the isMandatory, defaultValue and defaultHandlingCode properties of CodeSystem extensions.  It turns out isMandatory was always false, so I can just hardcode that.  I can omit defaultValue and defaultHandlingCode, however, we need to actually create property values that adhere to the defaults.  I.e. If a property had a default, then we need to set that default on all the concepts rather than just leaving the property omitted.  For those with defaultValue declared in MIF, this is simple.  For every concept that doesn't declare the property, declare a property of the specified defaultValue.  For those that have defaultBehavior, the only value is 'Hierarchical', which means the defaulting behavior is as follows: trace up the parent concepts until you find a concept that has the property declared and declare the same property value on the descendant property.  If you do this successfully, you should see changes such as these:</li>
+</ol>
+<ul>
+<li>AcknowledgementCondition#AL should have a 'status' property with a value 'active', as should all of the other concepts in that code system with the exception of 'SU' which already has a property value of 'retired'</li>
+<li>ActRelationshipType.PRCN should have a conceptProperty with name 'conductible' with value of "true" because it specializes _ActRelationshipConditional which has that property value</li>
+</ul>
+<p>Once this patch has been done, we can ignore the defaults going forward - whenever new codes are added, we'll just have to make sure the relevant properties get declared explicitly.  No MIF conversion code needs to change for this, only updating the existing MIF source content.</p>
+<ol start="2">
+<li>valueSet/version/associatedConceptProperty is not coming across.  The notes say that it's supposed to come in something called  rim-assoc-conc-property.  However, while there's a property with that name in the concept properties code system, there are no such properties declared.  Also, I'm not sure how it can work as a property given that it needs to appear on a value set, not on a concept, and there's no capacity in the ValueSet resource to define properties at the value set level.  This associatedConceptProperty notion is essential to MIF as it helps define formal naming.  If it's not there, some formal naming won't work properly.  I have <em>not</em> updated the MIF conversion code for this bit yet, as I'm not yet sure how the relevant information is going to manifest.</li>
+</ol>
+
+
+
+<a name="206602194"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/194616-terminology%20/%20utg/topic/coremif%20generation/near/206602194" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ted Klein <a href="https://fhir.github.io/chat-archive/stream/194616-terminology-/-utg/topic/coremif.20generation.html#206602194">(Aug 11 2020 at 17:10)</a>:</h4>
+<p>Right how I am thinking we will go forward with UTG release 2.0.0 without  a good coremif gen and put in some disclaimer.  If we don't do this we may need to delay the UTG release until after the September WGM cycle.</p>
+
+
+
+<a name="206804557"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/194616-terminology%20/%20utg/topic/coremif%20generation/near/206804557" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/194616-terminology-/-utg/topic/coremif.20generation.html#206804557">(Aug 13 2020 at 11:40)</a>:</h4>
+<p>I don't understand which decision is a problem here</p>
+
+
+
+<a name="207782175"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/194616-terminology%20/%20utg/topic/coremif%20generation/near/207782175" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/194616-terminology-/-utg/topic/coremif.20generation.html#207782175">(Aug 23 2020 at 17:08)</a>:</h4>
+<ol>
+<li>We're going to need to patch all of the v3 code systems that used to have defaultValue and defaultHandlingCode for properties so that the properties that would previously have been inferred as defaults are explicitly asserted everywhere.  (Right now, they're omitted and that's a problem.)</li>
+<li>We're going to need an extension to capture associatedConceptProperty for value sets.  There's no other way to do it and formal naming won't work without it.</li>
+</ol>
+
+
+
+<a name="207791747"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/194616-terminology%20/%20utg/topic/coremif%20generation/near/207791747" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/194616-terminology-/-utg/topic/coremif.20generation.html#207791747">(Aug 23 2020 at 21:15)</a>:</h4>
+<p>well, ok. Ted's claim is that some decision I made is related to this, but I'm not seeing it. Doesn't matter, I guess. It doesn't sound like there's anything that I need to do</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

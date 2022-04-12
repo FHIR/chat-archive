@@ -1,0 +1,68 @@
+[
+    {
+        "content": "<p>There are different business cases that come up quite a bit:    \"Conduct a patient search, but only where patients are managed by an organization I am affiliated with\".  \"What organizations am I affiliated with\"</p>\n<p>_Context_ \"I\" am a _Practitioner_ / _user_</p>\n<p>In trying to solve for cases such as these, I have a few questions / thoughts and am interested in opinions and recommendations.</p>\n<p>What's the correct way to find out what organizations a practitioner is associated with?  It seems like PractitionerRole might be the best option?</p>\n<p>From there I was thinking <code>Patient?name=foo&amp;managingOrganization=...</code> would be _okay_</p>\n<p>It seems like the ergonomics of a custom query parameter would simplify things quite a bit..</p>\n<p><code>Patient?name=foo&amp;userCanAccessTheOrganization=true</code></p>\n<p>I'm always torn here (custom parameters) because it feels like trail blazing.  It saves an additional request and I'm not even sure PractitionerRole is really the best way to obtain what I'm after.</p>\n<p>Just how frowned upon are custom parameters such as these?  Does something already exist which is better suited to my needs?  Thanks in advance!</p>",
+        "id": 259586855,
+        "sender_full_name": "Rob Resendez",
+        "timestamp": 1635543823
+    },
+    {
+        "content": "<p>The short answer is \"what are you allowed to see?\" is often driven by complex business rules, so a one-size-fits-all solution is unlikely.  </p>\n<p>In more detail: yes, PractitionerRole is the way to capture formal association with an Organization - though keep in mind that Organizations have relationships - there might be ancestor organizations and descendant organizations.</p>\n<p>Patient association with organizations is harder.  Patient.managingOrganization is \"what organization maintains this patient record\", not necessarily \"what organization is responsible for caring for this patient\".  As an example, if the Patient is managed by a central registry, there might be lots of organizations that provide care to the patient but don't 'manage' that record. </p>\n<p>Other ways to represent relationships to patients: does the practitioner have any involvement in encounters or orders for them?  Are they part of a CareTeam associated with the patient?  Is there a capitation Contract tying them to the Patient?</p>\n<p>Also, a lot of systems won't filter access based on search parameter, they'll pre-filter what you're allowed to see independent of the FHIR interface entirely.</p>",
+        "id": 259704143,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1635559752
+    },
+    {
+        "content": "<p>Yeah, policy-based data access restrictions I, too, see as something that should just be enforced at a per-request basis. Putting extra requirements on a requester seems kind of silly, but that's kind of where I am currently since the api is used by many contexts and I must not break any of them. Will have to do some soul-searching to figure out how to transition toward built-in filtering for user access to data. I am leaning toward starting with a custom search parameter and transitioning the behavior altogether based on some scope in the user token</p>\n<p>Some system-access contexts will still need this kind of info, so wanting to make sure I'm not way out in left field thinking that practitioner-role would be an okay source for the data that is incidentally behind some of our business policies historically.  I try to think in terms of \"is this where another system (other than my own) would store this kind of relationship?\".</p>",
+        "id": 259746207,
+        "sender_full_name": "Rob Resendez",
+        "timestamp": 1635620573
+    },
+    {
+        "content": "<p>We have the Permission resource which is intended to convey the \"who can read which data for what purpose\".</p>",
+        "id": 259833265,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1635750916
+    },
+    {
+        "content": "<p>I think the query by an authorized client would look exactly like the one by an unauthorized client. It's the server that decides whether that query is actually going to be executed.</p>",
+        "id": 259833332,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1635750993
+    },
+    {
+        "content": "<p>Sorry, I'm not seeing the Permission resource in FHIR r4.0.1, r4.6.0 or <a href=\"http://build.fhir.org\">build.fhir.org</a>. Can someone provide a link.</p>",
+        "id": 259864608,
+        "sender_full_name": "Mike Lohmeier",
+        "timestamp": 1635774109
+    },
+    {
+        "content": "<p>Permission is a draft resource that is in discussion for these kind of use-cases, but for which we know much more needs to be done. It is <a href=\"http://build.fhir.org/permission\">http://build.fhir.org/permission</a></p>",
+        "id": 259867112,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1635775413
+    },
+    {
+        "content": "<p>We (Epic) have been running into this a lot too.  We might be bringing something to the SMART spec to include something like a \"user login department\"(Location) in the context (with a launch/location scope that lets the app ask the EHR to figure it out).  For some cases, PractitionerRole/Organization aren't really practical.  Using a SMART context approach means that the server  can basically figure out the context and let the app know, rather than exposing the entire PractitionerRole/Organization structure to the app and making them dig through it.</p>",
+        "id": 259892696,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1635787080
+    },
+    {
+        "content": "<p>We're looking at various options to power authz row level security as well to implement in our fork of AWS FHIR Works. Granted our scalability and reliability requirements are very high and have driven us to specific solutions. We'd love to hear more of what people are doing here because it's a beast of a problem that I think any mature FHIR solution will have to address.</p>\n<p>The leading contender we're looking at is to leverage Open Policy Agent by synchronizing the Patient, Organization, Location, Practitioner and PractionerRole and building a custom ACL table to override with explicit point to point approvals and denials. Then create dynamic policies that get evaluated in real time on each request that leverage the synchronized FHIR resources and ACL table in OPA. Generally speaking, the solution is standard fare authz in an API powered by a policy engine.</p>\n<p>The 2nd leading option we're considering is using one of the zanzibaresque ACL solutions, like spicedb, coming out lately in the open source space. This would be similar to wiring in a policy engine into each request but the operating model would be geared around an infinitely scalable ACL table as opposed to dynamic policies. It's not as clear as a picture how we'd go from FHIR resources and relationships to ACLs systematically.</p>\n<p>We're still early in our analysis and have only vetted and prototyped a couple of the options we've identified which resulted in only throwing out options (looking at you keycloak...) but it'd be great to hear what others have done here.</p>",
+        "id": 259927050,
+        "sender_full_name": "Mike Lohmeier",
+        "timestamp": 1635803972
+    },
+    {
+        "content": "<p>We're currently using FHIR security labels to support our role-based resource-level authz implementation.</p>",
+        "id": 259958312,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1635835467
+    },
+    {
+        "content": "<p>(but our use case is probably relatively simple)</p>",
+        "id": 259958358,
+        "sender_full_name": "Joel Schneider",
+        "timestamp": 1635835528
+    }
+]

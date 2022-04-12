@@ -1,0 +1,80 @@
+[
+    {
+        "content": "<p>Are there any good resources on different analytics architectural patterns? I'm working on a new implementation, and having trouble answering some key questions, interested if anyone in this group can add some detail:</p>\n<ul>\n<li>Are there connectors that can perform analytics on a FHIR instance/dataset directly, or should any analytics solution replicate the data in some other format to perform analytics?</li>\n<li>Do typical analytics solutions simply copy FHIR data into JSON documents mirroring the source, then use a NoSQL query engine, or is it more common to replicate in a relational DB lik Postgres (a la FHIRbase)?</li>\n<li>Is it more common to do a batch update into an analytics store, or is it an acceptable pattern to do simultaneous updates on a FHIR store and parallel analytics store?</li>\n</ul>\n<p>Any other guidance on architecting a FHIR solution in a way that supports analytics stakeholders?</p>",
+        "id": 214625503,
+        "sender_full_name": "OS",
+        "timestamp": 1603742425
+    },
+    {
+        "content": "<p>There aren't a lot of implementations that I'm aware of. I believe Aidbox does SQL-on-FHIR directly on the backing database.</p>\n<p>Google has focused on replicating the data out to BigQuery. We can do batch or streaming updates - I think streaming generally has more value as it's close to real time, but having an efficient batch operation is also necessary to get large amounts of historical data loaded.</p>\n<p>Having an SQL query engine, whether more transactional (postgres) or more of a data warehouse (BigQuery), is pretty core to analytics. The main issue with SQL-on-FHIR is that the schema is still very nested - it doesn't work with most BI tools, and most data analysts are used to a flat schema. But there probably isn't a one-size-fits-all flat schema. There is certainly more work to be done here.</p>",
+        "id": 214650400,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1603759584
+    },
+    {
+        "content": "<p>On your first point - there is a FHIR Connector for PowerBI that can connect to nearly any FHIR Rest Endpoint. It works by translating the PowerBI queries into FHIR Search, so it tries to intelligently select the required data for a report. Its not going to fulfill all use-cases, and perhaps not those looking at very large population datasets. The the tool is likely easier to use and explore than most.</p>",
+        "id": 214658794,
+        "sender_full_name": "Brendan Kowitz",
+        "timestamp": 1603770266
+    },
+    {
+        "content": "<blockquote>\n<p>the schema is still very nested - it doesn't work with most BI tools, and most data analysts are used to a flat schema</p>\n</blockquote>\n<p>Just to hammer on this point... you need an ETL to transform the data based on your underlying data assumptions, to get it into the shape you want for analysis. This is inherent to the problem space, not simply a data format problem</p>",
+        "id": 214796943,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1603861953
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179219-analytics-on.20FHIR/topic/Analytics.20Patterns.3F/near/214796943\">said</a>:</p>\n<blockquote>\n<blockquote>\n<p>the schema is still very nested - it doesn't work with most BI tools, and most data analysts are used to a flat schema</p>\n</blockquote>\n<p>Just to hammer on this point... you need an ETL to transform the data based on your underlying data assumptions, to get it into the shape you want for analysis. This is inherent to the problem space, not simply a data format problem</p>\n</blockquote>\n<p>Sure, that's understood, but that's a problem not unique to FHIR. Tools like Redshift (<a href=\"https://docs.aws.amazon.com/redshift/latest/dg/tutorial-query-nested-data.html\">https://docs.aws.amazon.com/redshift/latest/dg/tutorial-query-nested-data.html</a>) enable querying nested JSON data, or using automated steps like Presto enables to extract JSON data. In either case, there is a step to 'flattening' the data, but my point is there's probably a small number of patterns to enable this. </p>\n<p>For example, <br>\n1) Export FHIR data, flatten/transform it, store it in a separate relational database.<br>\n1A: Maintain synchronicity by updating the relational table with every CUD event in FHIR<br>\nOR<br>\n1B: by doing periodic batch updates (either full or differential?)<br>\n2) Use a tool like <span class=\"user-mention\" data-user-id=\"195075\">@Brendan Kowitz</span>  referenced above that can translate a SQL query back to a FHIR API call, no separate analytics store needed<br>\n3) (This depends on the implementation I guess) - If the server stores the FHIR objects in a NoSQL/JSON format, point a tool like Presto or Redshift as above to build the data model and query directly on the data, again no separate data store needed. </p>\n<p>I'm sure there are other patterns, and guidances that are specific to implementations, and that's what I'm after - trying to understand the different options here...</p>",
+        "id": 214838599,
+        "sender_full_name": "OS",
+        "timestamp": 1603893171
+    },
+    {
+        "content": "<p>Some quick thoughts, as I am just planning a FHIR plattform for a hospital group that must include analytics capabilities, and have the same questions as <span class=\"user-mention\" data-user-id=\"285887\">@OS</span>  .</p>\n<p>To points 2) and 3) from above:<br>\nBoth require the analytics query to be directly executed on the production-serving system. This is usually not a good idea, especially not when querying the FHIR search API (option 2). As a FHIR server needs a (separate) database for storing records, e.g. a MongoDB or similar, you might indeed query the production database directly (option 3). However, the only provider (I am aware of) in the tech space that is indeed suggesting something similar is SAP with S/4 HANA. And even they keep their data warehouse solution in the portfolio.</p>\n<p>So, this leaves us with <br>\nOption 1): Exporting in batch, with periodic updates (differential!), via <br>\n1A) the FHIR Bulk Data API, or<br>\n1B) directly from the database<br>\n(which one is better depends on the use cases... because of security and semantics the API is probably better, and more future-proof) </p>\n<p>4) Hooking into the data stream, i.e. getting the data before it is processed / stored at the FHIR server. This is what other industries are doing, e.g. with Apache Kafka implementations, or in IoT space with \"event hubs\" that are distributing the data to different endpoints.<br>\n-&gt; obviously for this to work, the incoming messages would need to be well-understood. Maybe one could think of using FHIR server-like containers on top of Kafka.... </p>\n<p>... so, I will go with option 1A, but I believe that option 4) will be the future. </p>\n<p>As for the follow-up question, where the analytics data will then be stored, this is dependent on what the analytics people do know to use. In general, I'd suggest to go with the ELT pattern, i.e. export -&gt; load -&gt; transform (not ETL anymore). I.e. any flattening is done later based on the analytics use case.  So, you could <br>\na) store all JSON in a data lake blob or a NoSQL database<br>\nb) provide data scientists access from their Spark Cluster<br>\nc) add a relational in-memory database with a star schema for business intelligence</p>",
+        "id": 229461325,
+        "sender_full_name": "Paul Hellwig",
+        "timestamp": 1615289146
+    },
+    {
+        "content": "<p>Interesting topic</p>",
+        "id": 229488354,
+        "sender_full_name": "Lin Zhang",
+        "timestamp": 1615301399
+    },
+    {
+        "content": "<p>At our site, we have some experiences with 4a). In parallel to a FHIR Server that holds only a subset of data (due to performance issues) we have a Postgres DB with all the FHIR ressources as JSON blobs. SQL on this works very well, better than FHIR search. Postgres is filled by ETL and Kafka. But it's not the final solution, and we have a look at different alternatives. I personally would prefer a solution with all the FHIR ressources transfered into Apache Spark. Do you think this would be a solution not only for data scientest but for normal analytics tasks, too?</p>",
+        "id": 229492681,
+        "sender_full_name": "Detlef Kraska",
+        "timestamp": 1615303030
+    },
+    {
+        "content": "<p>Nice setup, didn't know that Postgres works on JSON blobs.</p>\n<p>Good question on Spark. I personally love Spark (or rather the Databricks ecosystem), but have not managed to get to more than a prototyping cluster for the last 5 years and in 2 jobs. Two reasons:</p>\n<ul>\n<li>Finding experts. Spark is complex, cluster maintenance, data distribution, even querying - you'd need to write Python or Scala to prepare the data for Spark SQL. Your typical data engineer knows SQL, whereas your typical data scientist knows Python, but has neither desire nor endurance to write reusable data pipelines.</li>\n<li>data security and access restrictions (Spark has no in-build granular authorization scheme, as far as I know)</li>\n</ul>\n<p>And: For end users you'd still need a business intelligence system like tableau. For all these standard questions - \"How many patients have disease x? How many of these got treatment y?\" - to be nicely visualized.</p>",
+        "id": 229507351,
+        "sender_full_name": "Paul Hellwig",
+        "timestamp": 1615307653
+    },
+    {
+        "content": "<p>We are tackling this exact problem at the moment. Great discussion so far. We don't have much experience in this so would value any input on what we are thinking.</p>\n<p>Initially we are also looking at a Kafka/Spark pipeline but for the countries in which we work it didn't seem feasible from a management and maintenance perspective. Also, translating nested JSON to a completely flat table like format is tricky.</p>\n<p>Currently we are thinking of using the Elastic Stack for this as we can ingest JSON directly into Elasticsearch. We will, however, still have to enrich events (resources) with extra data from their references to denormalise the data so it's in a better format for reporting. We use Logstash to do the transformations and we are using dual pipelines to process the data. In the first pipeline we extract all the raw resources from HAPI FHIR and just dump them as is into an Elasticsearch index (fhir-raw-&lt;resourceType&gt;). In addition we also divert all resources to the secondary pipeline where we drop some less useful resources, then enrich the useful resources with information from additional looks up performed to HAPI FHIR. We then store the enriched events to Elasticsearch in another index (fhir-enrich-&lt;resourceType&gt;). The below diagram shows this in a bit more detail:</p>\n<p><a href=\"/user_uploads/10155/MV9ZrMLxhAfp_8usRxpaEoSA/sandbox-architecture-elastic-stack-pipeline.png\">sandbox-architecture-elastic-stack-pipeline.png</a> </p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/MV9ZrMLxhAfp_8usRxpaEoSA/sandbox-architecture-elastic-stack-pipeline.png\" title=\"sandbox-architecture-elastic-stack-pipeline.png\"><img src=\"/user_uploads/10155/MV9ZrMLxhAfp_8usRxpaEoSA/sandbox-architecture-elastic-stack-pipeline.png\"></a></div><p>We are currently just prototyping this and it's working ok. We would like to hear if other have better/simpler architectures or any suggestions on the approach.</p>",
+        "id": 235151834,
+        "sender_full_name": "Ryan Crichton",
+        "timestamp": 1618824538
+    },
+    {
+        "content": "<p>Is it possible to do analytics without flattening?</p>",
+        "id": 235169042,
+        "sender_full_name": "Lin Zhang",
+        "timestamp": 1618834117
+    },
+    {
+        "content": "<p>In our case we want to capture everything, even if we aren't using it right now. So, flattening everything would be tricky. We opt to just persist it as is then in the second pipeline in my diagram we flatten and enrich resources with data we know we need right now. In the future if we see we need more data we can query the raw resources (without touching the OLTP database - HAPI FHIR) and reprocess them.</p>\n<p>It seems to make sense, but I'm not sure what is best practice in this space.</p>",
+        "id": 235347898,
+        "sender_full_name": "Ryan Crichton",
+        "timestamp": 1618927152
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"222440\">Ryan Crichton</span> <a href=\"#narrow/stream/179219-analytics-on.20FHIR/topic/Analytics.20Patterns.3F/near/235347898\">said</a>:</p>\n<blockquote>\n<p>In our case we want to capture everything, even if we aren't using it right now. So, flattening everything would be tricky. We opt to just persist it as is then in the second pipeline in my diagram we flatten and enrich resources with data we know we need right now. In the future if we see we need more data we can query the raw resources (without touching the OLTP database - HAPI FHIR) and reprocess them.</p>\n<p>It seems to make sense, but I'm not sure what is best practice in this space.</p>\n</blockquote>\n<p>apologies for bumping an old thread. </p>\n<p><span class=\"user-mention\" data-user-id=\"222440\">@Ryan Crichton</span>  - wanted to hear about your findings since then on how performant, scalable, flexible and extensible this architecture is. Appreciate any findings that you can share. thanks!</p>",
+        "id": 260066246,
+        "sender_full_name": "Senthil Nachimuthu",
+        "timestamp": 1635891787
+    }
+]

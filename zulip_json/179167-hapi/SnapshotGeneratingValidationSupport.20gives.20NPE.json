@@ -1,0 +1,272 @@
+[
+    {
+        "content": "<p>I am using the HAPI SnapshotGeneratingValidationSupport and am getting an NPE when I try to use it for the profile <a href=\"https://simplifier.net/forschungsnetzcovid-19/chroniclungdiseases\">https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/chronic-lung-diseases</a>.</p>\n<p>This profile defines a slice on <code>Coding.code.coding</code> with a required binding to a ValueSet containing a few explicitly listed (German) ICD-codes. However, it is a re-profiling of the base profile <a href=\"https://simplifier.net/forschungsnetzcovid-19/geccobasecondition\">https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition</a> which, in turn, <em>also</em> defines a slice on <code>Coding.code</code> with a required binding to a ValueSet containing all (german) ICD codes.</p>\n<p>Possibly, it is this combination that causes problems. What I observe is that the validation codes tries to expand the full ICD-10 ValueSets and fails but nonetheless assumes that it succeeded, causing an NPE. The first bit of the stack trace I see at the top level is this:</p>\n<div class=\"codehilite\"><pre><span></span><code>Failed to generate snapshot\nca.uhn.fhir.rest.server.exceptions.InternalErrorException: Failed to generate snapshot\n    at org.hl7.fhir.common.hapi.validation.support.SnapshotGeneratingValidationSupport.generateSnapshot(SnapshotGeneratingValidationSupport.java:134)\n    at org.hl7.fhir.common.hapi.validation.support.ValidationSupportChain.generateSnapshot(ValidationSupportChain.java:95)\n    at org.hl7.fhir.common.hapi.validation.validator.VersionSpecificWorkerContextWrapper.lambda$new$0(VersionSpecificWorkerContextWrapper.java:100)\n</code></pre></div>\n<p>Through some longwinded debugging, I managed to dig a bit deeper and find the following chain of events:</p>\n<ol>\n<li><code>SnapshotGeneratingValidationSupport#generateSnapshot</code> is called with the input SD <em>https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/chronic-lung-diseases</em></li>\n<li>This triggers a call to <code>ProfileUtilities#generateSnapshot</code> with the parameters <code>base</code> = SD for <em>https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition</em> and <code>derived</code> = SD for <em>https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/chronic-lung-diseases</em></li>\n<li>This eventually triggers a call to <code>ProfileUtilities#updateFromDefinition</code> with parameters <code>dest</code> = \"Condition.code.coding:icd10-gm\" , <code>source</code> = \"Condition.code.coding:icd10-gm\", and <code>srcSD</code> = SD for <em>https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition</em></li>\n<li>In the line <code>ValueSetExpansionOutcome expBase = context.expandVS(baseVs, true, false);</code>,  <code>expBase</code> is set to null since no validation support can expand this (<code>baseVs</code> is the full ICD-10 ValueSet)</li>\n<li>Nonetheless, two lines further down, the call <code>expBase.getValueset()</code>is made, causing a null pointer exception.</li>\n</ol>\n<p>Is this a known issue? (<span class=\"user-mention\" data-user-id=\"194952\">@Julian Sass</span> This is a GECCO profile, maybe have you seen smt. like this before?)</p>",
+        "id": 244156676,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1624891954
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"194703\">Morten Ernebjerg</span> <a href=\"#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE/near/244156676\">said</a>:</p>\n<blockquote>\n<p>Is this a known issue? (<span class=\"user-mention silent\" data-user-id=\"194952\">Julian Sass</span> This is a GECCO profile, maybe have you seen smt. like this before?)</p>\n</blockquote>\n<p>No, also first time I'm seeing this.</p>",
+        "id": 244258275,
+        "sender_full_name": "Julian Sass",
+        "timestamp": 1624961348
+    },
+    {
+        "content": "<p>A similar (but possibly different) error also happens with the latest command-line validator (well, actually the validator seems to complete but output errors along the way). I tested it using <a href=\"/user_uploads/10155/8APeA56zq4VC0ITYViysq3tS/test.json\">this Condition resource</a> (which also provokes the error in my code) and pulling in the latest version of the <code>de.gecco</code> package. (I wonder if the differences in the details may be due to the fact that the command-line validator uses a terminology server, but my code not):</p>\n<div class=\"codehilite\"><pre><span></span><code>&gt; java -jar validator/validator_cli.jar -version 4.0.1 -ig de.gecco#1.0.4 test.json\nFHIR Validation tool Version 5.4.6 (Git# aa0b7bc056c6). Built 2021-06-24T19:45:14.861Z (4 days old)\n  Java:   16.0.1 from /Library/Java/JavaVirtualMachines/adoptopenjdk-16.jdk/Contents/Home on x86_64 (64bit). 4096MB available\n  Paths:  Current = [REDACTED], Package Cache = [REDACTED]/.fhir/packages\n  Params: -version 4.0.1 -ig de.gecco#1.0.4 test.json\nLoading\n  Load FHIR v4.0 from hl7.fhir.r4.core#4.0.1 - 4575 resources (00:04.0261)\n  Load hl7.terminology#2.0.0 - 3749 resources (00:00.0908)\n  Terminology server http://tx.fhir.org - Version 1.9.378 (00:01.0816)\n  Load de.medizininformatikinitiative.kerndatensatz.meta#1.0.3 - 2 resources (00:00.0065)\n  Load hl7.fhir.uv.ips#1.0.0 - 82 resources (00:00.0023)\n  Load de.medizininformatikinitiative.kerndatensatz.medikation#1.0.8 - 9 resources (00:00.0105)\n  Load de.basisprofil.r4#0.9.13 - 128 resources (00:00.0131)\n  Load de.medizininformatikinitiative.kerndatensatz.prozedur#1.0.7 - 15 resources (00:06.0046)\n  Load de.medizininformatikinitiative.kerndatensatz.laborbefund#1.0.5 - 10 resources (00:00.0017)\n  Load kbv.basis#1.1.3 - 68 resources (00:00.0063)\n  Load de.medizininformatikinitiative.kerndatensatz.diagnose#1.0.4 - 12 resources (00:03.0793)\n  Load de.gecco#1.0.4 - 134 resources (00:00.0122)\n  Get set... Previous POST attempt returned HTTP&lt;422&gt; from url -&gt; http://tx.fhir.org/r4/ValueSet/$expand?_limit=1000&amp;_incomplete=true.\nUnable to generate snapshot for cardiovascular-diseases from gecco-base-condition because Profile CardiovascularDiseases (https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/cardiovascular-diseases), element Cardiovascular Diseases.coding.Condition.code.coding. Error generating snapshot: Binding https://www.netzwerk-universitaetsmedizin.de/fhir/ValueSet/cardiovascular-diseases is not a subset of binding https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/ValueSet/diagnoses-sct\norg.hl7.fhir.exceptions.DefinitionException: Profile CardiovascularDiseases (https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/cardiovascular-diseases), element Cardiovascular Diseases.coding.Condition.code.coding. Error generating snapshot: Binding https://www.netzwerk-universitaetsmedizin.de/fhir/ValueSet/cardiovascular-diseases is not a subset of binding https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/ValueSet/diagnoses-sct\n        at org.hl7.fhir.r5.context.SimpleWorkerContext.generateSnapshot(SimpleWorkerContext.java:786)\n        at org.hl7.fhir.r5.context.SimpleWorkerContext.generateSnapshot(SimpleWorkerContext.java:753)\n        at org.hl7.fhir.r5.context.SimpleWorkerContext.allStructures(SimpleWorkerContext.java:636)\n        at org.hl7.fhir.validation.ValidationEngine.prepare(ValidationEngine.java:502)\n        at org.hl7.fhir.validation.cli.services.ValidationService.initializeValidator(ValidationService.java:257)\n        at org.hl7.fhir.validation.cli.services.ValidationService.initializeValidator(ValidationService.java:212)\n        at org.hl7.fhir.validation.ValidatorCli.doValidation(ValidatorCli.java:203)\n        at org.hl7.fhir.validation.ValidatorCli.main(ValidatorCli.java:159)\n[a number of similar errors for other binding follow]\n</code></pre></div>\n<p><span class=\"user-mention\" data-user-id=\"248736\">@Mark Iantorno</span> Do you happen to have an idea what might be happening?</p>",
+        "id": 244290913,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1624977203
+    },
+    {
+        "content": "<p>So, you're saying that when you run it with the core validator, you expect no errors, but you are getting one error?</p>",
+        "id": 244291335,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1624977367
+    },
+    {
+        "content": "<p>Forget about the HAPI validation for a second, let's just deal with the core validator first.</p>",
+        "id": 244291413,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1624977408
+    },
+    {
+        "content": "<p>Let me take a closer look</p>",
+        "id": 244292497,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1624977835
+    },
+    {
+        "content": "<p>Thanks! The resource should be valid. Indeed, that is also what the validator outputs, i.e. it does not crash. But it does output all these stacktraces on the way, which makes it look as if an error is occurring under the hood. And judging by the stacktrace, that error might also be related to the one I'm seing in HAPI (snapshot generation).</p>",
+        "id": 244325656,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1624991128
+    },
+    {
+        "content": "<p>it most likely is being caused by the core validator if it is happening in both instances</p>",
+        "id": 244325789,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1624991168
+    },
+    {
+        "content": "<p>HAPI does eventually call the core validator in most cases</p>",
+        "id": 244325823,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1624991189
+    },
+    {
+        "content": "<p>Right, my debugging (above) also seems to indicate that it happens in the core, if I read it right (BTW to clarify: the HAPI validator does crash, the command-line one does not)</p>",
+        "id": 244326133,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1624991316
+    },
+    {
+        "content": "<p>well, is the validator right?</p>",
+        "id": 244326693,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1624991531
+    },
+    {
+        "content": "<p>If it bubles up an Error to hapi, hapi will most likely just stop, so this all makes sense</p>",
+        "id": 244326772,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1624991571
+    },
+    {
+        "content": "<p>Which is why I said not to worry about HAPI, and only focus on the core validator</p>",
+        "id": 244326825,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1624991606
+    },
+    {
+        "content": "<p>I have to correct steps 4 and 5 of the initial description (above <span aria-label=\"point up\" class=\"emoji emoji-1f446\" role=\"img\" title=\"point up\">:point_up:</span>) of the  error in see in my code. The NPE actually flies inside HAPI code, specifically in the  <a href=\"https://github.com/hapifhir/hapi-fhir/blob/ff2698d4d16fc938b592b9336cd4b71fe235ae0b/hapi-fhir-validation/src/main/java/org/hl7/fhir/common/hapi/validation/validator/VersionSpecificWorkerContextWrapper.java#L266\">expandVS method of  VersionSpecificWorkerContextWrapper (around line 266)</a>.:</p>\n<div class=\"codehilite\"><pre><span></span><code>IValidationSupport.ValueSetExpansionOutcome expanded = myValidationSupportContext.getRootValidationSupport().expandValueSet(myValidationSupportContext, null, convertedSource);\n\norg.hl7.fhir.r5.model.ValueSet convertedResult = null;\nif (expanded.getValueSet() != null) {\n    ...\n</code></pre></div>\n<p>With the input I describe above, <code>myValidationSupportContext.getRootValidationSupport()</code> returns a ValidationSupportChain instance. Calling expandValueSet on that returns <code>null</code> (no support in chain can expand the ICD-10 VS), so the variable <em>expanded</em> is <code>null</code> leading to the NPE in the if-check two lines below.</p>",
+        "id": 244382752,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1625035083
+    },
+    {
+        "content": "<p>Yeah, the validation chain in HAPI is getting a null returned value because the core is throwing an error then returning null. This has nothing to do with HAPI and we should stop looking at HAPI altogether</p>",
+        "id": 244412916,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625055192
+    },
+    {
+        "content": "<p>I'm just eating breakfast now. I'm going to dedicate a couple hours this morning to look at it starting at 9.</p>",
+        "id": 244412950,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625055218
+    },
+    {
+        "content": "<p><span aria-label=\"+1\" class=\"emoji emoji-1f44d\" role=\"img\" title=\"+1\">:+1:</span></p>",
+        "id": 244413723,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1625055591
+    },
+    {
+        "content": "<p>Alright, here's the full output I get...similar to what you encountered:<br>\n<a href=\"/user_uploads/10155/eBeGgeqhjvqhJsV1pwLRuBRz/stacktrace.txt\">stacktrace.txt</a></p>",
+        "id": 244420929,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625058769
+    },
+    {
+        "content": "<p>So, it's reproducible on the latest</p>",
+        "id": 244420968,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625058787
+    },
+    {
+        "content": "<p>good start</p>",
+        "id": 244420970,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625058789
+    },
+    {
+        "content": "<p>Well, this is strange.</p>",
+        "id": 244423231,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625059696
+    },
+    {
+        "content": "<p>When I actually create the test case within the validator with all the provided data, I get this output:</p>",
+        "id": 244423264,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625059716
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span><code>---- gecco-profile-slicing ----------------------------------------------------------------\n** Core:\nSLF4J: Class path contains multiple SLF4J bindings.\nSLF4J: Found binding in [jar:file:/home/mark/.m2/repository/org/slf4j/slf4j-simple/1.7.28/slf4j-simple-1.7.28.jar!/org/slf4j/impl/StaticLoggerBinder.class]\nSLF4J: Found binding in [jar:file:/home/mark/.m2/repository/ch/qos/logback/logback-classic/1.2.3/logback-classic-1.2.3.jar!/org/slf4j/impl/StaticLoggerBinder.class]\nSLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.\nSLF4J: Actual binding is of type [org.slf4j.impl.SimpleLoggerFactory]\n  Load de.medizininformatikinitiative.kerndatensatz.meta#1.0.3 - 2 resources (00:05.0432)\n  Load hl7.fhir.uv.ips#1.0.0 - 82 resources (00:00.0012)\n  Load de.medizininformatikinitiative.kerndatensatz.medikation#1.0.8 - 9 resources (00:00.0119)\n  Load de.basisprofil.r4#0.9.13 - 128 resources (00:00.0142)\n  Load de.medizininformatikinitiative.kerndatensatz.prozedur#1.0.7 - 15 resources (00:05.0273)\n  Load de.medizininformatikinitiative.kerndatensatz.laborbefund#1.0.5 - 10 resources (00:00.0014)\n  Load kbv.basis#1.1.3 - 68 resources (00:00.0062)\n  Load de.medizininformatikinitiative.kerndatensatz.diagnose#1.0.4 - 12 resources (00:04.0884)\n  Load de.gecco#1.0.4 - 134 resources (00:00.0140)\nStart Validating (16464 to set up)\nUnable to generate snapshot for https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/chronic-lung-diseases: Profile ChronicLungDiseases (https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/chronic-lung-diseases), element Chronic Lung Diseases.coding.Condition.code.coding. Error generating snapshot: Binding https://www.netzwerk-universitaetsmedizin.de/fhir/ValueSet/chronic-lung-diseases is not a subset of binding https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/ValueSet/diagnoses-sct\nTimes (ms): overall = 9403, tx = 1212, sd = 1, load = 5, fpe = 6\nWARNING: Condition.category[0]: None of the codings provided are in the value set http://hl7.org/fhir/ValueSet/condition-category (http://hl7.org/fhir/ValueSet/condition-category), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://snomed.info/sct#418112009)\n</code></pre></div>",
+        "id": 244423274,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625059722
+    },
+    {
+        "content": "<p>Which is a pass</p>",
+        "id": 244423287,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625059729
+    },
+    {
+        "content": "<p>only one warning</p>",
+        "id": 244423296,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625059733
+    },
+    {
+        "content": "<p>no 422 timeouts</p>",
+        "id": 244423307,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625059740
+    },
+    {
+        "content": "<p>you still get the same error, just no satck dump. No one has addressed the question of whether the error is correct or not</p>",
+        "id": 244475420,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1625081299
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> I had a deeper look a the look the snapshot generation errors logged in the command line validator output I posted above (third msg. in this thread), i.e. this:</p>\n<div class=\"codehilite\"><pre><span></span><code>Unable to generate snapshot for cardiovascular-diseases from gecco-base-condition because Profile CardiovascularDiseases (https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/cardiovascular-diseases), element Cardiovascular Diseases.coding.Condition.code.coding. Error generating snapshot: Binding https://www.netzwerk-universitaetsmedizin.de/fhir/ValueSet/cardiovascular-diseases is not a subset of binding https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/ValueSet/diagnoses-sct\n</code></pre></div>\n<p>If I understood everything correctly, it seems this error is not correct , i.e. the new binding is indeed a subset of the old one. The profile <a href=\"https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/cardiovascular-diseases\">https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/cardiovascular-diseases</a></p>\n<ul>\n<li>is a re-profiling of <a href=\"https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition\">https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition</a></li>\n<li>which is turn is a re-profiling of <a href=\"https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/StructureDefinition/Diagnose\">https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/StructureDefinition/Diagnose</a></li>\n</ul>\n<p>The profile at the bottom of the hierarchy (\".../Diagnose\") defines a slicing of <code>Condition.code.coding</code>. with the a pattern-discriminator on the path <code>$this</code>. A least one slice must be present. The sct-slice has <code>patternCoding</code> set to \"<a href=\"http://snomed.info/sct\">http://snomed.info/sct</a>\" and also has a required binding to a subset of SNOMED given by the value set <a href=\"https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/ValueSet/diagnoses-sct\">https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/ValueSet/diagnoses-sct</a>. This value set contains all terms that have a \"is-a\" relationship with either \"Situation with explicit context\" (243796009), \"Event\" (272379006), or \"Clinical finding\" (404684003).</p>\n<p>The profile at the top of the hierarchy (\".../cardiovascular-diseases\") overrides the binding for the sct-slice of <code>Condition.code.coding</code>, replacing it with a required binding to the value set <a href=\"https://www.netzwerk-universitaetsmedizin.de/fhir/ValueSet/cardiovascular-diseases\">https://www.netzwerk-universitaetsmedizin.de/fhir/ValueSet/cardiovascular-diseases</a> .The latter contains all codes with an is-a relation to \"Disorder of cardiovascular system (disorder)\" (49601007) and contains a number of SNOMED disorder terms. I checked all the terms in this value set and they are indeed all connected to either \"Clinical finding\" or \"Situation with explicit context\" through parent-links. Hence, the new VS does seem to be subset of the VS bound in the base profile. <span class=\"user-mention\" data-user-id=\"194952\">@Julian Sass</span> Was this ensured by construction in this and other Conditions profiles from GECCO?</p>",
+        "id": 244674305,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1625215358
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"194703\">Morten Ernebjerg</span> <a href=\"#narrow/stream/179167-hapi/topic/SnapshotGeneratingValidationSupport.20gives.20NPE/near/244674305\">said</a>:</p>\n<blockquote>\n<p><span class=\"user-mention silent\" data-user-id=\"194952\">Julian Sass</span> Was this ensured by construction in this and other Conditions profiles from GECCO?</p>\n</blockquote>\n<p>Yes, the concepts in the derived profile are all subsumed by the concepts in the parent profile.</p>",
+        "id": 244684562,
+        "sender_full_name": "Julian Sass",
+        "timestamp": 1625221834
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"248736\">@Mark Iantorno</span>, was there any conclusion to this?</p>",
+        "id": 245164840,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1625657370
+    },
+    {
+        "content": "<p>I was working on other things. I will get back on this, this afternoon</p>",
+        "id": 245174424,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625662553
+    },
+    {
+        "content": "<p>Great, thanks! - let me know if you need more info etc.</p>",
+        "id": 245180364,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1625664995
+    },
+    {
+        "content": "<p>So, couple things to keep in mind here: 1. I have very little knowledge about or experience with slicing. 2. I haven't really touched this part of the validator before.</p>",
+        "id": 245459754,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625845461
+    },
+    {
+        "content": "<p>So I'm going to ask a bunch of dumb questions as I'm going through this.</p>",
+        "id": 245459784,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625845480
+    },
+    {
+        "content": "<p>You said: \"However, it is a re-profiling of the base profile <a href=\"https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition\">https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition</a> which, in turn, also defines a slice on Coding.code with a required binding to a ValueSet containing all (german) ICD codes.\"</p>",
+        "id": 245459911,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625845555
+    },
+    {
+        "content": "<p>Where in the JSON is that defined? I only see 3 sliceNames? and they don't appear to point to a set of all german ICD codes</p>",
+        "id": 245460069,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625845643
+    },
+    {
+        "content": "<p>I see slices for verification status and uncertainty of presence</p>",
+        "id": 245460105,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625845672
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194703\">@Morten Ernebjerg</span></p>",
+        "id": 245460117,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625845677
+    },
+    {
+        "content": "<p>What timezone are you in Morten, can we have a quick call at some point</p>",
+        "id": 245460338,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1625845799
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"248736\">@Mark Iantorno</span> thanks for looking into this. <br>\nThe profile <a href=\"https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition\">https://www.netzwerk-universitaetsmedizin.de/fhir/StructureDefinition/gecco-base-condition</a> again is a re-profiling. The base where the slices on Condition.code.coding are defined is <a href=\"https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/StructureDefinition/Diagnose\">https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/StructureDefinition/Diagnose</a>. Here in the diff is e.g. the Condition.code.coding:icd10-gm slice with a required binding to the ValueSet containing all German ICD Codes.</p>",
+        "id": 245543310,
+        "sender_full_name": "Julian Sass",
+        "timestamp": 1625914275
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"248736\">@Mark Iantorno</span>, I'm on central European time. Would be happy to talk, feel free to PM me. Mondays looks good, but I will be away on vacation starting Tuesday late afternoon.</p>",
+        "id": 245545446,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1625917250
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"411403\">@Rene Lebherz</span> FYI</p>",
+        "id": 245701674,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1626103318
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"248736\">@Mark Iantorno</span>, any updates on this?</p>",
+        "id": 247900568,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1627893426
+    },
+    {
+        "content": "<p>Grahame has requested that this wait until he returns</p>",
+        "id": 248214825,
+        "sender_full_name": "Mark Iantorno",
+        "timestamp": 1627994428
+    },
+    {
+        "content": "<p>OK, thanks for the update!</p>",
+        "id": 248215204,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1627994648
+    }
+]

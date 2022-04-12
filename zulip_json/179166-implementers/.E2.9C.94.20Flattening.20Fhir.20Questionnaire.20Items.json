@@ -1,0 +1,170 @@
+[
+    {
+        "content": "<p>Hello, I am working on a QQR (Questionnaire - QuestionnaireResponse) report in Power BI. It seems according to the Fhir spec the cardinality of  Questionnaire.Item is 0-*. I have access to my Fhir server. Querying the server with the Questionnaire yields 13 distinct questionnaires. There are a couple of them where the nested level of Questionnaire.Item seems to go on to infinity. Manual expanding the Item columns to 8 levels yields 13 rows of data that are 400+ columns wide. This isn't ideal, but I still need to be able to \"consolidate\", \"flatten\", \"deserialize\" these columns into meaningful information. Also the QuestionnaireResponse calls have to be able to link back to the Questionnaire from whence they came. Questionnaire.Id + Questionnaire.LinkId seems to do the trick for linking. Each level of nested Item has the same column structure (<a href=\"http://hl7.org/fhir/R4/questionnaire.html\">http://hl7.org/fhir/R4/questionnaire.html</a>). How do I get all these nested levels (down to ?whatever? level there is not null data) and then \"line them up\", \"merge them\" under the initial Item at Level 0 and still be able to \"trace\" them back up the tree?</p>\n<p>Simplistic current outcome:</p>\n<p>Questionnaire   Item       LinkID  Item.Item      Item.LinkId    Item.Item.Item        Item.Item.LinkId    Item.Item.Item.Item...........       Item.LinkId....<br>\n1234                       1              ABC      1.1                    DEF                    1.1.1                             DEF<br>\n1234                       2              XYZ       2.1                    WXY                    2.1.2                             LMN                              2.5.8                                                    ASDF</p>\n<p>Simplistic expected outcome:</p>\n<p>Questionnaire   Item   Level    LinkID<br>\n1234                       1          0            ABC<br>\n1234                       1.1.1  1            DEF<br>\n1234                       1.2      1            GHI<br>\n1234                       2          0            XYZ<br>\n1234                       2.1      1            WXY<br>\n1234                       2.1.2   2           LMN<br>\n1234                       2.5.8   8           ASDF</p>",
+        "id": 249911089,
+        "sender_full_name": "Michael Brady",
+        "timestamp": 1629320463
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"284519\">@Ranvijay Kumar</span> may have ideas about how to structure PowerBI code for this</p>",
+        "id": 249913545,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1629321695
+    },
+    {
+        "content": "<p>You should go with QuestionnaireResponse.url rather than <a href=\"http://Questionnaire.id\">Questionnaire.id</a>, as id may vary from server to server, but QuestionnaireResponse.url will be a version-specific reference to the Questionnaire that's independent of server.  Flattening would have to be done carefully, as the context of child questions is based on the ancestors.  Seeing an answer to \"date of onset\" isn't that useful if you don't know that it's tied to the 'Diabetes\" answer for \"Any chronic conditions\" question, and also tied to the relative with a name, gender and birth date specified in other questions within the group.  So you don't just care about \"what level\", but \"what repetition within each level\".</p>",
+        "id": 249915809,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629323108
+    },
+    {
+        "content": "<p>I meant to say url. For linking back to QR.<br>\n<span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  how have you done the flattening?</p>",
+        "id": 249916352,
+        "sender_full_name": "Michael Brady",
+        "timestamp": 1629323435
+    },
+    {
+        "content": "<p>I've never done flattening.  I'm just warning that if you do do flattening, knowing the path of linkIds won't be sufficient.</p>",
+        "id": 249916962,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629323842
+    },
+    {
+        "content": "<p>Lloyd's suggesting flattening to the equivalent of:</p>\n<div class=\"codehilite\"><pre><span></span><code>Link: 2[0].1[4].1[1]\n</code></pre></div>\n\n<p>To say \"this comes from the first rep of linkid 2 holding its fifth rep of linkid 2.1 holding its second rep of linkid 2.1.1\"</p>",
+        "id": 249917499,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1629324143
+    },
+    {
+        "content": "<p>(I'm curious how widespread the convention of dotted numeric paths is, and whether you can rely on it.)</p>",
+        "id": 249917737,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1629324288
+    },
+    {
+        "content": "<p>You can't rely on it.  I've seen other conventions</p>",
+        "id": 249917802,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629324330
+    },
+    {
+        "content": "<p>The only rule is that it's a unique string.  (Proposal in R5 is to tighten it down so there are a few restrictions so that a megabyte string full of paragraphs and tabs, etc. is specifically non-conformant rather than merely ludicrous.)</p>",
+        "id": 249917905,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629324403
+    },
+    {
+        "content": "<p>Good, thanks Lloyd! (They just make these examples hard to read anyway. I had just read that section of the spec and wanted to confirm.)</p>",
+        "id": 249917909,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1629324404
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  Do you have suggestions on how to solve for this? It doesn't have to be the way I described it - just needs to make sense.<br>\n<span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>  So indexing wouldn't be done on the Values. It would be done on the columns.  'Item[0].LinkId[0]' Right?</p>",
+        "id": 249917955,
+        "sender_full_name": "Michael Brady",
+        "timestamp": 1629324462
+    },
+    {
+        "content": "<p>I don't think you have to worry about the item indices here. They're not needed for the semantics of matching items from questionnaire responses to questionnaires</p>",
+        "id": 249918413,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1629324744
+    },
+    {
+        "content": "<p>No, but they'll be required for interpreting the meaning of the answers.  Otherwise no way to know which date goes with which condition goes with which relative.</p>",
+        "id": 249918576,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629324848
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>   Yeah I'm not currently overly concerned about the linking of Q to QR. I'm focussing on Q.Item.Item.Item.... and how to make it make sense in a report. So I thought you were talking about that. Like somehow indexing the nested Item fileds and having the index level being the Level I'm looking for.</p>",
+        "id": 249918660,
+        "sender_full_name": "Michael Brady",
+        "timestamp": 1629324937
+    },
+    {
+        "content": "<p>If this is intended for consumption by users, there may not be a good 'generic' way to do it.</p>",
+        "id": 249919092,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629325278
+    },
+    {
+        "content": "<p>From a user perspective what I'd want to see is \"Aunt Martha diabetes onset: 1970-1980\", but doing that automatically for arbitrary questionnaires would be hard.</p>",
+        "id": 249919188,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629325341
+    },
+    {
+        "content": "<p>Ok first issue - how do I expand these Item columns only down as far as there is Not(null). They come in in [Table] types, but each Q now and in the future could have n levels.<br>\nNext issue - w/o loosing context, how to parse the questions into \"units\" based on the nested LinkId. I'll attach a Cancer Questionnaire. This is curerntly strictly focused on extracting Questionnaire data with Power BI Fhir connector (with a view to place the data into SQL). <a href=\"/user_uploads/10155/hxZrHaVjc8RRs8dfjW5q-hvx/Cancer.R4.json\">Cancer.R4.json</a></p>",
+        "id": 249920192,
+        "sender_full_name": "Michael Brady",
+        "timestamp": 1629326054
+    },
+    {
+        "content": "<p>In the json Item.LinkId of 1 is parent to Item.Item.LinkId 1.1 which is parent to Item.Item.Item.LinkId 1.1.1 and so on</p>",
+        "id": 249920392,
+        "sender_full_name": "Michael Brady",
+        "timestamp": 1629326244
+    },
+    {
+        "content": "<blockquote>\n<p>No, but they'll be required for interpreting the meaning of the answers.  Otherwise no way to know which date goes with which condition goes with which relative.</p>\n</blockquote>\n<p>I suspect I'm missing something here</p>",
+        "id": 249920756,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1629326522
+    },
+    {
+        "content": "<p>Linkid indices should give you that, no?</p>",
+        "id": 249920803,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1629326549
+    },
+    {
+        "content": "<p>There's no real generic flattening, but can be for a specific questionnaire.<br>\nThe other alternative is to not flatten, but further expand so that the item is the row in the DB, and it links to its parent record (which could be another item - except at the top level) so just becoming the true key value pairs...</p>",
+        "id": 249922998,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1629328330
+    },
+    {
+        "content": "<p>And remember that many questions (and groups) can repeat, so a QR isn't really a flat table anyway.<br>\nNormal data warehouse flattening handling is the same problem.</p>",
+        "id": 249923086,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1629328444
+    },
+    {
+        "content": "<p>Is your requirement here for data processing, extraction, or just general display (like HTML /PDF) of the entered data?</p>",
+        "id": 249923118,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1629328495
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span>  Extraction and display. I want to extract the data and meaning from the structure by displaying it in a way that a care provider can easily drill through.</p>",
+        "id": 250010001,
+        "sender_full_name": "Michael Brady",
+        "timestamp": 1629390174
+    },
+    {
+        "content": "<p>Practitioners are probably going to want to see the nested view.  The nesting is there specifically <em>because</em> the hierarchy matters to humans.  If it didn't, all Questionnaires would just be a flat list.  Ideally, you'd render the form the same way it was completed.  E.g. If questions were answered in a grid, it's often desirable to display the completed form that way too.</p>",
+        "id": 250021586,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1629395446
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"433820\">Michael Brady</span> has marked this topic as resolved.</p>",
+        "id": 250654300,
+        "sender_full_name": "Notification Bot",
+        "timestamp": 1629913416
+    },
+    {
+        "content": "<p><a href=\"https://community.powerbi.com/t5/Power-Query/FHIR-Questionnaires-flattening-the-nested-Item-structure/m-p/2032653#M59816\">https://community.powerbi.com/t5/Power-Query/FHIR-Questionnaires-flattening-the-nested-Item-structure/m-p/2032653#M59816</a></p>\n<p>here is the post that lead to the solution</p>",
+        "id": 250654330,
+        "sender_full_name": "Michael Brady",
+        "timestamp": 1629913440
+    },
+    {
+        "content": "<p>Here is aidbox approach using Custom Resources - <a href=\"#narrow/stream/179166-implementers/topic/.E2.9C.94.20Flattening.20Fhir.20Questionnaire.20Items\">https://chat.fhir.org/#narrow/stream/179166-implementers/topic/.E2.9C.94.20Flattening.20Fhir.20Questionnaire.20Items</a></p>",
+        "id": 250738722,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1629965981
+    }
+]

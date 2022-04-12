@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p>I am attempting to use the .Matches() method to pattern match two Encounters, A and B, and getting back false when I believe I should be getting true. A has a Participant (in the Participants BackboneElement). B has Participant = null.</p>\n<p>Generally, when a property is valued in A and null in B, Matches should return true, but in this case, it returns false. This is specific to this property (and BackboneElement properties generally). There are other properties which are valued in A and not in B which are not causing Matches to return false.</p>\n<p>Has anyone experienced this issue/know of a workaround? Could this be considered a bug in the firely-net-sdk?</p>",
+        "id": 242626455,
+        "sender_full_name": "Joelle McCarthy",
+        "timestamp": 1623689154
+    },
+    {
+        "content": "<p>The only semi-formal definition we have for matches -as far as I know- can be found here: <a href=\"http://hl7.org/fhir/elementdefinition-definitions.html#ElementDefinition.pattern_x_\">http://hl7.org/fhir/elementdefinition-definitions.html#ElementDefinition.pattern_x_</a></p>\n<p>It seems to me that if your pattern has a value for a backbone element, but the instance has not, they are not equal.  I must admit that the signature for <code>Matches()</code> is reversed: <code> public static bool Matches(IDeepComparable a, IDeepComparable pattern)</code>, so the second argument is the pattern.</p>\n<p>And indeed, if the pattern has a <code>null</code> value, the code says:   <code>if (pattern == null) return true;</code>.  But I don't know which of your A and B is the pattern and which the instance...</p>",
+        "id": 242647769,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1623698997
+    },
+    {
+        "content": "<p>This is the case when you use the static <code>DeepComparable.Matches()</code> method.  When you call <code>a.Matches(pattern)</code>, make sure the root of the pattern is not null, otherwise you do get <code>false</code>.  Which seems inconsistent, yes.</p>",
+        "id": 242648321,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1623699266
+    },
+    {
+        "content": "<p>This code has been untouched for over 7 years. I need to get a refresher myself ;-)</p>",
+        "id": 242648448,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1623699336
+    },
+    {
+        "content": "<p>Thanks for your response <span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span>. I should have more clearly specified my example. Here are two contrasting tests that demonstrate the issue, using the simplest possible pattern -- an Encounter with no properties set.</p>\n<p><strong>This passes, as expected:</strong></p>\n<div class=\"codehilite\" data-code-language=\"C#\"><pre><span></span><code><span class=\"na\">    [Test]</span>\n    <span class=\"k\">public</span> <span class=\"k\">static</span> <span class=\"k\">void</span> <span class=\"nf\">MatchingId_Passes</span><span class=\"p\">()</span>\n    <span class=\"p\">{</span>\n      <span class=\"kt\">var</span> <span class=\"n\">encounter</span> <span class=\"p\">=</span> <span class=\"k\">new</span> <span class=\"n\">Encounter</span>\n      <span class=\"p\">{</span>\n        <span class=\"n\">Id</span> <span class=\"p\">=</span> <span class=\"s\">\"id\"</span>\n      <span class=\"p\">};</span>\n\n      <span class=\"kt\">var</span> <span class=\"n\">pattern</span> <span class=\"p\">=</span> <span class=\"k\">new</span> <span class=\"n\">Encounter</span><span class=\"p\">();</span>\n\n      <span class=\"n\">Assert</span><span class=\"p\">.</span><span class=\"n\">IsTrue</span><span class=\"p\">(</span><span class=\"n\">encounter</span><span class=\"p\">.</span><span class=\"n\">Matches</span><span class=\"p\">(</span><span class=\"n\">pattern</span><span class=\"p\">));</span> <span class=\"c1\">// PASSES</span>\n    <span class=\"p\">}</span>\n</code></pre></div>\n<p><strong>Contrary to my expectation, this does not pass:</strong></p>\n<div class=\"codehilite\" data-code-language=\"C#\"><pre><span></span><code><span class=\"na\">    [Test]</span>\n    <span class=\"k\">public</span> <span class=\"k\">static</span> <span class=\"k\">void</span> <span class=\"nf\">MatchingParticipant_Fails</span><span class=\"p\">()</span>\n    <span class=\"p\">{</span>\n      <span class=\"kt\">var</span> <span class=\"n\">encounter</span> <span class=\"p\">=</span> <span class=\"k\">new</span> <span class=\"n\">Encounter</span>\n      <span class=\"p\">{</span>\n        <span class=\"n\">Participant</span> <span class=\"p\">=</span> <span class=\"k\">new</span> <span class=\"n\">List</span><span class=\"p\">&lt;</span><span class=\"n\">Encounter</span><span class=\"p\">.</span><span class=\"n\">ParticipantComponent</span><span class=\"p\">&gt;</span>\n        <span class=\"p\">{</span>\n          <span class=\"k\">new</span> <span class=\"n\">Encounter</span><span class=\"p\">.</span><span class=\"n\">ParticipantComponent</span>\n          <span class=\"p\">{</span>\n            <span class=\"n\">Individual</span> <span class=\"p\">=</span> <span class=\"k\">new</span> <span class=\"n\">ResourceReference</span><span class=\"p\">(</span><span class=\"s\">\"Practitioner/1234\"</span><span class=\"p\">)</span>\n          <span class=\"p\">}</span>\n        <span class=\"p\">}</span>\n      <span class=\"p\">};</span>\n\n      <span class=\"kt\">var</span> <span class=\"n\">pattern</span> <span class=\"p\">=</span> <span class=\"k\">new</span> <span class=\"n\">Encounter</span><span class=\"p\">();</span>\n\n      <span class=\"n\">Assert</span><span class=\"p\">.</span><span class=\"n\">IsTrue</span><span class=\"p\">(</span><span class=\"n\">encounter</span><span class=\"p\">.</span><span class=\"n\">Matches</span><span class=\"p\">(</span><span class=\"n\">pattern</span><span class=\"p\">));</span> <span class=\"c1\">// FAILS</span>\n    <span class=\"p\">}</span>\n</code></pre></div>\n<p>These examples are identical, but in the first the set property is Id, in the second it is Participant (a BackboneElement property). I would expect the behavior for these two cases to be the same: passing in both cases. However, for some reason the second one fails.</p>",
+        "id": 242919139,
+        "sender_full_name": "Joelle McCarthy",
+        "timestamp": 1623866670
+    },
+    {
+        "content": "<p>I believe the issue is in the chaining of <code>.Matches</code> into <code>BackboneElement</code> types.  Matches always returns false if the match pattern is <code>null</code> (e.g., <code>Assert.IsTrue(encounter.Matches(null))</code> will fail).</p>\n<p>Internally, each type just forwards the call to sub-types and it cannot differentiate between the null-fail and a mismatch fail.</p>\n<p><span class=\"user-mention\" data-user-id=\"191328\">@Ewout Kramer</span> : would it make sense to add a null check before chaining in <code>Matches</code> the same way it is in <code>DeepCopy</code>?</p>",
+        "id": 242928942,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1623871053
+    },
+    {
+        "content": "<p>Thanks for the example - this highlighted what was wrong.  The problem is not a backbone, but the fact that the element repeats.</p>",
+        "id": 242982030,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1623914890
+    },
+    {
+        "content": "<p>For example, this test, which has a non-repeating backbone, succeeds:</p>\n<div class=\"codehilite\" data-code-language=\"C#\"><pre><span></span><code><span class=\"na\">  [TestMethod]</span>\n        <span class=\"k\">public</span> <span class=\"k\">void</span> <span class=\"nf\">MatchingParticipant_Fails</span><span class=\"p\">()</span>\n        <span class=\"p\">{</span>\n            <span class=\"kt\">var</span> <span class=\"n\">encounter</span> <span class=\"p\">=</span> <span class=\"k\">new</span> <span class=\"n\">Encounter</span>\n            <span class=\"p\">{</span>\n                <span class=\"c1\">//Participant = new List&lt;Encounter.ParticipantComponent&gt;</span>\n                <span class=\"c1\">//{</span>\n                <span class=\"c1\">//  new Encounter.ParticipantComponent</span>\n                <span class=\"c1\">//  {</span>\n                <span class=\"c1\">//    Individual = new ResourceReference(\"Practitioner/1234\")</span>\n                <span class=\"c1\">//  }</span>\n                <span class=\"c1\">//},</span>\n\n                <span class=\"n\">Hospitalization</span> <span class=\"p\">=</span> <span class=\"k\">new</span> <span class=\"n\">Encounter</span><span class=\"p\">.</span><span class=\"n\">HospitalizationComponent</span>\n                <span class=\"p\">{</span>\n                    <span class=\"n\">Destination</span> <span class=\"p\">=</span> <span class=\"k\">new</span> <span class=\"n\">ResourceReference</span><span class=\"p\">(</span><span class=\"s\">\"Practitioner/1234\"</span><span class=\"p\">)</span>\n                <span class=\"p\">}</span>\n            <span class=\"p\">};</span>\n\n            <span class=\"kt\">var</span> <span class=\"n\">pattern</span> <span class=\"p\">=</span> <span class=\"k\">new</span> <span class=\"n\">Encounter</span><span class=\"p\">();</span>\n\n            <span class=\"n\">Assert</span><span class=\"p\">.</span><span class=\"n\">IsTrue</span><span class=\"p\">(</span><span class=\"n\">encounter</span><span class=\"p\">.</span><span class=\"n\">Matches</span><span class=\"p\">(</span><span class=\"n\">pattern</span><span class=\"p\">));</span> <span class=\"c1\">// SUCCESS!</span>\n        <span class=\"p\">}</span>\n</code></pre></div>",
+        "id": 242982092,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1623914947
+    },
+    {
+        "content": "<p>The culprit is here, in IDeepComparable.cs:</p>\n<div class=\"codehilite\" data-code-language=\"C#\"><pre><span></span><code> <span class=\"k\">public</span> <span class=\"k\">static</span> <span class=\"kt\">bool</span> <span class=\"n\">Matches</span><span class=\"p\">&lt;</span><span class=\"n\">T</span><span class=\"p\">&gt;(</span><span class=\"k\">this</span> <span class=\"n\">IEnumerable</span><span class=\"p\">&lt;</span><span class=\"n\">T</span><span class=\"p\">&gt;</span> <span class=\"n\">source</span><span class=\"p\">,</span> <span class=\"n\">IEnumerable</span><span class=\"p\">&lt;</span><span class=\"n\">T</span><span class=\"p\">&gt;</span> <span class=\"n\">pattern</span><span class=\"p\">)</span>\n                    <span class=\"k\">where</span> <span class=\"n\">T</span> <span class=\"p\">:</span> <span class=\"n\">IDeepComparable</span>\n        <span class=\"p\">{</span>\n            <span class=\"k\">if</span> <span class=\"p\">(</span><span class=\"n\">pattern</span> <span class=\"p\">==</span> <span class=\"k\">null</span><span class=\"p\">)</span> <span class=\"k\">return</span> <span class=\"k\">true</span><span class=\"p\">;</span>       <span class=\"c1\">// if not present in the pattern, there's a match</span>\n\n            <span class=\"k\">return</span> <span class=\"n\">source</span><span class=\"p\">.</span><span class=\"n\">All</span><span class=\"p\">(</span><span class=\"n\">src</span> <span class=\"p\">=&gt;</span> <span class=\"n\">pattern</span><span class=\"p\">.</span><span class=\"n\">Any</span><span class=\"p\">(</span><span class=\"n\">patt</span> <span class=\"p\">=&gt;</span> <span class=\"n\">Matches</span><span class=\"p\">(</span><span class=\"n\">src</span><span class=\"p\">,</span> <span class=\"n\">patt</span><span class=\"p\">)));</span>\n        <span class=\"p\">}</span>\n</code></pre></div>\n<p>The line <code>if(pattern == null)</code> makes sure that if there is no element, Matches returns true.  But with repeating elements, the element is never <code>null</code>, but rather an empty array. The line should therefore read:  </p>\n<div class=\"codehilite\" data-code-language=\"C#\"><pre><span></span><code>            <span class=\"k\">if</span> <span class=\"p\">(</span><span class=\"n\">pattern</span> <span class=\"p\">==</span> <span class=\"k\">null</span> <span class=\"p\">||</span> <span class=\"p\">!</span><span class=\"n\">pattern</span><span class=\"p\">.</span><span class=\"n\">Any</span><span class=\"p\">())</span> <span class=\"k\">return</span> <span class=\"k\">true</span><span class=\"p\">;</span>       <span class=\"c1\">// if not present in the pattern, there's a match</span>\n</code></pre></div>\n<p>This fixes the problem.</p>",
+        "id": 242982197,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1623915048
+    },
+    {
+        "content": "<p>See here for the reported issue on the SDK: <a href=\"https://github.com/FirelyTeam/firely-net-sdk/issues/1762\">https://github.com/FirelyTeam/firely-net-sdk/issues/1762</a></p>",
+        "id": 242982515,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1623915327
+    },
+    {
+        "content": "<p>Makes sense, thanks so much for your very prompt and helpful responses! <span aria-label=\"big smile\" class=\"emoji emoji-1f604\" role=\"img\" title=\"big smile\">:big_smile:</span></p>",
+        "id": 243025927,
+        "sender_full_name": "Joelle McCarthy",
+        "timestamp": 1623940188
+    },
+    {
+        "content": "<p>The new version of the SDK for a fix for this issue will be released today or tomorrow!</p>",
+        "id": 244386444,
+        "sender_full_name": "Ewout Kramer",
+        "timestamp": 1625038085
+    }
+]

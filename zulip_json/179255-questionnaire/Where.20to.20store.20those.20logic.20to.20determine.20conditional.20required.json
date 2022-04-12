@@ -1,0 +1,116 @@
+[
+    {
+        "content": "<p>Q1: Do you want to receive text notification ? (Yes /No)<br>\nQ2: What is your mobile phone number ? </p>\n<p>Q2 will become required if Q1's answer is 'Yes'</p>\n<p>How to put this kind of logic into Questionnaire ?</p>",
+        "id": 256280521,
+        "sender_full_name": "SAM TSAI",
+        "timestamp": 1633452871
+    },
+    {
+        "content": "<p>The <a href=\"http://build.fhir.org/ig/HL7/sdc/StructureDefinition-sdc-questionnaire-behave.html\">SDC</a> implementation guide covers defining constraints using the questionnaire-constraint extension as well as making 'required' expression-based via cqf-expression</p>",
+        "id": 256288800,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1633456163
+    },
+    {
+        "content": "<p>In my server you just mark q2 as mandatory, and put an enablewhen to activate it only when the answer is yes.</p>",
+        "id": 256376844,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1633509399
+    },
+    {
+        "content": "<p>Alternatively as Lloyd points out, but it's the constraint expression.<br>\n<a href=\"http://hl7.org/fhir/R4/extension-questionnaire-constraint.html\">http://hl7.org/fhir/R4/extension-questionnaire-constraint.html</a></p>",
+        "id": 256376957,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1633509481
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"427327\">@SAM TSAI</span> I have created a sample for your case.<br>\nPlease check it here <a href=\"https://sdc.beda.software/#/simple-conditional-question\">https://sdc.beda.software/#/simple-conditional-question</a></p>",
+        "id": 256385307,
+        "sender_full_name": "Ilya Beda",
+        "timestamp": 1633514185
+    },
+    {
+        "content": "<p>Didn't think of that.  <span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span>'s solution is better as it doesn't rely on extensions at all :)</p>",
+        "id": 256411030,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1633526984
+    },
+    {
+        "content": "<p>But I thought the original question was to make the mobile number optional when q1 is no, and mandatory when it is yes? Not to remove the entire question? BTW I was unable to find the portion of the spec that bases \"required\" on an expression, as mentioned by <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> in his first response.</p>",
+        "id": 256421040,
+        "sender_full_name": "Tilo Christ",
+        "timestamp": 1633530719
+    },
+    {
+        "content": "<p>The invariant I linked above does that.<br>\n(I'll throw an example together)</p>",
+        "id": 256479718,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1633552473
+    },
+    {
+        "content": "<p>something like this on the parent of the 2 questions</p>\n<div class=\"codehilite\"><pre><span></span><code>&lt;extension url=&quot;http://hl7.org/fhir/StructureDefinition/questionnaire-constraint&quot;&gt;\n        &lt;extension url=&quot;key&quot;&gt;\n            &lt;valueId value=&quot;Q2-req&quot; /&gt;\n        &lt;/extension&gt;\n        &lt;extension url=&quot;severity&quot;&gt;\n            &lt;valueCode value=&quot;error&quot; /&gt;\n        &lt;/extension&gt;\n        &lt;extension url=&quot;human&quot;&gt;\n            &lt;valueString value=&quot;Q2 is required when Q1 is yes&quot; /&gt;\n        &lt;/extension&gt;\n        &lt;extension url=&quot;expression&quot;&gt;\n            &lt;valueString value=&quot;item.where(linkId=&#39;Q1&#39;).answer.value = &#39;yes&#39; implies item.where(linkId=&#39;Q2&#39;).answer.value.exists()&quot; /&gt;\n        &lt;/extension&gt;\n    &lt;/extension&gt;\n</code></pre></div>",
+        "id": 256494060,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1633558960
+    },
+    {
+        "content": "<p>OK, I got the impression from <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>' initial response that there was a way to really affect the required flag. So it seems one can make it required dynamically, but without the visual hints (asterisk at the label etc.) that a filler might use for fields with a required attribute?</p>",
+        "id": 256611005,
+        "sender_full_name": "Tilo Christ",
+        "timestamp": 1633625391
+    },
+    {
+        "content": "<p>You can affect the required flag:</p>\n<div class=\"codehilite\"><pre><span></span><code>&lt;required&gt;\n   &lt;extension value=&quot;http://hl7.org/fhir/StructureDefinition/cqf-expression&quot;&gt;\n        &lt;valueExpression&gt;\n            &lt;expression value=&quot;your expression here&quot;/&gt;\n        &lt;/valueExpression&gt;\n    &lt;/extension&gt;\n&lt;/required&gt;\n</code></pre></div>",
+        "id": 256613249,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1633626183
+    },
+    {
+        "content": "<p>In my example above I forgot to add in the location field to indicate which field was in error.<br>\nThe cqf-expression format requires that the context be the item itself, so has to either look into it's children (not common here) or try navigating down to the item from the top, which has issues if there are repeating groups involved.<br>\nWhere I've done this, the invariant expression is far more concise as can put it as close as possible to the item (usually parent item) and then access to the sibbling question is far easier.</p>\n<div class=\"codehilite\"><pre><span></span><code>%response.item.where(linkId=&#39;group1&#39;).item.where(linkId=&#39;Q1&#39;).answer.value = &#39;yes&#39; implies %response.item.where(linkId=&#39;group1&#39;).item.where(linkId=&#39;Q2&#39;).answer.value.exists()\n</code></pre></div>\n<p>or (using the top level select to locate the common parent - which you won't be able to do if this is a repeating group)</p>\n<div class=\"codehilite\"><pre><span></span><code>%response.item.where(linkId=&#39;group1&#39;)\n.select(item.where(linkId=&#39;Q1&#39;).answer.value = &#39;yes&#39; implies item.where(linkId=&#39;Q2&#39;).answer.value.exists())\n</code></pre></div>\n<p>vs</p>\n<div class=\"codehilite\"><pre><span></span><code>item.where(linkId=&#39;Q1&#39;).answer.value = &#39;yes&#39; implies item.where(linkId=&#39;Q2&#39;).answer.value.exists()\n</code></pre></div>\n<p>also that expression evaluation will process many more nodes, rather than the few actually involved.</p>",
+        "id": 256662630,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1633647440
+    },
+    {
+        "content": "<p>I'm currently building out my implementation of the 'constraint' extension. What is the semantics of the \"severity\" field? I cannot find a list of all the permitted codes, and I am not sure whether there are any differences in behaviour expected?</p>",
+        "id": 256946750,
+        "sender_full_name": "Tilo Christ",
+        "timestamp": 1633864246
+    },
+    {
+        "content": "<p>Severity indicates whether it's an error, warning, information or best-practice issue if the constraint is violated.  It's supposed to have the same binding as constraint on StructureDefinition.  Can you submit a technical correction for us to fix that <span class=\"user-mention\" data-user-id=\"192169\">@Tilo Christ</span> ?</p>",
+        "id": 256968049,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1633884354
+    },
+    {
+        "content": "<p>It is bound with a required binding, you can only see that on the full structure tab in the extension.</p>",
+        "id": 256972024,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1633887997
+    },
+    {
+        "content": "<p>So it is.  So this is a rendering issue then.  When an extension is being defined, the binding <em>ought</em> to show up in both the differential view.  <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>?</p>",
+        "id": 256977509,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1633893252
+    },
+    {
+        "content": "<p>The description of the extension is saying the questionnaire can only be complete if the constraint is not violated. Can it still be complete if only a warning constraint is violated?</p>",
+        "id": 256980984,
+        "sender_full_name": "Tilo Christ",
+        "timestamp": 1633896683
+    },
+    {
+        "content": "<p>Yes.  Though ideally the warning should be displayed an the user should confirm the warning isn't an issue before marking it as complete.</p>",
+        "id": 256983626,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1633899106
+    },
+    {
+        "content": "<p>Also note that if you're doing the storage side too, the invariant can be ignored if the item is in draft mode.</p>",
+        "id": 256986575,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1633901789
+    }
+]

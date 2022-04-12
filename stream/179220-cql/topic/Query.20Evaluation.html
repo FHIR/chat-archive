@@ -1,0 +1,101 @@
+---
+layout: page
+title: "FHIR Chat  · Query Evaluation · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Query.20Evaluation.html">Query Evaluation</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153950607"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Query%20Evaluation/near/153950607" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matthew Dugal <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Query.20Evaluation.html#153950607">(Apr 04 2018 at 14:18)</a>:</h4>
+<p>Hi,<br>
+I am trying to understand the vision of query evaluation as laid out in the CQL Specification, specifically 5.3.4 Implementing Query Evaluation. Hopefully understanding this vision will help me understand the most complex aspects of the language.</p>
+<p>Using the following example:</p>
+<div class="codehilite"><pre><span></span>define &quot;Encounters with overlapping Warfarin and Parenteral Therapies&quot;:
+    from &quot;Encounters&quot; E,
+         &quot;Warfarin Therapy&quot; W,
+         &quot;Parenteral Therapy&quot; P
+</pre></div>
+
+
+<p>Implementation step 1:<br>
+"For each query source beyond the first, use a Times operation to produce a result with a tuple for each combination, named the same as the alias used to introduce the source in the query."</p>
+<p>What does this mean? And what would an example tuple look like for one of these combinations?</p>
+<p>Does this mean step 1 will result in a list of tuples that contains every possible combination of E, W, and P? As in ^2, ^3, or more?</p>
+<p>Is it expected to look something like this?</p>
+<div class="codehilite"><pre><span></span>Tuple: {
+    Name: &#39;RetrieveCombination_1&#39;,
+    Values: [
+                Tuple: { DataElement: Entry1, Alias: &quot;E&quot; },
+                Tuple: { DataElement: Entry25, Alias: &quot;W&quot; },
+                Tuple: { DataElement: Entry31, Alias: &quot;P&quot; }
+            ]
+}, ...
+</pre></div>
+
+
+
+<a name="153950993"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Query%20Evaluation/near/153950993" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christopher Schuler <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Query.20Evaluation.html#153950993">(Apr 05 2018 at 19:07)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="191473">@Matthew Dugal</span> . Your understanding of multi-source queries is correct, but your expected result is incorrect. I think the easiest way to clear up your understanding is to run some example code. <br>
+Here are the steps to do that:<br>
+1. Navigate to <a href="http://cql-runner.dataphoria.org/" target="_blank" title="http://cql-runner.dataphoria.org/">http://cql-runner.dataphoria.org/</a><br>
+2. Click the "Config" button in the menu bar, input Patient-12214 in the Patient Id field, and press OK<br>
+3. Run the following code:</p>
+<div class="codehilite"><pre><span></span>library MultiSourceQueryExample version &#39;1.0&#39;
+
+using FHIR version &#39;3.0.0&#39;
+
+context Patient
+
+define Conditions:
+    [Condition]
+
+define Procedures:
+    [Procedure]
+
+define &quot;Multisource Query&quot;:
+    from Conditions C,
+         Procedures P
+</pre></div>
+
+
+<p>4. The results will be displayed in the output window. The results will consist of the Patient resource and the resources from the expressions. Note that there are 5 Condition resources and 6 Procedure resources for the patient. The outcome of the multi-source query expression is a list of tuples with the 30 possible combinations.</p>
+<p>Hopefully that helps.</p>
+
+
+
+<a name="153951117"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Query%20Evaluation/near/153951117" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matthew Dugal <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Query.20Evaluation.html#153951117">(Apr 06 2018 at 03:05)</a>:</h4>
+<p>This is actually very helpful. Thank you.</p>
+<p>It leads me into the part that I've been working through with some difficulty. And if you or someone could help, that would be much appreciated. For the slightly modified version of your query, what would the return values of "overlaps" look like and how would the "and" statement operate on them?</p>
+<div class="codehilite"><pre><span></span>define &quot;Multisource Query&quot;:
+    from Conditions C,
+         Procedures P
+
+    with &quot;Encounters&quot; E
+      such that E.relevantPeriod overlaps C.prevalencePeriod
+            and E.relevantPeriod overlaps P.relevantPeriod
+</pre></div>
+
+
+
+<a name="153951166"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Query%20Evaluation/near/153951166" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matthew Dugal <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Query.20Evaluation.html#153951166">(Apr 06 2018 at 14:17)</a>:</h4>
+<p>I think the problem I am having understanding this is that it feels so much like the what is described on page 2-2 of "Implementing Computation of Specific Occurrences". Am I wrong in thinking the only difference is the locality of combinations?</p>
+
+
+
+<a name="153953498"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Query%20Evaluation/near/153953498" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Query.20Evaluation.html#153953498">(Apr 22 2018 at 18:53)</a>:</h4>
+<p>Apologies for the very late response here, can you tell me what you mean by "locality of combinations"? I'm not sure I understand that part.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

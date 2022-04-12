@@ -1,0 +1,92 @@
+[
+    {
+        "content": "<p>I need to send FHIR resources to a target endpoint that first travels VIA an intermediary endpoint (which is an integration engine).  In otherwords, the endpoint in my POST message is always the intermediary relay endpoint, and i have to tell it where the final intended destination of the bundle is.</p>\n<p>What is the most FHIR-y &amp; universal way to do this? </p>\n<p>Some ideas I've had:<br>\n1) Include an endpoint in the bundle that specifies the final target destination<br>\n2) Include a subscription in the bundle that specifies the final target destination<br>\n3) Create an extension for the bundle called .relayTarget that specifies a endpoint or subscription with the final target destination<br>\n4) Do something with bundle identifiers where the intermediary endpoint builds in routing rules according to the bundle identifiers.<br>\n5) others?</p>",
+        "id": 153978363,
+        "sender_full_name": "Tim Berezny",
+        "timestamp": 1532618772
+    },
+    {
+        "content": "<p>5) Add a 'route-to' query parameter to the POST URL</p>",
+        "id": 153978376,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1532620548
+    },
+    {
+        "content": "<p>That's a clever idea, have you tried that before?</p>",
+        "id": 153978387,
+        "sender_full_name": "Tim Berezny",
+        "timestamp": 1532621636
+    },
+    {
+        "content": "<p>No, never had to do routing like that...but it is maybe easier to read (and faster?) and use a URL parameter instead of having to parse the bundle</p>",
+        "id": 153978390,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1532621713
+    },
+    {
+        "content": "<p>I'd definitely recommend using either something in the URL (e.g. query parameter) or a custom HTTP header.</p>",
+        "id": 153978430,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1532630441
+    },
+    {
+        "content": "<p>I do like the custom header approach or query param  as I feel that it help extract that relay concept out of the FHIR resource.</p>",
+        "id": 153978446,
+        "sender_full_name": "Alfred Wong",
+        "timestamp": 1532632980
+    },
+    {
+        "content": "<p>This is a messaging routing problem, rather than an endpoint problem.</p>",
+        "id": 153978473,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1532640341
+    },
+    {
+        "content": "<p>did make me wonder about messaging...</p>",
+        "id": 153978481,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1532640536
+    },
+    {
+        "content": "<p>I don't see any other HTTP take on this problem... not sure why that is, but does it call the framing of the problem into question?</p>",
+        "id": 153978483,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1532640565
+    },
+    {
+        "content": "<p>Typically you want the endpoint to either be a black box (you have no clue whether there are multiple systems on the back end, or how functionality is divided/organized) or you have multiple endpoints that all happen to resolve to the same front-end box which services as your access point/security barrier and routes things accordingly.  The approach of single endpoint, but still knowledge of back-end systems is unusual.</p>",
+        "id": 153978509,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1532642832
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> yes, the endpoint being a black box is a philosophy we are trying to shoot for. </p>\n<p>More specifically, the overall flow we're trying to figure out is a ServiceRequest process where the relay system is the Ontario HIAL:</p>\n<p>1. Send ReferralRequest: Requester &gt; HIAL &gt; Provider<br>\n2. Send Appointment update back to sender: Provider &gt; HIAL &gt; Requester</p>\n<p>In process 1, the requester always sends to the HIAL endpoint, and the HIAL looks up the endpoint of the requested HealthcareService in a registry, so that part is solved.<br>\nIn process 2, we're trying to figure out how to get updates (like appointments) back to the Requester. The provider always sends to the HIAL endpoint and then we need to figure out how to get the HIAL to route to the correct initial requester.</p>\n<p>Having the provider system tell the HIAL where to send the update is one of the methods being discussed. The way that the provider system would know where to send the update to (that we've discussed so far) is either because the requester is registered with the provider system, OR the requester includes the updateEndpoint in the initial ServiceRequest payload. The  HIAL wouldn't be storing where the original ServiceRequest came from, so the receiving system would need to store that endpoint and inform the HIAL.</p>\n<p><span class=\"user-mention\" data-user-id=\"191367\">@Brian Postlethwaite</span> mentioned that another method is to lookup the endpoint of the requester's organization in a registry for updates. </p>\n<p>There are a few scenarios where ReferralRequests could go to different sources than the original request, particularly when updates are to be sent to MULTIPLE destinations, such as the requester + family doctor + referral registry + patient portal. These destinations should for the most part be known by the provider system (as you say \"explicitly configured\") ... and so the question is how to tell the single relay point (HIAL) to re-route to all of these spots.</p>\n<p>It sounds like the options mentioned so far are:<br>\n1) put final relay destinations into URL parameter<br>\n2) create an extension (in the /bundle resource?) for re-routing<br>\n3) lookup the organization of the request (although this doesn't solve when we want to also send to destinations other than the requester via the relay point)<br>\n4) Another method we've talked about internally is having the sending system include an identifier in the initial request, which would be returned with any later updates and the HIAL would somehow be able to lookup registered endpoints based on that identifier.</p>",
+        "id": 153978660,
+        "sender_full_name": "Tim Berezny",
+        "timestamp": 1532696337
+    },
+    {
+        "content": "<p>If you're doing REST, then you'd have a synchronous session from Requester to HIAL and HIAL to provider, so it should just \"happen\", no?  The call from HIAL to provider is invoked in the context of the synchronous session the HIAL starts up when responding to the requester.</p>",
+        "id": 153978669,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1532698366
+    },
+    {
+        "content": "<p>For immediate responses yes it would by synchronous. However, sending updates such as adding an appointment or setting an outcome might not happen until weeks later, which would not be synchronous.</p>",
+        "id": 153978676,
+        "sender_full_name": "Tim Berezny",
+        "timestamp": 1532700495
+    },
+    {
+        "content": "<p>But in that case, are you expecting to push the results?  If so, how?  If you're doing polling, that'll still by synchronous.  If you're doing subscriptions, the subscriber will be identifying their endpoint.  If you're doing messaging, you should have the information...</p>",
+        "id": 153978677,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1532700706
+    },
+    {
+        "content": "<p>FHIR Messaging would match your requirements.</p>",
+        "id": 218866986,
+        "sender_full_name": "Paul Knapp",
+        "timestamp": 1607104036
+    }
+]

@@ -1,0 +1,128 @@
+[
+    {
+        "content": "<p>Hi All, I do extensive development for real world APIs and I have repeatedly seen problems with various major vendors products (who shall rename nameless) when it comes to the volume of scopes required by Smart on FHIR for an API.  Take a Patient Access API for example which supports CARIN and USCore (read only)  Such an API requires around 58 scopes just to support .read operations on the required resources.  I have seen oAuth servers limited to 30 scopes, I have seen refresh token minters fail on creating tokens with too many scopes, and I have seen proxy servers that need to have buffers increased to handle the amount of data that needs to go back and forth to support Smart on FHIR.  Yes, I realize that there are wildcard scopes, but with those fine grained access control is lost.  One question I have is around the need to have patient and user scopes.  Interestingly, Inferno only tests patient/&lt;Resource&gt;.read and does not include user/&lt;<a href=\"http://Resource.read\">Resource.read</a>&gt; scopes in its default tests.  Any ideas on how we could trim down the number of scopes?  Are patient and user scopes redundant?  The spec is clear on how patient and user scope differ in theory but how do they differ in practice? How are vendors dealing with two differently when evaluating scopes in their APIs?</p>",
+        "id": 235436509,
+        "sender_full_name": "Richard Braman (FLY.HEALTH)",
+        "timestamp": 1618964501
+    },
+    {
+        "content": "<p>Are these oAuth servers limited to 30 scopes total, or 30 for a single authorization request?  For a single request, I'm not aware of any good reason why you would need to be granted both patient &amp; user level scopes for a single resource at the same time (e.g. \"patient/Observation.read user/Observation.read\").  But if real-world oAuth servers can only be configured with 30 scopes total, that's a different problem.</p>",
+        "id": 235440218,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1618967644
+    },
+    {
+        "content": "<p>One server major vendor's server is in fact limited to 30 scopes total.</p>",
+        "id": 235440441,
+        "sender_full_name": "Richard Braman (FLY.HEALTH)",
+        "timestamp": 1618967840
+    },
+    {
+        "content": "<blockquote>\n<p>Interestingly, Inferno only tests patient/&lt;Resource&gt;.read and does not include user/&lt;<a href=\"http://Resource.read\">Resource.read</a>&gt; scopes in its default tests.</p>\n</blockquote>\n<p>This is beside the point (I think) and I don't want to sidetrack the topic, but the ONC standardized API certification tests in Inferno require demonstrating an app launched with patient scopes for all USCDI-relevant resources¹, and separately an app launched with user scopes.  So you need to show both.  Our 'Community' tests are more flexible, and it is more up to the tester to decide to try user scopes and patient scopes, if they expect the server to support both permission-patient and permission-user SMART capabilities.</p>\n<p>¹ <em>(technically also constrained to resources that are also in the patient compartment, soon!)</em></p>",
+        "id": 235442135,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1618969475
+    },
+    {
+        "content": "<p>Robert, Can you tell me from an implementation perspective how a FHIR server handles patient scopes differently from user scopes?  The spec is clear on the difference in theory, but not so much in practice, as in, how SHOULD they be used by the server to control access to resource?</p>",
+        "id": 235445259,
+        "sender_full_name": "Richard Braman (FLY.HEALTH)",
+        "timestamp": 1618972496
+    },
+    {
+        "content": "<p>patient-level scopes give you access to a single patient's data; user-level scopes can give access to more than one patient's data. Is this what you mean?</p>",
+        "id": 235445384,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1618972619
+    },
+    {
+        "content": "<p>The patient scopes are straightforward.  The user scopes not so much (to me at least). You are saying to view data for another patient, the app must request, and the user must approve user scopes, Correct?.  How does the app know which patients it has access to?  I was always under the assumption that the user session had a single patient context.  Is that incorrect?  Every token response I have ever seen only had a single patient, and the patient context in the documentation is not an array.   In our smart on fhir flow, which allows the patient to approve scopes, the user is asked which data the user will grant access to.  It also asks which patient the user would like to view.  But only a single patient context is returned.  I have attached a screenshot to make it clearer. <a href=\"/user_uploads/10155/UmrcAt36TaqA6i8uGspKjNFw/patient_consent.png\">patient_consent.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/UmrcAt36TaqA6i8uGspKjNFw/patient_consent.png\" title=\"patient_consent.png\"><img src=\"/user_uploads/10155/UmrcAt36TaqA6i8uGspKjNFw/patient_consent.png\"></a></div>",
+        "id": 235446084,
+        "sender_full_name": "Richard Braman (FLY.HEALTH)",
+        "timestamp": 1618973387
+    },
+    {
+        "content": "<p>Sorry but Amberly and Jann had bad hair days</p>",
+        "id": 235446173,
+        "sender_full_name": "Richard Braman (FLY.HEALTH)",
+        "timestamp": 1618973439
+    },
+    {
+        "content": "<p>User scopes assume that the server has some permissions model where a user identity (the usual example is a practitioner) has access to one or more patients for reasons that are not contained in the scope. This is normal for EHRs. It doesn't make a lot of sense for pure FHIR servers. It seems that in patient access use cases most implementers are going with a patient selection UI in the auth flow (e.g. for multiple family members) and granting a patient scope rather than teaching the fhir server all of those linkages necessary to make a user scope possible.</p>",
+        "id": 235446750,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1618973983
+    },
+    {
+        "content": "<blockquote>\n<p>does the app know which patients it has access to?</p>\n</blockquote>\n<p>The app can search for data, and it gets what it gets. e.g. <code>GET /Patient</code>.</p>",
+        "id": 235446970,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1618974117
+    },
+    {
+        "content": "<p>Unfortunately, <code>GET /Patient</code> is not required in US Core.  Does anyone implement that?</p>",
+        "id": 235447277,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1618974336
+    },
+    {
+        "content": "<p>You can pass in search parameters (for a clinician facing app, to search a population by name); this has been implemented by EHRs I believe.</p>",
+        "id": 235447785,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1618974763
+    },
+    {
+        "content": "<p>True -- search by name, and a <a href=\"https://www.hl7.org/fhir/us/core/CapabilityStatement-us-core-server.html#patient\">few other options</a> are required in US Core.</p>",
+        "id": 235448048,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1618974984
+    },
+    {
+        "content": "<blockquote>\n<p>Does anyone implement that</p>\n</blockquote>\n<p>Yes, we support it, I believe Cerner does: you need that if you want to support user scopes for patient apps to get all dependents in one go</p>",
+        "id": 235505842,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1619010392
+    },
+    {
+        "content": "<p>There are going to be even more scopes in SMART v. 2!</p>",
+        "id": 235506020,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1619010481
+    },
+    {
+        "content": "<p>Yeah its a bit of a shame that the full /Patient query (bounded by user permission, of course) isn't required by us core, so there would be confidence for app builders that design the user experience around the availability of that query.</p>",
+        "id": 235506963,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1619010838
+    },
+    {
+        "content": "<p>But mandating that in all cases might be problematic</p>",
+        "id": 235507142,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1619010908
+    },
+    {
+        "content": "<p>Yes, for providers app it would be pretty bad</p>",
+        "id": 235524608,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1619017163
+    },
+    {
+        "content": "<p>Maybe they should just add Patient/$everything to USCore</p>",
+        "id": 235535759,
+        "sender_full_name": "Richard Braman (FLY.HEALTH)",
+        "timestamp": 1619020542
+    },
+    {
+        "content": "<p>is the patient context value capable of supporting more than one value?  Can it be an array?</p>",
+        "id": 235536176,
+        "sender_full_name": "Richard Braman (FLY.HEALTH)",
+        "timestamp": 1619020693
+    },
+    {
+        "content": "<p>It is defined as <em>the patient</em> in context for the session; it's not designed to convey \"patients you have access to\". But I could see the utility of this (or a releated property). Would be worth sharing a comment in the SMARTv2 ballot (or just a regular Jira comment, and mention it here) for folks interested.</p>",
+        "id": 235536727,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619020917
+    }
+]

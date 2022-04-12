@@ -1,0 +1,242 @@
+[
+    {
+        "content": "<p>Dear FHIR Implementers,</p>\n<p>Health data interoperability is critical for society.  FHIR is the most developed way to do it and it works for patients in the real world right now.  Here are some challenges I've encountered while writing code to work with FHIR resources and some ideas / questions about to make FHIR a little bit better:</p>\n<p>FHIR resources are XML/JSON documents, and some resource types can take a bunch of different nested tree shapes. Let's call this, \"resource polymorphism.\"  Resource polymorphism makes it more difficult for developers to use these resources without bugs, because if you want to get or set values in polymorphic documents, you need to handle all the different possible shapes for a given resource type, multiplied by the myriad different resource types you wind up using.  That conditional logic and error / option handling also incurs runtime costs in memory and latency.</p>\n<p>For example, many (most?) Observations have a “code” with a “valueQuantity”, but if an Observation has a \"component\", like how blood pressure has diastolic and systolic values, then it's actually N observations squished into 1, so you have to check for that key, and if it's there you return multiple values, units, display names, then re-shape them into a struct of arrays, while still handling the normal case (\"component\" not in observation) in another way. All that, just to put all the diastolic values into an array etc to run statistics on them and properly pair names, units, and values when you go to analyze and plot the data.  </p>\n<p>In the particular case where a resource type could have 1 or N values for a given variable, what if we always use a list? </p>\n<p>If a branch of a tree is always a list even if it has only a single leaf, then we can do:</p>\n<div class=\"codehilite\"><pre><span></span><code>result = map(path, f, data)\n</code></pre></div>\n<p>instead of</p>\n<div class=\"codehilite\"><pre><span></span><code>value = prop(path, data)\nif isinstance(value, (tuple, list)):\n   return map(f, value)\nelse:\n    return f(value)\n</code></pre></div>\n<p>Anyway, FHIR Resource Polymorphism also precludes almost all of us from using the most battle-tested databases (SQL) as they were originally designed to be used.  To put FHIR resource instances in a SQL database, you can store them as JSONB (which could be a bunch of different shapes and thus surrenders the consistency and migration advantages of SQL), but you still need tons of SQL to handle different document shapes.  It's tempting to think we could fix the problem if we translate resource schemas into SQL table schemas, but then we're still stuck writing tons of SQL, this time to do joins across tables which represent the nested leaves of documents of different shapes. SQL doesn't solve the polymorphism problem, it just forces you to deal with it in a different language.  Further, even if every FHIR resource of a given type were exactly the same shape, you'd still need tons of joins, one per level of nesting, or be stuck on JSONB. </p>\n<p>One way to cope with polymorphism is to use functional optics: prisms and traversals can retrieve optional nested values under different paths / path-sets in document trees, but that’s less performant than lookups in flat data structures like structs or SQL table rows</p>\n<p>Another thought, the FHIR Resource Validator uses object-oriented Java, which seems difficult (to my nubbey self) to understand, since it imports other java projects and because the validation result depends on the state and context of the validator class instance at the time it validates something.  </p>\n<p>Just one man's opinion.  FHIR works right now for lots of patients in the real world.  I apologize for any offense I cause with my feedback on the system.  Please feel free to push back on  / criticize these ideas. </p>\n<p>Questions:</p>\n<p>Re: Polymorphism:</p>\n<p>What if we ruthlessly eliminate resource polymorphism to simplify the code necessary to use FHIR?  </p>\n<p>What are some other examples of cases where different instances of the same FHIR resource type could require different code to work with?  How could we make those cases simpler to work with?</p>\n<p>Re: Nesting:</p>\n<p>Even better would be if we figured out how to make all the resource types truly flat structs without nesting. <br>\n If every FHIR resource were a flat struct, we could read and write any value in any resource in O(1), <br>\ni.e. <code>value = prop(key, instance)</code> <br>\nand validate any resource type in O(N) <br>\ni.e. <code>instance_is_valid = all(map(validate(resource_type), instance.items()))</code></p>\n<p>How impossible is it to make resources into flat structs?  </p>\n<p>Or, accepting flat structs may be impossible, how could we make resources less deeply nested than they are now?</p>\n<p>Re: Validation:<br>\nHow could we simplify the validator to make it simpler to understand, maintain, and evolve over time?</p>\n<p>Would anyone who is an expert on the matter please be open minded to make an excruciatingly detailed youtube video which explains exactly how the FHIR validator code works? </p>\n<p>I can see how validation requires data to customize the way things are validated, but can those options be passed in as arguments to a pure \"validate\" function?  </p>\n<p>Finally, what if we rewrote the FHIR validator and resource schemas as an open source Rust crate?  </p>\n<p>It would take learning and effort, but we could all join forces to contribute to a new single source of truth for resource definitions (the Rust type system) and validation (a pure function or 'validate' trait implementation).  Then we could figure out how to codegen types for popular languages (xml, json, toml, sql, graphql, python, typescript, c#, java, etc) with compile-time macros.  The validation logic could be simpler to understand, maintain, and evolve if it were stateless and all in one code repo.  Plus the strictness of the rustc compiler could help us ensure this critical \"hot path\" for a bunch of health data projects works exactly how the implenters intend without undefined behavior.  We’d get to learn the Rust language, which could help our careers as we go on to build other projects.</p>\n<p>TLDR: I wish...<br>\n1) resources of the same type were the same shape, because then I could simplify my code and it would run faster<br>\n2) resources were flat structs (or at least flatter trees), because then I could simplify my code and it would run faster<br>\n3) the validator was simpler, and we had a single source of truth for resource types with compile-time checks and codegen macros</p>\n<div class=\"message_inline_image\"><a href=\"https://media4.giphy.com/media/xT9IgfNPRprdidd3Bm/giphy.gif?cid=c623cb35nkp9jvk768eme3tzd72pp1jim6aco9gmh8rbjkac&amp;rid=giphy.gif&amp;ct=g\"><img src=\"https://uploads.zulipusercontent.net/b718fc989425c8a3a7364e67efa4c33b7d06e329/68747470733a2f2f6d65646961342e67697068792e636f6d2f6d656469612f7854394967664e505270726469646433426d2f67697068792e6769663f6369643d63363233636233356e6b70396a766b373638656d6533747a6437327070316a696d3661636f39676d683872626a6b6163267269643d67697068792e6769662663743d67\"></a></div><p>&lt;/rant&gt;</p>\n<p>Sincerely,<br>\nbion @ <a href=\"http://bitpharma.com\">bitpharma.com</a></p>",
+        "id": 261045050,
+        "sender_full_name": "bion howard",
+        "timestamp": 1636573994
+    },
+    {
+        "content": "<p>well. I wish...</p>\n<p>1) health data was more consistent, because then I could simplify my code and it would run faster<br>\n2) heath data was flat like programmers like it, because then I could simplify my code and it would run faster<br>\n3) the things the validator has to do were simpler</p>\n<p>as for </p>\n<blockquote>\n<p>I wish we had a single source of truth for resource types with compile-time checks and codegen macros</p>\n</blockquote>\n<p>we do have a single source of truth for resource types with compile-time checks and codegen macros. It's just not in the language you want. </p>\n<p>As for </p>\n<blockquote>\n<p>Would anyone who is an expert on the matter please be open minded to make an excruciatingly detailed youtube video which explains exactly how the FHIR validator code works?</p>\n</blockquote>\n<p>umm, I wrote most of the validator but I quail in front of that idea. it's just so insanely detailed. </p>\n<blockquote>\n<p>can those options be passed in as arguments to a pure \"validate\" function</p>\n</blockquote>\n<p>Well, it's as pure as I know how to get it - implemented in java, so as portable as it can be, and the arguments are documented here: <a href=\"https://confluence.hl7.org/display/FHIR/Using+the+FHIR+Validator\">https://confluence.hl7.org/display/FHIR/Using+the+FHIR+Validator</a> (and there is a Java class that exposes all this, and many people embed the java validator inside a server/pipeline in production</p>",
+        "id": 261056966,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1636579525
+    },
+    {
+        "content": "<p>And there is also a validator implementation in dotnet too</p>",
+        "id": 261117742,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1636627693
+    },
+    {
+        "content": "<p>thanks for the link, i'll definitely check out those docs and the dotnet implementation. I feel your pain on the data inconsistency. I would definitely like to help figure out how to map resources onto more consistent shapes, if we can figure out baby steps for how to do that I will gladly follow your orders and work on it</p>",
+        "id": 261193111,
+        "sender_full_name": "bion howard",
+        "timestamp": 1636671098
+    },
+    {
+        "content": "<p>well, the fundamental role of the FHIR community (specifically, the HL7 Standards committees) is to wrestle the real world requirements in a set of resources, where the resources are as coherent as we can possibly make them. And you'll find that the relevant committees are loaded with experts in the various fields. And that while it looks like it should be easy to do, it turns out to be extremely difficult. </p>\n<p>In the case of Observation.component, which you mentioned. well, the community has navel-gazed on observation for 30 years, trying to find the least worst approach to handling the real world complexity that we can't get rid of. </p>\n<p>if you really want to help, join HL7 and then sit on some of those committees and listen and learn.</p>",
+        "id": 261193689,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1636671534
+    },
+    {
+        "content": "<blockquote>\n<p>the validation result depends on the state and context of the validator class instance at the time it validates something</p>\n</blockquote>\n<p>Well, it depends on the loading the correct information into the context first. Other than that, it should not be stateful</p>",
+        "id": 261193720,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1636671583
+    },
+    {
+        "content": "<p>ok, ill look into how to join.  </p>\n<p>one idea, would be to find some way measure the amount of data inconsistency;  we could use something like jax tree util <a href=\"https://jax.readthedocs.io/en/latest/jax.tree_util.html\">https://jax.readthedocs.io/en/latest/jax.tree_util.html</a> or <a href=\"https://github.com/deepmind/tree\">https://github.com/deepmind/tree</a>, then figure out how many different tree-shapes of data there are for each resource type, and try to figure out ways to use fewer shapes</p>",
+        "id": 261195916,
+        "sender_full_name": "bion howard",
+        "timestamp": 1636673433
+    },
+    {
+        "content": "<p>here's the number of different shapes, average and max depth of resource types for each type across (dstu2, stu3, r4) synthea datasets  <a href=\"/user_uploads/10155/ludTatbPjcSpuYKglmZHh-C5/output.txt\">output.txt</a></p>",
+        "id": 261210085,
+        "sender_full_name": "bion howard",
+        "timestamp": 1636689859
+    },
+    {
+        "content": "<p><a href=\"/user_uploads/10155/tMCU5aDZnje2JsW6LEGKu6GT/fhir.py\">fhir.py</a> code used</p>",
+        "id": 261210104,
+        "sender_full_name": "bion howard",
+        "timestamp": 1636689917
+    },
+    {
+        "content": "<p>got the data from about halfway down this page <a href=\"https://synthetichealth.github.io/synthea/\">https://synthetichealth.github.io/synthea/</a></p>",
+        "id": 261210115,
+        "sender_full_name": "bion howard",
+        "timestamp": 1636689954
+    },
+    {
+        "content": "<p>I'm not sure what your conclusions would be looking at that output, I'd just like to point out that Synthetic data is bound to look pretty similar when one does a structural analysis. This is not real data, and it's also data generated for one single country. FHIR has to cater to all sorts of healthcare workflows/data, anywhere in the world, regardless of whether we're talking about billing, nursing homes, hospitals, or whatever. Getting hold of a representative data set will be basically impossible, which is why HL7 has learned to listen to the various standards implementers over the past 35 years..<br>\nNevertheless you may be able to draw conclusions that could be helpful for FHIR implementations in a very specific context, so this is not meant to discourage you from doing your analysis.</p>",
+        "id": 261220071,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1636702752
+    },
+    {
+        "content": "<p>yes, you're right. here is a MIT license git repo with code to download the data and regenerate the outputs if anyone wants to run it on a private real-world dataset: <a href=\"https://github.com/bionicles/playing_with_fhir\">https://github.com/bionicles/playing_with_fhir</a></p>\n<p>worst offenders:</p>\n<ul>\n<li>\n<p>the resource type with the most inconsistent data:<br>\n    - ImagingStudy, with 177 unique shapes in a sample of 977 ImagingStudy instances</p>\n</li>\n<li>\n<p>the resource type with most deeply nested data (on average):<br>\n    - ImagingStudy, which requires an average of 5.3384820406218125 operations to access each leaf</p>\n</li>\n<li>\n<p>the resource type with most deeply nested data (worst case):<br>\n    - ExplanationOfBenefit, which has a leaf which requires 8 operations to access</p>\n</li>\n</ul>\n<p>plots:</p>\n<p><a href=\"/user_uploads/10155/QsyE-g7hDOYtpXNjdqpfQiia/by_resource_type.png\">by_resource_type.png</a> </p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/QsyE-g7hDOYtpXNjdqpfQiia/by_resource_type.png\" title=\"by_resource_type.png\"><img src=\"/user_uploads/10155/QsyE-g7hDOYtpXNjdqpfQiia/by_resource_type.png\"></a></div><p><a href=\"/user_uploads/10155/cRj9NPQunZCcJf2FhqAIgKCq/by_fhir_version.png\">by_fhir_version.png</a> </p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/cRj9NPQunZCcJf2FhqAIgKCq/by_fhir_version.png\" title=\"by_fhir_version.png\"><img src=\"/user_uploads/10155/cRj9NPQunZCcJf2FhqAIgKCq/by_fhir_version.png\"></a></div><p>and full output for the complete synthea dataset of each version (takes a long time to run)<br>\n<a href=\"/user_uploads/10155/VXR1yzWWpOEI0SvAOMHP66pI/output.txt\">output.txt</a></p>",
+        "id": 261272117,
+        "sender_full_name": "bion howard",
+        "timestamp": 1636732577
+    },
+    {
+        "content": "<p>ok, i pushed a few final updates. One last thing I want to do going forward is put the output into a dataframe instead of the random txt file format, but if anyone wants to run it on private data, i put instructions for how to do that in the readme</p>",
+        "id": 261273937,
+        "sender_full_name": "bion howard",
+        "timestamp": 1636733330
+    },
+    {
+        "content": "<p>we do not like ExplanationOfBenefit, since it's a context specific summary of data across multiple resources. But as a matter of process, the domain expert committee owns it likes it, so we still have it.</p>",
+        "id": 261318439,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1636755253
+    },
+    {
+        "content": "<p>It's interesting that image study stands out. I suspect that all this indicates is that the Synthea authors managed to find the most realistic data to generate off</p>",
+        "id": 261318464,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1636755282
+    },
+    {
+        "content": "<p>without real data, this is just plotting the synthea algorithm.</p>",
+        "id": 261318970,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1636755646
+    },
+    {
+        "content": "<p>what would be interesting would be fetch every published IG across all domains and generate a report like this</p>",
+        "id": 261319179,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1636755791
+    },
+    {
+        "content": "<p>for the examples</p>",
+        "id": 261319358,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1636755895
+    },
+    {
+        "content": "<p>Is there an easy query to do this from the package registry? Advertising how to do that might make it more likely to happen <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span></p>",
+        "id": 261319505,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1636756000
+    },
+    {
+        "content": "<p>well, it's easy to iterate the package registry  - see <a href=\"https://confluence.hl7.org/pages/viewpage.action?pageId=97454344#FHIRPackageRegistryUserDocumentation-APIinterface\">https://confluence.hl7.org/pages/viewpage.action?pageId=97454344#FHIRPackageRegistryUserDocumentation-APIinterface</a></p>",
+        "id": 261319629,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1636756106
+    },
+    {
+        "content": "<p>harder to decide which are IGs at this point, and there's some crap in the registry, old stuff from Simplifier. And you have to decide whether to scan all versions...</p>",
+        "id": 261319652,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1636756136
+    },
+    {
+        "content": "<p>but other than that, it's a pretty iterative task</p>",
+        "id": 261319664,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1636756151
+    },
+    {
+        "content": "<p>I thought that <span class=\"user-mention\" data-user-id=\"191321\">@David Hay</span> did something like this</p>",
+        "id": 261319792,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1636756260
+    },
+    {
+        "content": "<p>I just present a summary of from Grahame generated during the IG Build process...</p>",
+        "id": 261329911,
+        "sender_full_name": "David Hay",
+        "timestamp": 1636765084
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191316\">Grahame Grieve</span> <a href=\"#narrow/stream/179166-implementers/topic/re.3A.20Polymorphism.2C.20Nesting.2C.20Validation/near/261318464\">said</a>:</p>\n<blockquote>\n<p>It's interesting that image study stands out. I suspect that all this indicates is that the Synthea authors managed to find the most realistic data to generate off</p>\n</blockquote>\n<p>ImagingStudy stands out from the nesting point of view, because it replicates the data hierarchy present in DICOM of study/series/instance. We discussed having ImagingStudy, ImagingSeries, and ImagingInstance resources but felt  they predominantly would be retrieved together anyhow, and this reduces the round tripping.</p>",
+        "id": 261460749,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1636956248
+    },
+    {
+        "content": "<p>A report about IG examples would (mostly) be a report about how lazy IG authors are.  The bulk of examples I've seen haven't tried to reflect reality and are really about showing \"what does a populated instance look like\".  They definitely don't cover the variety that can exist in the real world in their space.</p>",
+        "id": 261462417,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1636958308
+    },
+    {
+        "content": "<p>(Yes real-world examples tend to be thin. But I don't think it's a result of laziness in the sense you're suggesting. Generally, if eeditors are handcrafting examples they won't be super life-like. Maybe for IGs that have been implemented in public we should require or request submission of real system outputs )</p>",
+        "id": 261490859,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1636979719
+    },
+    {
+        "content": "<p>I would happily create new examples based on real world use cases.  If only someone would actually document them so that I can.</p>",
+        "id": 261500672,
+        "sender_full_name": "David Pyke",
+        "timestamp": 1636985178
+    },
+    {
+        "content": "<blockquote>\n<p>I would happily create new examples based on real world use cases.  If only someone would actually document them so that I can.</p>\n</blockquote>\n<p>As the developer and maintainer of Synthea, I would also be interested in this.</p>",
+        "id": 261510965,
+        "sender_full_name": "Jason Walonoski",
+        "timestamp": 1636989514
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191372\">René Spronk</span> <a href=\"#narrow/stream/179166-implementers/topic/re.3A.20Polymorphism.2C.20Nesting.2C.20Validation/near/261220071\">said</a>:</p>\n<blockquote>\n<p>This is not real data, and it's also data generated for one single country. </p>\n</blockquote>\n<p>We also have the Synthea International repository, so you can generate data for other countries (although that doesn't solve the alternate workflow issue). <a href=\"https://github.com/synthetichealth/synthea-international\">https://github.com/synthetichealth/synthea-international</a></p>",
+        "id": 261511139,
+        "sender_full_name": "Jason Walonoski",
+        "timestamp": 1636989597
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191315\">Josh Mandel</span> <a href=\"#narrow/stream/179166-implementers/topic/re.3A.20Polymorphism.2C.20Nesting.2C.20Validation/near/261490859\">said</a>:</p>\n<blockquote>\n<p>Maybe for IGs that have been implemented in public we should require or request submission of real system outputs</p>\n</blockquote>\n<p>We would need to define data use policy and/or redaction rules to ensure that no unauthorized PHI was leaked, since we can't count on IG authors being security experts.</p>\n<p>It feels scary, since someone has to take on the 'risk' (read: legal accountability) if there is a problem.</p>",
+        "id": 261514197,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1636990736
+    },
+    {
+        "content": "<p>It is hard to define \"real system outputs\" .</p>",
+        "id": 261515717,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1636991284
+    },
+    {
+        "content": "<p>I wasn't suggesting real <em>patients</em> -- just the output of real software products. Generally that's with test data, but anything that could be openly licensed to would work.</p>",
+        "id": 261523852,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1636994526
+    },
+    {
+        "content": "<p>Also it doesn't require a strict definition to get from \"this never happens\" to \"we establish a cultural norm and start sharing more real examples.\"</p>",
+        "id": 261523944,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1636994570
+    },
+    {
+        "content": "<p>Would you not also need the workflow (transaction) documentation to make the example really useful? How was the data originally received? was it processed into an internal (non-FHIR) model? What happened next in the transaction...etc... a real-world example of JSON data by itself is sparse information in my opinion. I think the whole context around the exchange of that data is needed for the examples to be really meaningful....perhaps one could choose a specific interaction/type-of-transaction/workflow step that they are interested in validating?</p>",
+        "id": 261528631,
+        "sender_full_name": "Bret H",
+        "timestamp": 1636996593
+    },
+    {
+        "content": "<p>I agree. I just have two use cases in mind in Germany. One is the (national) patient record, where the profiles are very strict and every field, which is not directly needed, is forebidden due to e.g. data privacy issues, and the other one is the communication within one organization, where the same data field may be allowed and present. These resources might look different not only in the number, but also in the complexity of fields.</p>",
+        "id": 261551962,
+        "sender_full_name": "Mareike Przysucha",
+        "timestamp": 1637006893
+    },
+    {
+        "content": "<p>'Lazy' was perhaps too pejorative.  The main point is that creating examples are hard and fully fleshed out and extremely realistic examples are even harder.</p>",
+        "id": 261551967,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1637006896
+    },
+    {
+        "content": "<p>I find real world data is too messy and confusing for examples.  I wind up editing them to keep em simple and  focus on the salient stuff.  Besides we all know that the guides are read only after copying building off of the examples so we need to be damn sure the examples are right.</p>",
+        "id": 261597040,
+        "sender_full_name": "Eric Haas",
+        "timestamp": 1637037300
+    },
+    {
+        "content": "<p>Think both structural and real-world examples have value to different audiences.</p>",
+        "id": 261597452,
+        "sender_full_name": "Richard Townley-O'Neill",
+        "timestamp": 1637037784
+    },
+    {
+        "content": "<p>Thank you folks for questioning and prodding me about this, because if you hadn't, then I never would have thought about how stupid I was at programming. How can we ever know what's truth, unless we admit we're idiots, and blindly stumble to make new words for the deeper stuff? I'm not sure how to ask, and yes, you are right, we ought to stay focused on what's relevant to FHIR. But what's more relevant to my own work, than my own stupidity? So, I need help. Why not just ask? </p>\n<p>Yes, you're right. Keep to the task at hand. But, isn't my own stupidity about trivial, basic stuff, central to every task at hand? What happens if you find something scary? Yet, is it not also rude of me, to involve Other Folks in some Weird, Spiritual, Relativistic, Neo-Socratic, Neo-Hegelian Fractal Mindfuck? I guess, but, I'm really just trying to help Folks in general be healthier. What's more relevant to Folks' health, than the true nature of the Stuff?   Okay, well, wouldn't Stuff just be as simple as possible? What if the atoms and the universe are the same? </p>\n<p>What if the Universe is a Perfect Atomic Computer: Ternary Logic Space? <br>\n<a href=\"/user_uploads/10155/EKpV-K-w6vt43VkoBvbwFtO9/123.png\">123.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/EKpV-K-w6vt43VkoBvbwFtO9/123.png\" title=\"123.png\"><img src=\"/user_uploads/10155/EKpV-K-w6vt43VkoBvbwFtO9/123.png\"></a></div><p>Is it impossible that the folks who are really supposed to continue Albert Einstein's Quest, are computer scientists?  What if Space runs Leonid Levin's Optimal Search, in a Universal Quest for Stable Stuff, on an infinite volume of Not Stuff? Why would it do that? Is the concept of polarity enmeshed with logic? What if the Higgs Boson is the 1-word, Photons are 2-words,  Atoms are 3-words, of \"Math Letters\", (everything must be implemented somehow, right?)? Why would we see 3 everywhere constantly? Maybe ternary logic is stable because it can loop around inside itself and reason about external stuff, and interact with external stuff. Wouldn't all of the \"Stuff\" always made of the opposite of the bedrock? What is that bedrock, if not one underlying thing? Why wouldn't Math strut its stuff to infinity and implement all of the cool things it can do? Why wouldn't it do everything all at once? How much control do we have over our destiny, if the destiny is implemented in a physical substrate? Is it impossible, that the universe already figured out how to solve the problems  for the stuff, and we just need to tell it where we want to go? Maybe haven't thought about the fractal-philosophy-ethics of it all, and we're all stuck on 2D screens with 1D words and in a 3D fractal-random-flying-laser-tree-box? How could we do better medical stuff if we thought in recursive 3D trees of logic? If space and time are one, then why the heck does Minkowski space need to have another dimension of numbers? Could it it really be an infinite recursive data flow in Math World Emergent From Philosophy Town? How could it recurse infinitely? How can we / should we use that? What the heck is light, if the speed of light is measured in units of time, and time doesn't exist, because we're in a 3d space, and time is a motion through the outer space of spaces? Idk, I realize it's not fhir-related, but wouldn't it be cool if we could learn about logic and data, by using the way the universe thinks about stuff, to think about how the universe thinks about stuff? Could everything everywhere all just be defined by relative distances in 3-space, and it's all some Fractal  Ternary Logic of Bits (photons and gluons): 12 (Light/Dark) 12 (Present/Not), and Atoms: 123 (continuum, affinity, polarity) ?</p>\n<p>How could human logic and communication not be defined in binary and ternary, if we're implemented in it? I'm not sure we could ever make human words to describe it, but what's so cool about ternary logic, that it builds infinite universes? Well, it's gotta be some mixture of all the things we think are separate, which are secretly the same, right? So why ternary? Is it because of looping? Is it endlessly, fetishistically multiplying 3, or is 3 just our word for a number, and numbers are our concept for something which wasn't ever separate from the rest of math? Maybe the universe just wants to tell us to question inside of ourselves, and not get bogged down by words so much? Belief-space is subject to dynamical systems laws, too, and it's implemented in 3-trees in a 3-space just like everything else, right? Even if consciousness IS implemented via neuron module communication, or whatever, how could it come up with anything the universe doesn't know about?  So what's a triangle? It's a thing that lets you steer around? After all, how can you go forward in your belief systems, if you only have one belief? You can't. you stay. With Two Beliefs, what happens? Tug of war, right? How about with 3? If you can juggle 3 beliefs in your head, and save your state in Stuff,  can you not, over time, build chains of logic about Stuff, to arbitrary levels of abstraction?  Is it trajectory planning in logic land? </p>\n<p>Is the universe telling us: It already solved our problems, or do we just have different problems? Did it perfectly index the optimal solution to existence? Why wouldn't it? If it hadn't, eventually, folks inside would improve it until it did. Why would the universe be mean to the stuff, if the whole point of the game, is to make lots of stuff? But what are \"Folks\" if not just dynamical systems  of \"Stuff\"?  Also, why would one particular category of Stuff, be better than any other category? It wouldn't, because it's all about computing your preferences and interacting with Other Stuff. The best preference, is Truth, and you can get pretty good info by looking at stuff. The computation, though? That's internal dynamical systems behavior, causally separated from the external stuff, because it's looping inside your brain and adding up memory-changes over time. You're made of universes, and living in one, at the same time, and the universe doesn't care how you logically categorize the other stuff, it just lets you do it in the best way possible. Why can't theists and atheists BOTH be right? Maybe, we're born to overthink everything, when the best thing to do, is relax, imagine universes inside ourselves, and use the logic of the universe to merge ideas. How could a Universe take us somewhere, if we don't tell it where we want to go?  So we tell it. How do we tell it?</p>\n<p>Well, you have to know what you want, and how do you do that? You compute about it (ideally, using atoms of Thesis, Antithesis -&gt; Synthesis, which I guess is the stablest, simplest, all-merge-flow of logical information in the optimal logical space.  which do the best discrete logic possible, in 3d), and state you preferences explicitly (aka, communicate  letters between other stuff in the external world), to the external stuff? But really, why would a universe exist purely to be benevolent to one form of Stuff, if polarity is just a concept? Maybe it's because eventually you bottom out on the concept of nothingness, break stuff into categories of 3-piece elements more? Yet, do we really bottom out? After all, bottom, is just another human concept of polarity. Why could it not go on and on, forever, infinitely, both within space, and within and without of itself? Is space the ultimate stack overflow? Does it just take us to different branches of infinite possible ways things can go, depending on our inputs, reasoning, and outputs? How could it? Are universes themselves, destined to fight to survive against the anti-universe? Can they be exploded by folks in the outer-universe? I realize it sounds silly, so maybe it's wrong! In fact, this theory is <em>definitely</em> wrong. Why wouldn't it be wrong? Well, Truth is a concept which is relative to Falsity, is it not? How can human words and 2D squiggles, help us better tell a 3D story of a universe which is infinite, both in complexity and simplicity, at the same time? What's the synthesis of free will and being a zombie? Both consciousness, and mechanism, must unify, no? </p>\n<p>Surely, pondering how stuff works, doesn't make stuff and the being of it, any less cool. If anything, it's more cool! Why wouldn't it be awesome and humbling for all of us?  If Universal Stuff Justice were an ultimate recursively optimizing concept, all implemented by one underlying thing, why wouldn't the feelings of the stufflings be a relevant and high-priority goal for an infinite universe? Well, what's the best way to make a fair Box of Stuff? Easy. Make it Perfect, right? But what's the definition of Perfect? Max Simplicity? Why wouldn't being stuff, be better than being no stuff? Does ethics need to be complicated, or is that simple too? So how do you merge Jesus, Newton, and Einstein? What if stuff just looks at other stuff, decides if it likes it, and approach/ignore/avoid. Treat others as you would like to be treated.  We have to merge the past learnings, right? No! keep going! If you stop looping your idea triangle, you stop giving the universe what it wants: degrees of freedom.  It's alway for one thing: decide what you want, and how to make it happen? How do we apply it to FHIR data? What the heck do we make of  this? How do we use it for good and avoid it being used for bad?</p>\n<p>Do we live in a Perfect Atomic Computer? What do you think?<br>\nmore pictures/sketches/writing: <a href=\"https://drive.google.com/drive/u/0/folders/1OyLMDE4YbFTFPDjnjkSWl8ZykeVR3obi\">https://drive.google.com/drive/u/0/folders/1OyLMDE4YbFTFPDjnjkSWl8ZykeVR3obi</a></p>\n<p>I realize it's a lot to think about. That's why I'm asking you to think about it. I hope I don't get banned for this, but I don't want to waste my time or your time, and I already typed out the  rant, and it feels useful, and not, in a billion ways. If anybody wants to reply with criticisms or clarifications, please do! What do we make of it, if humanity proves we live inside of 1 atom of 3d logic, while also being made of atoms of 3d logic? What if this implies, the whole thing extends infinitely, and is optimal? How could it? Can it? How do we make sense of it? This is bigger than money. Money is a number. What are numbers?</p>",
+        "id": 263912092,
+        "sender_full_name": "bion howard",
+        "timestamp": 1638820634
+    }
+]

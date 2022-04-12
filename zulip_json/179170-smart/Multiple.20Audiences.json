@@ -1,0 +1,176 @@
+[
+    {
+        "content": "<p>The current <a href=\"http://www.hl7.org/fhir/smart-app-launch/#step-1-app-asks-for-authorization\">SMART spec</a> requires the aud parameter be specified on an authorization request to identify the resource server that is the intended audience for a token.  Are multiple aud values supported / expected?  We have one auth servers that manages our DSTU2, STu3, and R4 resource servers, and it is very common for apps to use a mix of DSTU2, STU3, and R4 APIs in one integration.    The current spec doesn't forbid multiple aud parameters, but I feel like we should address that specifically.  I can submit a tracker if folks think we just need a documentation change.</p>",
+        "id": 236350138,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1619534921
+    },
+    {
+        "content": "<p>Also, ONC <a href=\"https://www.federalregister.gov/documents/2020/05/01/2020-07419/21st-century-cures-act-interoperability-information-blocking-and-the-onc-health-it-certification#p-1256\">specifically called out</a> that they were requiring token introspection so that an EHR auth server could manage multiple resource servers.  Supporting multiple audiences during authorization seems essential to making this usable (i.e. not requiring a new auth code flow for  each resource server).</p>",
+        "id": 236350663,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1619535111
+    },
+    {
+        "content": "<p>As background:  The intent of the audience parameter originally was not to scope the resulting access token to a specific resource server, but rather for the client to declare the resource server destination where security tokens will be sent.</p>\n<p>The threat model was to prevent a malicious application that \"launches\" a legitimate SMART application from advertising another party's authorization server in its Conformance/.well_known document, such that the resulting access token is utilized with the attacker's resource server rather than one associated with the owner of the authorization server.  The thought was that by sending the issuer value received as part of the launch in the request, it would be possible for an authorization server to determine whether the destination for where the client will send tokens is \"trusted\".</p>\n<p>I think the problem of \"mixing API versions\" would need to be tackled first from a specification perspective - there's nothing today (that I'm aware of) that actually makes this use case formally possible in the current SMART App Launch specification.  For example: there isn't a requirement in SMART that would require the authorization endpoints for different FHIR versions to align - it seems like that would be a pre-requisite to make this type of scenario formally possible in the specifications.</p>\n<p>[1]: <a href=\"http://hl7.org/fhir/smart-app-launch/#standalone-launch-sequence\">http://hl7.org/fhir/smart-app-launch/#standalone-launch-sequence</a></p>",
+        "id": 236374631,
+        "sender_full_name": "Matt Randall",
+        "timestamp": 1619543396
+    },
+    {
+        "content": "<p>+1 to Matt's characterization of the goal for <code>aud</code> -- it's to prevent an authorization server from being tricked by a FHIR serfver that's unaffiliated with it.</p>",
+        "id": 236375282,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619543688
+    },
+    {
+        "content": "<p>When it comes to answering the questions \"now that I have this access token from a given OAuth interaction, where can I use it?\" there are a few possible answers:</p>\n<ol>\n<li>Definitely you can use it at the FHIR server where you began the interactions</li>\n<li>Possibly you can use it at some other places too</li>\n</ol>\n<p>For (2), these could be discovered out-of-band (e.g., at registration time, apps could learn about a set of servers such as an EHR server + a Sync-for-science Imaging FHIR server that work with the same access tokens); or this could be in-band (e.g., a given FHIR server could advertise \"otherEndpointsYouCanQueryForRelatedData\" in its .well-known/smart-configuration, or we could define a new place for this kind of in-band discovery to occur).</p>",
+        "id": 236375671,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619543846
+    },
+    {
+        "content": "<p>How can you distinguish between a malicious resource server advertising another party's auth server in .well-known vs. a legit resource server advertising another party's auth server?  It seems like the ONC comment intends that 3rd party resource servers <em>can</em> name EHR servers as their auth server (with some precoordination to establish trust).  </p>\n<p>We have the case where some organizations have multiple products that have regulated data, and different vendors are developing resource servers to expose that data.  They want to use the Epic EHR auth server to manage access to all resource servers in the organization.  For example, medical claims data would be in the Epic resource server, but pharmacy claims would be an a 3rd party resource server.  Authorization for both claim APIs can be granted by the single Epic auth server.  We expect the pharmacy claim system to advertise the Epic auth server in their .well-known.  When a patient uses an app, they'd go through the auth code flow once and get a token that can be used against both resource servers (with the pharmacy system using introspect to validate the token and scopes).</p>",
+        "id": 236386220,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1619548097
+    },
+    {
+        "content": "<p>Let's start with your description of the user experience: this is exactly what we are aiming to enable for consumers. One authorization decision and one set of Scopes granted leading to the issuance of an access token that can be used at one or more resource servers within an organization.  We can work backwards from there as needed to think about implications for the spec.</p>",
+        "id": 236387097,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619548425
+    },
+    {
+        "content": "<p>There is a notion here of something like \"flow of trust\" -- if I use <a href=\"https://scammer.example.com/fhir\">https://scammer.example.com/fhir</a> as the entry point into an OAuth connection, and the scanner points to <a href=\"https://legit.example.org/oauth\">https://legit.example.org/oauth</a> as its SMART server, the request should fail because the authorization server won't recognize the supplied audience.</p>",
+        "id": 236387519,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619548569
+    },
+    {
+        "content": "<p>Even if the scammer's smart-configuration says \"alsoWorksWith: <a href=\"https://legit.example.org/fhir\">https://legit.example.org/fhir</a>\" the request will fail.</p>",
+        "id": 236387687,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619548652
+    },
+    {
+        "content": "<p>Ah.  So the audience is really the \"initial resource server that is initiating the auth code flow\".  Not a token audience or list of possible audiences.</p>",
+        "id": 236387689,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1619548653
+    },
+    {
+        "content": "<p>That is how I've been thinking about this, but I will admit that your precise line of questions is causing my thinking to get a lot more precise :-)</p>",
+        "id": 236387811,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619548690
+    },
+    {
+        "content": "<p>Where does this break?</p>",
+        "id": 236387838,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619548697
+    },
+    {
+        "content": "<p>First, I want to clarify that I'm asking about this for two different reasons:  1) recent review of the ONC test procedure for (g)(10) and 2) the multi-resource server for claims data integration I just described.</p>",
+        "id": 236388427,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1619548951
+    },
+    {
+        "content": "<p>The initial driver was the <a href=\"https://www.healthit.gov/test-method/standardized-api-patient-and-population-services\">(g)(10) procedure</a>.</p>",
+        "id": 236388458,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1619548966
+    },
+    {
+        "content": "<p>Which has this:</p>\n<p>[Both] The health IT developer demonstrates the ability of the Health IT Module to return an error response if the following parameters provided by an application to the Health IT Module in step 8 of this section do not match the parameters originally provided to an application by the Health IT Module in step 2 of this section according to the implementation specification adopted in § 170.215(a)(3):<br>\n“launch” (for EHR-Launch mode only); and<br>\n“aud”.</p>",
+        "id": 236388487,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1619548984
+    },
+    {
+        "content": "<p>Inferno is appropriately checking for invalid aud values.  SIA-01 and SIA-02.  <span class=\"user-mention\" data-user-id=\"192576\">@Robert Scanlon</span>.</p>",
+        "id": 236388600,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1619549044
+    },
+    {
+        "content": "<p>So I think \"current SMART spec aud\" approach works for the goal in that test script</p>",
+        "id": 236388664,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1619549060
+    },
+    {
+        "content": "<p>Yeah -  I think you are right.  Thanks for helping me think through this.</p>",
+        "id": 236389337,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1619549368
+    },
+    {
+        "content": "<p>The auth server has to maintain a list of allowed audiences on the backend.  But during the auth code flow, only one of those (associated with the resource server that triggered the flow) needs to be presented.</p>",
+        "id": 236389387,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1619549398
+    },
+    {
+        "content": "<p>It probably isn't worth updating SIA-02 in Inferno, but if I understand correctly, it would be fine if some small subset of aud values (the ones in the allow list in the auth server) were accepted.</p>",
+        "id": 236390006,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1619549665
+    },
+    {
+        "content": "<p>And the test procedure I think is a little confusing because step 13 is marked as [Both] (EHR and Standalone launch) but the validation references step 2 which is EHR launch only.</p>",
+        "id": 236390065,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1619549708
+    },
+    {
+        "content": "<p>So it isn't clear what aud is being validated against for standalone launch.</p>",
+        "id": 236390116,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1619549734
+    },
+    {
+        "content": "<p>But I think it should be the pre-coordinated list of allowed audiences stored in the auth server config.</p>",
+        "id": 236390225,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1619549775
+    },
+    {
+        "content": "<blockquote>\n<p>It probably isn't worth updating SIA-02 in Inferno, but if I understand correctly, it would be fine if some small subset of aud values (the ones in the allow list in the auth server) were accepted.</p>\n</blockquote>\n<p>Yes, we do not check that you only accept 1 aud at the authorization server.  And we don't check that the bearer token you provide is only valid at a single resource server (that matches the aud provided in the launch).  Either of those are fine from our perspective.  Our test just mocks up a fake malicous resource server, and checks that you don't hand out a bearer token that the client will then pass on to it.</p>",
+        "id": 236413585,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1619558933
+    },
+    {
+        "content": "<p>This isn't an extremely thorough test, but I do think it will catch a potentially common and very harmful mistake of implementers not realizing how important it is to pay attention to the aud.</p>",
+        "id": 236414025,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1619559120
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191764\">Cooper Thompson</span> <a href=\"#narrow/stream/179170-smart/topic/Multiple.20Audiences/near/236390065\">said</a>:</p>\n<blockquote>\n<p>And the test procedure I think is a little confusing because step 13 is marked as [Both] (EHR and Standalone launch) but the validation references step 2 which is EHR launch only.<br>\nSo it isn't clear what aud is being validated against for standalone launch.</p>\n</blockquote>\n<p>I agree, the test procedure is not clear what the expectation is for standalone launch aud validation.  It probably should be reworded so that others don't get confused by it.</p>",
+        "id": 236431791,
+        "sender_full_name": "Robert Scanlon",
+        "timestamp": 1619569839
+    },
+    {
+        "content": "<p>I just submitted <a href=\"http://jira.hl7.org/browse/FHIR-36179\">FHIR-36179</a>.   The discussion above got to a resolution for the g10 script issue, but there is still the multi-resource server claims data integration that currently is relying on email or website documentation.  I got to thinking this more based on some discussion in the <a href=\"#narrow/stream/179175-argonaut/topic/Endpoints.20project\">Argonaut Endpoint project</a>.  There are a bunch of different ways we can communicate what resource servers a token can be used for, but getting it into the base SMART spec seems like the best spot to me.</p>",
+        "id": 273893262,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1646262764
+    },
+    {
+        "content": "<p>I like the suggestion! Array of strings representing server base URLs?  Or including a response property like <a href=\"https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rar#section-7.1\">https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rar#section-7.1</a> ?</p>\n<p>FWIW I think it's still important to surface a set of related servers so clients know what to ask for in the first place. So I see this ticket as complementary to a discovery protocol that helps apps to learn about \"peer groups\" of servers.</p>",
+        "id": 273893812,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1646262985
+    },
+    {
+        "content": "<p>Yup - agreed.  The publishing side tells the clients what probably should work.  And the token response property is the authoritative claim from the auth server about what resource servers are trusted for a specific token.</p>",
+        "id": 273980928,
+        "sender_full_name": "Cooper Thompson",
+        "timestamp": 1646318037
+    }
+]

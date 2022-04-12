@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p>we experienced a very strange issue. we have a <a href=\"http://fhir.ch/ig/ch-emed/StructureDefinition-ch-emed-document-medicationcard.html\">FHIR document profile</a> which requires that the composition.subject is a patient and the patient needs to have one identifier. We have <a href=\"http://build.fhir.org/ig/ehealthsuisse/ch-emed/branches/validation/qa.html#_scratch_ig-build-temp-CHRP4N_repo_input_examples_bundle_medicationcard\">an incorrect example</a> without a Patient identifier and the IGPubliser correctly shows the failing in the reasoning (what a cool feature, btw):</p>\n<div class=\"codehilite\"><pre><span></span><code>This element does not match any known slicedefined_in_the_profilehttp://fhir.ch/ig/ch-emed/StructureDefinition/ch-emed-document-medicationcard\nBundle.entry[0]: discriminator = true and resource.conformsTo(&#39;http://fhir.ch/ig/ch-emed/StructureDefinition/ch-emed-composition-medicationcard&#39;)\n,\nBundle.entry[0]: Profile http://fhir.ch/ig/ch-emed/StructureDefinition/ch-emed-composition-medicationcard does not match for Bundle because of the following profile issues:\nBundle.entry[0].resource.subject: Unable to find a match for profile Patient/65788 among choices: http://fhir.ch/ig/ch-core/StructureDefinition/ch-core-patient-epr\n,\nBundle.entry[0].resource.subject:\nBundle.entry[1].resource.ofType(Patient): Patient.identifier: minimum required = 1, but only found 0 (from http://fhir.ch/ig/ch-core/StructureDefinition/ch-core-patient-epr)\n</code></pre></div>\n<p>however when we validate the same document with the FHIR validator we do not get an error:</p>\n<div class=\"codehilite\"><pre><span></span><code>java -jar validator_cli.jar -version 4.0.1 -ig ch.fhir.ig.ch-emed#1.0.0 -profile http://fhir.ch/ig/ch-emed/StructureDefinition/ch-emed-document-medicationcard http://build.fhir.org/ig/ehealthsuisse/ch-emed/branches/validation/Bundle-medicationcard.json\n...\nSuccess: 0 errors, 9 warnings, 6 notes\n  Information @ Bundle.entry[1] (line 124, col6): This element does not match any known slice defined in the profile http://fhir.ch/ig/ch-emed/StructureDefinition/ch-emed-document-medicationcard\n</code></pre></div>\n<p>trying to debug it, there is a comment in <a href=\"https://github.com/hapifhir/org.hl7.fhir.core/blob/41b7a0566c2059c947fa27226247644c40cee55a/org.hl7.fhir.validation/src/main/java/org/hl7/fhir/validation/instance/InstanceValidator.java#L3475\">InstanceValidator</a> that the conformsTo breaks the stack and you end up there, but the code is not entered because hostContext is null </p>\n<p>if i adjust the <a href=\"https://github.com/hapifhir/org.hl7.fhir.core/pull/676/files\">hostContext that is provided as a bundle</a> I get back the validation error, but I'am a bit puzzled why the InstanceValidator is needing an adjustment, but the same is working for the IG Publisher. </p>\n<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"248736\">@Mark Iantorno</span> do you have any ideas?</p>",
+        "id": 262648863,
+        "sender_full_name": "Oliver Egger",
+        "timestamp": 1637794243
+    },
+    {
+        "content": "<p>well, I'll have to debug</p>",
+        "id": 262959609,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1638150179
+    },
+    {
+        "content": "<p>can you make a validator test case that shows the problem as a PR to <a href=\"https://github.com/FHIR/fhir-test-cases/pulls\">https://github.com/FHIR/fhir-test-cases/pulls</a> ?</p>",
+        "id": 262966096,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1638160091
+    },
+    {
+        "content": "<p>it on my todo list <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span>  will let you know as soon as i have done it</p>",
+        "id": 262973149,
+        "sender_full_name": "Oliver Egger",
+        "timestamp": 1638169849
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> </p>\n<ol>\n<li>IG where error is correctly raised is <a href=\"http://build.fhir.org/ig/oliveregger/BundleConformsTo/branches/master/qa.html#_scratch_ig-build-temp-DWHJ33_repo_fsh-generated_resources_Bundle-medicationcard\">here</a> </li>\n<li>added the example and structuredefinitions to this <a href=\"https://github.com/FHIR/fhir-test-cases/pull/102\">validation testcase PR</a>, the error is not raised (which should be raised) within the validation tests </li>\n<li>Verified with the <a href=\"https://github.com/hapifhir/org.hl7.fhir.core/pull/676\">PR</a> that the error is raised</li>\n</ol>\n<p>let me know if you need any additional info to debug.</p>",
+        "id": 263074515,
+        "sender_full_name": "Oliver Egger",
+        "timestamp": 1638223857
+    },
+    {
+        "content": "<p>I don't really understand the proposed fix - the appContext is not interchangeable with the root resource</p>",
+        "id": 263093010,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1638237073
+    },
+    {
+        "content": "<p>and the app context is set outside the InstanceValidator and passed around so it can be used in callbacks so the application can keep it's context together</p>",
+        "id": 263093095,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1638237165
+    },
+    {
+        "content": "<p>on further investigation.. the IG publisher sets the appContext to the bundle element for it's own convenience. Other applications do something else. So that change you're made works with the IG publisher, but would break other applications that host the validator</p>",
+        "id": 263096395,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1638240952
+    },
+    {
+        "content": "<p>so that code shouldn't be using and looking at the app context (it's broken in the other cases already, casting appContext to Element). It should be using the rootResource, and the rootResource should be set. two fixes...</p>",
+        "id": 263096445,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1638240982
+    },
+    {
+        "content": "<p>I'll close your PR and make my own</p>",
+        "id": 263096484,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1638241068
+    },
+    {
+        "content": "<p>but I'll keep your test case - thanks</p>",
+        "id": 263096489,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1638241076
+    },
+    {
+        "content": "<p>thanks a lot for your investigation and explanations and looking forward for you PR!</p>",
+        "id": 263139413,
+        "sender_full_name": "Oliver Egger",
+        "timestamp": 1638276858
+    }
+]

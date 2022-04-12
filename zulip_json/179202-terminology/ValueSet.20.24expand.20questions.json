@@ -1,0 +1,182 @@
+[
+    {
+        "content": "<p>Hey all, I have a bunch of questions about the $expand operation that boil down to determinism: how do I know, and how can I prove, that my expand operation is working properly in all cases. I've read the documentation, and there are a lot of areas that are not completely clear (at least to me).</p>\n<p>I started this discussion on the implementers stream and was directed to this stream by another user, so I'm hoping you all can help me fill in the blanks.</p>\n<p>My first question is very basic (I think). I've been told that an expansion is supposed to be a flattened list of codes. But if that's the case, why does the ValueSet.expand.contains also have child contains (implying that it's not a flat list)? How would I know, given an input value set, that the expansion in one case is supposed to be a flattened list of codes, but in the other case the hierarchy is to be preserved?</p>",
+        "id": 195617116,
+        "sender_full_name": "Tim Dunnington",
+        "timestamp": 1588103591
+    },
+    {
+        "content": "<p>There's no <em>supposed to be</em>. First of all, the client can ask for flattened or not (forUI), but the server doesn't need to return a heirarchy unless it can</p>",
+        "id": 195618736,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1588104216
+    },
+    {
+        "content": "<p>The reason I started looking into this issue was around a specific value set. We've been adding code set validation to our server implementation over time. We started with our organization-specific code sets first, which were pretty straightforward, so our expand operation served us well for the past year or 2. But then today we added validation for an HL7 standard valueset (in this case, Location.type, which requires value set <a href=\"http://hl7.org/fhir/ValueSet/v3-ServiceDeliveryLocationRoleType\" title=\"http://hl7.org/fhir/ValueSet/v3-ServiceDeliveryLocationRoleType\">http://hl7.org/fhir/ValueSet/v3-ServiceDeliveryLocationRoleType</a>).</p>\n<p>My expand operation can't handle this value set, but that's fine, I'm happy to add support for the filters that will make it work.</p>\n<p>However, I'm left with the following dilemma:</p>\n<ul>\n<li>I would like to preserve hierarchy, it's actually easier than trying to flatten the list. In this value set, I would copy the _ServiceDeliveryLocationRoleType node to the expansion. The \"is-a\" rule says that all descendants, and the node itself, get copied to the expansion. If that's the case, wouldn't I have an expansion with a single item (the _ServiceDeliveryLocationRoleType and its descendants)? </li>\n<li>But if I do that, the exclude rule would seem to remove the same node I added in the include rule.</li>\n<li>If instead the \"is-a\" condition means \"copy the children to the expansion\", then the root node (_ServiceDeliveryLocationRoleType) wouldn't even be in the expansion, so why the exclude rule? And doesn't that conflict with the \"is-a\" definition?</li>\n</ul>\n<p>I can see that if I implement expand on these filters one way, it'll work for some value sets and not others, and vice versa. So I'm worried I'm in a catch-22 here...if you see what I mean.</p>",
+        "id": 195622479,
+        "sender_full_name": "Tim Dunnington",
+        "timestamp": 1588105765
+    },
+    {
+        "content": "<p>Here is the valueset for Location.type, for reference</p>\n<div class=\"codehilite\"><pre><span></span><code>{\n  &quot;resourceType&quot;: &quot;ValueSet&quot;,\n  &quot;id&quot;: &quot;282724b1-95a5-42fd-bd9d-e79e5ad3bd12&quot;,\n  &quot;meta&quot;: {\n    &quot;versionId&quot;: &quot;1&quot;,\n    &quot;lastUpdated&quot;: &quot;2019-12-11T21:02:30.851+00:00&quot;,\n    &quot;profile&quot;: [\n      &quot;http://hl7.org/fhir/StructureDefinition/valueset-shareable-definition&quot;\n    ]\n  },\n  &quot;text&quot;: {\n    &quot;status&quot;: &quot;generated&quot;,\n    &quot;div&quot;: &quot;&lt;div xmlns=\\&quot;http://www.w3.org/1999/xhtml\\&quot;&gt;Narrative removed to reduce size&lt;/div&gt;&quot;\n  },\n  &quot;extension&quot;: [\n    {\n      &quot;url&quot;: &quot;http://hl7.org/fhir/StructureDefinition/valueset-oid&quot;,\n      &quot;valueUri&quot;: &quot;urn:oid:2.16.840.1.113883.1.11.17660&quot;\n    }\n  ],\n  &quot;url&quot;: &quot;http://hl7.org/fhir/ValueSet/v3-ServiceDeliveryLocationRoleType&quot;,\n  &quot;version&quot;: &quot;2014-03-26&quot;,\n  &quot;name&quot;: &quot;ServiceDeliveryLocationRoleType&quot;,\n  &quot;status&quot;: &quot;active&quot;,\n  &quot;experimental&quot;: false,\n  &quot;publisher&quot;: &quot;HL7 v3&quot;,\n  &quot;compose&quot;: {\n    &quot;include&quot;: [\n      {\n        &quot;system&quot;: &quot;http://hl7.org/fhir/v3/RoleCode&quot;,\n        &quot;filter&quot;: [\n          {\n            &quot;property&quot;: &quot;concept&quot;,\n            &quot;op&quot;: &quot;is-a&quot;,\n            &quot;value&quot;: &quot;_ServiceDeliveryLocationRoleType&quot;\n          }\n        ]\n      }\n    ],\n    &quot;exclude&quot;: [\n      {\n        &quot;system&quot;: &quot;http://hl7.org/fhir/v3/RoleCode&quot;,\n        &quot;concept&quot;: [\n          {\n            &quot;code&quot;: &quot;_ServiceDeliveryLocationRoleType&quot;\n          }\n        ]\n      }\n    ]\n  }\n}\n</code></pre></div>",
+        "id": 195623985,
+        "sender_full_name": "Tim Dunnington",
+        "timestamp": 1588106490
+    },
+    {
+        "content": "<p>so if you doing value set validation, flatter is easier for the consumer of the expansion. The java validator explicitly asks for flat value sets rather than hierarchical ones - it's easier</p>",
+        "id": 195625654,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1588107344
+    },
+    {
+        "content": "<p>but you can do it using heirarchical value sets, until you run into one defined like this, which doesn't have a sensible heirarchy.</p>",
+        "id": 195625765,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1588107383
+    },
+    {
+        "content": "<p>well, it does; you just omit the code and elevate it's descendents up a level, but the algorithm starts to break down as more sophisticated excludes get included. So I didn't bother; if I see any exludes, I just stop trying to do the expand heirarchically in the first place</p>",
+        "id": 195625937,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1588107482
+    },
+    {
+        "content": "<blockquote>\n<p>The \"is-a\" rule says that all descendants, and the node itself, get copied to the expansion</p>\n</blockquote>\n<p>yes. the value set would be a lot simpler if it was defined this way:</p>",
+        "id": 195626026,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1588107509
+    },
+    {
+        "content": "<div class=\"codehilite\"><pre><span></span><code><span class=\"p\">{</span>\n  <span class=\"nt\">&quot;resourceType&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;ValueSet&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;id&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;282724b1-95a5-42fd-bd9d-e79e5ad3bd12&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;meta&quot;</span><span class=\"p\">:</span> <span class=\"p\">{</span>\n    <span class=\"nt\">&quot;versionId&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;1&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;lastUpdated&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;2019-12-11T21:02:30.851+00:00&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;profile&quot;</span><span class=\"p\">:</span> <span class=\"p\">[</span>\n      <span class=\"s2\">&quot;http://hl7.org/fhir/StructureDefinition/valueset-shareable-definition&quot;</span>\n    <span class=\"p\">]</span>\n  <span class=\"p\">},</span>\n  <span class=\"nt\">&quot;text&quot;</span><span class=\"p\">:</span> <span class=\"p\">{</span>\n    <span class=\"nt\">&quot;status&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;generated&quot;</span><span class=\"p\">,</span>\n    <span class=\"nt\">&quot;div&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;&lt;div xmlns=\\&quot;http://www.w3.org/1999/xhtml\\&quot;&gt;Narrative removed to reduce size&lt;/div&gt;&quot;</span>\n  <span class=\"p\">},</span>\n  <span class=\"nt\">&quot;extension&quot;</span><span class=\"p\">:</span> <span class=\"p\">[</span>\n    <span class=\"p\">{</span>\n      <span class=\"nt\">&quot;url&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;http://hl7.org/fhir/StructureDefinition/valueset-oid&quot;</span><span class=\"p\">,</span>\n      <span class=\"nt\">&quot;valueUri&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;urn:oid:2.16.840.1.113883.1.11.17660&quot;</span>\n    <span class=\"p\">}</span>\n  <span class=\"p\">],</span>\n  <span class=\"nt\">&quot;url&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;http://hl7.org/fhir/ValueSet/v3-ServiceDeliveryLocationRoleType&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;version&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;2014-03-26&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;name&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;ServiceDeliveryLocationRoleType&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;status&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;active&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;experimental&quot;</span><span class=\"p\">:</span> <span class=\"kc\">false</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;publisher&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;HL7 v3&quot;</span><span class=\"p\">,</span>\n  <span class=\"nt\">&quot;compose&quot;</span><span class=\"p\">:</span> <span class=\"p\">{</span>\n    <span class=\"nt\">&quot;include&quot;</span><span class=\"p\">:</span> <span class=\"p\">[</span>\n      <span class=\"p\">{</span>\n        <span class=\"nt\">&quot;system&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;http://hl7.org/fhir/v3/RoleCode&quot;</span><span class=\"p\">,</span>\n        <span class=\"nt\">&quot;filter&quot;</span><span class=\"p\">:</span> <span class=\"p\">[</span>\n          <span class=\"p\">{</span>\n            <span class=\"nt\">&quot;property&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;concept&quot;</span><span class=\"p\">,</span>\n            <span class=\"nt\">&quot;op&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;descendent-of&quot;</span><span class=\"p\">,</span>\n            <span class=\"nt\">&quot;value&quot;</span><span class=\"p\">:</span> <span class=\"s2\">&quot;_ServiceDeliveryLocationRoleType&quot;</span>\n          <span class=\"p\">}</span>\n        <span class=\"p\">]</span>\n      <span class=\"p\">}</span>\n    <span class=\"p\">]</span>\n  <span class=\"p\">}</span>\n<span class=\"p\">}</span>\n</code></pre></div>",
+        "id": 195626138,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1588107568
+    },
+    {
+        "content": "<p>that means the same thing.</p>",
+        "id": 195626156,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1588107579
+    },
+    {
+        "content": "<p>Thank you thank you! You're on my page here, and this was very helpful!</p>\n<p>I can see I have some options to consider:</p>\n<ul>\n<li>Given your comment on the java client preferring a flattened expansion, that alone is probably a good reason for me to go with that model and flatten the expansions.</li>\n<li>If I want to support hierarchies, I could do that with the the forUI parameter (although I'm on DSTU2, there's nothing to stop me from implementing it anyway, wouldn't break anything).</li>\n<li>I could create a new version of the value set above in my server, and remove the exclude statement as you suggest. For that matter, if I run into another case like this, where the value set is a bit iffy, I can correct it without breaking anything.</li>\n</ul>\n<p>Any thoughts about handling/validation of abstract codes? This value set includes a whole bunch of abstract codes, that are basically there to create hierarchies and subsets of codes. I suppose including abstract codes on the expansion is not going to hurt anything, but again in this example you'd have a bunch of codes that really aren't valid to use in a coding.</p>",
+        "id": 195630225,
+        "sender_full_name": "Tim Dunnington",
+        "timestamp": 1588109681
+    },
+    {
+        "content": "<p>well, have you looked at the expansion operation parameters?</p>",
+        "id": 195634016,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1588111631
+    },
+    {
+        "content": "<p>I'd been focused on the DSTU2 implementation and its parameters, but I'll take a closer look at the R4 parameters at your suggestion here. Thanks Grahame.</p>",
+        "id": 195710130,
+        "sender_full_name": "Tim Dunnington",
+        "timestamp": 1588167720
+    },
+    {
+        "content": "<p>Hello, I have a question about value set expansion. There are quite a few implicit SNOMED CT value sets that I get from a Snowstorm server using ECL expressions. These value sets are intended for a patient e-health app. Is there an opportunity to get patient-friendly terms in these value sets? Thank you!</p>",
+        "id": 197694150,
+        "sender_full_name": "Alexander Pavlushkin",
+        "timestamp": 1589550880
+    },
+    {
+        "content": "<p>how are SI distributing the patient friendly terms? It's a different edition? or a supplement?</p>",
+        "id": 197726164,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1589564235
+    },
+    {
+        "content": "<p>(deleted)</p>",
+        "id": 197730113,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1589565942
+    },
+    {
+        "content": "<p>sounds like a supplement to me, then?</p>",
+        "id": 197730886,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1589566292
+    },
+    {
+        "content": "<p>Apologies - needed coffee! Yes patient-friendly terms could be viewed as a supplement (my initial reply related to the GPS). In the NZ Edition, patient-friendly terms are distributed as additional descriptions and a language reference set.</p>",
+        "id": 197731926,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1589566810
+    },
+    {
+        "content": "<p>they have a use code then? (in FHIR terms)</p>",
+        "id": 197739423,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1589569965
+    },
+    {
+        "content": "<p>We don't have a designation use code for patient-friendly terms as yet. It's been discussed at Vocabulary, but not added to the FHIR ValueSet. For SCT expansions, I currently place the NZ Reference Set ID in the Designation Token passed in the useContext parameter, i.e. <a href=\"http://snomed.info/sct|281000210109\">http://snomed.info/sct|281000210109</a>... but we need a solution for all Code Systems.</p>",
+        "id": 197742652,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1589571175
+    },
+    {
+        "content": "<p>I'm pretty sure that we agreed (voted) to add it.  I need to pull up the Jira task</p>",
+        "id": 197743104,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1589571395
+    },
+    {
+        "content": "<p>It's looks like we can find at least one patient-friendly synonym that already exists in the SNOMED edition (we use the NZ edition). And in some cases we can't find an appropriate definition and should provide it.</p>",
+        "id": 197751557,
+        "sender_full_name": "Alexander Pavlushkin",
+        "timestamp": 1589576350
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191364\">Peter Jordan</span> <a href=\"#narrow/stream/179202-terminology/topic/ValueSet.20.24expand.20questions/near/197731926\">said</a>:</p>\n<blockquote>\n<p>Apologies - needed coffee! Yes patient-friendly terms could be viewed as a supplement (my initial reply related to the GPS). In the NZ Edition, patient-friendly terms are distributed as additional descriptions and a language reference set.</p>\n</blockquote>\n<p>Thank you!</p>",
+        "id": 197752338,
+        "sender_full_name": "Alexander Pavlushkin",
+        "timestamp": 1589576816
+    },
+    {
+        "content": "<p>We still need to apply this in the spec - <a href=\"http://jira.hl7.org/browse/FHIR-19960\">J#19960</a>.  It looks like we didn't ever decide what the new code for \"consumer friendly\" terms should be.  It's also not clear to me how robust this solution is of adding \"consumer friendly\" to the value set.  Is \"consumer friendly\" a subtype of 'Synonym' - or not?</p>",
+        "id": 197762527,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1589584361
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191405\">Rob Hausam</span> <a href=\"#narrow/stream/179202-terminology/topic/ValueSet.20.24expand.20questions/near/197762527\">said</a>:</p>\n<blockquote>\n<p>We still need to apply this in the spec - <a href=\"http://jira.hl7.org/browse/FHIR-19960\">J#19960</a>.  It looks like we didn't ever decide what the new code for \"consumer friendly\" terms should be.  It's also not clear to me how robust this solution is of adding \"consumer friendly\" to the value set.  Is \"consumer friendly\" a subtype of 'Synonym' - or not?</p>\n</blockquote>\n<p>I suppose yes.</p>",
+        "id": 197769182,
+        "sender_full_name": "Alexander Pavlushkin",
+        "timestamp": 1589592299
+    },
+    {
+        "content": "<p>Perhaps we should also have a debate about the need for \"consumer friendly\" terms?</p>",
+        "id": 197778274,
+        "sender_full_name": "Michael Lawley",
+        "timestamp": 1589607152
+    },
+    {
+        "content": "<p>The LOINC community has had a fair bit of discussion about this, but I suspect that like <span class=\"user-mention\" data-user-id=\"191343\">@Michael Lawley</span> ,  it doesn't feel settled. Presently, LOINC uses the label \"Consumer Name\", which is partly for historical reasons (it's been there a while, so harder to change). The agreed rules around its construction explicitly omit key distinguishing term attributes, which is great for its intended context of use (display to end users) but not for others (i.e. mapping). Some have argued these names would work nicely for \"generalist\" clinicians and so the distinction should really be between domain generalists and specialists, not providers and consumers. (We heard this from knowledge vendors that make their content available publicly to all). Despite all this, I'm good with \"consumer\" because it is evocative of the intended context of use...not because it's perfect. </p>\n<p>We could always make synonyms for \"consumer name\" <span aria-label=\"grinning face with smiling eyes\" class=\"emoji emoji-1f601\" role=\"img\" title=\"grinning face with smiling eyes\">:grinning_face_with_smiling_eyes:</span></p>",
+        "id": 197795288,
+        "sender_full_name": "Daniel Vreeman",
+        "timestamp": 1589634995
+    },
+    {
+        "content": "<p>I agree that some further discussion and looking at known use cases seems warranted.  I'm inclined to do that before applying this change (or any other related changes) to the spec.</p>",
+        "id": 197797363,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1589638147
+    },
+    {
+        "content": "<p>To some extent, this debate has already taken place in some countries - driven by a switch in emphasis from a reactive system of healthcare interventions to a consumer-driven health and wellness approach. While I understand terminologists' concerns in this area, my view is that consumer requirements need to be addressed. In NZ, I would be very surprised if our SNOMED NRC withdrew the 'Patient-Friendly' terms already in use as that would be in contravention of the overall NZ Health Strategy.</p>",
+        "id": 197815827,
+        "sender_full_name": "Peter Jordan",
+        "timestamp": 1589664186
+    },
+    {
+        "content": "<p>I agree we need it - just thinking about the details of how we address it in FHIR.</p>",
+        "id": 197816299,
+        "sender_full_name": "Rob Hausam",
+        "timestamp": 1589664949
+    }
+]

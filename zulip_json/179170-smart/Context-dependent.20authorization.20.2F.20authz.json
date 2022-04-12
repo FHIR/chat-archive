@@ -1,0 +1,128 @@
+[
+    {
+        "content": "<p>Hey folks, I have a SMART on FHIR proxy sitting in front of a Google FHIR store. The proxy forbids access when a related read scope is missing. That's easy enough. But what's the correct behavior for anything finer grained than that?  A trivial example is that an fhirUser of \"Patient/abc\" and the \"patient/Patient.read\" scope should only be able to read \"Patient/abc\" and not any other sibling like \"Patient/xyz\" (see <a href=\"#narrow/stream/179170-smart/topic/Patient.20scopes.2C.20authz.20logic\">https://chat.fhir.org/#narrow/stream/179170-smart/topic/Patient.20scopes.2C.20authz.20logic</a> for a more complicated example). What about the other FHIR entities? I haven't seen a specification anywhere. Is there either a formal or informal guide to follow? Thanks!</p>",
+        "id": 240646059,
+        "sender_full_name": "Merlyn Albery-Speyer",
+        "timestamp": 1622227810
+    },
+    {
+        "content": "<p>The rules and expected behavior here can be subtle.</p>\n<p>First off, there's not necessarily A correspondence directly between the fhirUser running an app and the <em>patient</em> context to which authorization is bound for <code>patient/</code> scopes (for example, a user might be a clinician or parent, sharing access scoped to a child's clinical record).</p>\n<p>Next, the interpretation of patient scoped data is not formalized. We reference the FHIR Patient compartment as a starting point, but we also say that if you share a scope like <code>patient/*.read</code>, this can include data that is not directly in the patient compartment, such as resources linked from Observations in the patient compartment (e.g., an Organization or Location linked from a lab result Observation).</p>\n<p>For a non-EHR-based FHIR server like the native FHIR cloud services (Google FHIR store, IBM FHIR server, HAPI, FHIR Server for Azure, Firely Spark, etc), there's often not a place where these policies exist (e.g., which records is user123 allowed to see/share, or which resources should be shared when a scope like <code>patient/*.read</code> is granted).</p>\n<p>Finally, I should note that even when all of the considerations above are established, it can still be challenging to figure out how to perform authorization as a proxy, while maintaining reasonable performance -- and to maintain correctness when supporting features like chained searches, reverse includes, and custom operations. We are much better at standardizing the simple stuff.</p>",
+        "id": 240664037,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1622238301
+    },
+    {
+        "content": "<p>Thanks, Josh.</p>\n<p>Is this all formalized anywhere? By this I mean, what will CMS do to determine compliance here? The answer I'd arrived at from the thread that spawned this one was: (<a href=\"#narrow/stream/179166-implementers/topic/Definitive.20AuthoriZation.20specification\">https://chat.fhir.org/#narrow/stream/179166-implementers/topic/Definitive.20AuthoriZation.20specification</a>)</p>\n<p>\"Solution:</p>\n<ul>\n<li>it is sufficient to blacklist any response from the FHIR server that references any other Patient, and otherwise let everything through</li>\n</ul>\n<p>Reasoning:</p>\n<ul>\n<li>it is surely possible that there are resources that are (1) not patient associated and (2) contain sensitive data, but when an app use patient scopes to get data about a patient it really need only patient-associated resources and those handful of resources referenced by them that are necessary for completeness: Practitioner, Organization, Location, PractitionerRole\"</li>\n</ul>\n<p>(And I am using Google FHIR store)</p>",
+        "id": 240669556,
+        "sender_full_name": "Merlyn Albery-Speyer",
+        "timestamp": 1622242738
+    },
+    {
+        "content": "<p>In general CMS doesn't have conformance testing, do they? ONC has EHR certification rules, which CMS points to and you can review the Inferno test suite behavior for current expectations. That said:</p>\n<ul>\n<li>The US Core profiles don't require any of the fancy search stuff (reverse chaining, includes, etc), so trivial solution is: ignore it. You may find that other profiles in the financial space, like CARIN Blue Button, add requirements here, so that's worth reviewing.</li>\n<li>Re: resources referenced from within the patient compartment, USCDI really only calls out the Organization and Practitioners as part of \"basic provenance\", so you'd probably want to make these available to all authorized clients, or else compute the subset of them that you need for each patient record</li>\n</ul>",
+        "id": 240670059,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1622243267
+    },
+    {
+        "content": "<p>The solution you proposed sounds like a good starting point; one area where we've seen some concerns/considerations is for Practitioner; we've heard some concerns about exposing details like practitioner names in the context of patient access.</p>",
+        "id": 240670141,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1622243347
+    },
+    {
+        "content": "<p>Sadly (?),  <code>_include</code> and <code>_revinclude</code> do appear to be part of the requirements (\"SEARCH-3\" and \"RESPONSE-3\"), e.g.: [source: \"onc_program_matrix_1_6_0.xls\"]</p>\n<blockquote>\n<p>SEARCH-3 : \"The health IT developer demonstrates the ability of the Health IT Module to support a resource search for the provenance target “(_revIncludes: Provenance:target)” for all the FHIR resources  included in the standard adopted in § 170.213 and implementation specification adopted in § 170.215(a)(2) according to the “Basic Provenance Guidance” section of the implementation specification adopted in § 170.215(a)(2).\"</p>\n</blockquote>",
+        "id": 240670423,
+        "sender_full_name": "Merlyn Albery-Speyer",
+        "timestamp": 1622243644
+    },
+    {
+        "content": "<p>Ah, fair enough -- specifically for provenance. The concerns about pulling sensitive data in through provenance are pretty limited though, because if you can see a resource you should generally be allowed to see the provenance pointing to it.</p>",
+        "id": 240670593,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1622243813
+    },
+    {
+        "content": "<p>At the proxy layer you just want to be very targeted about what is allowed, and not support general usage of includes without being able to either static analysis or dynamically determine whether a particular is just okay</p>",
+        "id": 240670619,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1622243850
+    },
+    {
+        "content": "<p>(This is fantastic input from you - thank you so much for engaging in this discussion!)</p>\n<blockquote>\n<p>Resources referenced from within the patient compartment, USCDI really only calls out the Organization and Practitioners as part of \"basic provenance\", ...</p>\n</blockquote>\n<p>It looks like the scope must be broader than <code>Organization</code> and <code>Practitioner</code> to be useful. E.g. <code>MedicationRequest</code> looks like it will spider out to other entities such as <code>Medication</code>.</p>",
+        "id": 240670621,
+        "sender_full_name": "Merlyn Albery-Speyer",
+        "timestamp": 1622243853
+    },
+    {
+        "content": "<p>Yes; this analysis is exactly the kind of thing you'd want to use to create a definition of what graph links are okay to follow. I'd be happy to collaborate on this if you are interested in publishing it openly somewhere (It's conceivable that a fhir GraphDefinition could help here, but that may be a distraction.)</p>",
+        "id": 240671138,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1622244446
+    },
+    {
+        "content": "<p>Honestly, this whole project to wrap up a Google FHIR store as a SMART on FHIR CMS-Rule friendly repo is entirely open-sourceable.</p>",
+        "id": 240673605,
+        "sender_full_name": "Merlyn Albery-Speyer",
+        "timestamp": 1622247371
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"413791\">@Merlyn Albery-Speyer</span> I can probably make your project a little easier. The Google Healthcare API has native SMART scope enforcement available in alpha (private preview). You can get access through our <a href=\"https://services.google.com/fb/forms/cloudhealthcareapiearlyaccessprogram/\">Trusted Tester program</a>.</p>\n<p>We had to address many of the same problems you have brought up. What we went with initially is a model where patient scopes apply only to the patient compartment itself, and for non-compartment resources like Organization, Location, etc. you can grant a user scope but it allows access to all resources of that type. Provenance remains a problem as it is a \"special\" compartment member that does not reference the patient directly, so it does not pass our compartment check.</p>\n<p>The good news is that this scope enforcement covers search, chained search, include/revinclude, patient $everything...pretty much all of the API surface except for $export and a couple other extended operations.</p>\n<p>There still needs to be an auth proxy or other wrapper on top to set the appropriate scopes. The Google solution is Apigee with HealthAPIx, but it's completely decoupled and you can adapt your wrapper to take advantage of the backend support.</p>",
+        "id": 240856015,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1622481848
+    },
+    {
+        "content": "<p>Excellent. <span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span>! I just applied for it. Once we're accepted, where do I go for documentation on authorization using SMART on FHIR scopes with the Google FHIR data store?</p>",
+        "id": 240969960,
+        "sender_full_name": "Merlyn Albery-Speyer",
+        "timestamp": 1622565805
+    },
+    {
+        "content": "<p><a href=\"https://cloud.google.com/healthcare/private/docs/how-tos/smart-on-fhir\">https://cloud.google.com/healthcare/private/docs/how-tos/smart-on-fhir</a> (this link only works when logged in to an account with access)</p>",
+        "id": 240973973,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1622567563
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"413791\">@Merlyn Albery-Speyer</span> </p>\n<blockquote>\n<p>By this I mean, what will CMS do to determine compliance here?</p>\n</blockquote>\n<p>The short answer is CMS doesn't have an open-source ONC Inferno style tool for conformance testing.</p>\n<p>The Google Trusted Tester program mentioned by <span class=\"user-mention\" data-user-id=\"197072\">@Paul Church</span> being in alpha, there's a de facto monopoly in the commercial space for CMS conformance testing, <a href=\"https://touchstone.aegis.net/touchstone/testdefinitions?selectedTestGrp=/FHIRSandbox/CARIN/CARIN-4-BlueButton/00-SMART-on-FHIR&amp;activeOnly=false&amp;contentEntry=TEST_SCRIPTS\">Aegis Touchstone</a> or <a href=\"https://www.drummondgroup.com/2020/10/22/aegis-and-drummond-announce-strategic-partnership/\">Aegis Touchstone up-sold with Drummond</a>.</p>\n<p>Here is a 1 year old overview of the FHIR conformance testing landscape.</p>\n<ul>\n<li>Video: <a href=\"https://www.youtube.com/watch?v=XdAsyU9oUms\">https://www.youtube.com/watch?v=XdAsyU9oUms</a><div class=\"youtube-video message_inline_image\"><a data-id=\"XdAsyU9oUms\" href=\"https://www.youtube.com/watch?v=XdAsyU9oUms\"><img src=\"https://uploads.zulipusercontent.net/61e561fc685dec299e9eda85dc536ec9d4f768f9/68747470733a2f2f692e7974696d672e636f6d2f76692f586441737955396f556d732f64656661756c742e6a7067\"></a></div></li>\n<li>Slides: <a href=\"https://www.slideshare.net/RyanMHarrison/20200612-fhir-testing-with-onc-inferno-mitre-crucible-and-aegis-touchstone\">https://www.slideshare.net/RyanMHarrison/20200612-fhir-testing-with-onc-inferno-mitre-crucible-and-aegis-touchstone</a></li>\n</ul>\n<p>Please let me know if you have something more up to date.</p>\n<p>I would highly recommend against trying to build your own test harness because the rules get very nuanced, very quickly.</p>",
+        "id": 241855821,
+        "sender_full_name": "Ryan Harrison",
+        "timestamp": 1623109883
+    },
+    {
+        "content": "<p>Just to be clear, Google doesn't have a conformance test. We have server support, which is available in early access (the trusted tester program).</p>",
+        "id": 241857641,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1623111676
+    },
+    {
+        "content": "<p>Is there actually a process for conformance testing against CMS? I thought CMS's API details were not directly regulated (e.g., CMS imposes no requirement to use a specific IG for patient access to financial data, but functional requirements align well to CARIN).</p>",
+        "id": 241859739,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1623113834
+    },
+    {
+        "content": "<p>Have I misunderstood or is my understanding out to date?</p>",
+        "id": 241859758,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1623113863
+    },
+    {
+        "content": "<blockquote>\n<p>CMS's API details were not directly regulated</p>\n</blockquote>\n<p>Correct</p>",
+        "id": 241864103,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1623118977
+    },
+    {
+        "content": "<p>Thanks, Ryan.</p>\n<p>For the benefit of others: I'm getting a lot of mileage out of adding request parameters to the proxied request to Google FHIR (i.e. <code>_id</code> or <code>patient</code>).</p>",
+        "id": 241961060,
+        "sender_full_name": "Merlyn Albery-Speyer",
+        "timestamp": 1623175317
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"413791\">@Merlyn Albery-Speyer</span>  - Curious if you ever made headway on the SMART proxy service, or did you switch to the google native SMART enforcement?    It seems like a community reference SMART evaluator would be useful.  i.e. a module that takes a Bundle of resources and SMART scope information and determines which resources are allowed or not.  Does such a beast exist already? Or is there something I'm not seeing which would prevent a generic implementation like that?</p>",
+        "id": 263228634,
+        "sender_full_name": "Craig McClendon",
+        "timestamp": 1638317932
+    }
+]

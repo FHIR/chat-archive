@@ -1,0 +1,212 @@
+[
+    {
+        "content": "<p>Some lessons learned from implementing an import operation in Google Cloud.<br>\n- We're loading data from cloud storage (GCS). Not much opinion on how to upload large data in general; cloud has already addressed that for us.<br>\n- Flexibility in input is good. We take wildcards. Limiting $import to accept only the file structure of $export would be undesirable, datasets come from many sources.<br>\n- The goal of $import should be an async operation with massive scalability, think gigabytes to terabytes of resources.<br>\n- Error handling: it's very helpful to have an out of band error channel - we take a user-specified GCS location where the server will write errors. If the client uploads 1M resources and 5K of them are bad, the server needs a scalable way to communicate those errors.<br>\n- We allow partial success and will import all the good resources. On the other hand, if the client uploads 1M resources and all of them are bad, maybe a fail-fast option?</p>",
+        "id": 161100606,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1552946711
+    },
+    {
+        "content": "<p>We have targeted a limited use case to start:<br>\n- empty FHIR store + many resources on disk<br>\n- not empty FHIR store, but loading a chunk of self-contained resources like a terminology or profile</p>\n<p>For this case, the import semantics are that every resource must have an ID (every operation is a PUT), referential integrity is ignored, and existing resources are overwritten without creating a _history entry.</p>\n<p>We support two modes: ndjson where every line is a resource, and ndjson where every line is a bundle. In the bundle case, bundles are all treated as 'collection' type with no semantics (except for history bundles, handled separately). This allows importing the contents of searchset bundles, for example the output from Patient/$everything.</p>\n<p>History bundles can be imported if the store config allows; they will populate the corresponding history as if it had occurred in the past. This is blocked from overwriting or adding to an existing history as the result might not make sense.</p>",
+        "id": 161100649,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1552946749
+    },
+    {
+        "content": "<p>Referential integrity, proper change history on overwrite, and batch/transaction semantics are all possible but likely to have a high tradeoff vs. throughput. Most of our users have wanted to \"database restore\" extremely large amounts of data so we have optimized for that.</p>\n<p>I'm quite curious how people want to define the converse of the $export operation - the user journey is not clear to me. Suppose I call $export on several FHIR servers to accumulate data for a set of patients, can I call $import to get all of it into one place without additional client processing? If the data has several copies of Practitioner/123, how does the server decide whether those are actually the same resource and which is the most current?</p>",
+        "id": 161100724,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1552946781
+    },
+    {
+        "content": "<p>These are great questions; look forward to digging in (and will propose discussion as part of a connectathon track too).</p>",
+        "id": 161100852,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1552946908
+    },
+    {
+        "content": "<p>For resource IDs, is a current expectation that you'll only import resources whose IDs are valid within the target system? (Some servers impose limits on the ID space, like hapi by default.)</p>",
+        "id": 161100915,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1552946989
+    },
+    {
+        "content": "<p>Yes, that is the current expectation. It's not ideal.</p>\n<p>Server-assigned IDs are conceptually not too bad to implement: just walk the input one additional time in advance, assign new IDs to everything, and keep track of how to rewrite references. Parallelizing that to handle very large input is another layer of complexity.</p>\n<p>There is a tension between having the client write out the desired semantics explicitly (e.g. by giving batch bundles with the verbs they want) vs. the client handing the server a bunch of resources and saying \"make it happen\". The output from $export isn't batch bundles...</p>",
+        "id": 161102156,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1552948070
+    },
+    {
+        "content": "<p>one key question is that if there are duplicate ids, is that by accident, or is the intent to replace them?</p>",
+        "id": 161102582,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1552948350
+    },
+    {
+        "content": "<p>We are planning to use a similar mechanism in our server, and will be moving the \"external\" ID that comes in from the import to an identifier that we can match into our system to be able to perform the appropriate operation on them - locating the correct resource.</p>",
+        "id": 161110463,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1552956577
+    },
+    {
+        "content": "<p>+1 I think this pattern is going to be pretty common. Do you have a strategy for assigning a system on these identifiers?</p>",
+        "id": 161110541,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1552956633
+    },
+    {
+        "content": "<p>The system will be the base URL where we got them from (at least that's where we were thinking) otherwise would need to have a system parameter somewhere in our server</p>",
+        "id": 161110824,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1552957025
+    },
+    {
+        "content": "<p>I like that. Rewrite all the references by searching on their external IDs as well?</p>",
+        "id": 161110915,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1552957159
+    },
+    {
+        "content": "<p>Yeah</p>",
+        "id": 161110920,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1552957174
+    },
+    {
+        "content": "<p>If the user wants to consolidate resources from different sources that represent the same thing (perhaps a rarely-changing entity like Location), they could have one resource with multiple external ID codes. Would make analysis easier.</p>",
+        "id": 161112094,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1552958565
+    },
+    {
+        "content": "<p>I was more thinking of reuploading new versions of existing content</p>",
+        "id": 161112828,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1552959406
+    },
+    {
+        "content": "<p>Right; I think the same approach works there too as long as the source system's base URL is included</p>",
+        "id": 161119522,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1552969104
+    },
+    {
+        "content": "<p>How do you want to handle referential integrity? Perhaps during the initial pass through the data the server could conditional create stub resources for each resource in the import so that during the actual import references are rewritten to point to a resource that is already valid on the server.</p>",
+        "id": 161163908,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1553011617
+    },
+    {
+        "content": "<p>We've got a quick write-up for $import at the connectathon! I got some early input from several folks here, but I'll personally take responsibility for any ambiguities and mistakes :-)</p>\n<p>Thanks <span class=\"user-mention\" data-user-id=\"195435\">@Kurt Ericson</span> <span class=\"user-mention\" data-user-id=\"191318\">@nicola (RIO/SS)</span> <span class=\"user-mention\" data-user-id=\"191414\">@Dan Gottlieb</span> <span class=\"user-mention\" data-user-id=\"195775\">@Michael Hansen</span> <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> for initial discussions.</p>\n<p><a href=\"https://confluence.hl7.org/pages/viewpage.action?pageId=46892105#id-2019-05BulkDataandAnalyticsTrack-1.Testthedraft$importoperation\" target=\"_blank\" title=\"https://confluence.hl7.org/pages/viewpage.action?pageId=46892105#id-2019-05BulkDataandAnalyticsTrack-1.Testthedraft$importoperation\">https://confluence.hl7.org/pages/viewpage.action?pageId=46892105#id-2019-05BulkDataandAnalyticsTrack-1.Testthedraft$importoperation</a></p>\n<p>Please share any thoughts on the approach; we wanted to define something simple with limited scope, but not close the door to more complex use cases downstream.</p>",
+        "id": 162640503,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1554483877
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>  <span class=\"user-mention\" data-user-id=\"195435\">@Kurt Ericson</span> <span class=\"user-mention\" data-user-id=\"191318\">@nicola (RIO/SS)</span> <span class=\"user-mention\" data-user-id=\"195775\">@Michael Hansen</span> <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> <span class=\"user-mention\" data-user-id=\"191496\">@Nikolai Schwertner</span> (and anyone else who's interested) Want to find time on Monday or Tuesday at Dev Days for a followup discussion on $import (we could use some of the session to come up with a plan for the September connectathon)?</p>",
+        "id": 167575774,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1559913707
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191414\">@Dan Gottlieb</span> Would love to join as well, I'm planning on being there for the Tuesday meeting, if that works for everyone else.</p>",
+        "id": 167576597,
+        "sender_full_name": "Nick Robison",
+        "timestamp": 1559914331
+    },
+    {
+        "content": "<p>Yes sounds good; I'll be there and available both days to meet.</p>",
+        "id": 167583529,
+        "sender_full_name": "Kurt Ericson",
+        "timestamp": 1559919110
+    },
+    {
+        "content": "<p>I might want to include a few people from the team too like <span class=\"user-mention\" data-user-id=\"195201\">@Jack Liu</span></p>",
+        "id": 167588198,
+        "sender_full_name": "Michael Hansen",
+        "timestamp": 1559922524
+    },
+    {
+        "content": "<p>Great! Thoughts on timing - maybe during lunch on Tuesday?</p>",
+        "id": 167600224,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1559931533
+    },
+    {
+        "content": "<p>Maybe session - not lunchtime? I see free slots in the schedule.</p>",
+        "id": 167602131,
+        "sender_full_name": "nicola (RIO/SS)",
+        "timestamp": 1559932842
+    },
+    {
+        "content": "<p>Isn't there a popup session option or something like that?</p>",
+        "id": 167603045,
+        "sender_full_name": "Michael Hansen",
+        "timestamp": 1559933410
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191354\">@Rien Wertheim</span> can we schedule a popup session around defining a import operations for Tuesday?</p>",
+        "id": 167605038,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1559934885
+    },
+    {
+        "content": "<p>I think so. Let me check and send you an email.</p>",
+        "id": 167606395,
+        "sender_full_name": "Rien Wertheim",
+        "timestamp": 1559935891
+    },
+    {
+        "content": "<p>I have a morning talk on Tuesday until 10am. Any time after would work for me.</p>",
+        "id": 167669045,
+        "sender_full_name": "Nikolai Schwertner",
+        "timestamp": 1560029959
+    },
+    {
+        "content": "<p>please include me in the popup session on Tuesday.  <a href=\"mailto:edward.yurcisin@carejourney.com\" title=\"mailto:edward.yurcisin@carejourney.com\">edward.yurcisin@carejourney.com</a>.</p>",
+        "id": 167779890,
+        "sender_full_name": "Edward Yurcisin",
+        "timestamp": 1560188966
+    },
+    {
+        "content": "<p>We're scheduled for a popup session to discuss an import operation on <strong>Tuesday from 2.10-2.50 in Sonora</strong>.</p>",
+        "id": 167786324,
+        "sender_full_name": "Dan Gottlieb",
+        "timestamp": 1560193175
+    },
+    {
+        "content": "<p>Hi! Could you please advise whether I could find the latest draft spec for bulk import. Thanks.</p>",
+        "id": 168608719,
+        "sender_full_name": "Andrey Lyashin",
+        "timestamp": 1561046373
+    },
+    {
+        "content": "<p><a href=\"https://github.com/smart-on-fhir/fhir-bulk-data-docs\" target=\"_blank\" title=\"https://github.com/smart-on-fhir/fhir-bulk-data-docs\">https://github.com/smart-on-fhir/fhir-bulk-data-docs</a></p>",
+        "id": 168612697,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1561049344
+    },
+    {
+        "content": "<p>Thank you. I am sorry but I have found only 'export' docs.</p>",
+        "id": 168616541,
+        "sender_full_name": "Andrey Lyashin",
+        "timestamp": 1561052166
+    },
+    {
+        "content": "<p>I'm not sure if <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> has moved it to a github location, but the working doc on $import from the connectathon is <a href=\"https://docs.google.com/document/d/1e9YYtDxc2Yed2RWU27jPLhfyIH0d6IH5Y9ligJUBFZE/edit#heading=h.bbcu6h9umbza\" target=\"_blank\" title=\"https://docs.google.com/document/d/1e9YYtDxc2Yed2RWU27jPLhfyIH0d6IH5Y9ligJUBFZE/edit#heading=h.bbcu6h9umbza\">https://docs.google.com/document/d/1e9YYtDxc2Yed2RWU27jPLhfyIH0d6IH5Y9ligJUBFZE/edit#heading=h.bbcu6h9umbza</a></p>",
+        "id": 168617102,
+        "sender_full_name": "Paul Church",
+        "timestamp": 1561052612
+    },
+    {
+        "content": "<p>(We'll move to GH and update the doc to point there before the next connectathon)</p>",
+        "id": 168620672,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1561054842
+    },
+    {
+        "content": "<p>Thank you!</p>",
+        "id": 168663519,
+        "sender_full_name": "Andrey Lyashin",
+        "timestamp": 1561104472
+    }
+]

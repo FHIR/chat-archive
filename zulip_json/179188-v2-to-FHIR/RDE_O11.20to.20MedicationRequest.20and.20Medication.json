@@ -1,0 +1,332 @@
+[
+    {
+        "content": "<p>Hello!</p>\n<p>I'm mapping RDE_O11 to MedicationRequest and Medication resources in FHIR STU3. I would appreciate it if someone could weigh in on what I'm presently doing. <em>Questions in italics.</em></p>\n<p><strong>RXE-3, RXE-4, and RXE-5 (Give Minimum and Maximum and Units)</strong></p>\n<ul>\n<li>These map to either <code>MedicationRequest.dosageInstruction.doseRange</code> or <code>MedicationRequest.dosageInstruction.doseQuantity</code> depending on whether or not RXE-4 is populated.</li>\n<li>For R4, these map to either <code>MedicationRequest.dosageInstruction.doseAndRate.doseRange</code> or <code>MedicationRequest.dosageInstruction.doseAndRate.doseQuantity</code> depending on whether or not RXE-4 is populated.</li>\n</ul>\n<p><strong>RXE-23 and RXE-24 (Give Rate Amount and Give Rate Units)</strong></p>\n<ul>\n<li>These map to either <code>MedicationRequest.dosageInstruction.rateRange</code>, <code>MedicationRequest.dosageInstruction.rateRatio</code>, or <code>MedicationRequest.dosageInstruction.rateQuantity</code> depending on the value of RXE-23 (I use regex to determine what's appropriate).</li>\n<li>For R4, these map to either <code>MedicationRequest.dosageInstruction.doseAndRate.rateRange</code>, <code>MedicationRequest.dosageInstruction.doseAndRate.rateRatio</code>, or <code>MedicationRequest.dosageInstruction.doseAndRate.rateQuantity</code> depending on the value of RXE-23.</li>\n</ul>\n<p>Note: Depending on the number of RXC segments provided, I map either a single- or multi-component medication (e.g. IV solutions). I map <code>RXE-2</code> (Give Code) to <code>Medication.code</code> of a Medication that is referenced by <code>MedicationRequest.medicationReference</code>. RXC segments result in Medication resources, which are referenced by <code>Medication.ingredient.itemReference</code> of that first, top-level Medication.</p>\n<p>Here's where I'm a little uncertain...</p>\n<p><strong>RXC-3 and RXC-4 (Component Amount and Component Units)</strong></p>\n<ul>\n<li><em>Should these be mapped to <code>Medication.package.content.amount</code>?</em></li>\n<li><em>For R4, should these be mapped to <code>Medication.amount</code>?</em></li>\n</ul>\n<p><strong>RXE-25, RXE-26, RXE-33, and RXE-34 (Give Strength and Give Strength Volume and Units)</strong></p>\n<ul>\n<li><em>Is there a place for this in FHIR?</em></li>\n<li>If not, I'm thinking of adding an extension with valueRatio to <code>MedicationRequest.medicationReference</code> to capture this. <em>Would that be appropriate?</em></li>\n</ul>\n<p><strong>RXC-5, RXC-6, RXC-8, and RXC-9 (Component Strength and Component Strength Volume and Units)</strong></p>\n<ul>\n<li><em>Should these be mapped to <code>Medication.ingredient.amount</code>?</em></li>\n<li><em>For R4, should these be mapped to <code>Medication.ingredient.strength</code>?</em></li>\n</ul>\n<p>Thanks for any help you can provide.</p>\n<p>For what it's worth, I understand that v2-to-FHIR mapping is incomplete for meds, and I'd be happy to share what I've got with whomever would benefit from it. : )</p>",
+        "id": 162455908,
+        "sender_full_name": "Diederik Muylwyk",
+        "timestamp": 1554316624
+    },
+    {
+        "content": "<p>The RXC components should map to Medication.ingredient.  Strength is also handled with ingredient.  Specifically, strength is the quantity of an 'active' ingredient.   You shouldn't ever have a situation where there's both a give strength adn component strengths.</p>",
+        "id": 162458323,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1554318018
+    },
+    {
+        "content": "<p>Hiya, <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>!</p>\n<p>So a message will either either have RXE-25/26/33/34 or RXC-5/6/8/9 populated but not both?</p>\n<p>In the second case, each component Medication would have it's own value in <code>Medication.ingredient.amount</code> (STU3).</p>\n<p>In the first case, each component Medication would have the same value in <code>Medication.ingredient.amount</code> (STU3).</p>\n<p>Is that correct?</p>",
+        "id": 162459136,
+        "sender_full_name": "Diederik Muylwyk",
+        "timestamp": 1554318561
+    },
+    {
+        "content": "<p>I think so.  I can't think of a situation where it makes sense to convey both.</p>\n<p>For RXE, I think you'd generally only have one ingredient that tyou'd talk about as I don't think RXE-25/26/33/34 deal well with drugs having multiple active ingredients (e.g. Tylenol 3s)</p>",
+        "id": 162460035,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1554319114
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"195421\">@Diederik Muylwyk</span>  - I don't know about the FHIR mapping, but I think it's possible for an RDE message to have something, e.g. an 'active ingredient' in the RXE and additives (e.g. solutions like D5W, etc.) in the RXC components.   I think I've also seen something like this for nutritional feeding, e.g. TPN.   Maybe someone from Pharmacy could give some real use cases (and samples from the V2 world).</p>",
+        "id": 162460141,
+        "sender_full_name": "John Silva",
+        "timestamp": 1554319200
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194183\">@John Silva</span>, <code>RXC-1</code> (RX Component Type) is generally used to distinguish base from additives. Of course, everyone's feed is a little different. : S</p>\n<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>, in my case I'm seeing RXE-25/26/33/34 populated with 0..* RXC segments, and those RXC segments generally do not have anything in RXC-5/6/8/9. Where I have multiple RXCs, would it be appropriate to populate all instances of <code>Medication.ingredient.amount</code> (STU3) with the same values based on RXE-25/26/33/34?</p>",
+        "id": 162461142,
+        "sender_full_name": "Diederik Muylwyk",
+        "timestamp": 1554319901
+    },
+    {
+        "content": "<p>If you've got multiple RXCs, those are each indicating a different ingredient.  The 'strength' should be an ingredient quantity for only one ingredient.  What you see in RXE is generally a ratio - e.g. 10 mg/mL.  In RXC you've got a recipe - 10mL of this, 2g of that, etc.   Because of the way ingredients combine, it's difficult to figure out what ingredient quantity will produce a particular strength unless you're ignoring everything other than the active ingredients.</p>",
+        "id": 162461404,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1554320072
+    },
+    {
+        "content": "<p>Hmm. I'm not sure how to proceed. I'm going to share an example of what I'm dealing with, and how I think it should look. This is test data with no PHI/PI included. Does this make sense with respect to how I'm mapping RXE-25/26 and RXC-5/6?</p>\n<p>Here's part of an RDE_O11 as it comes in:</p>\n<div class=\"codehilite\"><pre><span></span>...\nRXE|^Continuous^^20180731170000^^STAT|^PANTOPRAZOLE INFUSION^ADS^^^^^^pantoprazole (use for PROTONIX) 80 mg in sodium chloride 0.9 % 100 mL (0.8 mg/mL) infusion|8||43^mg/hr|||||2|Each||123456789^SIMPSON^HOMER^J||||||||||10|mL/hr|0.8|3^mg||||STANDARD|^use for PROTONIX||1|1^mL||||||main^SMC CENTRAL PHARMACY\nRXR|IV^Intravenous\nRXC|A|05613^PANTOPRAZOLE 40 MG INTRAVENOUS SOLUTION^ADS|80|mg|2|Each|^use for PROTONIX\nRXC|B|00407^100 ML BAG : SODIUM CHLORIDE 0.9 % INTRAVENOUS SOLUTION^ADS|80|mL|1|FC\n</pre></div>\n\n\n<p>Here it is after I've cleaned it up a bit (some terminology mapping, adding appropriate code systems, etc):</p>\n<div class=\"codehilite\"><pre><span></span>...\nRXE|^Continuous^^20180731170000^^STAT|J7999^Compounded drug, not otherwise classified^http://argonaut.hl7.org/fhir/sid/hcpc^^^^^^pantoprazole (use for PROTONIX) 80 mg in sodium chloride 0.9 % 100 mL (0.8 mg/mL) infusion|8||mg/h^mg/h^http://unitsofmeasure.org|||||2|Each^DESCRIPTION REQUIRED^urn:hssc:srhs:epic:med:units||123456789^SIMPSON^HOMER^J||||||||||10|mL/h^mL/h^http://unitsofmeasure.org|0.8|mg^mg^http://unitsofmeasure.org||||STANDARD|^use for PROTONIX||1|1^mL||||||main^SMC CENTRAL PHARMACY\nRXR|255560000^Intravenous^http://snomed.info/sct\nRXC|A|05613^PANTOPRAZOLE 40 MG INTRAVENOUS SOLUTION^urn:hssc:srhs:ads:medicationcode|80|mg^mg^http://unitsofmeasure.org|2|Each|^use for PROTONIX\nRXC|B|00407^100 ML BAG : SODIUM CHLORIDE 0.9 % INTRAVENOUS SOLUTION^urn:hssc:srhs:ads:medicationcode|80|mL^mL^http://unitsofmeasure.org|1|FC\n</pre></div>\n\n\n<div class=\"codehilite\"><pre><span></span>    RXE-25/26 = 0.8|mg^mg^http://unitsofmeasure.org\n1st RXC-5/6 = 2|Each\n2nd RXC-5/6 = 1|FC\n</pre></div>\n\n\n<p>Here part of the resulting transaction bundle with a single MedicationRequest and three contained Medication resources (one for the RXE, and one apiece for the two RXCs):</p>\n<div class=\"codehilite\"><pre><span></span>{\n  &quot;fullUrl&quot;: &quot;urn:uuid:b6748fb6-3e1f-4727-8375-f9d3a1ab34c8&quot;,\n  &quot;resource&quot;: {\n    &quot;resourceType&quot;: &quot;MedicationRequest&quot;,\n    &quot;contained&quot;: [\n      {\n        &quot;resourceType&quot;: &quot;Medication&quot;,\n        &quot;id&quot;: &quot;1&quot;,\n        &quot;code&quot;: {\n          &quot;coding&quot;: [\n            {\n              &quot;system&quot;: &quot;http://argonaut.hl7.org/fhir/sid/hcpc&quot;,\n              &quot;code&quot;: &quot;J7999&quot;,\n              &quot;display&quot;: &quot;Compounded drug, not otherwise classified&quot;\n            }\n          ],\n          &quot;text&quot;: &quot;pantoprazole (use for PROTONIX) 80 mg in sodium chloride 0.9 % 100 mL (0.8 mg/mL) infusion&quot;\n        },\n        &quot;ingredient&quot;: [\n          {\n            &quot;itemReference&quot;: {\n              &quot;reference&quot;: &quot;#2&quot;\n            },\n            &quot;isActive&quot;: true,\n            &quot;amount&quot;: {\n              &quot;numerator&quot;: {\n                &quot;value&quot;: 2,\n                &quot;unit&quot;: &quot;Each&quot;\n              },\n              &quot;denominator&quot;: {\n                &quot;value&quot;: 1\n              }\n            }\n          },\n          {\n            &quot;itemReference&quot;: {\n              &quot;reference&quot;: &quot;#3&quot;\n            },\n            &quot;isActive&quot;: false,\n            &quot;amount&quot;: {\n              &quot;numerator&quot;: {\n                &quot;value&quot;: 1,\n                &quot;unit&quot;: &quot;FC&quot;\n              },\n              &quot;denominator&quot;: {\n                &quot;value&quot;: 1\n              }\n            }\n          }\n        ]\n      },\n      {\n        &quot;resourceType&quot;: &quot;Medication&quot;,\n        &quot;id&quot;: &quot;2&quot;,\n        &quot;code&quot;: {\n          &quot;coding&quot;: [\n            {\n              &quot;system&quot;: &quot;urn:hssc:srhs:ads:medicationcode&quot;,\n              &quot;code&quot;: &quot;05613&quot;,\n              &quot;display&quot;: &quot;PANTOPRAZOLE 40 MG INTRAVENOUS SOLUTION&quot;\n            }\n          ]\n        }\n      },\n      {\n        &quot;resourceType&quot;: &quot;Medication&quot;,\n        &quot;id&quot;: &quot;3&quot;,\n        &quot;code&quot;: {\n          &quot;coding&quot;: [\n            {\n              &quot;system&quot;: &quot;urn:hssc:srhs:ads:medicationcode&quot;,\n              &quot;code&quot;: &quot;00407&quot;,\n              &quot;display&quot;: &quot;100 ML BAG : SODIUM CHLORIDE 0.9 % INTRAVENOUS SOLUTION&quot;\n            }\n          ]\n        }\n      }\n    ],\n    &quot;identifier&quot;: [\n      {\n        &quot;system&quot;: &quot;urn:hssc:srhs:epc:medorderid&quot;,\n        &quot;value&quot;: &quot;30926422&quot;\n      }\n    ],\n    &quot;status&quot;: &quot;active&quot;,\n    &quot;intent&quot;: &quot;order&quot;,\n    &quot;medicationReference&quot;: {\n      &quot;reference&quot;: &quot;#1&quot;,\n      &quot;extension&quot;: [\n        {\n          &quot;url&quot;: &quot;https:/example.org/fhir/ns/StructureDefinition/strength&quot;,\n          &quot;valueRatio&quot;: {\n            &quot;numerator&quot;: {\n              &quot;value&quot;: 0.8,\n              &quot;unit&quot;: &quot;mg&quot;,\n              &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,\n              &quot;code&quot;: &quot;mg&quot;\n            },\n            &quot;denominator&quot;: {\n              &quot;value&quot;: 1\n            }\n          }\n        }\n      ],\n    },\n    &quot;subject&quot;: {\n      &quot;reference&quot;: &quot;urn:uuid:05816ff9-706a-448a-8414-678174b4f7f4&quot;\n    },\n    &quot;context&quot;: {\n      &quot;reference&quot;: &quot;urn:uuid:240c8267-1f5d-4ae6-8c50-c768e287de7b&quot;\n    },\n    &quot;authoredOn&quot;: &quot;2017-03-01T14:23:34-05:00&quot;,\n    &quot;requester&quot;: {\n      &quot;agent&quot;: {\n        &quot;reference&quot;: &quot;urn:uuid:00355767-28e8-40ca-b75a-513b8ce1acb8&quot;\n      }\n    },\n    &quot;dosageInstruction&quot;: [\n      {\n        &quot;timing&quot;: {\n          &quot;repeat&quot;: {\n            &quot;boundsPeriod&quot;: {\n              &quot;start&quot;: &quot;2018-07-31T17:00:00-04:00&quot;\n            }\n          },\n          &quot;code&quot;: {\n            &quot;text&quot;: &quot;Continuous&quot;\n          }\n        },\n        &quot;route&quot;: {\n          &quot;coding&quot;: [\n            {\n              &quot;system&quot;: &quot;http://snomed.info/sct&quot;,\n              &quot;code&quot;: &quot;255560000&quot;,\n              &quot;display&quot;: &quot;Intravenous&quot;\n            }\n          ]\n        },\n        &quot;doseQuantity&quot;: {\n          &quot;value&quot;: 8,\n          &quot;unit&quot;: &quot;mg/h&quot;,\n          &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,\n          &quot;code&quot;: &quot;mg/h&quot;\n        },\n        &quot;rateQuantity&quot;: {\n          &quot;value&quot;: 10,\n          &quot;unit&quot;: &quot;mL/h&quot;,\n          &quot;system&quot;: &quot;http://unitsofmeasure.org&quot;,\n          &quot;code&quot;: &quot;mL/h&quot;\n        }\n      }\n    ],\n    &quot;dispenseRequest&quot;: {\n      &quot;quantity&quot;: {\n        &quot;value&quot;: 2,\n        &quot;unit&quot;: &quot;DESCRIPTION REQUIRED&quot;,\n        &quot;system&quot;: &quot;urn:hssc:srhs:epic:med:units&quot;,\n        &quot;code&quot;: &quot;Each&quot;\n      }\n    }\n  },\n  &quot;request&quot;: {\n    &quot;method&quot;: &quot;PUT&quot;,\n    &quot;url&quot;: &quot;/MedicationRequest?identifier=urn%3Ahssc%3Asrhs%3Aepc%3Amedorderid%7C30926422&quot;\n  }\n}\n</pre></div>",
+        "id": 162465378,
+        "sender_full_name": "Diederik Muylwyk",
+        "timestamp": 1554322737
+    },
+    {
+        "content": "<p>Oh, and this remains a question for me as well:</p>\n<p><strong>RXC-3 and RXC-4 (Component Amount and Component Units)</strong></p>\n<ul>\n<li><em>Should these be mapped to <code>Medication.package.content.amount</code>?</em></li>\n<li><em>For R4, should these be mapped to <code>Medication.amount</code>?</em></li>\n</ul>",
+        "id": 162469137,
+        "sender_full_name": "Diederik Muylwyk",
+        "timestamp": 1554325169
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191759\">@Melva Peters</span> <span class=\"user-mention\" data-user-id=\"192080\">@John Hatem</span> <span class=\"user-mention\" data-user-id=\"191402\">@Scott Robertson</span>  Any thoughts how you'd interpret this?</p>",
+        "id": 162476283,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1554330918
+    },
+    {
+        "content": "<p>Thanks, <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>. Apologies if that's too much to ask or inappropriate for this forum. : )</p>",
+        "id": 162476486,
+        "sender_full_name": "Diederik Muylwyk",
+        "timestamp": 1554331137
+    },
+    {
+        "content": "<p>Asking is always.  Sometimes we'll direct you elsewhere.  Sometimes we won't have the answers, but we'll try our best :)</p>",
+        "id": 162476617,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1554331299
+    },
+    {
+        "content": "<p>Appreciated. This is one of the better, more helpful tech-related communities in which I've participated. :D</p>",
+        "id": 162476683,
+        "sender_full_name": "Diederik Muylwyk",
+        "timestamp": 1554331352
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192166\">@Jean Duteau</span> can you help with these questions?</p>",
+        "id": 162485450,
+        "sender_full_name": "Melva Peters",
+        "timestamp": 1554340752
+    },
+    {
+        "content": "<blockquote>\n<p><strong>RXC-3 and RXC-4 (Component Amount and Component Units)</strong><br>\n*  <em>Should these be mapped to <code>Medication.package.content.amount</code>?</em><br>\n*  <em>For R4, should these be mapped to <code>Medication.amount</code>?</em></p>\n</blockquote>\n<p>Not sure for STU3. For R4 yes, medication.amount</p>\n<blockquote>\n<p><strong>RXE-25, RXE-26, RXE-33, and RXE-34 (Give Strength and Give Strength Volume and Units)</strong><br>\n*  <em>Is there a place for this in FHIR?</em><br>\n*  If not, I'm thinking of adding an extension with valueRatio to <code>MedicationRequest.medicationReference</code> to capture this. <em>Would that be appropriate?</em></p>\n</blockquote>\n<p>RXE-25... would be needed when you need to indicate a strength and that is not obtained from the medication reference. In FHIR you put that in the medication itself (amount). Why would you need that extension? Do you need to send anything that is not in the dosageInstruction and medication #1?</p>\n<blockquote>\n<p><strong>RXC-5, RXC-6, RXC-8, and RXC-9 (Component Strength and Component Strength Volume and Units)</strong><br>\n*  <em>For R4, should these be mapped to <code>Medication.ingredient.strength</code>?</em></p>\n</blockquote>\n<p>For R4, think so.</p>\n<p>I think the Pharmacy group should review this.</p>",
+        "id": 162515333,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1554377385
+    },
+    {
+        "content": "<p>Also, I notice the \"isActive\" attribute - was it not agreed to change this to \"role\"? to support excipient, adjuvant, etc.?</p>",
+        "id": 162515341,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1554377393
+    },
+    {
+        "content": "<p>(<span class=\"user-mention\" data-user-id=\"195421\">@Diederik Muylwyk</span> i think your extension lacks units on denominator, but that is not critical and I assume it is just an example)</p>",
+        "id": 162515471,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1554377507
+    },
+    {
+        "content": "<p>Hi, <span class=\"user-mention\" data-user-id=\"191832\">@Jose Costa Teixeira</span>. Thanks for your response!</p>\n<blockquote>\n<p>Not sure for STU3. For R4 yes, medication.amount</p>\n</blockquote>\n<p>I'm confident then that it would be <a href=\"https://www.hl7.org/fhir/STU3/medication-definitions.html#Medication.package.content.amount\" target=\"_blank\" title=\"https://www.hl7.org/fhir/STU3/medication-definitions.html#Medication.package.content.amount\"><code>Medication.package.content.amount</code></a> in STU3. This field was removed in R4 (rather, it appears to have been moved to <a href=\"https://www.hl7.org/fhir/medication-definitions.html#Medication.amount\" target=\"_blank\" title=\"https://www.hl7.org/fhir/medication-definitions.html#Medication.amount\"><code>Medication.amount</code></a>). These fields in the two versions have the same description.</p>\n<blockquote>\n<p>RXE-25... would be needed when you need to indicate a strength and that is not obtained from the medication reference. In FHIR you put that in the medication itself (amount). Why would you need that extension? Do you need to send anything that is not in the dosageInstruction and medication #1?</p>\n</blockquote>\n<p>I'm not entirely sure I understand so I'll try to repeat this back to you in my own words. I'll use only R4 for clarity here. In the case of a multi-component medication (multiple RXC segments), I would have a top-level Medication based on RXE and 2..* component Medications referenced as ingredients.</p>\n<ul>\n<li>RXE-25 should be mapped to <code>Medication.amount</code> of the top-level Medication.</li>\n<li>RXC-5 should be mapped to <code>Medication.ingredient.strength</code> in the top-level Medication for the ingredient element that references this component Medication.</li>\n<li>RXC-3 should be mapped to <code>Medication.amount</code> of the component Medication.</li>\n</ul>\n<p>So a top-level Medication uses <code>Medication.amount</code> to capture strength whereas a component Medication (referenced as an ingredient of that top-level Medication) uses <code>Medication.amount</code> to capture amount. <em>The same field is used for different purposes provided different context?</em></p>\n<blockquote>\n<p>I think the Pharmacy group should review this.</p>\n</blockquote>\n<p><em>Would <a class=\"stream\" data-stream-id=\"179249\" href=\"/#narrow/stream/179249-Medication\">#Medication</a> be an appropriate stream for these questions? I'm not sure how to engage the Pharmacy group.</em></p>\n<blockquote>\n<p>Also, I notice the \"isActive\" attribute - was it not agreed to change this to \"role\"? to support excipient, adjuvant, etc.?</p>\n</blockquote>\n<p>I'm afraid I don't know anything about that. I only know <a href=\"https://www.hl7.org/fhir/medication-definitions.html#Medication.ingredient.isActive\" target=\"_blank\" title=\"https://www.hl7.org/fhir/medication-definitions.html#Medication.ingredient.isActive\"><code>Medication.ingredient.isActive</code></a> from the spec.</p>\n<blockquote>\n<p>i think your extension lacks units on denominator, but that is not critical and I assume it is just an example</p>\n</blockquote>\n<p>This is simply an example. I'm already addressing that issue but don't need help with it.</p>\n<p>Thanks again for all your help!</p>",
+        "id": 162527284,
+        "sender_full_name": "Diederik Muylwyk",
+        "timestamp": 1554386329
+    },
+    {
+        "content": "<p>package.content.amount should be the content in a package (20 tablets, 500 ml) hence my doubt</p>",
+        "id": 162529155,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1554387547
+    },
+    {
+        "content": "<blockquote>\n<p>So a top-level Medication uses Medication.amount to capture strength whereas a component Medication (referenced as an ingredient of that top-level Medication) uses Medication.amount to capture amount. The same field is used for different purposes provided different context?</p>\n</blockquote>\n<p>Valid question. The descripption of the fields should be better in clarifying whether this is the intent. It seems so, and Pharma group should carify or confirm.</p>",
+        "id": 162529497,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1554387734
+    },
+    {
+        "content": "<blockquote>\n<p><em>Would <a class=\"stream\" data-stream-id=\"179249\" href=\"/#narrow/stream/179249-Medication\">#Medication</a> be an appropriate stream for these questions? I'm not sure how to engage the Pharmacy group.</em></p>\n</blockquote>\n<p>This stream should be ok. We summon them by calling them as Lloyd did. They will follow up. I wanted them to review my input, and look at ingredient.isActive (so that one was for them. not you).</p>",
+        "id": 162529950,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1554387980
+    },
+    {
+        "content": "<p>Okay, so are <code>Medication.package.content.amount</code>(STU3) and <code>Medication.amount</code> (R4) equivalent?</p>\n<blockquote>\n<p>RXE-25... would be needed when you need to indicate a strength and that is not obtained from the medication reference. In FHIR you put that in the medication itself (amount). Why would you need that extension? Do you need to send anything that is not in the dosageInstruction and medication #1?</p>\n</blockquote>\n<p>Perhaps I misunderstood. Which \"medication itself (amount)\" field are you referring to here?</p>\n<p>Where in <code>MedicationRequest.dosageInstruction</code> would I put possibly put strength from RXE-25? (I already map RXE-3/4/5 to <code>MedicationRequest.dosageInstruction.dose[x]</code>).</p>",
+        "id": 162530934,
+        "sender_full_name": "Diederik Muylwyk",
+        "timestamp": 1554388554
+    },
+    {
+        "content": "<p>the amount field.</p>",
+        "id": 162531693,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1554389004
+    },
+    {
+        "content": "<p>in your example, what is the value you are missing and need to convey?</p>",
+        "id": 162531729,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1554389034
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"195421\">@Diederik Muylwyk</span>, sorry I am joining this conversation late (&lt;24hr is late!).  I'm starting with the open points in your last exchange with <span class=\"user-mention\" data-user-id=\"191832\">@Jose Costa Teixeira</span>.  I will  work back through the thread for additional open points.  Let me know if there is a particular open point you would like me to address.</p>\n<p>Yes, (STU3) <code>Medication.package.content.amount</code> is the same as (R4) <code>Medication.amount</code>.  We collapsed the structure to resolve questions and requests after STU3</p>\n<p>Regarding Amount:  (v2.8) <code>RDE-25 Give Strength</code> is NOT the amount to give, it is the strength of the product to be given when <code>RDE-2 Give Code</code> does not include a strength.  </p>\n<ul>\n<li>If <code>RDE-2 Give Code</code> represents \"Amoxicillin 250 mg capsule\" then <code>RDE-25</code> would not be populated.  </li>\n<li><code> RDE-2</code> representing \"Amoxicillin\" would <em>require</em> <code>RDE-25</code> and <code>RDE-26 Give Strength Units</code> to be populated.</li>\n</ul>\n<p>Since <code>RDE-25</code> is a strength and not an amount, you would not map <code>RDE-25</code> into <code>MedicationRequest.dosageInstruction</code>.</p>\n<p>I will respond further as I review the thread</p>",
+        "id": 162544473,
+        "sender_full_name": "Scott Robertson",
+        "timestamp": 1554396472
+    },
+    {
+        "content": "<p>Thanks, everyone. This is <em>super</em> helpful!</p>",
+        "id": 162546963,
+        "sender_full_name": "Diederik Muylwyk",
+        "timestamp": 1554398090
+    },
+    {
+        "content": "<p>I would like to see a standard way to handle dosageInstruction vs strength for extemporaneous preparations. If you say Amoxicilin 250 mg that is clear, but if you talk about infusions that need to be prepared, the strnght of the concentration is actually determined in the dosage instructions, right?</p>",
+        "id": 162551767,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1554401248
+    },
+    {
+        "content": "<p>overall, mind that V2 to FHIR mapping may not be clear, especially in areas where the models are different.<br>\nfor Chapter 4 medication, there are lots of other differences - Order control codes for example.</p>",
+        "id": 162551945,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1554401365
+    },
+    {
+        "content": "<p>My point being: for Mapping V2 to FHIR, best to check - is this information element useful and used, or it is already there?</p>",
+        "id": 162552183,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1554401508
+    },
+    {
+        "content": "<blockquote>\n<blockquote>\n<p>RXE-25... would be needed when you need to indicate a strength and that is not obtained from the medication reference. In FHIR you put that in the medication itself (amount). Why would you need that extension? Do you need to send anything that is not in the dosageInstruction and medication #1?</p>\n</blockquote>\n<p>I'm not entirely sure I understand so I'll try to repeat this back to you in my own words. I'll use only R4 for clarity here. In the case of a multi-component medication (multiple RXC segments), I would have a top-level Medication based on RXE and 2..* component Medications referenced as ingredients.</p>\n<ul>\n<li>RXE-25 should be mapped to <code>Medication.amount</code> of the top-level Medication.</li>\n<li>RXC-5 should be mapped to <code>Medication.ingredient.strength</code> in the top-level Medication for the ingredient element that references this component Medication.</li>\n<li>RXC-3 should be mapped to <code>Medication.amount</code> of the component <code>Medication</code>.<br>\nSo a top-level <code>Medication</code> uses <code>Medication.amount</code> to capture strength whereas a component <code>Medication</code> (referenced as an ingredient of that top-level <code>Medication</code>) uses <code>Medication.amount</code> to capture amount. The same field is used for different purposes provided different context?</li>\n</ul>\n</blockquote>\n<p>speaking only of R4</p>\n<p>RXE-25 maps to<code>Medication.ingredient.amount</code>, <em>if necessary</em>.  See my previous response.</p>\n<p>This may be controversial, but I have a conceptual difference between v2.x RXC and <code>Medication.ingredient</code>.  RXC, generally, provides a 'recipe' to create the final product, while <code>Medication.ingredient</code>describes the final product.  So RXC has (1) a component product (RXC-2), (2) an amount of the component product (RXC-3/RXC-4), (3) the strength of the component product (RXC-5/RXC-6 and, if necessary RXC-8/RXC-9).  On the other hand, <code>Medication.ingredient</code> describes the component product (<code>Medication.ingredient.code</code>) and the strength of the component (<code>Medication.ingredient.strength</code>) in the overall <code>Medication</code>.  This may be a point for further discussion - I mention it as it is a basis for my responses.  <em>(I await any scathing rebuttals)</em> :-)</p>\n<p>With my conceptual difference in mind, the relationship between RXC and Medication.ingredient isn't a simple mapping.   </p>\n<p>{Amount [RXC-3 &amp; RXC-4]} * {Strength [[RXC-5 &amp; RXC-6] &amp; [RXC-8 &amp; RXC-9]]} = {Component quantity in final product}</p>\n<p>{Component Quantity in final product} / {Final 'volume' of all Components} = {Component Strength} = <code>Medication.ingredient.strength</code></p>\n<p>Your suggestion that \"RXC-3 should be mapped to <code>Medication.amount</code> of the component <code>Medication</code>\" provides a means to reconcile my \"conceptual\" point with most of your requirements:  Use <code>Medication.ingredient.itemReference</code> for v2-R4 mapping of RXC.    </p>\n<ul>\n<li>Each RXC gets it's own <code>Medication</code> resource</li>\n<li><code>Medication.code</code>contains the coded component product.  This maps to/from RXC-2.</li>\n<li><code>Medication.amount</code> contains the amount of the product in the overall preparation (e.g., I'm adding <em>25 ml</em> of a 10 mg/ml product).  This maps to/from RXC-3 &amp; RXC-4.  </li>\n<li><code>Medication.ingredient.itemCodeableConcept</code> contains either the same code in Medication.code (or a code for an ingredient of the ingredient?).  This is a required element, so I have to put something in it.</li>\n<li><code>Medication.ingredient.strength</code> contains the strength of the component product (e.g., I'm adding 25 ml of a <em>10 mg/ml</em> product).  This maps to/from RXC-5 &amp; RXC-6 and RXC-8 &amp; RXC-9.</li>\n</ul>\n<p>Again, I await responses (and scathing rebuttals)</p>\n<p>More later if find more to comment on.</p>",
+        "id": 162559392,
+        "sender_full_name": "Scott Robertson",
+        "timestamp": 1554405804
+    },
+    {
+        "content": "<p>If there is consensus on my RXC mapping thought, I will look into how this can be reflected in the R4 Medication narrative</p>",
+        "id": 162559669,
+        "sender_full_name": "Scott Robertson",
+        "timestamp": 1554406006
+    },
+    {
+        "content": "<p>Does this change if you use the itemReference(Substance) and if we changed strength to be a choice between Ratio and Quantity?  So you could say \"125mg of calcium\" instead of some strength?</p>",
+        "id": 162559746,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1554406081
+    },
+    {
+        "content": "<p>If strength becomes a choice of Ratio or Quantity then we may have an issue of clarity between amount and strength (if strength is a Quantity, that would look like amount)</p>\n<p>I think my logic will work with intemReference(Substance)</p>",
+        "id": 162561267,
+        "sender_full_name": "Scott Robertson",
+        "timestamp": 1554407113
+    },
+    {
+        "content": "<p>Again, this is super helpful. My little standards-obsessed brain is buzzing. : )</p>\n<p><span class=\"user-mention\" data-user-id=\"191402\">@Scott Robertson</span>'s ideas are very much in line with my own.</p>\n<p>What confuses me a little is the description for <code>Medication.amount</code>.</p>\n<blockquote>\n<p>Specific amount of the drug in the <strong>packaged product</strong>. For example, when specifying a product that has the same strength (For example, Insulin glargine 100 unit per mL solution for injection), this attribute provides additional clarification of the package amount (For example, 3 mL, 10mL, etc.).</p>\n</blockquote>\n<p>Is this the same as \"the amount of the product in the overall preparation\"?</p>\n<p>I also need to make sure this works equally well for both single- and multi-component medications.</p>",
+        "id": 162562433,
+        "sender_full_name": "Diederik Muylwyk",
+        "timestamp": 1554407914
+    },
+    {
+        "content": "<p>No, it is intended for when packaged products with different amounts are assigned the same code.  The example injection is the normal use case where the code for the product is \"Insulin glargine 100 unit per mL solution\" but it comes in 3ml vials, 10ml vials, and 15ml vials.</p>",
+        "id": 162562578,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1554408017
+    },
+    {
+        "content": "<p>The overall amount would be given in the resource that is referencing this medication.</p>",
+        "id": 162562673,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1554408088
+    },
+    {
+        "content": "<p>Quick thank you to <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>, <span class=\"user-mention\" data-user-id=\"194183\">@John Silva</span>, <span class=\"user-mention\" data-user-id=\"191759\">@Melva Peters</span>, <span class=\"user-mention\" data-user-id=\"191832\">@Jose Costa Teixeira</span>, <span class=\"user-mention\" data-user-id=\"191402\">@Scott Robertson</span>, and <span class=\"user-mention\" data-user-id=\"192166\">@Jean Duteau</span>.</p>\n<p>I've a working solution, and I know how to move forward. Thanks for your help!</p>",
+        "id": 162639211,
+        "sender_full_name": "Diederik Muylwyk",
+        "timestamp": 1554482838
+    },
+    {
+        "content": "<p>would be great to document this somewhere other than zulip...</p>",
+        "id": 162681779,
+        "sender_full_name": "David Hay",
+        "timestamp": 1554522239
+    },
+    {
+        "content": "<p>IHE is planning to cover the medication workflows and since the IHE model started with V2, it makes sense to include some of the v2 mapping there as well</p>",
+        "id": 162686945,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1554531188
+    },
+    {
+        "content": "<p>Will propose it to the work to be done.<br>\nBut the meaning of each field in FHIR like Scott explained, and the clarification of things like amount, that should be in FHIR,  not an IHE thing.</p>",
+        "id": 162687447,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1554532146
+    },
+    {
+        "content": "<p>I don't think documenting this in FHIR will be practical.  Most of what I said clarifies v2, not FHIR.  The mapping documentation in FHIR doesn't support this kind of clarification.  I welcome being told I'm missing a feature in FHIR documentation that will support this material (<span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> <span class=\"user-mention\" data-user-id=\"191759\">@Melva Peters</span> )</p>\n<p>I will think about what can help clarify the FHIR Medication resource documentation in this regard.  But I don't want to put a lot of v2 specific material inside of FHIR.</p>",
+        "id": 162765922,
+        "sender_full_name": "Scott Robertson",
+        "timestamp": 1554660140
+    },
+    {
+        "content": "<p>wasn't necessarily suggesting that it should be in FHIR  - but mapping between FHIR and other standards will be common, so it seems reasonable to establish a place where summaries of discussions like this could be placed so it doesn't need to be repeated each time. perhaps <a href=\"http://fhir.org\" target=\"_blank\" title=\"http://fhir.org\">fhir.org</a>?</p>",
+        "id": 162766378,
+        "sender_full_name": "David Hay",
+        "timestamp": 1554660891
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191402\">@Scott Robertson</span>  Best to start to document in the v2-to-FHIR confluence pages.  We have pages for data types, segments/fields, and messages.  When in the project we talk about \"documenting on FHIR\" we mean using the FHIR resource constructs that can express mapping.  We then can point to that wherever relevant, such as the FHIR Mapping tabs, or the v2+ mapping tabs, or just on its own.  The confluence pages are here: <a href=\"https://confluence.hl7.org/display/OO/2-To-FHIR+Project\" target=\"_blank\" title=\"https://confluence.hl7.org/display/OO/2-To-FHIR+Project\">https://confluence.hl7.org/display/OO/2-To-FHIR+Project</a>.</p>",
+        "id": 163983032,
+        "sender_full_name": "Hans Buitendijk",
+        "timestamp": 1556021448
+    },
+    {
+        "content": "<p>Looking for some assistance on RDE^O11 V2 to FHIR mapping. We are able to map fields of ORC segment to MedicationRequest as well as ServiceRequest resources. What would be the correct way of mapping ORC segment of RDE message to FHIR resources?</p>",
+        "id": 263415791,
+        "sender_full_name": "gauri raut",
+        "timestamp": 1638439924
+    },
+    {
+        "content": "<p>The v2-to-FHIR project has begun a draft map of the RDE^O11 message type. The message map is at <a href=\"https://docs.google.com/spreadsheets/d/1j2sFqTxQe6Obg0R9UXurpLap0PglJQ-Gh3sfIehycNs/edit#gid=0\">https://docs.google.com/spreadsheets/d/1j2sFqTxQe6Obg0R9UXurpLap0PglJQ-Gh3sfIehycNs/edit#gid=0</a> and the ORC to MedicationRequest map is at <a href=\"https://docs.google.com/spreadsheets/d/1PgXUqQBY77k21yZOBj3j132okiW2cv4l_4xrvcFTi7s/edit#gid=0\">https://docs.google.com/spreadsheets/d/1PgXUqQBY77k21yZOBj3j132okiW2cv4l_4xrvcFTi7s/edit#gid=0</a>. These are preliminary documents and haven't had any community review yet, so they are subject to change. We'd love to hear any feedback you have.</p>",
+        "id": 263437791,
+        "sender_full_name": "Craig Newman",
+        "timestamp": 1638452340
+    },
+    {
+        "content": "<p>Thank you, <span class=\"user-mention\" data-user-id=\"192758\">@Craig Newman</span> . I am able to access ORC to MedicationRequest map but not able  access message map. Can you please provide an access for message map?</p>",
+        "id": 263544392,
+        "sender_full_name": "gauri raut",
+        "timestamp": 1638517075
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"456625\">@gauri raut</span> please try the message map again. I just changed the sharing permissions so that as long as you have the link it should be accessible.</p>",
+        "id": 263577979,
+        "sender_full_name": "Craig Newman",
+        "timestamp": 1638537609
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"192758\">@Craig Newman</span> It is still not accessible</p>",
+        "id": 263589763,
+        "sender_full_name": "gauri raut",
+        "timestamp": 1638542948
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"456625\">@gauri raut</span> please try one more time<br>\n<a href=\"https://docs.google.com/spreadsheets/d/1j2sFqTxQe6Obg0R9UXurpLap0PglJQ-Gh3sfIehycNs/edit?usp=sharing\">https://docs.google.com/spreadsheets/d/1j2sFqTxQe6Obg0R9UXurpLap0PglJQ-Gh3sfIehycNs/edit?usp=sharing</a><br>\nIf this still doesn't work, we may need to get Hans (who created the spreadsheet) to try and change it (I may not have permissions, although it appears that I should). Sorry for the delay.</p>",
+        "id": 263594828,
+        "sender_full_name": "Craig Newman",
+        "timestamp": 1638545151
+    },
+    {
+        "content": "<p>Thank you <span class=\"user-mention\" data-user-id=\"192758\">@Craig Newman</span> , I can access it now</p>",
+        "id": 263595655,
+        "sender_full_name": "gauri raut",
+        "timestamp": 1638545531
+    },
+    {
+        "content": "<p>Thank you, <span class=\"user-mention\" data-user-id=\"192758\">@Craig Newman</span>  <span class=\"user-mention\" data-user-id=\"191689\">@Hans Buitendijk</span>  for sharing mapping template. I am currently working on mapping ORC, TQ1 and RXO segments to MedicationRequest FHIR resource. As per HL7, we can receive quantity in below fields,</p>\n<div class=\"codehilite\"><pre><span></span><code>    1. ORC.7.1 - TQ.1 - Quantity\n    2. TQ1.2 - Quantity (HL7 v2.5.1 onwards)\n    3. RXO.2/RXO.3 - Requested Give Amount - Minimum/Maximum\n</code></pre></div>\n\n<p>In the mapping sheet all of the above fields are mapped with dosageInstruction.doseAndRate  <br>\n        TQ.1 - dosageInstruction.doseAndRate.doseQuantity<br>\n        TQ1.2 - dosageInstruction.doseAndRate.doseQuantity<br>\n        RXO.2 - dosageInstruction.doseAndRate[1].doseRange.low.value with type=\"ordered\"<br>\n        RXO.3 - dosageInstruction.doseAndRate[1].doseRange.high.value</p>\n<p>As per usage note mentioned in the HL7 V2.8 guide(4A.4.1.2 RXO-2),Quantity in the TQ or TQ1 will always defaults to 1 <br>\n    \"for pharmacy/treatment orders, the quantity component of the quantity/timing field refers to what is to be given out at each service interval; thus, in terms of the RX order, that first component always defaults to 1. Hence, in the actual execution of the order, the value of 1 in the first component of the quantity/timing field always refers to one administration of the amount specified in this field (the Requested Give Amount field)\"</p>\n<p>Need assistance to understand which quantity(either RXO.2 and RXO.3 or TQ1.2/TQ.1) should be considered as doseQuantity .<br>\nThank you</p>",
+        "id": 264419024,
+        "sender_full_name": "gauri raut",
+        "timestamp": 1639127228
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"456625\">@gauri raut</span> :  The ORC[MedicationRequest] map is still under construction, so appreciate the feedback.  In v2 the concepts are separate, but in FHIR doseAndRate is 0..* within the Dosage data type, so both could be mapped to this data type component as separate instances for doseAndRate.  When you consider that, would that fit?  Or if you do that you need to know the difference that the doseAndRate type (currently an example) would not provide?  We have not really gotten to this yet, so we would have to go to the Pharmacy workgroup to get insight into how they plan to maintain the distinction that HL7 v2 makes.  <span class=\"user-mention\" data-user-id=\"192080\">@John Hatem</span> , <span class=\"user-mention\" data-user-id=\"191402\">@Scott Robertson</span>  : This sounds like we want to get some insight from Pharmacy.</p>",
+        "id": 264457857,
+        "sender_full_name": "Hans Buitendijk",
+        "timestamp": 1639148129
+    },
+    {
+        "content": "<p>FHIR doseAndRate is 0..*.But below is the description of RXO.2 in HL7 guide(4A.4.1.2 RXO-2 Requested Give Amount - Minimum (NM) 00293)<br>\n\"<em>This field is not a duplication of the first component of the quantity/timing field, since in non-pharmacy/treatment orders, that component can be used to specify multiples of an ordered amount. Another way to say this is that, for pharmacy/treatment orders, the quantity component of the quantity/timing field refers to what is to be given out at each service interval; thus, in terms of the RX order, that first component always defaults to 1. Hence, in the actual execution of the order, the value of 1 in the first component of the quantity/timing field always refers to one administration of the amount specified in this field (the Requested Give Amount field).</em>\"</p>\n<p>Looking at the above description, it seems quantity in ORC..7.1(TQ.1) and RXO.2 are not similar. And for RX order, first component always defaults to 1 in ORC..7.1(TQ.1), or TQ1.2. I am not sure if type would  be able to differentiate between  them. Any suggested values would be really appreciated.</p>\n<p><span class=\"user-mention\" data-user-id=\"191689\">@Hans Buitendijk</span>  <span class=\"user-mention\" data-user-id=\"192156\">@Aditya Joshi</span></p>",
+        "id": 264666153,
+        "sender_full_name": "gauri raut",
+        "timestamp": 1639374210
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191689\">@Hans Buitendijk</span> <span class=\"user-mention\" data-user-id=\"456625\">@gauri raut</span> <span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> </p>\n<p><strong>quoting V2.8 specification for RXO segment:</strong><br>\n\"A quantity/timing field is not needed in the RXO segment. The ORC segment contains the requested ORC-7-quantity/timing of the original order which does not change as the order is encoded, dispensed, or administered.\"</p>\n<p>This suggests that ORC-7 timing is for the RXO segment. </p>\n<p><strong>Non repeating ORC-7 or TQ1. There can be few scenarios:</strong> </p>\n<ol>\n<li>\n<p>ORC-7 + RXO :  Mapping ORC-7 (TQ data type) and RXO-2 &amp; RXO-3 data to dosageInstruction. Here we can repeat the doseAndRate element to capture the quantity coming from both TQ.1 and RXO fields. </p>\n</li>\n<li>\n<p>TQ.1 of ORC-7 will always be \"1\", therefore can ignore mapping this quantity to doseAndRate. This is the place not so clear, what are the usages or scenarios when it is not \"1\"</p>\n</li>\n</ol>\n<p><strong>Repeating ORC-7 or TQ1:Now another issue- ORC-7 can repeat.</strong> </p>\n<p>If it is repeated in the ORC segment, then how to proceed with mappings. Some scenarios when ORC-7 repeating (in RDE message where RXO is also there)-</p>\n<ol>\n<li>\n<p>take first ORC-7 repetition and RXO-2 &amp; RXO-3 fields and create one dosageInstruction, here repeat the doseAndRate to capture quantity from both TQ.1 and ORC. For all other repetitions, create separate dosageInstruction but no RXO field data there. </p>\n</li>\n<li>\n<p>Only take first repetition of ORC-7 and ignore rest </p>\n</li>\n<li>\n<p>Repeat each ORC-7 as a separate dosageInstruction and the RXO one as a separate one. No mixing. <br>\nVarying medications:Please note the RXO segment is not repeating in the RDE message. I am wondering what will be the real world use cases where we have multiple ORC-7 or TQ1 segments for one RXO segment. Is it like- take 2 tablets on the first day, followed by 3 tablets for the next 3 days (varying medication). In such cases, TQ1 or ORC-7 (first repetition) might have quantity as 1 to say that actual quantity for original order is in RXO segment and rest of the TQ1 or ORC-7 will provide the varying medications. </p>\n</li>\n</ol>\n<p>Any examples on V2 side to see repeating ORC-7 or TQ1 for one RXO in RDE message? </p>\n<p><strong>How to proceed for now- conclusion for now:</strong><br>\na. do you recommend to choose the method where each ORC-7 or TQ1 maps to separate dosageInstruction element and RXO field maps to separate dosageInstruction (in this case there won't be any timing for the dosageInstruction getting created from RXO segment)</p>\n<p><strong>b. My inclination for solution for now:</strong><br>\nor take the first repetition of ORC-7 or TQ1 and RXO fields to create one dosageInstruction where doseAndRate can repeat to accommodate TQ.1 or TQ1-2, <br>\nAND, all other repetitions of ORC-7 or TQ1 will map to separate dosageInstructions with no RXO data.</p>\n<p>I am inclined to use this and believe that probably ORC-7.1 or TQ1-2 (quantity) will be\"1\" for first repetition. If somebody from the V2 world can confirm that then we can ignore mapping  ORC-7.1 or TQ1-2 to doseAndRate at all and that will make the entire solution look good. </p>\n<p>Also, I feel that real world messages will mostly have only one repetition of ORC-7 or TQ1 segment and probably no quantity in it or if it is there then \"1\" value, in such cases opting for this solution will at least work for most of the real world V2 implementations. Any expert on V2 side can provide inputs here?</p>\n<p>Looking forward for some guidance here.</p>",
+        "id": 264672523,
+        "sender_full_name": "Aditya Joshi",
+        "timestamp": 1639381931
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191402\">Scott Robertson</span> <a href=\"#narrow/stream/179188-v2-to.20FHIR/topic/RDE_O11.20to.20MedicationRequest.20and.20Medication/near/162559392\">said</a>:</p>\n<blockquote>\n<blockquote>\n<blockquote>\n<p>RXE-25... would be needed when you need to indicate a strength and that is not obtained from the medication reference. In FHIR you put that in the medication itself (amount). Why would you need that extension? Do you need to send anything that is not in the dosageInstruction and medication #1?</p>\n</blockquote>\n<p>I'm not entirely sure I understand so I'll try to repeat this back to you in my own words. I'll use only R4 for clarity here. In the case of a multi-component medication (multiple RXC segments), I would have a top-level Medication based on RXE and 2..* component Medications referenced as ingredients.</p>\n<ul>\n<li>RXE-25 should be mapped to <code>Medication.amount</code> of the top-level Medication.</li>\n<li>RXC-5 should be mapped to <code>Medication.ingredient.strength</code> in the top-level Medication for the ingredient element that references this component Medication.</li>\n<li>RXC-3 should be mapped to <code>Medication.amount</code> of the component <code>Medication</code>.<br>\nSo a top-level <code>Medication</code> uses <code>Medication.amount</code> to capture strength whereas a component <code>Medication</code> (referenced as an ingredient of that top-level <code>Medication</code>) uses <code>Medication.amount</code> to capture amount. The same field is used for different purposes provided different context?</li>\n</ul>\n</blockquote>\n<p>speaking only of R4</p>\n<p>RXE-25 maps to<code>Medication.ingredient.amount</code>, <em>if necessary</em>.  See my previous response.</p>\n<p>This may be controversial, but I have a conceptual difference between v2.x RXC and <code>Medication.ingredient</code>.  RXC, generally, provides a 'recipe' to create the final product, while <code>Medication.ingredient</code>describes the final product.  So RXC has (1) a component product (RXC-2), (2) an amount of the component product (RXC-3/RXC-4), (3) the strength of the component product (RXC-5/RXC-6 and, if necessary RXC-8/RXC-9).  On the other hand, <code>Medication.ingredient</code> describes the component product (<code>Medication.ingredient.code</code>) and the strength of the component (<code>Medication.ingredient.strength</code>) in the overall <code>Medication</code>.  This may be a point for further discussion - I mention it as it is a basis for my responses.  <em>(I await any scathing rebuttals)</em> :-)</p>\n<p>With my conceptual difference in mind, the relationship between RXC and Medication.ingredient isn't a simple mapping.   </p>\n<p>{Amount [RXC-3 &amp; RXC-4]} * {Strength [[RXC-5 &amp; RXC-6] &amp; [RXC-8 &amp; RXC-9]]} = {Component quantity in final product}</p>\n<p>{Component Quantity in final product} / {Final 'volume' of all Components} = {Component Strength} = <code>Medication.ingredient.strength</code></p>\n<p>Your suggestion that \"RXC-3 should be mapped to <code>Medication.amount</code> of the component <code>Medication</code>\" provides a means to reconcile my \"conceptual\" point with most of your requirements:  Use <code>Medication.ingredient.itemReference</code> for v2-R4 mapping of RXC.    </p>\n<ul>\n<li>Each RXC gets it's own <code>Medication</code> resource</li>\n<li><code>Medication.code</code>contains the coded component product.  This maps to/from RXC-2.</li>\n<li><code>Medication.amount</code> contains the amount of the product in the overall preparation (e.g., I'm adding <em>25 ml</em> of a 10 mg/ml product).  This maps to/from RXC-3 &amp; RXC-4.  </li>\n<li><code>Medication.ingredient.itemCodeableConcept</code> contains either the same code in Medication.code (or a code for an ingredient of the ingredient?).  This is a required element, so I have to put something in it.</li>\n<li><code>Medication.ingredient.strength</code> contains the strength of the component product (e.g., I'm adding 25 ml of a <em>10 mg/ml</em> product).  This maps to/from RXC-5 &amp; RXC-6 and RXC-8 &amp; RXC-9.</li>\n</ul>\n<p>Again, I await responses (and scathing rebuttals)</p>\n<p>More later if find more to comment on.</p>\n</blockquote>\n<p>Hi <span class=\"user-mention\" data-user-id=\"195421\">@Diederik Muylwyk</span>, Is this a final outcome you are following or any other thoughts?</p>",
+        "id": 264830846,
+        "sender_full_name": "gauri raut",
+        "timestamp": 1639474188
+    }
+]

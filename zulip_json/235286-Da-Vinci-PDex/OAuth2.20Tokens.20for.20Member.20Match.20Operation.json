@@ -1,0 +1,224 @@
+[
+    {
+        "content": "<p>Hi all, I'm looking at the member-match specification, and trying to come up with the best way to layer in authorization.  At this time, I'm thinking of using backend services specification in the bulk data IG to drive this use case.  We would have the client (other payer) request a token using client credentials and execute the member-match operation.  Scopes would be member-match and appropriate patient-restricted scopes (e.g. patient/DiagnosticReport.read).  If there's a successful response, the returned patient's resource ID would be added to the introspection claims so subsequent resource calls can be appropriately restricted.  I wanted to get feedback on this approach.  Let me know if you have any questions.</p>",
+        "id": 254616936,
+        "sender_full_name": "Spencer Kathol",
+        "timestamp": 1632436937
+    },
+    {
+        "content": "<p>If I understand correctly, you are contemplating generating an access token that is initially not bound to any specific patient but becomes bound upon successful completion of a match operation? That is an interesting pattern. Just to be sure, I don't think this needs to rely on the introspection response as long as your member match is returning the relevant patient id. It's a nice touch to include this information in an introspection response, but it would be best not to assume that clients will be able to or will need to call the introspection api.</p>",
+        "id": 254618886,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1632438020
+    },
+    {
+        "content": "<p>It's also worth mentioning that we don't have standardized scopes for custom operations; you might want to use our extension syntax, which either leverages a double underscore prefix or a full URL for the scope names (e.g., <code>__$member-match</code>)</p>",
+        "id": 254619192,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1632438203
+    },
+    {
+        "content": "<p>The way authorization should work is specified here: <a href=\"http://build.fhir.org/ig/HL7/davinci-ehrx/consent-oauth.html#workflow\">http://build.fhir.org/ig/HL7/davinci-ehrx/consent-oauth.html#workflow</a></p>",
+        "id": 254621132,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1632439448
+    },
+    {
+        "content": "<p>So no backed auth, but mutual TLS</p>",
+        "id": 254621156,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1632439470
+    },
+    {
+        "content": "<p>With a payer directory system handling the certificates</p>",
+        "id": 254621192,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1632439499
+    },
+    {
+        "content": "<p>And then using UDAP for the patient restriction / consent part</p>",
+        "id": 254621214,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1632439520
+    },
+    {
+        "content": "<p>(Having said that, everyone appear to be going the SMART - OAuth2 route with the patient authorizing the connection instead of using member-match)</p>",
+        "id": 254621547,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1632439769
+    },
+    {
+        "content": "<p>I don't think that's true of 'everyone' and now that there's more breathing space, there may be some shifts.</p>",
+        "id": 254621684,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1632439860
+    },
+    {
+        "content": "<p>Everyone that answered the question 'what are you implementing' during the connectathon said that</p>",
+        "id": 254621910,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1632440022
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span> and <span class=\"user-mention\" data-user-id=\"191912\">@Michele Mottini</span>.  I will read over that HRex consent spec - it seems to provide the direction I've been looking for.  FWIW, I'm working with an organization who has opted to go the member-match route.</p>",
+        "id": 254622056,
+        "sender_full_name": "Spencer Kathol",
+        "timestamp": 1632440110
+    },
+    {
+        "content": "<p>Yes, but a number of payers not at the connectathon have said other things</p>",
+        "id": 254622376,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1632440333
+    },
+    {
+        "content": "<p>Also, any solution that requires patients to log on and do anything with a computer excludes a significant portion of the patient population.</p>",
+        "id": 254622429,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1632440378
+    },
+    {
+        "content": "<p>Is this the appropriate standard to reference for OAuth mTLS? <a href=\"https://datatracker.ietf.org/doc/html/rfc8705\">https://datatracker.ietf.org/doc/html/rfc8705</a>  I assume we don't need to make the payer directory access dynamic - we can download public keys in a batch and update static configuration periodically?</p>",
+        "id": 254725153,
+        "sender_full_name": "Spencer Kathol",
+        "timestamp": 1632498305
+    },
+    {
+        "content": "<p>Spencer, I think the appropriate takeaway here is that there's a couple of possible ways to do this, all of them are complicated, and there's not yet clear direction on if or what the single right way will be.</p>",
+        "id": 254736543,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1632502589
+    },
+    {
+        "content": "<p>I'm also eager to understand how these decisions align or diverge from what is being contemplated in TEFCA/carequality</p>",
+        "id": 254736786,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1632502680
+    },
+    {
+        "content": "<p>Also, <a href=\"http://build.fhir.org/ig/HL7/davinci-ehrx/consent-oauth.html\">http://build.fhir.org/ig/HL7/davinci-ehrx/consent-oauth.html</a>, wow! There's a lot on this page. Using system-level authnz for patient-facing apps is an invitation to PHI breaches. What happens when $member-match returns the wrong patient? This page lists a pou of \"PATRQT\", (patient request) which invites PHI breaches.</p>",
+        "id": 254737003,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1632502756
+    },
+    {
+        "content": "<p>Member match returning the wrong patient seems like a significant risk regardless of auth... Especially if the requesting payer decides to merge data they receive.  We are talking about using the old coverage member ID + MBI + DOB for matching which should be pretty solid, but still, there should probably be an oh s*** button.  In any case, we'll probably stick with something close to what I originally proposed, maybe with a few tweaks driven by the link shared above.  It's less complicated, and actually not too terribly different.</p>",
+        "id": 254740421,
+        "sender_full_name": "Spencer Kathol",
+        "timestamp": 1632504035
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span> There's no intention to use the HRex consent-oath for patient facing apps.  This is <em>only</em> for system-to-system exchange between payers who are already mutually authenticated to each other over TLS.  Patient's only involvement is signing a paper form or making a phone call.  (And sometimes not even that, as for some types of data sharing between payers, no consent is necessary.)</p>",
+        "id": 254760782,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1632512430
+    },
+    {
+        "content": "<p>Thanks, Lloyd. That's not the case in other UDAP, pou={patient request} network scenarios. Appreciate the clarification.</p>",
+        "id": 254762544,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1632513178
+    },
+    {
+        "content": "<p>I <em>think</em> I made the mutual TLS bit clear on the page.  If you think there's anything further I need to make explicit, feedback is welcome <span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span></p>",
+        "id": 254772418,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1632517526
+    },
+    {
+        "content": "<p>(and everyone else <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span> )</p>",
+        "id": 254772438,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1632517537
+    },
+    {
+        "content": "<p>Lloyd, one possible clarification (I feel like Bas would appreciate) is defining what's meant by mutual TLS by pointing to an RFC. I think that the page refers to TLS client and server authentication as described here: <a href=\"https://www.ietf.org/rfc/rfc2246.html#appendix-F.1.1\">https://www.ietf.org/rfc/rfc2246.html#appendix-F.1.1</a>, but note that Spencer thought that it referred to this: <a href=\"https://datatracker.ietf.org/doc/html/rfc8705\">https://datatracker.ietf.org/doc/html/rfc8705</a>, which I'm pretty sure is totally different. So, specific wording could be:</p>\n<blockquote>\n<p>All such exchanges SHALL be conducted under mutually authenticated TLS <em>as defined in <a href=\"https://datatracker.ietf.org/doc/html/rfc2246\">rfc2246</a></em></p>\n</blockquote>",
+        "id": 254777582,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1632520010
+    },
+    {
+        "content": "<p>Done</p>",
+        "id": 254797462,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1632534593
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191864\">Isaac Vetter</span> <a href=\"#narrow/stream/235286-Da-Vinci.20PDex/topic/OAuth2.20Tokens.20for.20Member.20Match.20Operation/near/254737003\">said</a>:</p>\n<blockquote>\n<p>Also, <a href=\"http://build.fhir.org/ig/HL7/davinci-ehrx/consent-oauth.html\">http://build.fhir.org/ig/HL7/davinci-ehrx/consent-oauth.html</a>, wow! There's a lot on this page. Using system-level authnz for patient-facing apps is an invitation to PHI breaches. What happens when $member-match returns the wrong patient? This page lists a pou of \"PATRQT\", (patient request) which invites PHI breaches.</p>\n</blockquote>\n<p><span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span> why do you say this? Patients should be able to access their own data, and when they do that the purposeOfUse is PATRQT. It is the purpose of use for patient is asking for their own data.</p>",
+        "id": 255041107,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1632746737
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"191404\">@John Moehrke</span> , only that EMPI lookup is fallible and inferior to the OAuth auth code flow for establishing patient identity and that the risks for failing are higher.</p>",
+        "id": 255052384,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1632751190
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span>  Regarding documentation on mTLS, a few things that could help clear up confusion for me:</p>\n<ul>\n<li>The mTLS line item in the diagram specifies \"Server-to-Server OAuth - Establish Mutual TLS\" which is what led me to 8750 as it has a similar title.  8750 describes additional requirements for checking the client certificate against the client_id, which it sounds like isn't necessary.  It may help to update the diagram as well so this is more clear?</li>\n<li>The B2B link you have on that page is out of date.  I've been looking at this one: <a href=\"http://hl7.org/fhir/us/udap-security/2021Sep/b2b.html\">http://hl7.org/fhir/us/udap-security/2021Sep/b2b.html</a></li>\n<li>Since the client certificate lookup appears to be dynamic, is the expectation that it happen in real time, or can the set of public keys be retrieved all at once on a schedule?</li>\n<li>Are payers at liberty to issue certificates on their own, or will they need to request one from a single authority for this purpose (and have a common issuer or small set of issuers)?</li>\n</ul>\n<p>The answers to some of these may or may not be known/determined which is fine.  And I may be misinterpreting in some areas, if so feel free to correct my understanding. <span aria-label=\"smile\" class=\"emoji emoji-1f642\" role=\"img\" title=\"smile\">:smile:</span></p>",
+        "id": 255052915,
+        "sender_full_name": "Spencer Kathol",
+        "timestamp": 1632751355
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span>  If you have system-to-system between payers, a 'pou' of PATREQ would mean that one of the uses of the information retrieved by the requesting payor would be to respond to patient requests.  In practice, we don't want/need to track any pou at all, but the base spec doesn't currently give us a choice.  So our default expectation is that all of the top-level pou values will be sent.  This is only for system to system between payers.  The 'lookup' process would be equivalent to what happens now by phone and fax (payer 1 phones payer 2, provides information about the patient, payer 1 looks up the patient in their system and, if they find a single match, returns the data.  All we're doing is removing the human from the loop.  The algorithm won't be different (and less chances of transcription error).  The risk is that the wrong patient's data is received by payer 2 and becomes incorporated in that patient's record (same risk as before).  It has the benefit that it will work for the entire patient population, as opposed to the subset who have established portal accounts and know how to access and uses them.</p>\n<p><span class=\"user-mention\" data-user-id=\"363194\">@Spencer Kathol</span> I'll update the link to hard-code to the ballot release for now.  Can you put the other questions into a tracker item against HRex?  They'll need some broader discussion in terms of how tight we want to get.  Certainly there needs to be some degree of tightening, but I'm not sure how far to go.</p>",
+        "id": 255148510,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1632793463
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> you say </p>\n<blockquote>\n<p>In practice, we don't want/need to track any pou at all, but the base spec doesn't currently give us a choice<br>\nwhere is this required? It is common for B2B to have overall policies that fix the purpose of use such that transactions do not need to re-state them.</p>\n</blockquote>",
+        "id": 255212343,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1632834252
+    },
+    {
+        "content": "<p><a href=\"http://hl7.org/fhir/us/udap-security/2021Sep/b2b.html\">http://hl7.org/fhir/us/udap-security/2021Sep/b2b.html</a> - purpose_of_use is marked as required.  There's been a change request submitted asking for this to be softened to optional.</p>",
+        "id": 255227545,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1632839945
+    },
+    {
+        "content": "<p>okay, that is not \"core\".. also, just balloted,    You and I commented strongly against this mandate, and we did discuss it and did not have sufficient participation to overturn. It was considered better to mandate than not. Note the vocabulary was also relaxed with discussions of a vocabulary value that represented the lack of a purpose of use. I tried to argue \"null-flavor violation!\", but failed.</p>",
+        "id": 255228344,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1632840236
+    },
+    {
+        "content": "<p><a href=\"https://jira.hl7.org/browse/FHIR-33636\">https://jira.hl7.org/browse/FHIR-33636</a></p>",
+        "id": 255228587,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1632840326
+    },
+    {
+        "content": "<p>UDAP is an IG, so one chooses to be compliant to UDAP.</p>",
+        "id": 255228664,
+        "sender_full_name": "John Moehrke",
+        "timestamp": 1632840362
+    },
+    {
+        "content": "<p>Agree that having a value that says \"no purpose of use\" is a bad idea.  Far better to make the element optional.  I realize that Da Vinci can choose not to comply, but that creates other issues.  For now, we'll just recommend sending all purposes of use when purpose of use is irrelevant.  It's annoying, but doable.</p>",
+        "id": 255238252,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1632843685
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> Agree that for a HIPAA covered transaction consent is not required but i heard <span class=\"user-mention\" data-user-id=\"196359\">@Robert Dieterle</span>  mentioning that we are adding it in HRex so that both payers have a record of this consent. So sounds like we are trying to have an audit trail. Correct?</p>\n<p>Also what if we do <strong>NOT</strong> get consent from the requesting payer...can we deny that request or will we still be responding back w/ minimum necessary data (per HIPAA rule). USCDI is probably more than just minimum necessary. Thoughts on this scenario?</p>",
+        "id": 261831180,
+        "sender_full_name": "Yukta Bellani",
+        "timestamp": 1637175331
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"196359\">@Robert Dieterle</span></p>",
+        "id": 261870259,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1637194898
+    },
+    {
+        "content": "<p>The specification will require that the \"new\" payer make a consent resource available to both indicate that consent was obtained from the member and the scope of the consent (e.g., does it include specially protected information).  Since the intent is to exchange USCDI information, I assume the payer may deny the request if the consent resource is not provided.</p>",
+        "id": 261927957,
+        "sender_full_name": "Robert Dieterle",
+        "timestamp": 1637242847
+    }
+]

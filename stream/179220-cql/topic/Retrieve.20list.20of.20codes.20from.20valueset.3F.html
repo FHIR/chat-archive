@@ -1,0 +1,98 @@
+---
+layout: page
+title: "FHIR Chat  · Retrieve list of codes from valueset? · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieve.20list.20of.20codes.20from.20valueset.3F.html">Retrieve list of codes from valueset?</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="268750323"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieve%20list%20of%20codes%20from%20valueset%3F/near/268750323" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Frank Adrian <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieve.20list.20of.20codes.20from.20valueset.3F.html#268750323">(Jan 20 2022 at 20:10)</a>:</h4>
+<p>In CQL 1.5 is there any way to retrieve a list of codes that make up a valueset?</p>
+<p>In 1.4, you could pass a valueset as a parameter to a function like this:</p>
+<p>define function "VS Cast Function"(VSet List&lt;System.Code&gt;):<br>
+  ( ( cast { "VSet", 1 }[0]as Tuple {<br>
+      codes List&lt;System.Code&gt;,<br>
+      oid System.String,<br>
+      version System.String<br>
+    }<br>
+  ).codes ) VSetCodes<br>
+    return System.Code { code: VSetCodes.code, system: VSetCodes.system }</p>
+<p>and get back a list of the codes from the valueset.</p>
+<p>In 1.5, attempting to pass in a valueset to this function results in a compilation error that complains about a parameter mismatch. If you change the function parameter to a System.ValueSet instead of a List&lt;System.Code&gt;, the code compiles, but generates a run-time error.</p>
+<p>Is there a way to retrieve the list of codes that make up a value set in CQL 1.5? Is there some reason that the code from CQL 1.4 shouldn't still work? Maybe a transparent coercion from System.ValueSet to a List&lt;System.Code&gt; in expressions would still be useful.</p>
+
+
+
+<a name="268991119"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieve%20list%20of%20codes%20from%20valueset%3F/near/268991119" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> JP <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieve.20list.20of.20codes.20from.20valueset.3F.html#268991119">(Jan 23 2022 at 02:05)</a>:</h4>
+<p>Runtime error in VS Code or cqf-ruler? If so possibly a cql-engine bug.</p>
+
+
+
+<a name="269140339"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieve%20list%20of%20codes%20from%20valueset%3F/near/269140339" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Frank Adrian <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieve.20list.20of.20codes.20from.20valueset.3F.html#269140339">(Jan 24 2022 at 17:30)</a>:</h4>
+<p>It's a runtime error in the CQL engine: "Could not resolve data provider for package 'org.cqframework.cql.elm.execution'." It seems to happen any time you attempt to use a System.ValueSet object in the 1.5 engine.</p>
+<p>Here is some code I've been trying in 1.5 ("ED", "Observation", and "Outpatients" are define in the header using the valueset declaration):</p>
+<p>define function "VS Cast Function"(VSet System.ValueSet):<br>
+( ( cast { "VSet", 1 }[0]as Tuple {<br>
+  codes List&lt;System.Code&gt;,<br>
+  oid System.String,<br>
+  version System.String<br>
+}<br>
+  ).codes ) VSetCodes<br>
+  return System.Code { code: VSetCodes.code, system: VSetCodes.system }</p>
+<p>define function "Combine Valuesets"(vss List&lt;System.ValueSet&gt;)<br>
+  returns List&lt;System.Code&gt;:<br>
+    flatten(vss VSet return "VS Cast Function"(VSet))</p>
+<p>define Test: "Combine Valuesets"({"ED", "Observation", "Outpatient"})</p>
+<p>define function Test1 (vset System.ValueSet):<br>
+    [Procedure: vset] P</p>
+<p>define Test2: Test1("Outpatient")</p>
+<p>Both "Test" and "Test2" die with the error message listed above.</p>
+
+
+
+<a name="269140568"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieve%20list%20of%20codes%20from%20valueset%3F/near/269140568" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieve.20list.20of.20codes.20from.20valueset.3F.html#269140568">(Jan 24 2022 at 17:32)</a>:</h4>
+<p>Hi Frank, we had some discussion about this during the connectathon. The VSCast function is actually taking advantage of the internal representation of valuesets in the JavaScript engine, and isn't "compatible" with the Java engine. To make it run in the Java engine, just replace the body of the VSCast function so that it returns the VSet argument (which is what the function is ultimately doing).</p>
+
+
+
+<a name="269140618"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieve%20list%20of%20codes%20from%20valueset%3F/near/269140618" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieve.20list.20of.20codes.20from.20valueset.3F.html#269140618">(Jan 24 2022 at 17:33)</a>:</h4>
+<p>There are several trackers related to addressing this behavior in the Java and JavaScript engines to address the inconsistency.</p>
+
+
+
+<a name="269140705"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieve%20list%20of%20codes%20from%20valueset%3F/near/269140705" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieve.20list.20of.20codes.20from.20valueset.3F.html#269140705">(Jan 24 2022 at 17:33)</a>:</h4>
+<p>The changes have been applied to the 1.5.6 translator and the current release of the engine/evaluator and IDE plugins in the Java stack.</p>
+
+
+
+<a name="269140905"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieve%20list%20of%20codes%20from%20valueset%3F/near/269140905" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieve.20list.20of.20codes.20from.20valueset.3F.html#269140905">(Jan 24 2022 at 17:35)</a>:</h4>
+<p>Basically, retrieving the list of codes from a ValueSet is just referencing the ValueSet declaration in 1.4, but in 1.5, since the specification introduced a ValueSet runtime type, you can now pass value sets around as references and there is newly proposed explicit ExpandValueSet operation (or you can just treat it like a list of codes to force an implicit expand).</p>
+
+
+
+<a name="269182079"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieve%20list%20of%20codes%20from%20valueset%3F/near/269182079" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Frank Adrian <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieve.20list.20of.20codes.20from.20valueset.3F.html#269182079">(Jan 24 2022 at 22:30)</a>:</h4>
+<p>We've tried using 1.5.6 translator and the 1.5.4 version of the engine and received a run-time error when ExpandValueSet was run: Unexpected exception caught during execution: org.apache.commons.lang3.NotImplementedException: evaluate not implemented for class ExpandValueSet. Which version of the engine has this operator?</p>
+
+
+
+<a name="269188557"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Retrieve%20list%20of%20codes%20from%20valueset%3F/near/269188557" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Retrieve.20list.20of.20codes.20from.20valueset.3F.html#269188557">(Jan 24 2022 at 23:40)</a>:</h4>
+<p>The fix was actually included in the 1.5.3 engine, so it should definitely be there. Are you using the cql-evaluator? And if so, what version? 1.4.2 is the latest and targets the 1.5.4 engine.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

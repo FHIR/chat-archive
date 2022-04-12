@@ -1,0 +1,91 @@
+---
+layout: page
+title: "FHIR Chat  · Warning iso Error for missing slice · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Warning.20iso.20Error.20for.20missing.20slice.html">Warning iso Error for missing slice</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="276119421"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Warning%20iso%20Error%20for%20missing%20slice/near/276119421" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> David Simons <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Warning.20iso.20Error.20for.20missing.20slice.html#276119421">(Mar 21 2022 at 21:57)</a>:</h4>
+<p>I want to profile Patient (<a href="https://my.profile">https://my.profile</a>) that a certain slice SHOULD exist, not MUST, and hence want a validation warning rather than an error, on the conformant Resource.</p>
+<p>Getting a <code>Error: Exception in thread "main" java.lang.Error: Not done yet (ValidatorHostServices.resolveFunction): slice</code> from HL7 validator.</p>
+<p>Is my approach in the right direction, and how to overcome .slice() apparently not being implemented yet?</p>
+<div class="codehilite"><pre><span></span><code>   &lt;element id=&quot;Patient.identifier&quot;&gt;
+      &lt;path value=&quot;Patient.identifier&quot;/&gt;
+      &lt;slicing&gt;
+        &lt;discriminator&gt;
+          &lt;type value=&quot;pattern&quot;/&gt;
+          &lt;path value=&quot;type.coding&quot;/&gt;
+        &lt;/discriminator&gt;
+        &lt;description value=&quot;At least MR type Identifier is required&quot;/&gt;
+        &lt;rules value=&quot;open&quot;/&gt;
+      &lt;/slicing&gt;
+      &lt;constraint&gt;
+        &lt;key value=&quot;mrslice&quot; /&gt;
+        &lt;severity value=&quot;warning&quot; /&gt;
+        &lt;human value=&quot;MyPatient SHOULD have an MR Identifier slice&quot; /&gt;
+        &lt;expression value=&quot;$this.slice(&#39;https://my.profile&#39;, &#39;MRSlice&#39;).exists()&quot; /&gt;
+        &lt;source value=&quot;https://my.profile&quot; /&gt;
+      &lt;/constraint&gt;
+      &lt;mustSupport value=&quot;true&quot; /&gt;
+    &lt;/element&gt;
+    &lt;element id=&quot;Patient.identifier:MRSlice&quot;&gt;
+      &lt;path value=&quot;Patient.identifier&quot;/&gt;
+      &lt;sliceName value=&quot;MRSlice&quot;/&gt;
+      &lt;min value=&quot;0&quot;/&gt;
+      &lt;max value=&quot;1&quot;/&gt;
+    &lt;/element&gt;
+    &lt;element id=&quot;Patient.identifier:MRSlice.use&quot;&gt;
+      &lt;path value=&quot;Patient.identifier.use&quot;/&gt;
+      &lt;fixedCode value=&quot;official&quot;/&gt;
+    &lt;/element&gt;
+    &lt;element id=&quot;Patient.identifier:MRSlice.type.coding&quot;&gt;
+      &lt;path value=&quot;Patient.identifier.type.coding&quot;/&gt;
+      &lt;patternCoding&gt;
+        &lt;system value=&quot; http://terminology.hl7.org/CodeSystem/v2-0203&quot;/&gt;
+        &lt;code value=&quot;MR&quot;/&gt;
+      &lt;/patternCoding&gt;
+    &lt;/element&gt;
+</code></pre></div>
+
+
+
+<a name="276125591"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Warning%20iso%20Error%20for%20missing%20slice/near/276125591" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Warning.20iso.20Error.20for.20missing.20slice.html#276125591">(Mar 21 2022 at 23:11)</a>:</h4>
+<p>It seems right.  Only way to overcome the slice not existing would be to drive the invariant by the discriminator values for the slice</p>
+
+
+
+<a name="276842176"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Warning%20iso%20Error%20for%20missing%20slice/near/276842176" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> David Simons <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Warning.20iso.20Error.20for.20missing.20slice.html#276842176">(Mar 28 2022 at 08:35)</a>:</h4>
+<p>For completeness, indeed I switched to a constraint at the Patient resource level, for example:</p>
+<div class="codehilite"><pre><span></span><code>  &lt;differential&gt;
+    &lt;element id=&quot;Patient&quot;&gt;
+      &lt;path value=&quot;Patient&quot;/&gt;
+      &lt;constraint&gt;
+        &lt;key value=&quot;identifierofficial&quot; /&gt;
+        &lt;severity value=&quot;warning&quot; /&gt;
+        &lt;human value=&quot;SHOULD have exactly 1 &#39;official&#39; Identifier&quot; /&gt;
+        &lt;expression value=&quot;identifier.where(use=&#39;official&#39;).count() = 1&quot; /&gt;
+        &lt;source value=&quot;https://my.profile&quot; /&gt;
+      &lt;/constraint&gt;
+    &lt;/element&gt;
+  &lt;/differential&gt;
+</code></pre></div>
+
+
+
+<a name="276887356"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/Warning%20iso%20Error%20for%20missing%20slice/near/276887356" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/Warning.20iso.20Error.20for.20missing.20slice.html#276887356">(Mar 28 2022 at 15:07)</a>:</h4>
+<p>As an example, drawing from my own jurisdiction, 'official' would be the medical record number assigned by the clinic.  'usual' would be a provincial health number.  (Most people know and use their provincial health number, almost no-one knows their MRN.)</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

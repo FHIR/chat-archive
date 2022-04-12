@@ -1,0 +1,146 @@
+[
+    {
+        "content": "<p>Hello people,<br>\nIn DSTU2 we have few DiagnosticOrder with multiple items. For a test panel, we were populating all the test orders as multiple items of same diagnostic order. Now while converting we are getting issues since procedurerequest is for used for a single item. </p>\n<p>I read about compound-requests(<a href=\"http://hl7.org/fhir/STU3/request.html#compound\" target=\"_blank\" title=\"http://hl7.org/fhir/STU3/request.html#compound\">http://hl7.org/fhir/STU3/request.html#compound</a>). I thought I can use <code>Request.requisitionId</code> because the definition says \"by the same practitioner at the same time for the same subject\" , which is the same scenario for a panel.</p>\n<p>Here is what I think the conversion should be. Below is the structure of a diagnostic order with multiple items</p>\n<div class=\"codehilite\"><pre>DiagnosticOrder\n    Item A\n        code\n        event\n            status =&gt; created\n    Item B\n        code\n        event \n            status =&gt; created\n</pre></div>\n\n\n<p>I think it can be converted in below structure</p>\n<div class=\"codehilite\"><pre>ProcedureRequest A\n    code ?(Not sure what this should be)\nProcedureRequest B\n    requisition =&gt; A\n    code =&gt;  Item A.code\n    status active\nProcedureRequest C\n    requisition =&gt; A\n    code =&gt; Item B.code\n    status active\n</pre></div>\n\n\n<p>In above structure ProcedureRequestA is a composite request, and ProcedureRequestB and ProcedureRequestC are the concrete which will refer to ProcedureRequestA as requisition. Here I want to validate my idea. is this the way this should be converted or there should be a different approach to it. Another question, since <code>ProcedureRequest.code</code> is a mandatory field what should that be ideally.</p>",
+        "id": 153881071,
+        "sender_full_name": "Mritunjay Dubey",
+        "timestamp": 1491451596
+    },
+    {
+        "content": "<p>Procedure B and Procedure C are not clear. In ProcedureRequest B,  code =&gt;  Item A.code and in ProcedureRequest C,  code =&gt; Item B.code. Does that mean Procedure B is also composite and Procedure C is concrete?</p>",
+        "id": 153881079,
+        "sender_full_name": "Sunanda Veeraganti",
+        "timestamp": 1491470933
+    },
+    {
+        "content": "<p>No! Actully, what I meant there is one Composite PRequest \"A\" and there are two concerete PRequests \"B\" and \"C\" for each item. Both concrete PRequests will be referring to \"A\" as requisition.  </p>",
+        "id": 153881080,
+        "sender_full_name": "Mritunjay Dubey",
+        "timestamp": 1491471207
+    },
+    {
+        "content": "<p>ProcedureRequest.code  is a codeable concept.  For a Diagnostic Procedure the code is  - 103693007  Diagnostic procedure</p>",
+        "id": 153881083,
+        "sender_full_name": "Sunanda Veeraganti",
+        "timestamp": 1491476694
+    },
+    {
+        "content": "<p>Shouldn't that be procedurerequest.category i.e. what type of procedurerequest is this? procedurerequest.code should be specifying what is being ordered as in \"Test Name\"</p>",
+        "id": 153881084,
+        "sender_full_name": "Mritunjay Dubey",
+        "timestamp": 1491476877
+    },
+    {
+        "content": "<p>Both Category and code are codeable concepts. yes you are correct. The Value set is defined here. <a href=\"http://hl7.org/fhir/STU3/valueset-procedure-code.html\" target=\"_blank\" title=\"http://hl7.org/fhir/STU3/valueset-procedure-code.html\">http://hl7.org/fhir/STU3/valueset-procedure-code.html</a></p>",
+        "id": 153881085,
+        "sender_full_name": "Sunanda Veeraganti",
+        "timestamp": 1491477462
+    },
+    {
+        "content": "<p>Yeah correct! This is an example binding, this can be totally different in my context.</p>",
+        "id": 153881086,
+        "sender_full_name": "Mritunjay Dubey",
+        "timestamp": 1491478059
+    },
+    {
+        "content": "<p>Sorry, I think we have deviated from the main question? My question was more about, is that the proper use of  <code>PRequest. requisition</code>. If yes what should be code for the composite PRequest.</p>",
+        "id": 153881087,
+        "sender_full_name": "Mritunjay Dubey",
+        "timestamp": 1491478229
+    },
+    {
+        "content": "<p>A new code should be defined for composite PRequest. Prequest code is not appropriate. solution.</p>",
+        "id": 153881090,
+        "sender_full_name": "Sunanda Veeraganti",
+        "timestamp": 1491480080
+    },
+    {
+        "content": "<p>Okey I agree to that. Otherwise that I just wanted to know is this a proper use of <code>PRequest. requisition</code> ?</p>",
+        "id": 153881091,
+        "sender_full_name": "Mritunjay Dubey",
+        "timestamp": 1491480183
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192421\">@Mritunjay Dubey</span> ProcedureRequest.requisition is an unique identifier. You don't need to create instance of a ProcedureRequest to hold that identifier. As long as all the requests have the same identifier, they are treated as in a composition. Here is the description from STU3: Requests are linked either by a \"basedOn\" relationship (i.e. one request is fulfilling another) or by having a common requisition. Requests that are part of the same requisition are generally treated independently from the perspective of changing their state or maintaining them after initial creation.<br>\nAnd PrcoedureRequestB.code and ProcedureRequestC.code should be their own SNOMED CT procedure code.<br>\nYour example is kind of confusing.</p>",
+        "id": 153881102,
+        "sender_full_name": "Yunwei Wang",
+        "timestamp": 1491487447
+    },
+    {
+        "content": "<p>There's no need to introduce an addtional ProcedureRequest A.  You just have one ProcedureRequest for each item and a common requisitionId on both.  There's no need to introduce a composite order in most cases.  The exception is if there are timing dependencies or conditionality dependencies for the child items - e.g. an order to do A or B, but not both.  In that case, ProcedureRequestB and ProcedureRequestC would have a ProcedureRequest.intent of \"option\" and you'd have a RequestGroupA that pointed to both.  The RequestGroupA would manage the relevant status, timing, etc. for all of its options. </p>",
+        "id": 153881105,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1491490103
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> <span class=\"user-mention\" data-user-id=\"191506\">@Yunwei Wang</span> thanks! That was helpful.</p>",
+        "id": 153881130,
+        "sender_full_name": "Mritunjay Dubey",
+        "timestamp": 1491494850
+    },
+    {
+        "content": "<p>Hello guys, As we discussed above A diagnosticorder with multiple items will be converted to separate procedure requests. Right now we have just one value <code>identifier</code> and <code>id</code> field populated for whole diagnostic order. Now we need multiple <code>identifier</code> and <code>id</code> one each for every procedure request. is there a standard way to deal with this problem? </p>",
+        "id": 153881553,
+        "sender_full_name": "Mritunjay Dubey",
+        "timestamp": 1491807371
+    },
+    {
+        "content": "<p>The same problem is with entry.fullUrl since a single entry will be changed to multiple entries</p>",
+        "id": 153881554,
+        "sender_full_name": "Mritunjay Dubey",
+        "timestamp": 1491807428
+    },
+    {
+        "content": "<p>@Mritunjay Dubey Will there be a problem using multiple identifiers in your scenario?</p>",
+        "id": 153881564,
+        "sender_full_name": "Sunanda Veeraganti",
+        "timestamp": 1491816475
+    },
+    {
+        "content": "<p>Yeah! We just thought of going with multiple identifier which we will generate. I was just wondering if there is a standard rule/guideline by fhir.</p>",
+        "id": 153881565,
+        "sender_full_name": "Mritunjay Dubey",
+        "timestamp": 1491816969
+    },
+    {
+        "content": "<p>If you are creating multiple procedure requests then it is better to have identifers for each request. It will be clean. I am also curious to see if any one proposes a better solution</p>",
+        "id": 153881566,
+        "sender_full_name": "Sunanda Veeraganti",
+        "timestamp": 1491817081
+    },
+    {
+        "content": "<p>If you don't have identifiers for each order entry, just append \".1\", \".2\" or \"-1\" or \"-2\".  There's no particular guidance because only you know what's going to be unique and reliable in your environment.</p>",
+        "id": 153881599,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1491833446
+    },
+    {
+        "content": "<p>yeah true! Even I thought of appending something, but just wanted to make sure that it is not wrong. Thanks</p>",
+        "id": 153881603,
+        "sender_full_name": "Mritunjay Dubey",
+        "timestamp": 1491835386
+    },
+    {
+        "content": "<p>A new question, The conversion scripts are adding an extension with url \"<a href=\"http://hl7.org/fhir/diagnosticorder-r2-marker\" target=\"_blank\" title=\"http://hl7.org/fhir/diagnosticorder-r2-marker\">http://hl7.org/fhir/diagnosticorder-r2-marker</a>\" while converting DiagnosticOrder to ProcedureRequest, but it says it is unknown. Am I missing anything here?</p>",
+        "id": 153885083,
+        "sender_full_name": "Mritunjay Dubey",
+        "timestamp": 1492594182
+    },
+    {
+        "content": "<p>that's so the mapping can round trip back to DiagnosticOrder, but it's not a formally defined extension </p>",
+        "id": 153885099,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1492604236
+    },
+    {
+        "content": "<p>ohh okey, it is just to identify that this ProcedureRequest is converted from DiagnosticOrder.</p>",
+        "id": 153885102,
+        "sender_full_name": "Mritunjay Dubey",
+        "timestamp": 1492604436
+    },
+    {
+        "content": "<p>yes</p>",
+        "id": 153885105,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1492604557
+    }
+]

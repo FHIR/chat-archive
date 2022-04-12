@@ -1,0 +1,123 @@
+---
+layout: page
+title: "FHIR Chat  · Explicit names for rules in map files. · mapping-framework"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/index.html">mapping-framework</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Explicit.20names.20for.20rules.20in.20map.20files.2E.html">Explicit names for rules in map files.</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="263450446"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/Explicit%20names%20for%20rules%20in%20map%20files./near/263450446" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Anthony Rocco <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Explicit.20names.20for.20rules.20in.20map.20files.2E.html#263450446">(Dec 02 2021 at 15:06)</a>:</h4>
+<p>I'm using HAPI FHIR r4 and trying to perform a transform with the StructureMapUtilities class, however the FHIRLexer is throwing this exception when parsing my map:</p>
+<p><code>org.hl7.fhir.r4.utils.FHIRLexer$FHIRLexerException: Error in ?? at 9, 7: Complex rules must have an explicit name</code></p>
+<p>What makes something a complex rule? I've seen examples of maps where there's to explicit rule names at all, and some where every rule has an explicit name. For reference, here is my map:</p>
+<div class="codehilite"><pre><span></span><code>map &quot;http://hl7.org/fhir/StructureMap/LabResultToDiagnosticReport&quot; = &quot;LabResultToDiagnosticReport&quot;
+
+uses &quot;http://hl7.org/fhir/StructureDefinition/LabResult&quot; alias LabResult as source
+uses &quot;http://hl7.org/fhir/StructureDefinition/DiagnosticReport&quot; alias DiagnosticReport as target
+uses &quot;http://hl7.org/fhir/StructureDefinition/Observation&quot; alias Observation as target
+uses &quot;http://hl7.org/fhir/StructureDefinition/Bundle&quot; alias Bundle as target
+
+group makeBundle(source src : LabResult, target bundle : Bundle) {
+  src -&gt; bundle.id = uuid();
+  src -&gt; bundle.type = &#39;collection&#39;;
+  src -&gt; bundle.entry as entry, entry.resource = create(&#39;DiagnosticReport&#39;) as report then
+    TransformDiagnosticReport(src, report), TransformDiagnosticReportPostHandler(src, report, bundle);
+}
+
+group TransformDiagnosticReport(source src : LabResult, target report : DiagnosticReport) {
+    src -&gt; report.id = uuid();
+    src -&gt; report.status = &#39;final&#39;;
+    src.facilitycode as ordercode -&gt; report.code = cc(&quot;http://loinc.org&quot;, ordercode, ordercode)
+    src.observationdatetime as odt -&gt; report.effectiveDateTime = dateOp(odt, &#39;dateTime&#39;);
+    src.labresultid as labid -&gt; report.identifier = id(&#39;https://xxx&#39;, labid);
+}
+
+group TransformDiagnosticReportPostHandler(source src : LabResult, source report : DiagnosticReport, target bundle : Bundle) {
+    src.observations as obs -&gt; bundle.entry as entry, entry.resource = create(&#39;Observation&#39;) as observation
+        then TransformObservation(src, report, observation);
+}
+
+group TransformObservation(source lab_obs, source report : DiagnosticReport, target observation: Observation) {
+   lab_obs -&gt; observation.id = uuid();
+   lab_obs -&gt; observation.status = &#39;final&#39;;
+   lab_obs.observationidentifier as o_identifier -&gt; observation.identifier = id(&#39;https://xxx&#39;, o_identifier);
+    lab_obs.loinc as loinc -&gt; observation.code = cc(&quot;http://loinc.org&quot;, loinc, loinc);
+    observation.id as o_id log &quot;$this&quot; -&gt; report.result = create(&#39;Reference&#39;) as result,
+        result.reference = evaluate(o_id, &#39;\&#39;Observation/\&#39; + $this&#39;);
+}
+</code></pre></div>
+
+
+
+<a name="263451872"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/Explicit%20names%20for%20rules%20in%20map%20files./near/263451872" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Anthony Rocco <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Explicit.20names.20for.20rules.20in.20map.20files.2E.html#263451872">(Dec 02 2021 at 15:15)</a>:</h4>
+<p><span class="user-mention" data-user-id="191363">@Vadim Peretokin</span></p>
+
+
+
+<a name="263453171"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/Explicit%20names%20for%20rules%20in%20map%20files./near/263453171" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vadim Peretokin <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Explicit.20names.20for.20rules.20in.20map.20files.2E.html#263453171">(Dec 02 2021 at 15:23)</a>:</h4>
+<p>I'm not sure off the top of my head, and that name is not called out in the spec. Maybe it means the 'then' statement? I'd try to debug this by cutting everything out and building it back up again until you get the error.</p>
+
+
+
+<a name="263453874"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/Explicit%20names%20for%20rules%20in%20map%20files./near/263453874" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vadim Peretokin <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Explicit.20names.20for.20rules.20in.20map.20files.2E.html#263453874">(Dec 02 2021 at 15:27)</a>:</h4>
+<p><code>    src.facilitycode as ordercode -&gt; report.code = cc("http://loinc.org", ordercode, ordercode)</code> is missing a semicolon - check this <span class="user-mention" data-user-id="458359">@Anthony Rocco</span></p>
+
+
+
+<a name="263470984"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/Explicit%20names%20for%20rules%20in%20map%20files./near/263470984" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Anthony Rocco <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Explicit.20names.20for.20rules.20in.20map.20files.2E.html#263470984">(Dec 02 2021 at 17:18)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191363">Vadim Peretokin</span> <a href="#narrow/stream/181579-mapping-framework/topic/Explicit.20names.20for.20rules.20in.20map.20files.2E/near/263453171">said</a>:</p>
+<blockquote>
+<p>I'm not sure off the top of my head, and that name is not called out in the spec. Maybe it means the 'then' statement? I'd try to debug this by cutting everything out and building it back up again until you get the error.</p>
+</blockquote>
+<p>Thanks Vadim, and also thank you for your great presentation on FHIR mapping language - it was a big help. I ended up resolving this error by naming all my rules, like so:</p>
+<div class="codehilite"><pre><span></span><code>src -&gt; bundle.id = uuid() &quot;bundle.id&quot;;
+src -&gt; bundle.type = &#39;collection&#39; &quot;bundle.type&quot;;
+</code></pre></div>
+<p>Even those two rules were causing an exception without it.</p>
+<p>I'm now encountering this error:<br>
+<code>     [java] org.hl7.fhir.exceptions.FHIRException: Cannot set property resource on entry - value is not a primitive type (DiagnosticReport) or an ElementModel type</code> <br>
+I followed how you constructed the bundle in your video, but maybe the spec has changed since then.</p>
+<p>Edit: That error seems to have been an issue with how I was loading the structure definition for DiagnosticReport - has since been resolved. Some of the transformed you used like <code>id</code> are throwing an Exception saying the transform is unknown, which mapping engine did you use in your presentation?</p>
+
+
+
+<a name="263814632"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/Explicit%20names%20for%20rules%20in%20map%20files./near/263814632" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vadim Peretokin <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Explicit.20names.20for.20rules.20in.20map.20files.2E.html#263814632">(Dec 06 2021 at 07:07)</a>:</h4>
+<p>Same one actually! But it was a couple of years ago so things have moved on since then it would seem.</p>
+
+
+
+<a name="263814699"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/Explicit%20names%20for%20rules%20in%20map%20files./near/263814699" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vadim Peretokin <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Explicit.20names.20for.20rules.20in.20map.20files.2E.html#263814699">(Dec 06 2021 at 07:08)</a>:</h4>
+<p>It would be good to figure out all the new changes and publish an update <span aria-label="thinking" class="emoji emoji-1f914" role="img" title="thinking">:thinking:</span></p>
+
+
+
+<a name="263814864"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/Explicit%20names%20for%20rules%20in%20map%20files./near/263814864" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Vadim Peretokin <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Explicit.20names.20for.20rules.20in.20map.20files.2E.html#263814864">(Dec 06 2021 at 07:12)</a>:</h4>
+<p><span class="user-mention" data-user-id="191478">@Oliver Egger</span> is naming every single rule really required now? It seems a bit unnecessary. Maybe this is not intended?</p>
+
+
+
+<a name="263976520"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/Explicit%20names%20for%20rules%20in%20map%20files./near/263976520" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Declan Kieran <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Explicit.20names.20for.20rules.20in.20map.20files.2E.html#263976520">(Dec 07 2021 at 09:32)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="458359">Anthony Rocco</span> <a href="#narrow/stream/181579-mapping-framework/topic/Explicit.20names.20for.20rules.20in.20map.20files.2E/near/263470984">said</a>:</p>
+<blockquote>
+<p>Edit: That error seems to have been an issue with how I was loading the structure definition for DiagnosticReport - has since been resolved. Some of the transformed you used like <code>id</code> are throwing an Exception saying the transform is unknown, which mapping engine did you use in your presentation?</p>
+</blockquote>
+<p>I've noticed the unknown map error being thrown because of another error higher up, even when the transform parameter is set to the correct value from the FML map, i.e. in your example the transform=http://hl7.org/fhir/StructureMap/LabResultToDiagnosticReport.  It had me looking in the wrong place a few times. This was when using the validator_cli and looking at the output on the terminal, not sure about errors coming back in an OperationOutcome...</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

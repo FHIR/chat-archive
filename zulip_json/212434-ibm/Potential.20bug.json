@@ -1,0 +1,254 @@
+[
+    {
+        "content": "<p>Changing to \"strict\" mode by default has highlighted how bad our e2e search tests are.  Most of them are just checking for &gt;=1 result, so the fact we were returning all the results for unexpected issues was masking some problems.</p>",
+        "id": 180052810,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573059453
+    },
+    {
+        "content": "<p>I think our JDBC search tests are pretty good, so I'm not sure how important it is to improve all these e2e tests</p>",
+        "id": 180052883,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573059483
+    },
+    {
+        "content": "<p>but there is a related issue i'm looking at right now which I believe is either a bug in our fhirpath engine or in the spec-defined search criteria</p>",
+        "id": 180052928,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573059516
+    },
+    {
+        "content": "<p>the search parameter in question is <code>Observation-value-quantity</code> and the expression is <code>(Observation.component.value as Quantity) | (Observation.component.value as SampledData)</code></p>",
+        "id": 180052991,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573059558
+    },
+    {
+        "content": "<p>i would expect that to extract the values from the following sample Observation (Observation1.json):</p>\n<div class=\"codehilite\"><pre><span></span>{\n        &quot;resourceType&quot; : &quot;Observation&quot;,\n        &quot;status&quot; : &quot;final&quot;,\n        &quot;category&quot; : [{\n            &quot;coding&quot; : [ {\n                &quot;system&quot; : &quot;http://terminology.hl7.org/CodeSystem/observation-category&quot;,\n                &quot;code&quot; : &quot;vital-signs&quot;,\n                &quot;display&quot; : &quot;Vital Signs&quot;\n            } ]\n        }],\n        &quot;code&quot; : {\n            &quot;coding&quot; : [ {\n                &quot;system&quot; : &quot;http://loinc.org&quot;,\n                &quot;code&quot; : &quot;55284-4&quot;,\n                &quot;display&quot; : &quot;Blood pressure systolic and diastolic&quot;\n            } ]\n        },\n        &quot;component&quot; : [ {\n            &quot;code&quot; : {\n                &quot;coding&quot; : [ {\n                    &quot;system&quot; : &quot;http://loinc.org&quot;,\n                    &quot;code&quot; : &quot;8459-0&quot;,\n                    &quot;display&quot; : &quot;Systolic blood pressure--sitting&quot;\n                } ]\n            },\n            &quot;valueQuantity&quot; : {\n                &quot;value&quot; : 125.0,\n                &quot;unit&quot; : &quot;mmHg&quot;\n            }\n        }, {\n            &quot;code&quot; : {\n                &quot;coding&quot; : [ {\n                    &quot;system&quot; : &quot;http://loinc.org&quot;,\n                    &quot;code&quot; : &quot;8453-3&quot;,\n                    &quot;display&quot; : &quot;BP dias--sitting&quot;\n                } ]\n            },\n            &quot;valueQuantity&quot; : {\n                &quot;value&quot; : 80.0,\n                &quot;unit&quot; : &quot;mmHg&quot;\n            }\n        } ]\n}\n</pre></div>",
+        "id": 180053049,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573059596
+    },
+    {
+        "content": "<p>but its not</p>",
+        "id": 180053058,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573059601
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192334\">@John Timm</span> does the fhirpath look right to you?  component is an array, but FHIRPath handles that automatically, right?</p>",
+        "id": 180053387,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573059720
+    },
+    {
+        "content": "<p>OK, I think I figured this one out.  Its failing to select these because of the <code>isSingleton(nodes)</code> check in FHIRPathEvaluator.visitTypeExpression<br>\n<a href=\"/user_uploads/10155/zrGCC-B9dAss7kdxcsv9fdGm/pasted_image.png\" target=\"_blank\" title=\"pasted_image.png\">pasted image</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/zrGCC-B9dAss7kdxcsv9fdGm/pasted_image.png\" target=\"_blank\" title=\"pasted image\"><img src=\"/user_uploads/10155/zrGCC-B9dAss7kdxcsv9fdGm/pasted_image.png\"></a></div>",
+        "id": 180055290,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573060803
+    },
+    {
+        "content": "<p>is it possible just to have that method call the <code>is</code> and <code>as</code> methods instead of duplicating the logic?</p>",
+        "id": 180056993,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573061824
+    },
+    {
+        "content": "<p>Although I think the FHIRPath spec says \"as\" should have a single left-hand operand, I'm gonna treat this one like a bug on our side (since the <code>X as Y</code> pattern is so common in search expressions)</p>",
+        "id": 180058193,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573062574
+    },
+    {
+        "content": "<p>opened <a href=\"https://github.com/IBM/FHIR/issues/370\" target=\"_blank\" title=\"https://github.com/IBM/FHIR/issues/370\">https://github.com/IBM/FHIR/issues/370</a></p>",
+        "id": 180059505,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573063338
+    },
+    {
+        "content": "<p>Per the FHIRPath Specification (Section 6.3):<br>\n<a href=\"http://hl7.org/fhirpath/2018Sep/index.html#types\" target=\"_blank\" title=\"http://hl7.org/fhirpath/2018Sep/index.html#types\">http://hl7.org/fhirpath/2018Sep/index.html#types</a><br>\n\"If the input collections contains more than one item, the evaluator will throw an error. In all other cases this function returns the empty collection.\"</p>",
+        "id": 180059752,
+        "sender_full_name": "John Timm",
+        "timestamp": 1573063477
+    },
+    {
+        "content": "<p>yes, i included that in the \"additional context\" on the bug report</p>",
+        "id": 180059897,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573063564
+    },
+    {
+        "content": "<p>included the \"fix\" in <a href=\"https://github.com/IBM/FHIR/pull/369\" target=\"_blank\" title=\"https://github.com/IBM/FHIR/pull/369\">https://github.com/IBM/FHIR/pull/369</a></p>",
+        "id": 180066755,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573067579
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192334\">@John Timm</span> interesting build error after making that change to ensure <code>is</code> always operates on a singleton:</p>\n<div class=\"codehilite\"><pre><span></span>[ERROR] Tests run: 13, Failures: 4, Errors: 0, Skipped: 0, Time elapsed: 9.016 s &lt;&lt;&lt; FAILURE! - in TestSuite\n[ERROR] testInvalidBundleContainedInDomainResource(com.ibm.fhir.validation.test.BundleValidationTest)  Time elapsed: 0.057 s  &lt;&lt;&lt; FAILURE!\njava.lang.Error: An error occurred while validating constraint: bdl-11 with location: (base) and expression: type = &#39;document&#39; implies entry.first().resource.is(Composition) at path: Bundle\n    at com.ibm.fhir.validation.test.BundleValidationTest.testInvalidBundleContainedInDomainResource(BundleValidationTest.java:237)\nCaused by: com.ibm.fhir.model.path.exception.FHIRPathException: java.lang.IllegalArgumentException: Input collection has 0 items, but only 1 is allowed\n    at com.ibm.fhir.validation.test.BundleValidationTest.testInvalidBundleContainedInDomainResource(BundleValidationTest.java:237)\nCaused by: java.lang.IllegalArgumentException: Input collection has 0 items, but only 1 is allowed\n    at com.ibm.fhir.validation.test.BundleValidationTest.testInvalidBundleContainedInDomainResource(BundleValidationTest.java:237)\n</pre></div>",
+        "id": 180076138,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573074209
+    },
+    {
+        "content": "<p>i guess we should just return empty() if the input collection is empty()?</p>",
+        "id": 180076224,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573074271
+    },
+    {
+        "content": "<p>instead of throwing</p>",
+        "id": 180076233,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573074279
+    },
+    {
+        "content": "<p>Agreed with the empty() for empty() comment</p>",
+        "id": 180077050,
+        "sender_full_name": "John Timm",
+        "timestamp": 1573074880
+    },
+    {
+        "content": "<p>i don't think fhirpath spec even covers that</p>",
+        "id": 180077069,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573074894
+    },
+    {
+        "content": "<blockquote>\n<p>If there is more than one item in the input collection, the evaluator will throw an error.</p>\n</blockquote>",
+        "id": 180077109,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573074917
+    },
+    {
+        "content": "<p>so i guess it should fall through to the next comment:</p>\n<blockquote>\n<p>Otherwise, this operator returns the empty collection.</p>\n</blockquote>",
+        "id": 180077131,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573074937
+    },
+    {
+        "content": "<p>but its weird to think that a left-hand operator can be empty collection</p>",
+        "id": 180077160,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573074961
+    },
+    {
+        "content": "<p>If it's not required, then it could be not present / empty. Not all expressions have the element.exists() implies guard.</p>",
+        "id": 180077314,
+        "sender_full_name": "John Timm",
+        "timestamp": 1573075042
+    },
+    {
+        "content": "<p>proposed fix:<br>\n<a href=\"/user_uploads/10155/lQv2nsy3JMO9-k-M-IAvFRtv/pasted_image.png\" target=\"_blank\" title=\"pasted_image.png\">pasted image</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/lQv2nsy3JMO9-k-M-IAvFRtv/pasted_image.png\" target=\"_blank\" title=\"pasted image\"><img src=\"/user_uploads/10155/lQv2nsy3JMO9-k-M-IAvFRtv/pasted_image.png\"></a></div>",
+        "id": 180077399,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573075086
+    },
+    {
+        "content": "<p>so we'd exit early for both as and is</p>",
+        "id": 180077411,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573075101
+    },
+    {
+        "content": "<p>I'm hoping this takes care of the build failures</p>",
+        "id": 180077462,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573075140
+    },
+    {
+        "content": "<p>actually, this messes up the indentLevel</p>",
+        "id": 180077849,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573075416
+    },
+    {
+        "content": "<p>i assume thats just used for debug purposes?</p>",
+        "id": 180077866,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573075430
+    },
+    {
+        "content": "<p>Please make sure to do a indentLevel-- before your early exit.</p>",
+        "id": 180077923,
+        "sender_full_name": "John Timm",
+        "timestamp": 1573075453
+    },
+    {
+        "content": "<p>Or alter the code to maintain a single exit.</p>",
+        "id": 180077948,
+        "sender_full_name": "John Timm",
+        "timestamp": 1573075476
+    },
+    {
+        "content": "<p>will do</p>",
+        "id": 180078204,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573075637
+    },
+    {
+        "content": "<p>but now i'm having second-thoughts on returning empty list of <code>is</code></p>",
+        "id": 180078228,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573075655
+    },
+    {
+        "content": "<p>for <code>as</code> it seems right</p>",
+        "id": 180078229,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573075660
+    },
+    {
+        "content": "<p>but maybe <code>is</code> should return <code>SINGLETON_FALSE</code> ?</p>",
+        "id": 180078244,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573075673
+    },
+    {
+        "content": "<p>thats what seems to match the prior behavior</p>",
+        "id": 180078296,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573075688
+    },
+    {
+        "content": "<p>There are other examples of functions that return empty if the input is empty. I think we should follow that. returning false implies something was actually checked. an empty input doesn't have anything that can be checked. i think returning <br>\nempty makes more sense.</p>",
+        "id": 180078362,
+        "sender_full_name": "John Timm",
+        "timestamp": 1573075739
+    },
+    {
+        "content": "<p>ok, thanks for the confirm.  trying it out now</p>",
+        "id": 180078501,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573075828
+    },
+    {
+        "content": "<p>on the indent thing, does the indent level matter when we visit the expression?  assuming yes, I just popped a indentLevel--; in before the early exit return</p>",
+        "id": 180079001,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573076170
+    },
+    {
+        "content": "<p>if indentLevel didn't matter for the visit, i would have just moved the early exit block above the indentLevel++</p>",
+        "id": 180079035,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573076209
+    },
+    {
+        "content": "<p><a href=\"https://github.com/IBM/FHIR/pull/369\" target=\"_blank\" title=\"https://github.com/IBM/FHIR/pull/369\">https://github.com/IBM/FHIR/pull/369</a> is updated</p>",
+        "id": 180079149,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573076287
+    },
+    {
+        "content": "<p>we call visit a couple of times after the indentLevel++ statement so I think the best solution is to put indentLevel-- right before return empty()</p>",
+        "id": 180080402,
+        "sender_full_name": "John Timm",
+        "timestamp": 1573077149
+    },
+    {
+        "content": "<p>ok, cool, thats what i did</p>",
+        "id": 180080873,
+        "sender_full_name": "Lee Surprenant",
+        "timestamp": 1573077523
+    }
+]

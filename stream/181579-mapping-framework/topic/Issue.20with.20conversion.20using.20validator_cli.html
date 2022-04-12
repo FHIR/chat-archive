@@ -1,0 +1,132 @@
+---
+layout: page
+title: "FHIR Chat  · Issue with conversion using validator_cli · mapping-framework"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/index.html">mapping-framework</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Issue.20with.20conversion.20using.20validator_cli.html">Issue with conversion using validator_cli</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="265332601"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/Issue%20with%20conversion%20using%20validator_cli/near/265332601" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Declan Kieran <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Issue.20with.20conversion.20using.20validator_cli.html#265332601">(Dec 17 2021 at 17:41)</a>:</h4>
+<p>I'm using tag 5.6.7, commit 2b4f3f3d1870624c00dcd9cd7f9a67206dbfec46</p>
+<p>When using the validator_cli to covert from version 3.0 to version 4.0, i.e.</p>
+<div class="codehilite" data-code-language="Bash"><pre><span></span><code>ValidatorCli ./source.json -version <span class="m">3</span>.0 -to-version <span class="m">4</span>.0 -output ./output.json
+</code></pre></div>
+<p>It is using the STU3 version (in my case) of MedicationRequest (the ResourceType I'm trying to convert).</p>
+<p>At ValidatorCli.java:237</p>
+<div class="codehilite" data-code-language="Java"><pre><span></span><code>    <span class="n">String</span> <span class="n">definitions</span> <span class="o">=</span> <span class="n">VersionUtilities</span><span class="p">.</span><span class="na">packageForVersion</span><span class="p">(</span><span class="n">cliContext</span><span class="p">.</span><span class="na">getSv</span><span class="p">())</span> <span class="o">+</span> <span class="s">"#"</span> <span class="o">+</span> <span class="n">VersionUtilities</span><span class="p">.</span><span class="na">getCurrentVersion</span><span class="p">(</span><span class="n">cliContext</span><span class="p">.</span><span class="na">getSv</span><span class="p">());</span>
+    <span class="n">ValidationEngine</span> <span class="n">validator</span> <span class="o">=</span> <span class="n">validationService</span><span class="p">.</span><span class="na">initializeValidator</span><span class="p">(</span><span class="n">cliContext</span><span class="p">,</span> <span class="n">definitions</span><span class="p">,</span> <span class="n">tt</span><span class="p">);</span>
+</code></pre></div>
+<p>cliContext.getSv() returns 3.0, as per the cli argument `-version 3.0'.  It uses this to initialise the ValidationEngine, and is grabbing the npm package hl7.fhir.r3.core#3.0.2 from the cache.</p>
+<p>When it calls getTargetResourceFromStructureMap, it extracts the target URL from the map that is passed in, i.e.</p>
+<div class="codehilite" data-code-language="Java"><pre><span></span><code>      <span class="k">if</span> <span class="p">(</span><span class="n">component</span><span class="p">.</span><span class="na">getMode</span><span class="p">()</span> <span class="o">==</span> <span class="n">StructureMap</span><span class="p">.</span><span class="na">StructureMapModelMode</span><span class="p">.</span><span class="na">TARGET</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">targetTypeUrl</span> <span class="o">=</span> <span class="n">component</span><span class="p">.</span><span class="na">getUrl</span><span class="p">();</span>
+        <span class="k">break</span><span class="p">;</span>
+      <span class="p">}</span>
+</code></pre></div>
+<p>The value of targetTypeUrl is "<a href="http://hl7.org/fhir/StructureDefinition/MedicationRequest">http://hl7.org/fhir/StructureDefinition/MedicationRequest</a>", which when searching the STU3 npm package of course returns the STU3 MedicationRequest, it therefore doesn't recognise the encounter element in the target FML.  Changing the value of targetTypeUrl at runtime to "<a href="http://hl7.org/fhir/StructureDefinition/MedicationRequest">http://hl7.org/fhir/StructureDefinition/MedicationRequest</a>" resolves this.  Function in question</p>
+<div class="codehilite" data-code-language="Java"><pre><span></span><code>  <span class="kd">private</span> <span class="n">org</span><span class="p">.</span><span class="na">hl7</span><span class="p">.</span><span class="na">fhir</span><span class="p">.</span><span class="na">r5</span><span class="p">.</span><span class="na">elementmodel</span><span class="p">.</span><span class="na">Element</span> <span class="nf">getTargetResourceFromStructureMap</span><span class="p">(</span><span class="n">StructureMap</span> <span class="n">map</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">String</span> <span class="n">targetTypeUrl</span> <span class="o">=</span> <span class="kc">null</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">StructureMap</span><span class="p">.</span><span class="na">StructureMapStructureComponent</span> <span class="n">component</span> <span class="p">:</span> <span class="n">map</span><span class="p">.</span><span class="na">getStructure</span><span class="p">())</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">component</span><span class="p">.</span><span class="na">getMode</span><span class="p">()</span> <span class="o">==</span> <span class="n">StructureMap</span><span class="p">.</span><span class="na">StructureMapModelMode</span><span class="p">.</span><span class="na">TARGET</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">targetTypeUrl</span> <span class="o">=</span> <span class="n">component</span><span class="p">.</span><span class="na">getUrl</span><span class="p">();</span>
+        <span class="k">break</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">targetTypeUrl</span> <span class="o">==</span> <span class="kc">null</span><span class="p">)</span> <span class="k">throw</span> <span class="k">new</span> <span class="n">FHIRException</span><span class="p">(</span><span class="s">"Unable to determine resource URL for target type"</span><span class="p">);</span>
+
+    <span class="n">StructureDefinition</span> <span class="n">structureDefinition</span> <span class="o">=</span> <span class="kc">null</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">StructureDefinition</span> <span class="n">sd</span> <span class="p">:</span> <span class="k">this</span><span class="p">.</span><span class="na">context</span><span class="p">.</span><span class="na">getStructures</span><span class="p">())</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">sd</span><span class="p">.</span><span class="na">getUrl</span><span class="p">().</span><span class="na">equalsIgnoreCase</span><span class="p">(</span><span class="n">targetTypeUrl</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">structureDefinition</span> <span class="o">=</span> <span class="n">sd</span><span class="p">;</span>
+        <span class="k">break</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">structureDefinition</span> <span class="o">==</span> <span class="kc">null</span><span class="p">)</span> <span class="k">throw</span> <span class="k">new</span> <span class="n">FHIRException</span><span class="p">(</span><span class="s">"Unable to find StructureDefinition for target type ('"</span> <span class="o">+</span> <span class="n">targetTypeUrl</span> <span class="o">+</span> <span class="s">"')"</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="n">Manager</span><span class="p">.</span><span class="na">build</span><span class="p">(</span><span class="n">getContext</span><span class="p">(),</span> <span class="n">structureDefinition</span><span class="p">);</span>
+  <span class="p">}</span>
+</code></pre></div>
+<p>another fix for this is to change the URL of the target in <code>~/.fhir/packages/hl7.fhir.xver.r4#1.2.0/package/StructureMap-MedicationRequest3to4.json</code>, so when the package is searched it finds the correct StructureDefinition.</p>
+<p>i.e. change this</p>
+<div class="codehilite" data-code-language="JSON"><pre><span></span><code><span class="p">{</span>
+  <span class="nt">"url"</span><span class="p">:</span> <span class="s2">"http://hl7.org/fhir/StructureDefinition/MedicationRequest"</span><span class="p">,</span>
+  <span class="nt">"mode"</span><span class="p">:</span> <span class="s2">"target"</span><span class="p">,</span>
+  <span class="nt">"alias"</span><span class="p">:</span> <span class="s2">"MedicationRequest"</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>to</p>
+<div class="codehilite" data-code-language="JSON"><pre><span></span><code><span class="p">{</span>
+  <span class="nt">"url"</span><span class="p">:</span> <span class="s2">"http://hl7.org/fhir/4.0/StructureDefinition/MedicationRequest"</span><span class="p">,</span>
+  <span class="nt">"mode"</span><span class="p">:</span> <span class="s2">"target"</span><span class="p">,</span>
+  <span class="nt">"alias"</span><span class="p">:</span> <span class="s2">"MedicationRequest"</span>
+<span class="p">}</span>
+</code></pre></div>
+<p><span class="user-mention" data-user-id="191316">@Grahame Grieve</span>  I'm wondering what would be the best of course of action is to fix this.  The options I'm thinking of are</p>
+<ul>
+<li>
+<p>Change the code to load in the r4 package to search, as opposed to searching the STU3 package</p>
+<ul>
+<li>Advantage - No need to change the StructureMap, and possibly cause side effects elsewhere...</li>
+<li>Disadvantage - Loading another package is a lot of overhead and maybe also is duplication?</li>
+</ul>
+</li>
+<li>
+<p>Change the StructreMap</p>
+<ul>
+<li>Advantage / Disadvantage - reverse of previous</li>
+</ul>
+</li>
+</ul>
+<p>If the former, should I create a github issue for this?  If the latter, is there a set of tests that could validate this didn't break a load of stuff, also where a issue/change request be made for that?</p>
+
+
+
+<a name="265338690"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/Issue%20with%20conversion%20using%20validator_cli/near/265338690" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Declan Kieran <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Issue.20with.20conversion.20using.20validator_cli.html#265338690">(Dec 17 2021 at 18:22)</a>:</h4>
+<p>Minimal source snippet to repeat the issue</p>
+<div class="codehilite" data-code-language="JSON"><pre><span></span><code><span class="p">{</span>
+  <span class="nt">"resourceType"</span><span class="p">:</span> <span class="s2">"MedicationRequest"</span><span class="p">,</span>
+  <span class="nt">"context"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="nt">"reference"</span><span class="p">:</span> <span class="s2">"Encounter/f001"</span><span class="p">,</span>
+    <span class="nt">"display"</span><span class="p">:</span> <span class="s2">"encounter that leads to this prescription"</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+
+<a name="273082075"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/Issue%20with%20conversion%20using%20validator_cli/near/273082075" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Declan Kieran <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Issue.20with.20conversion.20using.20validator_cli.html#273082075">(Feb 24 2022 at 12:26)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>  <span class="user-mention" data-user-id="191316">@Grahame Grieve</span>  Just in case it's useful to anyone, I have created a repo that uses a modified xver package that will convert a load of STU3 examples in a pipeline and then test them against expected output (just previously ran successful transforms). I took the examples from the <a href="https://github.com/rbren/fhir-swagger/">fhir-swagger project</a> .  I cleared out ones that wouldn't convert, like bundles and resources that had contained resources and was left with 794.</p>
+<p><a href="https://github.com/declankieran-nhsd/hapi-fhir-3to4-demo/">https://github.com/declankieran-nhsd/hapi-fhir-3to4-demo/</a></p>
+<p>There is also a script to validate how accurate the transforms are based on examining the input and expected files referencing the source and target StructureDefintions.  Details of the logic behind the script are on a readme here</p>
+<p><a href="https://github.com/declankieran-nhsd/hapi-fhir-3to4-demo/tree/main/scripts">https://github.com/declankieran-nhsd/hapi-fhir-3to4-demo/tree/main/scripts</a></p>
+<p>It is only looking at keys, and only so far as defined with the StructureDefinitions.  It doesn't look at data, and it doesn't reference any defined mappings.  There is a report on the transform accuracy here</p>
+<p><a href="https://github.com/declankieran-nhsd/hapi-fhir-3to4-demo/tree/main/examples">https://github.com/declankieran-nhsd/hapi-fhir-3to4-demo/tree/main/examples</a></p>
+<p>It highlights</p>
+<p>Keys that are invalid and shouldn't be in the input as per the source StructureDefintion<br>
+Keys that are definitely lost (Limitation here is invalid data causing a failure in the transform currently isn't implemented)<br>
+Keys possibly lost or renamed (This is due to not referencing a defined map, but that again could be implemented fairly easily I think)</p>
+<p>The ones showing issues with the transform I think are mostly not issues, and I think these tests show the libraries and maps to be very robust.</p>
+<p>There is also another repo that currently has some FML for specific extensions, again with some test automation.  These include UK CareConnect extensions being converted to UKCore extensions.</p>
+<p><a href="https://github.com/NHSDigital/fhir-transforms/">https://github.com/NHSDigital/fhir-transforms/</a></p>
+<p>Thanks again <span class="user-mention" data-user-id="191478">@Oliver Egger</span>  for the help with writing the FML for these.</p>
+
+
+
+<a name="273082360"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/181579-mapping-framework/topic/Issue%20with%20conversion%20using%20validator_cli/near/273082360" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/181579-mapping-framework/topic/Issue.20with.20conversion.20using.20validator_cli.html#273082360">(Feb 24 2022 at 12:29)</a>:</h4>
+<p>great stuff, thanks</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

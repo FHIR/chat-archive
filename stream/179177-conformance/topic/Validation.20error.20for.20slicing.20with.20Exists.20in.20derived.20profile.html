@@ -1,0 +1,70 @@
+---
+layout: page
+title: "FHIR Chat  · Validation error for slicing with Exists in derived profile · conformance"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/index.html">conformance</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/Validation.20error.20for.20slicing.20with.20Exists.20in.20derived.20profile.html">Validation error for slicing with Exists in derived profile</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="154025298"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/Validation%20error%20for%20slicing%20with%20Exists%20in%20derived%20profile/near/154025298" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/Validation.20error.20for.20slicing.20with.20Exists.20in.20derived.20profile.html#154025298">(Dec 13 2018 at 10:37)</a>:</h4>
+<p>I am seeing a curious validation error with the latest Java JAR validator when using slicing with an Exists-discriminator in a derived profile: </p>
+<p>Here is what I did (working in Forge):<br>
+1. Create a new derived profile from the following profile (German base profile for Patient): <a href="http://fhir.de/StructureDefinition/patient-de-basis/0.2" target="_blank" title="http://fhir.de/StructureDefinition/patient-de-basis/0.2">http://fhir.de/StructureDefinition/patient-de-basis/0.2</a> . This Profile does not itself slice <code>name</code> field, but it does specify a custom profile for it (viz. <a href="http://fhir.de/StructureDefinition/humanname-de-basis/0.2" target="_blank" title="http://fhir.de/StructureDefinition/humanname-de-basis/0.2">http://fhir.de/StructureDefinition/humanname-de-basis/0.2</a>)<br>
+2. Slice the <code>name</code>field, with a discriminator of type "Exists" on <code>period.end</code><br>
+3. Add a slice and in this slice, set the cardinality of <code>period.end</code>to 0..0<br>
+4. Validate using the latest Java JAR validator against a <code>Patient</code> example that contains the <code>name</code>field with only <code>name.given</code> filled in (at least the <code>name</code>field has to be there)</p>
+<p>This gives the following error (despite step 3):</p>
+<div class="codehilite"><pre><span></span>*FAILURE* validating examples\patient-example-minimal.xml:  error:1 warn:0 info:0
+  Error @ Patient.name (line 6, col11) : Discriminator (period.end) is based on element existence, but slice Patient.name:sliceName neither sets min&gt;=1 or max=0
+</pre></div>
+
+
+<p>Curiously, if I do exactly the same, but base my profile on the standard STU3 Patient resource, it works. Doe slicing in derived field somehow work differently?</p>
+
+
+
+<a name="154026056"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/Validation%20error%20for%20slicing%20with%20Exists%20in%20derived%20profile/near/154026056" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Ewout Kramer <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/Validation.20error.20for.20slicing.20with.20Exists.20in.20derived.20profile.html#154026056">(Dec 18 2018 at 10:13)</a>:</h4>
+<p>I sort of understand the error - does it make sense to have a discriminator on an element that has set it's cardinality to 0..0.  It seems the error should say: "but slice ........ EITHER sets min&gt;=1 or max=0" - so maybe I just don't understand what's going on.</p>
+<p>That said, the german profile on humanname does not make any changes to the period element, so there should not be changes in behaviour. <span class="user-mention" data-user-id="191316">@Grahame Grieve</span> <span class="user-mention" data-user-id="191336">@Michel Rutten</span> ?</p>
+
+
+
+<a name="154026058"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/Validation%20error%20for%20slicing%20with%20Exists%20in%20derived%20profile/near/154026058" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michel Rutten <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/Validation.20error.20for.20slicing.20with.20Exists.20in.20derived.20profile.html#154026058">(Dec 18 2018 at 10:29)</a>:</h4>
+<p>Forge helps users to design valid StructureDefinitions, but ultimately verification is left up to the validator. I don't fully understand the warning message from the Java validator...</p>
+
+
+
+<a name="154026069"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/Validation%20error%20for%20slicing%20with%20Exists%20in%20derived%20profile/near/154026069" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/Validation.20error.20for.20slicing.20with.20Exists.20in.20derived.20profile.html#154026069">(Dec 18 2018 at 11:35)</a>:</h4>
+<p>In this case, I am not restricting the cardinality of <code>period.end</code>in general, only in a particular slice where I removed it (0..0). This was based on my understanding  that to use the Exists-discriminator, one needs to fix the "existence status" of the corresponding element to either "never" (cardinality = 0) or "always" (cardinality &gt; 1) in slices. But if I  read the error message right, it seems to tell me that I failed to do exactly that, which is what confused me.</p>
+
+
+
+<a name="154026070"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/Validation%20error%20for%20slicing%20with%20Exists%20in%20derived%20profile/near/154026070" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Brian Postlethwaite <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/Validation.20error.20for.20slicing.20with.20Exists.20in.20derived.20profile.html#154026070">(Dec 18 2018 at 11:35)</a>:</h4>
+<p>That's constraining to 0..0 could be to validate that this slice isn't to be used.</p>
+
+
+
+<a name="154026074"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/Validation%20error%20for%20slicing%20with%20Exists%20in%20derived%20profile/near/154026074" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Morten Ernebjerg <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/Validation.20error.20for.20slicing.20with.20Exists.20in.20derived.20profile.html#154026074">(Dec 18 2018 at 11:40)</a>:</h4>
+<p>(BTW, the usecase background is that I want to define a slice that picks out a name entry for which(among other properties)  no end-date has been specified so that this name is guaranteed to still be valid)</p>
+
+
+
+<a name="154026099"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179177-conformance/topic/Validation%20error%20for%20slicing%20with%20Exists%20in%20derived%20profile/near/154026099" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179177-conformance/topic/Validation.20error.20for.20slicing.20with.20Exists.20in.20derived.20profile.html#154026099">(Dec 18 2018 at 14:59)</a>:</h4>
+<p>If you're using "exists", you expect one slice to be 1..x and one to be 0..0.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,178 @@
+---
+layout: page
+title: "FHIR Chat  · Full text searching · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Full.20text.20searching.html">Full text searching</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153960757"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Full%20text%20searching/near/153960757" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Luke Swindale <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Full.20text.20searching.html#153960757">(May 15 2018 at 00:04)</a>:</h4>
+<p>Has anyone had experience using HAPI for lucene full text searching? I've got an autocomplete I'm using to look up Medication resources using a 'prefix, any order' approach. We're using fhir-jpa-server-base:3.2.0 with Hibernate Search, backed by MySQL. Achieving 'prefix, any order' was a bit of a challenge and very ugly. I'm just wondering whether there's a better way.</p>
+<p><strong>Request:</strong> <code>http://localhost:8080/my-app/Medication?_content=blister%20onda&amp;_profile=https://www.healthterminologies.gov.au/StructureDefinition/MyMedication</code></p>
+<p><strong>Problem:</strong><br>
+Trying to do a full text search, using _content, used the "myContentText" field, within the index, and not "myContentTextEdgeNgram". I did note that it looks as if the author originally intended to search this field as it is commented out on line 86 of FulltextSearchSvcImpl.java. As a result the search would only return matches on whole words, not prefix.</p>
+<p>Additionally, the search results did not appear to be in relevance order. For my autocomplete I just wanted to show the first page of results and not bother with paging through the remaining. However, since relevance ordering is not honored I'd never get back the results I'd expect. The cause of this is that IFulltextSearchSvc.search() returns the set of matching resource ids, in relevance order... but the SearchBuilder.java then uses that set in an IN SQL query, which does not honor the order of provided ids.</p>
+<p><strong>Solution 1 - Prefix searching:</strong><br>
+To achieve this I created my own implementation of IFulltextSearchSvc.java which extends FulltextSearchSvcImpl.java and then just override FulltextSearchSvcImpl.search() and FulltextSearchSvcImpl.addTextSearch(). To configure my new implementation I included the following in my application configuration:</p>
+<div class="codehilite"><pre><span></span>@Configuration
+@EnableTransactionManagement()
+public class MyServerConfig extends BaseJavaConfigDstu3 {
+    @Bean(autowire = Autowire.BY_TYPE)
+    public IFulltextSearchSvc searchDaoDstu3() {
+        return new MyFulltextSearchSvc();
+    }
+}
+</pre></div>
+
+
+<p>I then attempted to simply uncomment the field definition for "myContentTextEdgeNgram". This did make lucene query the desired field. However, the query was too complex and overboosting the first term in the provided search text. To achieve a reasonable result I rewrote the query with just lucene, and not the hibernate querybuilder. The resulting lucene query is below (for the search text "blister onda").</p>
+<p><em>Hibernate search query builder (ranked my expected result of 'ZOFRAN ondansetron ... blister pack' wayyyyyy down the result set):</em><br>
+<code>+(myContentText:"blister onda"~2^4.0 ((myContentTextEdgeNGram:bli myContentTextEdgeNGram:blis myContentTextEdgeNGram:blist myContentTextEdgeNGram:bliste myContentTextEdgeNGram:blister myContentTextEdgeNGram:blister  myContentTextEdgeNGram:blister o myContentTextEdgeNGram:blister on myContentTextEdgeNGram:blister ond myContentTextEdgeNGram:blister onda)^2.0)) +myResourceType:medication</code></p>
+<p><em>Lucene query (ranked my expected result of 'ZOFRAN ondansetron ... blister pack' at the top of the result set):</em><br>
+<code>+(myContentTextEdgeNGram:blister myContentTextEdgeNGram:onda) +myResourceType:medication</code></p>
+<p><strong>BEFORE:</strong></p>
+<div class="codehilite"><pre><span></span>    private void addTextSearch(QueryBuilder theQueryBuilder, BooleanJunction&lt;?&gt; theBoolean, List&lt;List&lt;? extends IQueryParameterType&gt;&gt; theTerms, String theFieldName, String theFieldNameEdgeNGram, String theFieldNameNGram) {
+        if (theTerms == null) {
+            return;
+        }
+        for (List&lt;? extends IQueryParameterType&gt; nextAnd : theTerms) {
+            Set&lt;String&gt; terms = new HashSet&lt;String&gt;();
+            for (IQueryParameterType nextOr : nextAnd) {
+                StringParam nextOrString = (StringParam) nextOr;
+                String nextValueTrimmed = StringUtils.defaultString(nextOrString.getValue()).trim();
+                if (isNotBlank(nextValueTrimmed)) {
+                    terms.add(nextValueTrimmed);
+                }
+            }
+            if (terms.isEmpty() == false) {
+                if (terms.size() == 1) {
+                    //@formatter:off
+                    Query textQuery = theQueryBuilder
+                        .phrase()
+                        .withSlop(2)
+                        .onField(theFieldName).boostedTo(4.0f)
+//                      .andField(theFieldNameEdgeNGram).boostedTo(2.0f)
+//                      .andField(theFieldNameNGram).boostedTo(1.0f)
+                        .sentence(terms.iterator().next().toLowerCase()).createQuery();
+                    //@formatter:on
+
+                    theBoolean.must(textQuery);
+                } else {
+                    String joinedTerms = StringUtils.join(terms, &#39; &#39;);
+                    theBoolean.must(theQueryBuilder.keyword().onField(theFieldName).matching(joinedTerms).createQuery());
+                }
+            }
+        }
+    }
+</pre></div>
+
+
+<p><strong>AFTER:</strong></p>
+<div class="codehilite"><pre><span></span>    private void addTextSearch(QueryBuilder theQueryBuilder, BooleanJunction&lt;?&gt; theBoolean, List&lt;List&lt;? extends IQueryParameterType&gt;&gt; theTerms, String theFieldName, String theFieldNameEdgeNGram, String theFieldNameNGram) {
+        if (theTerms == null) {
+            return;
+        }
+        for (List&lt;? extends IQueryParameterType&gt; nextAnd : theTerms) {
+            Set&lt;String&gt; terms = new HashSet&lt;String&gt;();
+            for (IQueryParameterType nextOr : nextAnd) {
+                StringParam nextOrString = (StringParam) nextOr;
+                String nextValueTrimmed = StringUtils.defaultString(nextOrString.getValue()).trim();
+                if (isNotBlank(nextValueTrimmed)) {
+                    terms.add(nextValueTrimmed);
+                }
+            }
+            if (terms.isEmpty() == false) {
+                if (terms.size() &gt; 1) {
+                    String termsAsString = StringUtils.join(terms, &#39; &#39;);
+                    terms = new HashSet&lt;&gt;(1);
+                    terms.add(termsAsString);
+                }
+                List&lt;TermQuery&gt; queries = Arrays.asList(terms.iterator().next().toLowerCase().split(&quot; &quot;)).stream()
+                        .map(x -&gt; new TermQuery(new Term(theFieldNameEdgeNGram, x)))
+                        .collect(Collectors.toList());
+                BooleanQuery.Builder booleanQuery = new BooleanQuery.Builder();
+                for (TermQuery termQuery : queries) {
+                    booleanQuery.add(termQuery, BooleanClause.Occur.SHOULD);
+                }
+                theBoolean.must(booleanQuery.build());
+            }
+        }
+    }
+</pre></div>
+
+
+<p><strong>Solution 2 - Relevance Ordering:</strong><br>
+Firstly, I should point out that this solution is specific to MySQL although there are similar variations for most other common databases. Additionally, injecting my implementation is VERY ugly and far from desired. Since there was no way of configuring an alternate SearchBuilder, the only way (without forking HAPI) I could apply a fix was to replace the SearchBuilder.java with a copy contained within our own source code, keeping the same packaging to trick the classloader.... I did say it was ugly. Depending on any responses I may just create a branch of HAPI and a pull request.</p>
+<p>Anyway, given that IFulltextSearchSvc.search() returned the relevance ordered set of resource ids, I then added an order by condition to the subsequent SearchBuilder query that fetched the corresponding set of resources. The result seems legit. The top results returned in my autocomplete are now the most relevant.</p>
+<p><strong>BEFORE (around line 1370):</strong></p>
+<div class="codehilite"><pre><span></span>         /*
+         * Fulltext search
+         */
+        if (myParams.containsKey(Constants.PARAM_CONTENT) || myParams.containsKey(Constants.PARAM_TEXT)) {
+            if (myFulltextSearchSvc == null) {
+                if (myParams.containsKey(Constants.PARAM_TEXT)) {
+                    throw new InvalidRequestException(&quot;Fulltext search is not enabled on this service, can not process parameter: &quot; + Constants.PARAM_TEXT);
+                } else if (myParams.containsKey(Constants.PARAM_CONTENT)) {
+                    throw new InvalidRequestException(&quot;Fulltext search is not enabled on this service, can not process parameter: &quot; + Constants.PARAM_CONTENT);
+                }
+            }
+
+            List&lt;Long&gt; pids;
+            if (myParams.getEverythingMode() != null) {
+                pids = myFulltextSearchSvc.everything(myResourceName, myParams);
+            } else {
+                pids = myFulltextSearchSvc.search(myResourceName, myParams);
+            }
+            if (pids.isEmpty()) {
+                // Will never match
+                pids = Collections.singletonList(-1L);
+            }
+
+            myPredicates.add(myResourceTableRoot.get(&quot;myId&quot;).as(Long.class).in(pids));
+        }
+</pre></div>
+
+
+<p><strong>AFTER (around line 1370):</strong></p>
+<div class="codehilite"><pre><span></span>         /*
+         * Fulltext search
+         */
+        if (myParams.containsKey(Constants.PARAM_CONTENT) || myParams.containsKey(Constants.PARAM_TEXT)) {
+            if (myFulltextSearchSvc == null) {
+                if (myParams.containsKey(Constants.PARAM_TEXT)) {
+                    throw new InvalidRequestException(&quot;Fulltext search is not enabled on this service, can not process parameter: &quot; + Constants.PARAM_TEXT);
+                } else if (myParams.containsKey(Constants.PARAM_CONTENT)) {
+                    throw new InvalidRequestException(&quot;Fulltext search is not enabled on this service, can not process parameter: &quot; + Constants.PARAM_CONTENT);
+                }
+            }
+
+            List&lt;Long&gt; pids;
+            if (myParams.getEverythingMode() != null) {
+                pids = myFulltextSearchSvc.everything(myResourceName, myParams);
+            } else {
+                pids = myFulltextSearchSvc.search(myResourceName, myParams);
+                // The MySQL specific order by fix... to honour pid ordering
+                outerQuery.orderBy(myBuilder.asc(myBuilder.function(&quot;FIND_IN_SET&quot;, Integer.class,
+                        myResourceTableRoot.get(&quot;myId&quot;), myBuilder.literal(StringUtils.join(pids, &quot;,&quot;)))));
+            }
+            if (pids.isEmpty()) {
+                // Will never match
+                pids = Collections.singletonList(-1L);
+            }
+            myPredicates.add(myResourceTableRoot.get(&quot;myId&quot;).as(Long.class).in(pids));
+        }
+</pre></div>
+
+
+<p>Sooo... the above changes have resulted in a much more useful full text search, for my implementation, but is a bit ugly (particularly the SearchBuilder hack). Please let me know if there is a much simpler way of achieving the same or if I've fallen into any traps and missed any important considerations. At the very least, maybe my hack might prove useful to others.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

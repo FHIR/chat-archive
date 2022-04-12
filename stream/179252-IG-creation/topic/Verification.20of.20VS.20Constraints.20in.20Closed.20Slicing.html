@@ -1,0 +1,156 @@
+---
+layout: page
+title: "FHIR Chat  · Verification of VS Constraints in Closed Slicing · IG creation"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/index.html">IG creation</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing.html">Verification of VS Constraints in Closed Slicing</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="224522275"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Verification%20of%20VS%20Constraints%20in%20Closed%20Slicing/near/224522275" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Saul Kravitz <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing.html#224522275">(Jan 29 2021 at 19:35)</a>:</h4>
+<p>I think we've hit upon an IG Publisher error involving the verification of VS constraints in closed slicing.   The error is the failure to emit an error message.   A high level explanation is:</p>
+<p>- the base element that is sliced is bound to a VS <br>
+  - slicing is closed<br>
+  - one of the child slices requires a code that is outside of the base element's bound VS</p>
+<p>Here is the actual example, from the carin-bb IG (the CI build illustrates the problem, I'll excerpt it here).<br>
+The example is from the ProfessionalEOB profile. <a href="https://build.fhir.org/ig/HL7/carin-bb/StructureDefinition-C4BB-ExplanationOfBenefit-Professional-NonClinician.html">https://build.fhir.org/ig/HL7/carin-bb/StructureDefinition-C4BB-ExplanationOfBenefit-Professional-NonClinician.html</a><br>
+Let's look at the slicing of item.adjudication</p>
+<div class="codehilite" data-code-language="ruleset"><pre><span></span><code>* item.adjudication ^slicing.rules = #closed
+* item.adjudication ^slicing.ordered = false   // can be omitted, since false is the default
+* item.adjudication ^slicing.description = "Slice based on value pattern"
+* item.adjudication ^slicing.discriminator.type = #pattern
+* item.adjudication ^slicing.discriminator.path = "category"
+* item.adjudication.category from C4BBAdjudicationCategoryDiscriminator (required)
+</code></pre></div>
+<div class="codehilite"><pre><span></span><code>* item.adjudication MS
+* item.adjudication contains
+   adjudicationamounttype 1..* MS and
+   denialreason 0..1 MS and
+   inoutnetwork 1..1 MS and
+   allowedunits 0..1 MS
+* item.adjudication[allowedunits] ^short = &quot;The quantity of units, times, days, visits, services, or treatments for the service described by the HCPCS code, revenue code or procedure code, submitted by the provider.  (149)&quot;
+* item.adjudication[allowedunits].category = C4BBAdjudicationDiscriminator#allowedunits
+* item.adjudication[allowedunits].value only decimal
+* item.adjudication[denialreason].category  = C4BBAdjudicationDiscriminator#denialreason
+* item.adjudication[denialreason].reason from X12ClaimAdjustmentReasonCodesCMSRemittanceAdviceRemarkCodes
+* item.adjudication[denialreason].reason 1..1 MS
+* item.adjudication[denialreason] ^short = &quot;Reason codes used to interpret the Non-Covered Amount (92)&quot;
+* item.adjudication[adjudicationamounttype].category from C4BBAdjudication
+* item.adjudication[adjudicationamounttype] ^short = &quot;Amounts&quot;
+* item.adjudication[adjudicationamounttype].amount  MS
+* item.adjudication[adjudicationamounttype].amount 1..1
+* item.adjudication[inoutnetwork] ^short = &quot;Indicates the in network or out of network payment status of the claim. (142)&quot;
+* item.adjudication[inoutnetwork].category from C4BBPayerBenefitPaymentStatus (required)
+</code></pre></div>
+<p>Note:</p>
+<ul>
+<li>slicing is closed, and is on item.adjuidcation.category</li>
+<li>item.adjudication.category is bound to C4BBAdjudicationCategoryDiscriminator</li>
+<li>
+<p>There are four slices:<br>
+** allowedUnits -- category is C4BBAdjudicationDiscriminator#allowedunits<br>
+** denialReason -- category is C4BBAdjudicationDiscriminator#denialreason<br>
+** adjudicationamounttype - category is from VS C4BBAdjudication<br>
+** inoutnetwork - category is from VS C4BBPayerBenefitPaymentStatus</p>
+</li>
+<li>
+<p>C4BBAdjudicationCategoryDiscriminator is comprised of:<br>
+** adjudicationAmountType covered by -- codes from C4BBAdjudication<br>
+** denialRerason and allowedUnits covered by  -- codes from C4BBAdjudicationDiscriminator<br>
+** inoutnetwork isn't covered  --- it's codes are in C4BBPayerBenefitPaymentStatus<br>
+So, we have a closed slicing.   One of the slices requires codes that are outside of the range of the VS of the discriminator.   Should be an error.<br>
+Sushi doesn't check this, and neither does IG publisher.</p>
+</li>
+</ul>
+
+
+
+<a name="224525732"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Verification%20of%20VS%20Constraints%20in%20Closed%20Slicing/near/224525732" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing.html#224525732">(Jan 29 2021 at 20:02)</a>:</h4>
+<p>I think the main issue here is that we have the base w/ an element that is bound to a valueset w/ <code>required</code> strength:</p>
+<div class="codehilite"><pre><span></span><code>* item.adjudication.category from C4BBAdjudicationCategoryDiscriminator (required)
+</code></pre></div>
+<p>And then we have a slice that binds that same element path to a <em>different</em> valueset that is <em>not</em> a subset of the originally required value set:</p>
+<div class="codehilite"><pre><span></span><code>* item.adjudication[inoutnetwork].category from C4BBPayerBenefitPaymentStatus (required)
+</code></pre></div>
+<p>Those bindings are technically incompatible since the slice VS does not <em>constrain</em> the base VS; it all out <em>replaces</em> it.</p>
+<p>SUSHI doesn't catch this because SUSHI does not do terminology-based validation.  Since it is possible to override a required binding in a valid way (if the new VS is a subset of the original VS), SUSHI doesn't complain.  But since the IG Publisher <em>does</em> do terminology-based validation, I would expect it to catch things like this.</p>
+
+
+
+<a name="224538876"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Verification%20of%20VS%20Constraints%20in%20Closed%20Slicing/near/224538876" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing.html#224538876">(Jan 29 2021 at 21:53)</a>:</h4>
+<p>If you have a binding on a repeating element, it applies to <em>all</em> repetitions.  We have a number of places (particularly category) where there's a binding for a repeating element that isn't obviously intended to apply to all repetitions, but more likely "at least one of the repetitions".  The only way to enforce such a binding in a resource definition is an invariant.  I've actually raised a change request for us to try to address this issue (and clean up the places where we're doing it wrong).</p>
+
+
+
+<a name="224540138"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Verification%20of%20VS%20Constraints%20in%20Closed%20Slicing/near/224540138" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Saul Kravitz <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing.html#224540138">(Jan 29 2021 at 22:02)</a>:</h4>
+<p>With the current definition (that the IG Publisher is happy with) it is <em>impossible</em> to create an instance of the profiled resource that includes the defined slice, since it violates the binding constraint.   The VS binding for the discriminating element is NOT a superset of the VS for the slice, but rather they are disjoint.</p>
+
+
+
+<a name="224543027"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Verification%20of%20VS%20Constraints%20in%20Closed%20Slicing/near/224543027" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing.html#224543027">(Jan 29 2021 at 22:15)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191320">Lloyd McKenzie</span> <a href="#narrow/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing/near/224538876">said</a>:</p>
+<blockquote>
+<p>We have a number of places (particularly category) where there's a binding for a repeating element that isn't obviously intended to apply to all repetitions, but more likely "at least one of the repetitions".  The only way to enforce such a binding in a resource definition is an invariant.</p>
+</blockquote>
+<p>I don't want to go on too much of a side tangent, but can't you also say that via slicing?  E.g., do an open slicing on <code>category</code>, discriminating by <code>pattern</code> on <code>this()</code>, and apply the VS binding in a <code>1..*</code> slice?  Wouldn't that effectively say at least one category must be a member of this VS, but other categories are allowed?</p>
+
+
+
+<a name="224543277"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Verification%20of%20VS%20Constraints%20in%20Closed%20Slicing/near/224543277" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing.html#224543277">(Jan 29 2021 at 22:16)</a>:</h4>
+<p>Oh... I missed the <strong>in a <em>resource</em> definition</strong> part.  I guess we don't use slicing in resources, do we?</p>
+
+
+
+<a name="224588212"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Verification%20of%20VS%20Constraints%20in%20Closed%20Slicing/near/224588212" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing.html#224588212">(Jan 30 2021 at 14:42)</a>:</h4>
+<p>Bingo.</p>
+
+
+
+<a name="224789083"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Verification%20of%20VS%20Constraints%20in%20Closed%20Slicing/near/224789083" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing.html#224789083">(Feb 01 2021 at 20:53)</a>:</h4>
+<p>so I agree that the IG publisher doesn't validate slice fixed codes against against general bindings. I've not been motivated to prioritize this because as you say, there can be no valid instances against a profile like this</p>
+
+
+
+<a name="224892826"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Verification%20of%20VS%20Constraints%20in%20Closed%20Slicing/near/224892826" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing.html#224892826">(Feb 02 2021 at 16:09)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="191316">Grahame Grieve</span> <a href="#narrow/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing/near/224789083">said</a>:</p>
+<blockquote>
+<p>so I agree that the IG publisher doesn't validate slice fixed codes against against general bindings. I've not been motivated to prioritize this because as you say, there can be no valid instances against a profile like this</p>
+</blockquote>
+<p>I would think that  detecting a profile that cannot have any valid instances would be something we <em>would</em> want to do, as the whole profile is useless at that point.  Or are you thinking that if the author includes examples (as is best case), then the examples would prove out the validity or invalidity of the profile?</p>
+<p>That said, not to be too contrarian, but if a <code>CodeableConcept</code> is fixed in a slice using <code>pattern[x]</code>, then I think it still is possible to have a valid instance -- since a <code>patternCodeableConcept</code> does not <em>prohibit</em> you from having a coding that matches the general binding (e.g., an instance could have a CodeableConcept with <code>coding[0]</code> meeting the <code>pattern[x]</code> requirement and <code>coding[1]</code> meeting the <code>binding</code> requirement).</p>
+
+
+
+<a name="224893194"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Verification%20of%20VS%20Constraints%20in%20Closed%20Slicing/near/224893194" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing.html#224893194">(Feb 02 2021 at 16:11)</a>:</h4>
+<p>But much of that is beside the point here, because we're not talking about fixed codes.  In the specific case Saul mentioned, the sliced element has a required binding to one value set and one of the slices overrides that binding with a required binding to a different (and disjoint) value set.  So it's a matter of required value sets clashing.</p>
+
+
+
+<a name="224932604"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Verification%20of%20VS%20Constraints%20in%20Closed%20Slicing/near/224932604" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing.html#224932604">(Feb 02 2021 at 20:34)</a>:</h4>
+<p>I agree it would be nice, but yes, the example validation should manifest the problem, which is why I have not prioritised it against all the other things I get asked to do</p>
+
+
+
+<a name="224932689"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179252-IG%20creation/topic/Verification%20of%20VS%20Constraints%20in%20Closed%20Slicing/near/224932689" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179252-IG-creation/topic/Verification.20of.20VS.20Constraints.20in.20Closed.20Slicing.html#224932689">(Feb 02 2021 at 20:35)</a>:</h4>
+<p>Example validation will only manifest it if the element in question appears in the example - which isn't guaranteed if it's not mandatory</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

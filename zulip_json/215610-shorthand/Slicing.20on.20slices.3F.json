@@ -1,0 +1,176 @@
+[
+    {
+        "content": "<p>I have a Bundle that I want to slice with the following requirements:<br>\na) 1 entry with an Organization resource that matches a Registrant profile<br>\nb) 0..* entries with an OrganizationAffiliation resource<br>\nc) 0..* entries with an Organization resource that matches an Establishment profile<br>\nd) 0..1 entry with a DocumentReference resource<br>\ne) 0..* entries with no resource (used to delete resources)</p>\n<p>I'm struggling in how to slice the Bundle.entry to achieve this and I think that I might have a solution but SUSHI's validation routine might be getting in the way.</p>\n<p>If I didn't have (a) and (c), I could slice this on entry.resource with type #type.  If I didn't have (e), then I could slice on entry.resource with type #profile.  So I thought I would do an initial slice in entry.resource with type #type where (a) and (c) require an Organization resource.  Then I would further slice the Organization slice on #profile and specify the specific profile required.</p>\n<div class=\"codehilite\"><pre><span></span><code>* entry ^slicing.discriminator.type = #type\n* entry ^slicing.discriminator.path = &quot;resource&quot;\n* entry ^slicing.rules = #open\n* entry contains Organizations 1..* MS and EstablishmentAffiliation 0..* MS and EstablishmentDelete 0..* MS and SourceSPL 0..1 MS\n\n* entry[Organizations].resource only Organization\n* entry[Organizations] ^slicing.discriminator.type = #profile\n* entry[Organizations] ^slicing.discriminator.path = &quot;this()&quot;\n* entry[Organizations] ^slicing.rules = #open\n* entry[Organizations] contains Registrant 1..1 MS and Establishment 0..* MS\n</code></pre></div>\n<p>Hopefully this makes sense and is the right way to express what I want.  Assuming that is, then this is what I have in my instance:</p>\n<div class=\"codehilite\"><pre><span></span><code>* entry[Organizations][Registrant].resource = DenmarServicesRegistrant\n* entry[Organizations][Registrant].request.method = #POST\n* entry[Organizations][Registrant].request.url = &quot;Organization&quot;\n* entry[EstablishmentAffiliation].resource = EditorialExpertsEstablishmentAffiliation\n* entry[EstablishmentAffiliation].request.method = #POST\n* entry[EstablishmentAffiliation].request.url = &quot;OrganizationAffiliation&quot;\n* entry[Organizations][Establishment].resource = EditorialExpertsEstablishment\n* entry[Organizations][Establishment].request.method = #POST\n* entry[Organizations][Establishment].request.url = &quot;Organization&quot;\n</code></pre></div>\n<p>Unfortunately,  with the above, I get the following error from SUSHI:</p>\n<div class=\"codehilite\"><pre><span></span><code>error Element Bundle.entry:Organizations has minimum cardinality 1 but occurs 0 time(s).\n  Line: 193 - 205\n</code></pre></div>\n<p>Am I not specifying this properly in my instance?  If I change the cardinality on the Organization slice from 1..* to 0..*, then SUSHI doesn't complain, but that doesn't seem to express what I want.</p>",
+        "id": 224258916,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611787074
+    },
+    {
+        "content": "<p>Firstly, are you getting that from SUSHI? or the IG Publisher? I'm not sure how they get called exactly as I use FSHOnly for all of my tanks, <br>\nBut I tried to do something very similar myself today as well but I had a different workaround (specific to my usecase) that allowed me to not use the 2nd tier of slicing once I exhausted my ideas and gave up. <br>\nFrom my trial-and-error and what bits of the spec I could parse, I honestly don't think that that form of re-slicing is expected/allowed for at all..</p>",
+        "id": 224261964,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1611788835
+    },
+    {
+        "content": "<p>that error was from SUSHI.  shoot, if it isn't expected/allowed.  I'm not sure how I'm going to produce a profile that will validate what I want it to validate</p>",
+        "id": 224262066,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611788893
+    },
+    {
+        "content": "<p>what do you need from the delete slice? because you may be able to write an invariant with a bundle.entry.resource.exists().not() implies . . . <br>\nif it could be unilaterally applied</p>",
+        "id": 224262633,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1611789192
+    },
+    {
+        "content": "<p>i just want to say that some of the expected slices would be an entry that tells me to delete a specific resource</p>",
+        "id": 224262755,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611789254
+    },
+    {
+        "content": "<p>you do point me in a direction - if I ignore that slice statement, that doesn't preclude instances to include those since the slicing is open, but for the slices that are recognized, it will do the proper validation.</p>",
+        "id": 224263040,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611789476
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"192166\">@Jean Duteau</span>.  Have you tried using two discriminators?  Recall that <code>^slicing.discriminator</code> is an array -- so I think you can discriminate by <code>#type</code> and <code>#profile</code> at the same time -- and slices just need to ensure unique <em>combinations</em> of the resource and profile.  I <em>think</em>.  So... something like:</p>\n<div class=\"codehilite\"><pre><span></span><code>* entry ^slicing.discriminator[+].type = #type\n* entry ^slicing.discriminator[=].path = &quot;resource&quot;\n* entry ^slicing.discriminator[+].type = #profile\n* entry ^slicing.discriminator[=].path = &quot;resource&quot;\n</code></pre></div>",
+        "id": 224321403,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1611838650
+    },
+    {
+        "content": "<p>I also think what you're trying to do with re-slicing makes sense (although I noticed that your re-slicing discriminator path is wrong).  That said, when I read the <a href=\"http://hl7.org/fhir/R4/profiling.html#reslicing\">FHIR spec on re-slicing</a>, it only speaks in terms of re-slicing a slice defined in a <em>parent</em> profile.  I don't know if that's just lack of imagination on the part of the spec author, or if it's an actual requirement of re-slicing.</p>\n<p>That aside, SUSHI should allow the basic mechanism you're trying to do, and clearly there <em>is</em> an item in <code>entry[Organizations]</code> -- so this seems like perhaps SUSHI's card counting logic is getting messed up by the re-slicing.  We can look into it.</p>",
+        "id": 224322345,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1611839158
+    },
+    {
+        "content": "<p>OK, I've filed <a href=\"https://github.com/FHIR/sushi/issues/742\">SUSHI#742</a> for this and also implemented a simple example of it at <a href=\"https://fshschool.org/FSHOnline/#/share/3opCADp\">FSHOnline/#/share/3opCADp</a>.</p>",
+        "id": 224324965,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1611840490
+    },
+    {
+        "content": "<p>huh, looks like the double-slice is resolved through sushi as </p>\n<div class=\"codehilite\"><pre><span></span><code>&quot;id&quot;:&quot;Bundle.entry:observations/heartrate&quot;\n&quot;path&quot;:&quot;Bundle.entry&quot;\n</code></pre></div>\n<p>which if double-slicing is even possible I feel like is the wrong way to express it.. But I still read the re-slicing info in the spec as adding to the current discriminators and slice definitions rather than doing something (useful) like this: another form of slicing in only one iteration of a slice at the same level.</p>",
+        "id": 224339226,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1611846683
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191469\">Chris Moesel</span> <a href=\"#narrow/stream/215610-shorthand/topic/Slicing.20on.20slices.3F/near/224321403\">said</a>:</p>\n<blockquote>\n<p>Hey <span class=\"user-mention silent\" data-user-id=\"192166\">Jean Duteau</span>.  Have you tried using two discriminators?  Recall that <code>^slicing.discriminator</code> is an array -- so I think you can discriminate by <code>#type</code> and <code>#profile</code> at the same time -- and slices just need to ensure unique <em>combinations</em> of the resource and profile.  I <em>think</em>.  So... something like:</p>\n</blockquote>\n<p>Yes, I tried that, but the problem is that for the #profile discriminator to work, it appears that you have to have something in resource and I don't for the DELETE transactions.  That's why I thought to slice on #type which doesn't appear to require that and then slice within that one slice.</p>",
+        "id": 224363478,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611855471
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"237342\">ryan moehrke</span> <a href=\"#narrow/stream/215610-shorthand/topic/Slicing.20on.20slices.3F/near/224339226\">said</a>:</p>\n<blockquote>\n<p>huh, looks like the double-slice is resolved through sushi as </p>\n<div class=\"codehilite\"><pre><span></span><code>&quot;id&quot;:&quot;Bundle.entry:observations/heartrate&quot;\n&quot;path&quot;:&quot;Bundle.entry&quot;\n</code></pre></div>\n<p>which if double-slicing is even possible I feel like is the wrong way to express it.. But I still read the re-slicing info in the spec as adding to the current discriminators and slice definitions rather than doing something (useful) like this: another form of slicing in only one iteration of a slice at the same level.</p>\n</blockquote>\n<p>I agree with Ryan about the slicing paths to not seem correct and that is potentially why you are getting the error that Bundle.entry has minimum cardinality of 2.  I was able to get this to go through validation by setting the mins all to 0.  But then the validator complained, so I'm pretty sure that this isn't an intended means of re-slicing.</p>",
+        "id": 224363812,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611855600
+    },
+    {
+        "content": "<p>if there is a way to explicitly say missing is expected in a slice (per discriminator) and another way to explicitly say that missing is inconsequential to slice matching, I can see how multiple discriminators could work. But again, I did not see a way to do that. And without that clarification of missing-expected and missing-agnostic I see no way how tooling can actually resolve slices against multiple discriminators unless every slice has some value/binding/etc. for each discriminator path given.</p>",
+        "id": 224366507,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1611856620
+    },
+    {
+        "content": "<p>exactly!  although I will say that slicing on #type seems to allow for a missing as I use that in a different profile and it works.  But it doesn't seem to be allowed on #profile because the validator needs an actual instance of something to determine what it's profile is.</p>",
+        "id": 224366696,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611856690
+    },
+    {
+        "content": "<p>in fact, I just checked and I use multiple discriminators in another profile where missing is allowed.  It seems that missing is allowed for anything that the validator doesn't have to resolve into something, i.e. if your path is x.resolve() or if the type is #profile.</p>",
+        "id": 224366818,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611856755
+    },
+    {
+        "content": "<p>I think all the tooling available won't let you <em>not</em> have a type (it just inherits all of the possible options from the parent StructureDef) so that may be why type works without an explicit typing in the slice<br>\nbut how does it treat a missing value? as nothing is expected and if something exists then it's not the slice in question? or that the missing value does not matter for matching that particular slice and only the other discriminator(s) matter and are sufficient for mutually exclusive slice matching?</p>",
+        "id": 224367077,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1611856859
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"237342\">ryan moehrke</span> <a href=\"#narrow/stream/215610-shorthand/topic/Slicing.20on.20slices.3F/near/224339226\">said</a>:</p>\n<blockquote>\n<p>huh, looks like the double-slice is resolved through sushi as </p>\n<div class=\"codehilite\"><pre><span></span><code>&quot;id&quot;:&quot;Bundle.entry:observations/heartrate&quot;\n&quot;path&quot;:&quot;Bundle.entry&quot;\n</code></pre></div>\n<p>which if double-slicing is even possible I feel like is the wrong way to express it.</p>\n</blockquote>\n<p>Using <code>/</code> to separate the layers of slices in re-slicing (splitting a slice into sub-slices) is straight from the spec:<br>\n<a href=\"/user_uploads/10155/h4CuYMqb0PrDalQWGtSMcMB2/image.png\">image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/h4CuYMqb0PrDalQWGtSMcMB2/image.png\" title=\"image.png\"><img src=\"/user_uploads/10155/h4CuYMqb0PrDalQWGtSMcMB2/image.png\"></a></div>",
+        "id": 224367502,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1611857039
+    },
+    {
+        "content": "<p>I have a slice on Questionnaire.item where my discriminator is #value on type and #value on an extension(blah).  In my various slice definitions, I only specify the extension's value if I have multiple slices with the same item.type.  I believe that the validator therefore matches any value of the extension, including no extension specified at all, as meeting the slice condition.  And since I don't have multiple slices with the same item.type that doesn't then specify a specific item.extension(blah).value my slicing covers the space I intended.</p>",
+        "id": 224368020,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611857281
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"237342\">ryan moehrke</span> <a href=\"#narrow/stream/215610-shorthand/topic/Slicing.20on.20slices.3F/near/224367077\">said</a>:</p>\n<blockquote>\n<p>but how does it treat a missing value? as nothing is expected and if something exists then it's not the slice in question? or that the missing value does not matter for matching that particular slice and only the other discriminator(s) matter and are sufficient for mutually exclusive slice matching?</p>\n</blockquote>\n<p>I wonder if there is a precedence to validating multiple discriminators?  In the slice I just talked about, item.type is listed first so it segments the slicing space first?  And since I only have one slice with item.type = #string, it doesn't matter what the value of the extension is, even if the slice definition is silent?</p>",
+        "id": 224368492,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611857489
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191469\">Chris Moesel</span> <a href=\"#narrow/stream/215610-shorthand/topic/Slicing.20on.20slices.3F/near/224367502\">said</a>:</p>\n<blockquote>\n<p>Using <code>/</code> to separate the layers of slices in re-slicing (splitting a slice into sub-slices) is straight from the spec:<br>\n<a href=\"/user_uploads/10155/h4CuYMqb0PrDalQWGtSMcMB2/image.png\">image.png</a></p>\n</blockquote>\n<p>interesting... that implies that this functionality that we want is explicitly allowed (and has been designed for at least in the spec) now the question turns to why isn't it working like we want it to</p>",
+        "id": 224369713,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1611857995
+    },
+    {
+        "content": "<p>I think it's just a SUSHI bug in counting occurrences of base slices when they've been re-sliced.  The real question is if the IG publisher accepts it or not.  If the IG publisher accepts it then I think the only issue is the SUSHI cardinality counting bug -- which someone will be looking at during our current 2-week sprint.</p>",
+        "id": 224370094,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1611858161
+    },
+    {
+        "content": "<p>Jean, if you don't mind can I see that profile you mentioned? that slices based on type and then extension if needed?<br>\nI just want to see how it manifests in the actual structure def in case I'm missing something</p>",
+        "id": 224370182,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1611858195
+    },
+    {
+        "content": "<p><a href=\"/user_uploads/10155/sn4bS3BT4R5pgLHX6NVR4Iml/Questionnaire.fsh\">Questionnaire.fsh</a></p>",
+        "id": 224370342,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611858252
+    },
+    {
+        "content": "<p>If the IG Publisher does not accept it, then maybe I am interpreting the spec wrong.  There is also the matter that the spec seems to imply this would mainly happen in regard to reslicing a slice from a parent profile -- not reslicing a slice from the current profile.  Although I don't see what the real difference would be.</p>",
+        "id": 224370344,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1611858253
+    },
+    {
+        "content": "<p>putzing around with your questionnaire fsh jean, it looks like the cause of your error might not be the slicing per se, but the use of slice names as indexes in the instance, I haven't been able to exhaustively test but once I switched to slice names in the instance you gave I saw a similar error from sushi<br>\nmaybe switching to regular integer (or soft) indexes will get you past that particular hump for now and then we can see if the ig publisher / validator likes it.</p>",
+        "id": 224375109,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1611860269
+    },
+    {
+        "content": "<p>right.  we can do that with the latest version of SUSHI because the team relaxed that validation.  I would try that but I moved on for my current batch of profiles.</p>",
+        "id": 224375345,
+        "sender_full_name": "Jean Duteau",
+        "timestamp": 1611860354
+    },
+    {
+        "content": "<p>I haven't had a chance to look at the FSH, but using slice names in the instance does have some advantages -- namely that it will automically apply any required fixed values for you.  But if you don't need that, you could try switching to soft indexing.  That basically entirely turns off SUSHI's slice validation.</p>",
+        "id": 224375415,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1611860382
+    },
+    {
+        "content": "<p>well that would make sense as to why we don't see slicing validation errors when we don't use them huh :p</p>",
+        "id": 224375561,
+        "sender_full_name": "ryan moehrke",
+        "timestamp": 1611860421
+    },
+    {
+        "content": "<p>FWIW, I switched the Questionnaire instance to specify items by slicename instead of index and it worked just fine for me.  I'm using SUSHI 1.1.0.  I didn't run the publisher, so it may still fail there -- but SUSHI liked it just fine, and it even allowed me to remove some of the type and extension assignments in the instance (since calling out the slice by name automatically applied them).<br>\n<a href=\"/user_uploads/10155/XGe0etfVpWZsRUemOlCRoHNi/Questionnaire.fsh\">Questionnaire.fsh</a></p>",
+        "id": 224379868,
+        "sender_full_name": "Chris Moesel",
+        "timestamp": 1611862106
+    }
+]

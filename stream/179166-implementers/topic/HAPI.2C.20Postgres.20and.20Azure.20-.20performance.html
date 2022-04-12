@@ -1,0 +1,101 @@
+---
+layout: page
+title: "FHIR Chat  · HAPI, Postgres and Azure - performance · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HAPI.2C.20Postgres.20and.20Azure.20-.20performance.html">HAPI, Postgres and Azure - performance</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="158048329"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HAPI%2C%20Postgres%20and%20Azure%20-%20performance/near/158048329" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Veliyan Georgiev <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HAPI.2C.20Postgres.20and.20Azure.20-.20performance.html#158048329">(Feb 11 2019 at 17:31)</a>:</h4>
+<p>Does anyone have any performance tips on getting HAPI 3.6+ to work with Postgres in Azure?<br>
+I'm doing some initial testing and I'm getting really bad performance for queries like:<br>
+<a href="https://hapi-x5lnjt7yu5yqe.azurewebsites.net/baseDstu3/Patient?gender=female&amp;birthdate=gt1950-07-01&amp;birthdate=lt1960-07-01&amp;_has:Condition:subject:code=http://snomed.info/sct%7C55822004" target="_blank" title="https://hapi-x5lnjt7yu5yqe.azurewebsites.net/baseDstu3/Patient?gender=female&amp;birthdate=gt1950-07-01&amp;birthdate=lt1960-07-01&amp;_has:Condition:subject:code=http://snomed.info/sct%7C55822004">https://hapi-x5lnjt7yu5yqe.azurewebsites.net/baseDstu3/Patient?gender=female&amp;birthdate=gt1950-07-01&amp;birthdate=lt1960-07-01&amp;_has:Condition:subject:code=http://snomed.info/sct%7C55822004</a></p>
+<p>..what seems to break it is the _has param</p>
+<p>Here is the stack trace</p>
+<p>2019-02-11 10:25:56.785 [qtp182639397-27] INFO  c.u.f.j.s.SearchCoordinatorSvcImpl [SearchCoordinatorSvcImpl.java:543] Proceeding, as we have 250 results<br>
+2019-02-11 10:25:57.385 [search_coord_1] INFO  o.h.e.j.b.internal.AbstractBatchImpl [AbstractBatchImpl.java:193] HHH000010: On release of batch it still contained JDBC statements<br>
+2019-02-11 10:25:57.386 [search_coord_1] ERROR o.h.e.j.batch.internal.BatchingBatch [BatchingBatch.java:127] HHH000315: Exception executing batch [java.sql.BatchUpdateException: Batch entry 0 insert into HFJ_SEARCH_RESULT (SEARCH_ORDER, RESOURCE_PID, SEARCH_PID, PID) values (0, 1228, 1152, 50252) was aborted: ERROR: insert or update on table "hfj_search_result" violates foreign key constraint "fk_searchres_search"<br>
+  Detail: Key (search_pid)=(1152) is not present in table "hfj_search".  Call getNextException to see other errors in the batch.], SQL: insert into HFJ_SEARCH_RESULT (SEARCH_ORDER, RESOURCE_PID, SEARCH_PID, PID) values (?, ?, ?, ?)<br>
+2019-02-11 10:25:57.386 [search_coord_1] WARN  o.h.e.jdbc.spi.SqlExceptionHelper [SqlExceptionHelper.java:137] SQL Error: 0, SQLState: 23503<br>
+2019-02-11 10:25:57.386 [search_coord_1] ERROR o.h.e.jdbc.spi.SqlExceptionHelper [SqlExceptionHelper.java:142] Batch entry 0 insert into HFJ_SEARCH_RESULT (SEARCH_ORDER, RESOURCE_PID, SEARCH_PID, PID) values (0, 1228, 1152, 50252) was aborted: ERROR: insert or update on table "hfj_search_result" violates foreign key constraint "fk_searchres_search"<br>
+  Detail: Key (search_pid)=(1152) is not present in table "hfj_search".  Call getNextException to see other errors in the batch.<br>
+2019-02-11 10:25:57.387 [search_coord_1] ERROR o.h.e.jdbc.spi.SqlExceptionHelper [SqlExceptionHelper.java:142] ERROR: insert or update on table "hfj_search_result" violates foreign key constraint "fk_searchres_search"<br>
+  Detail: Key (search_pid)=(1152) is not present in table "hfj_search".<br>
+2019-02-11 10:25:57.391 [search_coord_1] ERROR o.h.i.ExceptionMapperStandardImpl [ExceptionMapperStandardImpl.java:39] HHH000346: Error during managed flush [org.hibernate.exception.ConstraintViolationException: could not execute batch]<br>
+2019-02-11 10:25:57.442 [search_coord_1] ERROR c.u.f.j.s.SearchCoordinatorSvcImpl [SearchCoordinatorSvcImpl.java:702] Failed during search loading after 192175ms<br>
+org.springframework.dao.DataIntegrityViolationException: could not execute batch; SQL [insert into HFJ_SEARCH_RESULT (SEARCH_ORDER, RESOURCE_PID, SEARCH_PID, PID) values (?, ?, ?, ?)]; constraint [fk_searchres_search]; nested exception is org.hibernate.exception.ConstraintViolationException: could not execute batch<br>
+    at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:259)<br>
+    at ca.uhn.fhir.jpa.config.HapiFhirHibernateJpaDialect.convertHibernateAccessException(HapiFhirHibernateJpaDialect.java:59)<br>
+    at org.springframework.orm.jpa.vendor.HibernateJpaDialect.translateExceptionIfPossible(HibernateJpaDialect.java:225)<br>
+    at org.springframework.orm.jpa.JpaTransactionManager.doCommit(JpaTransactionManager.java:540)<br>
+    at org.springframework.transaction.support.AbstractPlatformTransactionManager.processCommit(AbstractPlatformTransactionManager.java:746)<br>
+    at org.springframework.transaction.support.AbstractPlatformTransactionManager.commit(AbstractPlatformTransactionManager.java:714)<br>
+    at org.springframework.transaction.support.TransactionTemplate.execute(TransactionTemplate.java:152)<br>
+    at ca.uhn.fhir.jpa.search.SearchCoordinatorSvcImpl$BaseTask.call(SearchCoordinatorSvcImpl.java:676)<br>
+    at ca.uhn.fhir.jpa.search.SearchCoordinatorSvcImpl$BaseTask.call(SearchCoordinatorSvcImpl.java:449)<br>
+    at java.util.concurrent.FutureTask.run(FutureTask.java:266)<br>
+    at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)<br>
+    at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)<br>
+    at java.lang.Thread.run(Thread.java:748)<br>
+Caused by: org.hibernate.exception.ConstraintViolationException: could not execute batch<br>
+    at org.hibernate.exception.internal.SQLStateConversionDelegate.convert(SQLStateConversionDelegate.java:112)<br>
+    at org.hibernate.exception.internal.StandardSQLExceptionConverter.convert(StandardSQLExceptionConverter.java:42)<br>
+    at org.hibernate.engine.jdbc.spi.SqlExceptionHelper.convert(SqlExceptionHelper.java:113)<br>
+    at org.hibernate.engine.jdbc.batch.internal.BatchingBatch.performExecution(BatchingBatch.java:128)<br>
+    at org.hibernate.engine.jdbc.batch.internal.BatchingBatch.addToBatch(BatchingBatch.java:88)<br>
+    at org.hibernate.persister.entity.AbstractEntityPersister.insert(AbstractEntityPersister.java:3165)<br>
+    at org.hibernate.persister.entity.AbstractEntityPersister.insert(AbstractEntityPersister.java:3686)<br>
+    at org.hibernate.action.internal.EntityInsertAction.execute(EntityInsertAction.java:90)<br>
+    at org.hibernate.engine.spi.ActionQueue.executeActions(ActionQueue.java:604)<br>
+    at org.hibernate.engine.spi.ActionQueue.executeActions(ActionQueue.java:478)<br>
+    at org.hibernate.event.internal.AbstractFlushingEventListener.performExecutions(AbstractFlushingEventListener.java:356)<br>
+    at org.hibernate.event.internal.DefaultFlushEventListener.onFlush(DefaultFlushEventListener.java:39)<br>
+    at org.hibernate.internal.SessionImpl.doFlush(SessionImpl.java:1454)<br>
+    at org.hibernate.internal.SessionImpl.managedFlush(SessionImpl.java:511)<br>
+    at org.hibernate.internal.SessionImpl.flushBeforeTransactionCompletion(SessionImpl.java:3283)<br>
+    at org.hibernate.internal.SessionImpl.beforeTransactionCompletion(SessionImpl.java:2479)<br>
+    at org.hibernate.engine.jdbc.internal.JdbcCoordinatorImpl.beforeTransactionCompletion(JdbcCoordinatorImpl.java:473)<br>
+    at org.hibernate.resource.transaction.backend.jdbc.internal.JdbcResourceLocalTransactionCoordinatorImpl.beforeCompletionCallback(JdbcResourceLocalTransactionCoordinatorImpl.java:178)<br>
+    at org.hibernate.resource.transaction.backend.jdbc.internal.JdbcResourceLocalTransactionCoordinatorImpl.access$300(JdbcResourceLocalTransactionCoordinatorImpl.java:39)<br>
+    at org.hibernate.resource.transaction.backend.jdbc.internal.JdbcResourceLocalTransactionCoordinatorImpl$TransactionDriverControlImpl.commit(JdbcResourceLocalTransactionCoordinatorImpl.java:271)<br>
+    at org.hibernate.engine.transaction.internal.TransactionImpl.commit(TransactionImpl.java:98)<br>
+    at org.springframework.orm.jpa.JpaTransactionManager.doCommit(JpaTransactionManager.java:536)<br>
+    ... 9 common frames omitted<br>
+Caused by: java.sql.BatchUpdateException: Batch entry 0 insert into HFJ_SEARCH_RESULT (SEARCH_ORDER, RESOURCE_PID, SEARCH_PID, PID) values (0, 1228, 1152, 50252) was aborted: ERROR: insert or update on table "hfj_search_result" violates foreign key constraint "fk_searchres_search"<br>
+  Detail: Key (search_pid)=(1152) is not present in table "hfj_search".  Call getNextException to see other errors in the batch.<br>
+    at org.postgresql.jdbc.BatchResultHandler.handleError(BatchResultHandler.java:148)<br>
+    at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2184)<br>
+    at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:481)<br>
+    at org.postgresql.jdbc.PgStatement.executeBatch(PgStatement.java:840)<br>
+    at org.postgresql.jdbc.PgPreparedStatement.executeBatch(PgPreparedStatement.java:1538)<br>
+    at org.apache.commons.dbcp2.DelegatingStatement.executeBatch(DelegatingStatement.java:223)<br>
+    at org.apache.commons.dbcp2.DelegatingStatement.executeBatch(DelegatingStatement.java:223)<br>
+    at org.hibernate.engine.jdbc.batch.internal.BatchingBatch.performExecution(BatchingBatch.java:118)<br>
+    ... 27 common frames omitted<br>
+Caused by: org.postgresql.util.PSQLException: ERROR: insert or update on table "hfj_search_result" violates foreign key constraint "fk_searchres_search"<br>
+  Detail: Key (search_pid)=(1152) is not present in table "hfj_search".<br>
+    at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2440)<br>
+    at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2183)<br>
+    ... 33 common frames omitted<br>
+2019-02-11 10:26:02.643 [qtp182639397-27] INFO  ca.uhn.fhir.context.FhirContext [FhirContext.java:171] Creating new FHIR context for FHIR version [DSTU3]<br>
+2019-02-11 10:26:02.736 [qtp182639397-27] INFO  ca.uhn.fhir.util.XmlUtil [DependencyLogImpl.java:75] FHIR XML procesing will use StAX implementation 'Woodstox XML-processor' version '4.4.1'<br>
+^C[INFO] Stopped ServerConnector@5eb1fd44{HTTP/1.1,[http/1.1]}{0.0.0.0:8080}<br>
+[INFO] Stopped scavenging<br>
+[INFO] Destroying Spring FrameworkServlet 'spring'</p>
+
+
+
+<a name="158048818"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/HAPI%2C%20Postgres%20and%20Azure%20-%20performance/near/158048818" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/HAPI.2C.20Postgres.20and.20Azure.20-.20performance.html#158048818">(Feb 11 2019 at 17:38)</a>:</h4>
+<p>You might want to raise this on the <a class="stream" data-stream-id="179167" href="/#narrow/stream/179167-hapi">#hapi</a> stream</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

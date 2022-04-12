@@ -1,0 +1,74 @@
+[
+    {
+        "content": "<p>I'm running into a problem compiling a HAPI Service using HAPI 4.0.1 using OpenJDK 11 that wants to make use of FHIR R4 and needs to use javax.xml.namespace.NamespaceContext.  The compile error is: The package javax.xml.namespace is accessible from more than one module: &lt;unnamed&gt;, java.xml</p>\n<p>I've tracked it down (I think) to the the dependency chain:  hapi-fhir-structures-r4-4.0.1.jar which depends on ucum-1.0.2.jar which depends on xpp3-1.1.4c.jar which defines javax.xml.namespace.QName.  This conflicts with javax.xml.namespace package defined in JDK 11.</p>\n<p>The xpp package is only used in the org.fhir.ucum.DefinitionParser class to parse UCUM definitions as far as I can tell.</p>\n<p>I'm not sure why R4 structures is using this, it isn't found in STU3 or DSTU2 structures.</p>\n<p><span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span> Can you explain what ucum is used for in R4 Structures?</p>",
+        "id": 177727684,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1570636280
+    },
+    {
+        "content": "<p>For what it's worth, excluding the XPP artifact resolves the compile issue, but I'd like to understand better what functionality I'm effectively disabling when I do that.</p>",
+        "id": 177727870,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1570636398
+    },
+    {
+        "content": "<p>Also shows up as a depenency in org.hl7.fhir.validation (4.0.0) and hapi-fhir-validation (4.0.1), so a similar question there, what is XPP used for (what will I be disabling)</p>",
+        "id": 177728417,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1570636727
+    },
+    {
+        "content": "<p>the validator uses UCUM.</p>",
+        "id": 177748511,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570650060
+    },
+    {
+        "content": "<p>Is this a version issue that the ucum code needs updating? because I use XPP in other places too</p>",
+        "id": 177748546,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570650084
+    },
+    {
+        "content": "<p>The issue is that XPP defines javax.xml.namespace.QName which is already defined by Java in its runtime library, and so will run into issues when trying to compile a project using it without a module-info.java.  Ideally, XPP would just reuse Java's javax.xml.namespace.QName class, instead of defining its own, but that package doesn't seem to have had any maintainence for half a decade or more.</p>",
+        "id": 177753699,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1570653376
+    },
+    {
+        "content": "<p>I note that the APIs for QName are exactly the same, and so I think I can resolve this without reducing functionality by removing that package from the XPP library, excluding that dependency from the build via Maven, and adding my patched library.  I'm going to check this out to see if it works.</p>",
+        "id": 177755483,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1570654609
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> I'm not following all this. Why hasn't this come up before? Do we need to clone XPP and sort this out? Wouldn't this be a problem for other users of XPP?</p>",
+        "id": 177777690,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570680838
+    },
+    {
+        "content": "<p>I suspect the reason this hasn't come up before is b/c there were workarounds for it in Eclipse prior to 2019-06 release, where you could \"import\" the JRE libraries using classpath instead of via Module, but that capability no longer exists since that release.  And so the only way you'd come up with it is if: a) you recently upgraded eclipse, and b) are using java XML and XPath libraries to do other work in your services b/c you are dealing with non-FHIR XML content.</p>",
+        "id": 177812220,
+        "sender_full_name": "Keith Boone",
+        "timestamp": 1570715931
+    },
+    {
+        "content": "<p>so I use xpp a lot. Maybe I should clone the code so that this isn't a problem anymore</p>",
+        "id": 177871179,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570759182
+    },
+    {
+        "content": "<p>I wonder if we could work around this by using xpp3_min instead. It doesn't bundle the <code>javax.xml</code> class (which is definitely the issue here). JDK9+ uses the new module system and does not like people bundling stuff like that in random JARs.</p>\n<p>XPP is not likely to ever be adapted to modern Java, as far as I can see the last release was 12 years ago.. The better long term solution might be to try to migrate to StAX but that also might be a lot of work. Trying xpp_min seems like the logical first thing to try.</p>",
+        "id": 177871920,
+        "sender_full_name": "James Agnew",
+        "timestamp": 1570760296
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191387\">@Keith Boone</span> can you try that? if AllR5Tests pass, then that'll work fine</p>",
+        "id": 177871951,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1570760363
+    }
+]

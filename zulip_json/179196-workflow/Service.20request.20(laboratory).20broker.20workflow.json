@@ -1,0 +1,56 @@
+[
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191320\">@Lloyd McKenzie</span> <span class=\"user-mention\" data-user-id=\"191316\">@Grahame Grieve</span>  We have discussed possible workflow for ordering diagnostic requests with the broker (dispatcher) at FHIRstarter at SPb. So we've done flowcharts to summarize our discussion. </p>\n<p>In our case clinic interact with several labs, it collects specimen and sends them to the laboratory. So we need the lab to tell clinic some information about protocols for collecting specimens. Also, the lab should be able to request some extra info (Questionnaire) to set the correct reference or in case of government regulation rules.</p>\n<p>The main steps of this interaction are:<br>\n1. Get a catalog of possible order codes.<br>\n2. Get an estimated time of accomplishment for each position in a catalog.<br>\n3. Get information about required specimens.<br>\n4. Get extra questionnaires.<br>\n5. Request service request<br>\n6. Get results</p>\n<p><a href=\"/user_uploads/10155/DBG5GL4EMibXrx0t_dhFFpvG/Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png\" target=\"_blank\" title=\"Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png\">Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/DBG5GL4EMibXrx0t_dhFFpvG/Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png\" target=\"_blank\" title=\"Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png\"><img src=\"/user_uploads/10155/DBG5GL4EMibXrx0t_dhFFpvG/Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png\"></a></div><p>It seems we can express all our needs with new R4 resources, but we have some questions:<br>\n1. Should we have some Task to describe whole interaction? Clinic can use it to show that all ServiceRequest with the same requestionId was successfully created. <br>\n2. What kind of resource should be \"event\" for ServiceRequest for specimens? Should it be Procedure? I've found this discussion <a href=\"http://community.fhir.org/t/how-to-associate-a-specimen-with-a-procedure/826/4\" target=\"_blank\" title=\"http://community.fhir.org/t/how-to-associate-a-specimen-with-a-procedure/826/4\">http://community.fhir.org/t/how-to-associate-a-specimen-with-a-procedure/826/4</a> , I think we are also interested in specimens section in Procedure.<br>\n3. When lab asks the clinic to fill out the Questionnaire can we set a reference to Questionnaire into supprtingInfo field of ServiceRequest?<br>\n4. Should we use an extension in EntryDefinition for estimated time of accomplishment?</p>",
+        "id": 153973104,
+        "sender_full_name": "Alexander Ivanov",
+        "timestamp": 1530614826
+    },
+    {
+        "content": "<p>1. : What do you want to define? The diagram you show with concrete steps and values seems like an ExampleScenario. If you want to define how the workflow CAN behave (i.e. what are the boundaries instead of a specific example instance) the you'd use PlanDefinition</p>",
+        "id": 153973111,
+        "sender_full_name": "Jose Costa Teixeira",
+        "timestamp": 1530617556
+    },
+    {
+        "content": "<p>Hi Alexander,</p>\n<p>In looking at your workflow, a few minor comments:<br>\n- 1 should probably be an ObservationDefinition.  EntryDefinition probably isn't necessary to your use-case (and may well go away)<br>\n- I'd expect #1, 9, 10 and 17 to happen at the same time<br>\n- 6+7 can be done in a single query using _include if you like (but separate queries are fine)<br>\n- 8, 16, 23, 27, 31, 36, 40 should be a PUT rather than a POST<br>\n- 11 is optional.  The task in 12 could just say \"please instantiate this ActivityDefinition\"<br>\n- 14 could grab the Task, the service request (if any), and everything pointed to (ActivityDefinition, Questionnaire, SpecimenDefinition).  No need to have so much back and forth.  And when completing them, you can update the Task to point to the Specimen and QuestionnaireResponse<br>\n- 25 is optional.  You could share about the specimen collection procedure, but not sure anyone else will care<br>\n- Typically you wouldn't need DocumentReference for the rendered report.  You'd just embed it in DiagnosticReport.presentedForm.  However, if you want it to be available for MHD or something, then DocumentReference is fine.</p>",
+        "id": 153973115,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1530622512
+    },
+    {
+        "content": "<p>In response to your questions<br>\n1. The Task(s) assigned by the lab to the clinic could be \"subtasks\" of the original Task asking the lab to fulfill the order<br>\n2. It would typically be Procedure.  Whether you need to actually expose the procedure or just the resulting Specimen is up to you<br>\n3. I'd probably have the original Task point to a PlanDefinition which points to ActivityDefinitions for specimen collection and completing the Questionnaire.  In theory, when the clinical system retrieves the ObservationDefinition it could grab everything else and include those things on the original Task seeking fulfillment.  However, if the expectations vary by fulfilling lab, then having the lab initiate the request is reasonable<br>\n4. I'd put it on ObservationDefinition and submit a change request for it to be added to core as I think that's something that would typically be part of the definition</p>",
+        "id": 153973116,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1530622899
+    },
+    {
+        "content": "<blockquote>\n<p>1. : What do you want to define? The diagram you show with concrete steps and values seems like an ExampleScenario. If you want to define how the workflow CAN behave (i.e. what are the boundaries instead of a specific example instance) the you'd use PlanDefinition</p>\n</blockquote>\n<p>We are interested in the exact case, is correct from FHIR point of view? Later on, we can create formal definition with PlanDefinition.</p>",
+        "id": 153973118,
+        "sender_full_name": "Alexander Ivanov",
+        "timestamp": 1530623013
+    },
+    {
+        "content": "<blockquote>\n<p>In response to your questions<br>\n1. The Task(s) assigned by the lab to the clinic could be \"subtasks\" of the original Task asking the lab to fulfill the order<br>\n2. It would typically be Procedure.  Whether you need to actually expose the procedure or just the resulting Specimen is up to you<br>\n3. I'd probably have the original Task point to a PlanDefinition which points to ActivityDefinitions for specimen collection and completing the Questionnaire.  In theory, when the clinical system retrieves the ObservationDefinition it could grab everything else and include those things on the original Task seeking fulfillment.  However, if the expectations vary by fulfilling lab, then having the lab initiate the request is reasonable<br>\n4. I'd put it on ObservationDefinition and submit a change request for it to be added to core as I think that's something that would typically be part of the definition</p>\n</blockquote>\n<p>3. I think we can use PlanDefinition and ActivityDefinition for specimen collection and Questionnaire. It will reduce the number of requests. </p>\n<p>But there is an issue with the number of specimens to be taken, for example, some labs allow to take one container for two ServiceRequests and the other requires to take separate containers for each ServiceRequest. The number of containers and specimens is calculated based on all requests received by the laboratory, that is why I think laboratory should initiate the request for specimens.</p>",
+        "id": 153973120,
+        "sender_full_name": "Alexander Ivanov",
+        "timestamp": 1530624419
+    },
+    {
+        "content": "<p>That makes sense</p>",
+        "id": 153973125,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1530624722
+    },
+    {
+        "content": "<p>@<strong>Игорь Николаев</strong> you've asked for the last version of sequence chart:</p>\n<p><a href=\"/user_uploads/10155/fbylv4b91R7kOz3zfKgJpF3x/Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png\" target=\"_blank\" title=\"Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png\">Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png</a></p>\n<div class=\"message_inline_image\"><a href=\"/user_uploads/10155/fbylv4b91R7kOz3zfKgJpF3x/Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png\" target=\"_blank\" title=\"Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png\"><img src=\"/user_uploads/10155/fbylv4b91R7kOz3zfKgJpF3x/Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png\"></a></div>",
+        "id": 153974277,
+        "sender_full_name": "Alexander Ivanov",
+        "timestamp": 1531121330
+    },
+    {
+        "content": "<p>Looks good.  Step 14 is optional.  It's a directed Task and presumably the requesting EHR isn't going to say \"no\".  (If they do, they don't get their test results :&gt;).  So it's not essential to communicate to the lab that they've agreed to do the task - unless it's possible for multiple systems to provide the specimen and QuestionnaireResponse.</p>\n<p>In terms of communicating the QuestionnaireResponse and Specimen back to the lab, there are two options.  Updating the ServiceRequest is a valid one and probably my preferred choice as it puts the information where it should ideally be.  However, in some workflows the notion of updating an order once fulfillment is underway might be deemed \"problematic\".  If that were the case, your alternative would be to attach the information as outputs to the Task.  I'm not advocating for doing that, just letting you know you have the choice.</p>",
+        "id": 153974288,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1531123320
+    }
+]

@@ -1,0 +1,80 @@
+[
+    {
+        "content": "<p>We've noticed that some wallet apps don't successfully launch with our .smart-health-card file export on Android. The spec only states the MIME type to use (<a href=\"https://spec.smarthealth.cards/#via-file-download\">application/smart-health-card</a>). What Android intents and intent filters are people using?</p>\n<p>cc / <span class=\"user-mention\" data-user-id=\"410376\">@Oliver Pang</span></p>",
+        "id": 257431066,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1634156356
+    },
+    {
+        "content": "<p>Ours is something like: </p>\n<div class=\"codehilite\"><pre><span></span><code>Intent intent = new Intent();\nintent.setAction(Intent.ACTION_SEND);\nintent.setDataAndType(uri, &quot;application/smart-health-card&quot;);\nintent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);\nintent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);\nstartActivityForResult(Intent.createChooser(intent, ...\n</code></pre></div>",
+        "id": 257431525,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1634156554
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"365368\">@James Kizer</span></p>",
+        "id": 257432570,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1634156990
+    },
+    {
+        "content": "<p>Based on our read of the Android docs, <code>ACTION_VIEW</code> seems like the more appropriate choice. </p>\n<p>The description of <code>ACTION_VIEW</code> is:</p>\n<blockquote>\n<p>Display the data to the user. This is the most common action performed on data -- it is the generic action you can use on a piece of data to get the most reasonable thing to occur. For example, when used on a contacts entry it will view the entry; when used on a mailto: URI it will bring up a compose window filled with the information supplied by the URI; when used with a tel: URI it will invoke the dialer.</p>\n</blockquote>\n<p>Our take on that is to \"display this data in another app\"</p>\n<p>The description of <code>ACTION_SEND</code> is:</p>\n<blockquote>\n<p>Deliver some data to someone else. Who the data is being delivered to is not specified; it is up to the receiver of this action to ask the user where the data should be sent. </p>\n</blockquote>\n<p>Our take on that is \"send this data to another person\"</p>\n<p>Regardless of which intent you ultimately choose, CommonHealth is set up handle both <code>ACTION_VIEW</code> and <code>ACTION_SEND</code>. We created a test app to ensure that CommonHealth can handle these intents and including code below for how we configure them.</p>\n<p>For <code>ACTION_VIEW</code>:</p>\n<div class=\"codehilite\"><pre><span></span><code>        val shareableUri = SHCContentProvider.createShareableUri()\n\n        return Intent(Intent.ACTION_VIEW).apply {\n            setDataAndType(shareableUri, &quot;application/smart-health-card&quot;)\n            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)\n        }\n</code></pre></div>\n<p>For <code>ACTION_SEND</code>:</p>\n<div class=\"codehilite\"><pre><span></span><code>        val shareableUri = SHCContentProvider.createShareableUri()\n\n        return Intent(Intent.ACTION_SEND).apply {\n            putExtra(Intent.EXTRA_STREAM, shareableUri)\n            type = &quot;application/smart-health-card&quot;\n            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)\n        }\n</code></pre></div>\n<p>After updating the <code>ACTION_SEND</code> code to use <code>setDataAndType</code> rather than <code>putExtra(Intent.EXTRA_STREAM, shareableUri)</code> and <code>type = \"application/smart-health-card\"</code>, CommonHealth was no longer listed as an application capable handling the intent. Also, comparing your implementation against the docs <a href=\"https://developer.android.com/training/sharing/send#send-binary-content\">here</a>, I'd suggest trying the <code>putExtra(Intent.EXTRA_STREAM, shareableUri)</code> and <code>type = \"application/smart-health-card\"</code> approach.</p>\n<p>Also note that we use <code>startActivity</code> instead of <code>startActivityForResult</code> as well.</p>",
+        "id": 257441283,
+        "sender_full_name": "James Kizer",
+        "timestamp": 1634160545
+    },
+    {
+        "content": "<p>We've also seen some reports of users having trouble exporting data from their MyChart app into CommonHealth, so it would be great if we could hop on a call to debug</p>",
+        "id": 257441493,
+        "sender_full_name": "James Kizer",
+        "timestamp": 1634160618
+    },
+    {
+        "content": "<p>Appreciate the writeup! The EXTRA_STREAM approach does seem more in-line with the docs so we'll definitely try it and let you know how it goes. </p>\n<p>Regarding  ACTION_VIEW vs ACTION_SEND,  We've personally chose ACTION_SEND as we're sending the user SHC data to another app for ownership. ACTION_VIEW does definitely make sense as well - especially reading this excerpt</p>\n<blockquote>\n<p>It is the generic action you can use on a piece of data to get the most reasonable thing to occur. </p>\n</blockquote>\n<p>Curious if we have other opinions in this chat as well</p>",
+        "id": 257446889,
+        "sender_full_name": "Oliver Pang",
+        "timestamp": 1634163041
+    },
+    {
+        "content": "<p>I think it'd be worth including notes in the spec, once we get a shared perspective ironed out.</p>",
+        "id": 257456581,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1634168767
+    },
+    {
+        "content": "<p>Worked like a charm James!<br>\nVerified I was able to export my SHC to CommonHealth with my personal MyChart account using that tweak.</p>\n<p>From a bit of testing - I'd propose we prefer the ACTION_SEND approach over ACTION_VIEW.<br>\nACTION_SEND  seems to be supported by a variety of apps (e.g. Google Drive, GMail, OneDrive) for sharing or uploading to cloud - whereas view lacks that. It'll be a bit more flexible for the user.</p>\n<p>It may be worthwhile to include a suggested intent filter config as well  in the spec- to be extra explicit.</p>",
+        "id": 257732840,
+        "sender_full_name": "Oliver Pang",
+        "timestamp": 1634318138
+    },
+    {
+        "content": "<p>Oliver, James, would that be something like ... ?</p>\n<div class=\"codehilite\"><pre><span></span><code>&lt;activity android:name=&quot;ShareActivity&quot; android:exported=&quot;false&quot;&gt;\n    &lt;!-- This activity handles &quot;SEND&quot; actions with text data --&gt;\n    &lt;intent-filter&gt;\n        &lt;action android:name=&quot;android.intent.action.SEND&quot;/&gt;\n        &lt;category android:name=&quot;android.intent.category.DEFAULT&quot;/&gt;\n        &lt;data android:mimeType=&quot;application/smart-health-card&quot;/&gt;\n    &lt;/intent-filter&gt;\n</code></pre></div>",
+        "id": 257746591,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1634323913
+    },
+    {
+        "content": "<p>RE: ACTION_SEND vs ACTION_VIEW, that's fine, but we also need to make wallets aware that other applications on the device (i.e., Files, Gmail) utilize the ACTION_VIEW intent. Also, sometimes the mime type come through as <code>application/octet-stream</code> from some applications (e.g., from Files), so we might want to include that.</p>\n<p>Our intent filters to support this functionality are as follows:</p>\n<div class=\"codehilite\"><pre><span></span><code>&lt;intent-filter&gt;\n    &lt;action android:name=&quot;android.intent.action.VIEW&quot; /&gt;\n    &lt;category android:name=&quot;android.intent.category.DEFAULT&quot; /&gt;\n    &lt;category android:name=&quot;android.intent.category.BROWSABLE&quot; /&gt;\n\n    &lt;data android:host=&quot;*&quot; android:scheme=&quot;content&quot; android:mimeType=&quot;application/smart-health-card&quot; /&gt;\n    &lt;data android:host=&quot;*&quot; android:scheme=&quot;content&quot; android:mimeType=&quot;application/octet-stream&quot; /&gt;\n&lt;/intent-filter&gt;\n&lt;intent-filter&gt;\n    &lt;action android:name=&quot;android.intent.action.SEND&quot; /&gt;\n    &lt;category android:name=&quot;android.intent.category.DEFAULT&quot; /&gt;\n    &lt;data android:mimeType=&quot;application/smart-health-card&quot; /&gt;\n&lt;/intent-filter&gt;\n</code></pre></div>",
+        "id": 257753097,
+        "sender_full_name": "James Kizer",
+        "timestamp": 1634326820
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"365368\">@James Kizer</span> , <span class=\"user-mention\" data-user-id=\"410376\">@Oliver Pang</span> -- how's this look: <a href=\"https://github.com/smart-on-fhir/health-cards/pull/197\">https://github.com/smart-on-fhir/health-cards/pull/197</a> ?</p>",
+        "id": 257757427,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1634328517
+    },
+    {
+        "content": "<p>Thanks for putting this PR up <span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span>, left some feedback</p>",
+        "id": 257758118,
+        "sender_full_name": "James Kizer",
+        "timestamp": 1634328774
+    },
+    {
+        "content": "<p>Good point James - I did notice that during initial testing as well. Good thing to note.</p>\n<p>I don't have any concerns with the PR Isaac. Agreed with the PR comments from James</p>",
+        "id": 257758323,
+        "sender_full_name": "Oliver Pang",
+        "timestamp": 1634328882
+    }
+]

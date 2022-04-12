@@ -1,0 +1,49 @@
+---
+layout: page
+title: "FHIR Chat  · Interceptor calling order changed in Hapi 3.8.0 · hapi"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/index.html">hapi</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Interceptor.20calling.20order.20changed.20in.20Hapi.203.2E8.2E0.html">Interceptor calling order changed in Hapi 3.8.0</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="169109391"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Interceptor%20calling%20order%20changed%20in%20Hapi%203.8.0/near/169109391" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matti Uusitalo <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Interceptor.20calling.20order.20changed.20in.20Hapi.203.2E8.2E0.html#169109391">(Jun 27 2019 at 07:09)</a>:</h4>
+<p><span class="user-mention" data-user-id="191319">@James Agnew</span> It appears that the Interceptor lifecycle has changed. <br>
+<a href="http://hapifhir.io/doc_rest_server_interceptor.html#_toc_registering_interceptors" target="_blank" title="http://hapifhir.io/doc_rest_server_interceptor.html#_toc_registering_interceptors">http://hapifhir.io/doc_rest_server_interceptor.html#_toc_registering_interceptors</a><br>
+"Note that order is important: The server will invoke incomingRequestPreProcessed and incomingRequestPostProcessed in the same order that they are registered to the server. The server will invoke outgoingResponse in the reverse order to the order in which the interceptors were registered. This means that interceptors can be thought of as "wrapping" the request. "</p>
+<p>We register a UsageLoggingInterceptor, then AuthorizationInterceptor, then ProfileInterceptor. After upgrading to Hapi 3.8.0 we noticed that we started getting duplicate Usage log records from search operations where the client is not authorized to access a Patient's data. It seems that Hapi calls UsageLoggingInterceptor's outgoingResponse method first, then AuthorizationInterceptor. AuthorizationInterceptor then throws an Exception and PHR loops through the handleException methods.</p>
+<p>I know there's a new Hook mechanism but isn't the ordering of the Hook &amp; Pointcut basically same as with the earlier IServerInterceptor interface?</p>
+
+
+
+<a name="169110342"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Interceptor%20calling%20order%20changed%20in%20Hapi%203.8.0/near/169110342" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matti Uusitalo <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Interceptor.20calling.20order.20changed.20in.20Hapi.203.2E8.2E0.html#169110342">(Jun 27 2019 at 07:28)</a>:</h4>
+<p>Could we perhaps mitigate it by implementing Hook to Pointcut.STORAGE_PREACCESS_RESOURCE in our AuthorizationInterceptor?</p>
+
+
+
+<a name="169118794"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Interceptor%20calling%20order%20changed%20in%20Hapi%203.8.0/near/169118794" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Matti Uusitalo <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Interceptor.20calling.20order.20changed.20in.20Hapi.203.2E8.2E0.html#169118794">(Jun 27 2019 at 09:39)</a>:</h4>
+<blockquote>
+<p>Could we perhaps mitigate it by implementing Hook to Pointcut.STORAGE_PREACCESS_RESOURCE in our AuthorizationInterceptor?</p>
+</blockquote>
+<p>We could. What we did was we overrode AuthorizationInterceptor's outgoingResponse implementation with a no-op version and implemented a new method with Hook(Pointcut.STORAGE_PREACCESS_RESOURCE) which calls the super.outgoingResponse implementation.</p>
+<p>I still consider this a workaround and we would prefer if the earlier ordering of interceptor calls were used.</p>
+
+
+
+<a name="169166223"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179167-hapi/topic/Interceptor%20calling%20order%20changed%20in%20Hapi%203.8.0/near/169166223" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> James Agnew <a href="https://fhir.github.io/chat-archive/stream/179167-hapi/topic/Interceptor.20calling.20order.20changed.20in.20Hapi.203.2E8.2E0.html#169166223">(Jun 27 2019 at 19:17)</a>:</h4>
+<p>Hmm, I'd consider this a bug in the new framework.</p>
+<p>Ultimately, we are no longer relying on the order of registration, since that has always seemed brittle. In the new world, the <code>@Hook</code> and <code>@Interceptor</code> annotations have an optional attribute called <code>order()</code> that can be used to specify the order that an interceptor or any of its individual hooks should be executed in.</p>
+<p>Looks like we haven't yet specified an order for AuthorizationInterceptor though. Will investigate.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

@@ -1,0 +1,144 @@
+---
+layout: page
+title: "FHIR Chat  · How to reference specific repeating element? · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html">How to reference specific repeating element?</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="233812206"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/How%20to%20reference%20specific%20repeating%20element%3F/near/233812206" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Silva <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html#233812206">(Apr 09 2021 at 12:30)</a>:</h4>
+<p>New to CQL so sorry if this is a 'newbie question'.</p>
+<p>If one wants to create a CQL expression to reference a specific entry in an array parameter, e.g. the identifier array element type marked as 'MR' (MRN) or use marked as 'official', how would that be done?   I'm suspecting it could be done with this, but haven't tried it yet:  <code>Patient.identifier.where(type = 'MR').value</code> or <code>Patiient.identifier.where(use = 'official').value</code>.   (the MR example is probably more complicated because the MR is in the coding[].code element)</p>
+<p>BTW, I tried some of this using an online <a href="https://niquola.github.io/fhirpath-demo/#/">FHIRpath tester tool</a> but I'm not sure how closely CQL expressions follow FHIRpath syntax.</p>
+<p>Update: this seems to work with the FHIRpath tool but is it correct CQL syntax:<br>
+<code>Practitioner.identifier.where(type.coding.code='TAX').value</code></p>
+
+
+
+<a name="233822481"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/How%20to%20reference%20specific%20repeating%20element%3F/near/233822481" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Chris Moesel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html#233822481">(Apr 09 2021 at 13:41)</a>:</h4>
+<p><span class="user-mention" data-user-id="298707">@John Silva</span> -- the answer is mostly... "it depends".  It assumes an available <code>Practitioner</code> definition and uses several CQL language <em>options</em>.  These options may or may not be allowed/supported depending on your situation (what translator you're using, what options are enabled on it, etc).</p>
+<ul>
+<li>Since the phrase starts with <code>Practitioner</code>, this only works if you have defined a <code>Practitioner</code> expression or are working in a <code>Practitioner</code> context that provides a <code>Practitioner</code> expression for you.</li>
+<li>Since <code>Practitioner.identifier</code> is an array and you directly access <code>.value</code> on it (after filtering), you are using an option called <a href="http://build.fhir.org/ig/HL7/cql/03-developersguide.html#path-traversal">Path Traversal</a>, which basically implies the iteration and collects the tail values for you.  This is an <em>option</em> in CQL that was only added later in the spec, and mainly to align w/ FHIRPath. (BTW -- this is also happening with <code>type.coding.code = 'TAX'</code>, since <code>type.coding</code> is an array).</li>
+<li>The use of <code>.where(...)</code> employs the <a href="http://build.fhir.org/ig/HL7/cql/03-developersguide.html#method-invocation">Method Invocation</a> option (or "fluent" syntax).  Like path traversal, this is also an <em>option</em> in CQL that was only added later in the spec, and mainly to align w/ FHIRPath.</li>
+</ul>
+<p>So, yes, that is technically valid CQL assuming all the necessary options are enabled (and <code>Practitioner</code> is defined).  But I'm not sure that it's <em>common</em> in CQL.  That however, may just be because these features are newer (and optional) aspects of the language.  I'd be interested in what <span class="user-mention" data-user-id="191359">@Bryn Rhodes</span> has to say about this.  Bryn, do you encourage CQL developers to utilize there FHIRPath syntaxes in CDS and/or eCQM development?</p>
+<p>BTW -- if you wanted to write CQL that avoids those particular options, it would look something like this:</p>
+<div class="codehilite"><pre><span></span><code>Practitioner.identifier PI
+  where exists(
+    PI.type.coding C where C.code.value = &#39;TAX&#39;
+  )
+  return PI.value
+</code></pre></div>
+<p>So, as you can see, those FHIRPath syntaxes do make things a little tidier (as long as the author understands what they're actually doing).</p>
+
+
+
+<a name="233845436"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/How%20to%20reference%20specific%20repeating%20element%3F/near/233845436" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html#233845436">(Apr 09 2021 at 15:42)</a>:</h4>
+<p><span class="user-mention" data-user-id="191469">@Chris Moesel</span> , <span class="user-mention" data-user-id="298707">@John Silva</span> , yes, this is supported with the default options for the translator, you actually have to explicitly disable this functionality if you _don't_ want it supported:<br>
+<a href="https://github.com/cqframework/clinical_quality_language/blob/master/Src/java/cql-to-elm/OVERVIEW.md#usage">https://github.com/cqframework/clinical_quality_language/blob/master/Src/java/cql-to-elm/OVERVIEW.md#usage</a></p>
+
+
+
+<a name="233845830"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/How%20to%20reference%20specific%20repeating%20element%3F/near/233845830" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html#233845830">(Apr 09 2021 at 15:45)</a>:</h4>
+<p>The translator will actually expand the FHIRPath syntax to use queries in the ELM, so that existing ELM engines _should_ be able to support it already. The <code>X.where(&lt;condition&gt;) </code> for example, translates to <code>X $this where &lt;condition&gt;</code>. Translation semantics for FHIRPath are specified in this appendix: <a href="https://cql.hl7.org/16-i-fhirpathtranslation.html">https://cql.hl7.org/16-i-fhirpathtranslation.html</a></p>
+
+
+
+<a name="233846172"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/How%20to%20reference%20specific%20repeating%20element%3F/near/233846172" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html#233846172">(Apr 09 2021 at 15:47)</a>:</h4>
+<p>I will note that CQL developed for eCQMs specifically disables method invocation, so we don't see that in CQL for eCQMs, though that is being considered for use in the FHIR space, specifically to ensure FHIRPath expressions can be used without restrictions.</p>
+
+
+
+<a name="233852330"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/How%20to%20reference%20specific%20repeating%20element%3F/near/233852330" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Silva <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html#233852330">(Apr 09 2021 at 16:27)</a>:</h4>
+<p>We're using this CQL library; <a href="https://github.com/cqframework/clinical_quality_language">https://github.com/cqframework/clinical_quality_language</a> -- I'll have to look at it's documentation to see if it supports this FHIIRpath expression syntax.   <span class="user-mention" data-user-id="191469">@Chris Moesel</span> - if not I'll try the syntax you mentioned, thanks!</p>
+<p>(The interesting thing is that this comes from the fact that there is a profile on Questionnaire that specifies using CQL expressions rather than FHIRpath -- which is another discussion.)</p>
+
+
+
+<a name="234181166"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/How%20to%20reference%20specific%20repeating%20element%3F/near/234181166" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Silva <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html#234181166">(Apr 12 2021 at 15:37)</a>:</h4>
+<p>A related question:</p>
+<p>I'm trying to extract the string value of the Practitioner.identifier[] array for the value where the type.coding.code is 'TAX'.   I've tried this expression, which works in FHIRpath but not in CQL:</p>
+<p><code>Practitioner.identifier.where(type.coding.code='TAX').value.first()</code>  <span class="user-mention" data-user-id="191359">@Bryn Rhodes</span>  - would this FHIRpath expression be expected to work in CQL framework engine?)</p>
+<p>If I use the expression syntax <span class="user-mention" data-user-id="191469">@Chris Moesel</span> suggested it returns the value but as an array value, e.g. [12345] </p>
+<p><code> Practitioner.identifier PI
+  where exists(
+    PI.type.coding C where C.code.value = 'TAX'
+  )
+  return PI.value</code></p>
+<p>I tried this <code>PI.value.first()</code> and that causing an exception in the CQF Ruler engine.</p>
+
+
+
+<a name="234206895"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/How%20to%20reference%20specific%20repeating%20element%3F/near/234206895" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Kiel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html#234206895">(Apr 12 2021 at 18:24)</a>:</h4>
+<p>You can use <a href="https://cql.hl7.org/09-b-cqlreference.html#first">First</a>.</p>
+<p>Also <a href="https://cql.hl7.org/09-b-cqlreference.html#equivalent">Equivalent</a> should work with CodeableConcept:</p>
+<div class="codehilite"><pre><span></span><code>First(Practitioner.identifier PI where PI.type ~ Code &#39;TAX&#39; from &lt;system&gt; return PI.value)
+</code></pre></div>
+
+
+
+<a name="234238962"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/How%20to%20reference%20specific%20repeating%20element%3F/near/234238962" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Silva <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html#234238962">(Apr 12 2021 at 22:16)</a>:</h4>
+<p><span class="user-mention" data-user-id="197470">@Alexander Kiel</span>  - thanks; that worked!    I wonder if the FHIRpath syntax is supposed to work with the CQL framework code (or not)?</p>
+
+
+
+<a name="234242545"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/How%20to%20reference%20specific%20repeating%20element%3F/near/234242545" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html#234242545">(Apr 12 2021 at 22:56)</a>:</h4>
+<p><span class="user-mention" data-user-id="298707">@John Silva</span> , that syntax does work in the Atom plugin and evaluates, so it _should_ work in the ruler (same component), but it sounds like there's an issue there. What version of the ruler are you running? Just the latest?</p>
+
+
+
+<a name="234250151"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/How%20to%20reference%20specific%20repeating%20element%3F/near/234250151" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Silva <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html#234250151">(Apr 13 2021 at 00:22)</a>:</h4>
+<p>We're installing from this docker version: contentgroup/cqf-ruler.  (I think we've deployed 'latest' but I'll check with our DevOps guy)</p>
+<p>If I query the CapabilityStatement on the deployed HAPI server with CQF Ruler it reports:</p>
+<p>`  "software": {<br>
+    "extension": [ {<br>
+      "url": "<a href="http://hl7.org/fhir/StructureDefinition/capabilitystatement-softwareModule">http://hl7.org/fhir/StructureDefinition/capabilitystatement-softwareModule</a>",<br>
+      "extension": [ {<br>
+        "url": "name",<br>
+        "valueString": "CQF Ruler FHIR R4 Server"<br>
+      }, {<br>
+        "url": "version",<br>
+        "valueString": "0.4.1"<br>
+      } ]<br>
+    } ],<br>
+'</p>
+
+
+
+<a name="234438712"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/How%20to%20reference%20specific%20repeating%20element%3F/near/234438712" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html#234438712">(Apr 14 2021 at 04:14)</a>:</h4>
+<p>Be very cautious about using first when the data element doesn't define any semantics to sort order.  Looking for first(given) is fine, because 'given' has a defined order.  However first(name.given) would not be ok, because there's no order to the list of names and you're not allowed to count on particular names being first - and it's exceptionally bad practice for IGs to impose an order where it has no meaning.  In these cases saying first() is essentially saying "grab one at random" - which is fine so long as there's no incentive for systems to try to make sure that a particular value happens to actually <em>be</em> first.</p>
+
+
+
+<a name="234480472"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/How%20to%20reference%20specific%20repeating%20element%3F/near/234480472" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Kiel <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html#234480472">(Apr 14 2021 at 11:11)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> You are right. In the example of <span class="user-mention" data-user-id="298707">@John Silva</span> , he linked to get the value of an identifier with a specific type. Normally, I suspect, that every resource will have only one such identifier. One could use <a href="https://cql.hl7.org/09-b-cqlreference.html#singleton-from">singleton from</a> to ensure that one doesn't pick a random element and enforce one identifier per type in the profiles.</p>
+
+
+
+<a name="234481300"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/How%20to%20reference%20specific%20repeating%20element%3F/near/234481300" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> John Silva <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/How.20to.20reference.20specific.20repeating.20element.3F.html#234481300">(Apr 14 2021 at 11:20)</a>:</h4>
+<p>Thanks <span class="user-mention" data-user-id="197470">@Alexander Kiel</span>  and <span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span>   Yes, I saw the 'disclaimer' about using First() or .first() in FHIRpath..  However, in our case we have (expect) only a single instance of the identifier repeat that matches the type code we're looking for though, that being said, it is still possible in our example, to have more than one TIN (Tax ID Number) for different jurisdictions, e.g. TIN for NY and another for VT, etc.   So, I using the singleton() expression would be much better.   However, in the case where there are multiple matches for TIN, I suppose it would be best left to pass the array of results back to the UI layer and let that determine how to display them to the user.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

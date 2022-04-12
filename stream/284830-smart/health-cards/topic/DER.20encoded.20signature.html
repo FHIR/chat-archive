@@ -1,0 +1,131 @@
+---
+layout: page
+title: "FHIR Chat  · DER encoded signature · smart/health-cards"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/284830-smart/health-cards/index.html">smart/health-cards</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/284830-smart/health-cards/topic/DER.20encoded.20signature.html">DER encoded signature</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="239778038"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/284830-smart/health-cards/topic/DER%20encoded%20signature/near/239778038" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Stephen Whitney <a href="https://fhir.github.io/chat-archive/stream/284830-smart/health-cards/topic/DER.20encoded.20signature.html#239778038">(May 21 2021 at 16:28)</a>:</h4>
+<p>We've leveraged AWS KMS to provision the EC keys for JWS signing. When we try to validate using the MS Smarthealth Card Validation SDK, this is the error we receive:</p>
+<p>root@d79fd1cb1c55:/usr/src/app# node . --path /inputs/jws.smart-health-card --type jws<br>
+SMART Health Card Validation SDK v1.0.0-1</p>
+<p>JWS-compact<br>
+   │<br>
+   ├─ Warning<br>
+   │    · Issuer key endpoint does not contain a 'access-control-allow-origin' header for Cross-Origin Resource Sharing (CORS)<br>
+   │<br>
+   ├─ Error<br>
+   │    · Schema: {"instancePath":"","schemaPath":"#/pattern","keyword":"pattern","params":{"pattern":"^[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+$"},"message":"must match pattern \"^[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+$\""}<br>
+   │    · Can't parse JWS header as JSON.<br>
+   │<br>
+   │    · Signature appears to be in DER encoded form. Signature is expected to be 64-byte r||s concatenated form.<br>
+   │      See <a href="https://tools.ietf.org/html/rfc7515#appendix-A.3">https://tools.ietf.org/html/rfc7515#appendix-A.3</a> for expected ES256 signature form.<br>
+   │<br>
+   └─ JWS.payload<br>
+         │<br>
+         └─ FhirBundle</p>
+<p>Validation completed</p>
+<p>Has anyone come across these errors seen above?</p>
+
+
+
+<a name="239781025"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/284830-smart/health-cards/topic/DER%20encoded%20signature/near/239781025" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christian Paquin <a href="https://fhir.github.io/chat-archive/stream/284830-smart/health-cards/topic/DER.20encoded.20signature.html#239781025">(May 21 2021 at 16:51)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="269724">Stephen Whitney</span> <a href="#narrow/stream/284830-smart.2Fhealth-cards/topic/DER.20encoded.20signature/near/239778038">said</a>:</p>
+<blockquote>
+<p>We've leveraged AWS KMS to provision the EC keys for JWS signing. Has anyone come across these errors seen above?</p>
+</blockquote>
+<p>I get the same. The cited <a href="https://datatracker.ietf.org/doc/html/rfc7515#appendix-A.3">appendix 3</a> describe the proper encoding for the signature. How are you generating the JWS signature? (language, API, pseudocode?) We can help to see if that's the proper way to create it.</p>
+
+
+
+<a name="239782387"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/284830-smart/health-cards/topic/DER%20encoded%20signature/near/239782387" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Stephen Whitney <a href="https://fhir.github.io/chat-archive/stream/284830-smart/health-cards/topic/DER.20encoded.20signature.html#239782387">(May 21 2021 at 17:02)</a>:</h4>
+<p>We're using boto3 python SDK:</p>
+<div class="codehilite"><pre><span></span><code>def _set_jws(self):
+    if environ not in [
+        &quot;test&quot;,
+    ]:
+        signature = self._sign_token(self.key_id, self.message)
+        verification = self._verify_signature(self.key_id, self.message, signature)
+        signed = (
+            self.message
+
+            + b&quot;.&quot;
+            + base64.urlsafe_b64encode(signature).replace(b&quot;=&quot;, b&quot;&quot;)
+        )
+        return signed
+    else:
+        return self.message
+
+def _sign_token(self, key_id, message):
+    signature = kms_client.sign(
+        KeyId=key_id,
+        Message=message,
+        MessageType=&quot;RAW&quot;,
+        SigningAlgorithm=&quot;ECDSA_SHA_256&quot;,
+    )
+    logger.log(msg=signature, level=cl.log_level)
+    return signature[&quot;Signature&quot;]
+</code></pre></div>
+
+
+
+<a name="239786052"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/284830-smart/health-cards/topic/DER%20encoded%20signature/near/239786052" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christian Paquin <a href="https://fhir.github.io/chat-archive/stream/284830-smart/health-cards/topic/DER.20encoded.20signature.html#239786052">(May 21 2021 at 17:30)</a>:</h4>
+<p>Looks like the <a href="https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/kms.html#KMS.Client.sign">boto3 sign</a> API returns a DER encoded signature:</p>
+<div class="codehilite"><pre><span></span><code>When used with the ECDSA_SHA_256 , ECDSA_SHA_384 , or ECDSA_SHA_512 signing algorithms,
+this value is a DER-encoded object as defined by ANS X9.62–2005 and RFC 3279 Section 2.2.3 .
+This is the most commonly used signature format and is appropriate for most uses.
+</code></pre></div>
+<p>This will need to be converted to the raw <code>r</code> and <code>s</code> values expected in the JWS signature format. I'm not sure what is the best way to do this in python; I'll take a look...</p>
+
+
+
+<a name="239790465"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/284830-smart/health-cards/topic/DER%20encoded%20signature/near/239790465" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Stephen Whitney <a href="https://fhir.github.io/chat-archive/stream/284830-smart/health-cards/topic/DER.20encoded.20signature.html#239790465">(May 21 2021 at 18:03)</a>:</h4>
+<p>This post shows the code needed to unmarshall DER into raw R and S using Go. We're going to start a chat with AWS to see if they can help us in python.</p>
+<p><a href="https://aws.amazon.com/blogs/security/how-to-verify-aws-kms-signatures-in-decoupled-architectures-at-scale/">https://aws.amazon.com/blogs/security/how-to-verify-aws-kms-signatures-in-decoupled-architectures-at-scale/</a></p>
+
+
+
+<a name="239799411"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/284830-smart/health-cards/topic/DER%20encoded%20signature/near/239799411" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Christian Paquin <a href="https://fhir.github.io/chat-archive/stream/284830-smart/health-cards/topic/DER.20encoded.20signature.html#239799411">(May 21 2021 at 19:12)</a>:</h4>
+<p><span class="user-mention silent" data-user-id="269724">Stephen Whitney</span> <a href="#narrow/stream/284830-smart.2Fhealth-cards/topic/DER.20encoded.20signature/near/239790465">said</a>:</p>
+<blockquote>
+<p>This post shows the code needed to unmarshall DER into raw R and S using Go. We're going to start a chat with AWS to see if they can help us in python.</p>
+<p><a href="https://aws.amazon.com/blogs/security/how-to-verify-aws-kms-signatures-in-decoupled-architectures-at-scale/">https://aws.amazon.com/blogs/security/how-to-verify-aws-kms-signatures-in-decoupled-architectures-at-scale/</a></p>
+</blockquote>
+<p>Yes, you'd need to do the same in python (perhaps with <a href="https://python-asn1.readthedocs.io/en/latest/">this lib</a>?) The ASN.1 encoding of an ECDSA sig is fairly simple (see <a href="https://datatracker.ietf.org/doc/html/rfc3279#section-2.2.3">section 2.2.3 of RFC 3279</a>):</p>
+<div class="codehilite"><pre><span></span><code>Ecdsa-Sig-Value  ::=  SEQUENCE  {
+           r     INTEGER,
+           s     INTEGER  }
+</code></pre></div>
+
+
+
+<a name="239806120"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/284830-smart/health-cards/topic/DER%20encoded%20signature/near/239806120" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Reece Adamson <a href="https://fhir.github.io/chat-archive/stream/284830-smart/health-cards/topic/DER.20encoded.20signature.html#239806120">(May 21 2021 at 20:05)</a>:</h4>
+<p>We ran into something similar with our Ruby implementation. This GitHub PR (<a href="https://github.com/jpadilla/pyjwt/pull/158">https://github.com/jpadilla/pyjwt/pull/158</a>) in <code>pyjwt</code> deals with this and has a python DER to Raw (and vice-versa) implementation thats pretty simple.</p>
+
+
+
+<a name="239815952"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/284830-smart/health-cards/topic/DER%20encoded%20signature/near/239815952" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Stephen Whitney <a href="https://fhir.github.io/chat-archive/stream/284830-smart/health-cards/topic/DER.20encoded.20signature.html#239815952">(May 21 2021 at 21:36)</a>:</h4>
+<p>thank you <span class="user-mention" data-user-id="197651">@Reece Adamson</span> and <span class="user-mention" data-user-id="385047">@Christian Paquin</span> . I'm so close now. I just need to figure out this last hurdle:</p>
+<p>Signature is 69-bytes. Signature is expected to be 64-bytes</p>
+<p>My guess is that it has to do with this:</p>
+<p><a href="https://github.com/jpadilla/pyjwt/blob/e0a288017d945f8dd7da2fa13d5defb85192e38a/jwt/utils.py#L60">https://github.com/jpadilla/pyjwt/blob/e0a288017d945f8dd7da2fa13d5defb85192e38a/jwt/utils.py#L60</a></p>
+<p>Update: It's all good. Thank you again!</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

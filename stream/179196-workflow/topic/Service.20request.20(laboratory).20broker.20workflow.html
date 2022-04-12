@@ -1,0 +1,110 @@
+---
+layout: page
+title: "FHIR Chat  · Service request (laboratory) broker workflow · workflow"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179196-workflow/index.html">workflow</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179196-workflow/topic/Service.20request.20(laboratory).20broker.20workflow.html">Service request (laboratory) broker workflow</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153973104"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179196-workflow/topic/Service%20request%20%28laboratory%29%20broker%20workflow/near/153973104" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Ivanov <a href="https://fhir.github.io/chat-archive/stream/179196-workflow/topic/Service.20request.20(laboratory).20broker.20workflow.html#153973104">(Jul 03 2018 at 10:47)</a>:</h4>
+<p><span class="user-mention" data-user-id="191320">@Lloyd McKenzie</span> <span class="user-mention" data-user-id="191316">@Grahame Grieve</span>  We have discussed possible workflow for ordering diagnostic requests with the broker (dispatcher) at FHIRstarter at SPb. So we've done flowcharts to summarize our discussion. </p>
+<p>In our case clinic interact with several labs, it collects specimen and sends them to the laboratory. So we need the lab to tell clinic some information about protocols for collecting specimens. Also, the lab should be able to request some extra info (Questionnaire) to set the correct reference or in case of government regulation rules.</p>
+<p>The main steps of this interaction are:<br>
+1. Get a catalog of possible order codes.<br>
+2. Get an estimated time of accomplishment for each position in a catalog.<br>
+3. Get information about required specimens.<br>
+4. Get extra questionnaires.<br>
+5. Request service request<br>
+6. Get results</p>
+<p><a href="/user_uploads/10155/DBG5GL4EMibXrx0t_dhFFpvG/Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png" target="_blank" title="Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png">Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png</a></p>
+<div class="message_inline_image"><a href="/user_uploads/10155/DBG5GL4EMibXrx0t_dhFFpvG/Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png" target="_blank" title="Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png"><img src="/user_uploads/10155/DBG5GL4EMibXrx0t_dhFFpvG/Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png"></a></div><p>It seems we can express all our needs with new R4 resources, but we have some questions:<br>
+1. Should we have some Task to describe whole interaction? Clinic can use it to show that all ServiceRequest with the same requestionId was successfully created. <br>
+2. What kind of resource should be "event" for ServiceRequest for specimens? Should it be Procedure? I've found this discussion <a href="http://community.fhir.org/t/how-to-associate-a-specimen-with-a-procedure/826/4" target="_blank" title="http://community.fhir.org/t/how-to-associate-a-specimen-with-a-procedure/826/4">http://community.fhir.org/t/how-to-associate-a-specimen-with-a-procedure/826/4</a> , I think we are also interested in specimens section in Procedure.<br>
+3. When lab asks the clinic to fill out the Questionnaire can we set a reference to Questionnaire into supprtingInfo field of ServiceRequest?<br>
+4. Should we use an extension in EntryDefinition for estimated time of accomplishment?</p>
+
+
+
+<a name="153973111"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179196-workflow/topic/Service%20request%20%28laboratory%29%20broker%20workflow/near/153973111" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Jose Costa Teixeira <a href="https://fhir.github.io/chat-archive/stream/179196-workflow/topic/Service.20request.20(laboratory).20broker.20workflow.html#153973111">(Jul 03 2018 at 11:32)</a>:</h4>
+<p>1. : What do you want to define? The diagram you show with concrete steps and values seems like an ExampleScenario. If you want to define how the workflow CAN behave (i.e. what are the boundaries instead of a specific example instance) the you'd use PlanDefinition</p>
+
+
+
+<a name="153973115"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179196-workflow/topic/Service%20request%20%28laboratory%29%20broker%20workflow/near/153973115" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179196-workflow/topic/Service.20request.20(laboratory).20broker.20workflow.html#153973115">(Jul 03 2018 at 12:55)</a>:</h4>
+<p>Hi Alexander,</p>
+<p>In looking at your workflow, a few minor comments:<br>
+- 1 should probably be an ObservationDefinition.  EntryDefinition probably isn't necessary to your use-case (and may well go away)<br>
+- I'd expect #1, 9, 10 and 17 to happen at the same time<br>
+- 6+7 can be done in a single query using _include if you like (but separate queries are fine)<br>
+- 8, 16, 23, 27, 31, 36, 40 should be a PUT rather than a POST<br>
+- 11 is optional.  The task in 12 could just say "please instantiate this ActivityDefinition"<br>
+- 14 could grab the Task, the service request (if any), and everything pointed to (ActivityDefinition, Questionnaire, SpecimenDefinition).  No need to have so much back and forth.  And when completing them, you can update the Task to point to the Specimen and QuestionnaireResponse<br>
+- 25 is optional.  You could share about the specimen collection procedure, but not sure anyone else will care<br>
+- Typically you wouldn't need DocumentReference for the rendered report.  You'd just embed it in DiagnosticReport.presentedForm.  However, if you want it to be available for MHD or something, then DocumentReference is fine.</p>
+
+
+
+<a name="153973116"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179196-workflow/topic/Service%20request%20%28laboratory%29%20broker%20workflow/near/153973116" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179196-workflow/topic/Service.20request.20(laboratory).20broker.20workflow.html#153973116">(Jul 03 2018 at 13:01)</a>:</h4>
+<p>In response to your questions<br>
+1. The Task(s) assigned by the lab to the clinic could be "subtasks" of the original Task asking the lab to fulfill the order<br>
+2. It would typically be Procedure.  Whether you need to actually expose the procedure or just the resulting Specimen is up to you<br>
+3. I'd probably have the original Task point to a PlanDefinition which points to ActivityDefinitions for specimen collection and completing the Questionnaire.  In theory, when the clinical system retrieves the ObservationDefinition it could grab everything else and include those things on the original Task seeking fulfillment.  However, if the expectations vary by fulfilling lab, then having the lab initiate the request is reasonable<br>
+4. I'd put it on ObservationDefinition and submit a change request for it to be added to core as I think that's something that would typically be part of the definition</p>
+
+
+
+<a name="153973118"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179196-workflow/topic/Service%20request%20%28laboratory%29%20broker%20workflow/near/153973118" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Ivanov <a href="https://fhir.github.io/chat-archive/stream/179196-workflow/topic/Service.20request.20(laboratory).20broker.20workflow.html#153973118">(Jul 03 2018 at 13:03)</a>:</h4>
+<blockquote>
+<p>1. : What do you want to define? The diagram you show with concrete steps and values seems like an ExampleScenario. If you want to define how the workflow CAN behave (i.e. what are the boundaries instead of a specific example instance) the you'd use PlanDefinition</p>
+</blockquote>
+<p>We are interested in the exact case, is correct from FHIR point of view? Later on, we can create formal definition with PlanDefinition.</p>
+
+
+
+<a name="153973120"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179196-workflow/topic/Service%20request%20%28laboratory%29%20broker%20workflow/near/153973120" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Ivanov <a href="https://fhir.github.io/chat-archive/stream/179196-workflow/topic/Service.20request.20(laboratory).20broker.20workflow.html#153973120">(Jul 03 2018 at 13:26)</a>:</h4>
+<blockquote>
+<p>In response to your questions<br>
+1. The Task(s) assigned by the lab to the clinic could be "subtasks" of the original Task asking the lab to fulfill the order<br>
+2. It would typically be Procedure.  Whether you need to actually expose the procedure or just the resulting Specimen is up to you<br>
+3. I'd probably have the original Task point to a PlanDefinition which points to ActivityDefinitions for specimen collection and completing the Questionnaire.  In theory, when the clinical system retrieves the ObservationDefinition it could grab everything else and include those things on the original Task seeking fulfillment.  However, if the expectations vary by fulfilling lab, then having the lab initiate the request is reasonable<br>
+4. I'd put it on ObservationDefinition and submit a change request for it to be added to core as I think that's something that would typically be part of the definition</p>
+</blockquote>
+<p>3. I think we can use PlanDefinition and ActivityDefinition for specimen collection and Questionnaire. It will reduce the number of requests. </p>
+<p>But there is an issue with the number of specimens to be taken, for example, some labs allow to take one container for two ServiceRequests and the other requires to take separate containers for each ServiceRequest. The number of containers and specimens is calculated based on all requests received by the laboratory, that is why I think laboratory should initiate the request for specimens.</p>
+
+
+
+<a name="153973125"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179196-workflow/topic/Service%20request%20%28laboratory%29%20broker%20workflow/near/153973125" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179196-workflow/topic/Service.20request.20(laboratory).20broker.20workflow.html#153973125">(Jul 03 2018 at 13:32)</a>:</h4>
+<p>That makes sense</p>
+
+
+
+<a name="153974277"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179196-workflow/topic/Service%20request%20%28laboratory%29%20broker%20workflow/near/153974277" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Alexander Ivanov <a href="https://fhir.github.io/chat-archive/stream/179196-workflow/topic/Service.20request.20(laboratory).20broker.20workflow.html#153974277">(Jul 09 2018 at 07:28)</a>:</h4>
+<p>@<strong>Игорь Николаев</strong> you've asked for the last version of sequence chart:</p>
+<p><a href="/user_uploads/10155/fbylv4b91R7kOz3zfKgJpF3x/Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png" target="_blank" title="Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png">Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png</a></p>
+<div class="message_inline_image"><a href="/user_uploads/10155/fbylv4b91R7kOz3zfKgJpF3x/Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png" target="_blank" title="Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png"><img src="/user_uploads/10155/fbylv4b91R7kOz3zfKgJpF3x/Workflow-states-for-a-lab-order-for-a-blood-test-using-lab-broker-dispatcher.png"></a></div>
+
+
+
+<a name="153974288"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179196-workflow/topic/Service%20request%20%28laboratory%29%20broker%20workflow/near/153974288" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Lloyd McKenzie <a href="https://fhir.github.io/chat-archive/stream/179196-workflow/topic/Service.20request.20(laboratory).20broker.20workflow.html#153974288">(Jul 09 2018 at 08:02)</a>:</h4>
+<p>Looks good.  Step 14 is optional.  It's a directed Task and presumably the requesting EHR isn't going to say "no".  (If they do, they don't get their test results :&gt;).  So it's not essential to communicate to the lab that they've agreed to do the task - unless it's possible for multiple systems to provide the specimen and QuestionnaireResponse.</p>
+<p>In terms of communicating the QuestionnaireResponse and Specimen back to the lab, there are two options.  Updating the ServiceRequest is a valid one and probably my preferred choice as it puts the information where it should ideally be.  However, in some workflows the notion of updating an order once fulfillment is underway might be deemed "problematic".  If that were the case, your alternative would be to attach the information as outputs to the Task.  I'm not advocating for doing that, just letting you know you have the choice.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

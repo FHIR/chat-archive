@@ -1,0 +1,122 @@
+[
+    {
+        "content": "<p>In the DataRequirement dataType there are, what appears to be 2 ways to specify the search/filtering mechanism, the codeFilter and dateFilter.   What is not clear, especially for the dateFilter, is how and when to use .path vs .searchParam.</p>\n<p>For example, if I'm trying to create a DR dataFilter for \"patient &gt; 65 yrs old\" how would that be encoded in dateFilter?<br>\n    dateFilter.path = \"birthdate=gt1955-01-01\".  (using this because a FHIR server might not implement the age search extension) <br>\nor<br>\n    dateFilter.serarchParam = \"birthdate=gt1955-01-01\"<br>\nor<br>\n    something else?</p>\n<p>[Should I be asking this in the Implementers stream rather than here? ]</p>",
+        "id": 207269801,
+        "sender_full_name": "John Silva",
+        "timestamp": 1597762674
+    },
+    {
+        "content": "<p>Yeah, it's not specifically CDS Hooks question -- though I don't think there's a dedicated area for broader CDS discussion (maybe <a class=\"stream\" data-stream-id=\"179220\" href=\"/#narrow/stream/179220-cql\">#cql</a> would be worth trying, or <span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> could probably answer directly). Where/how are you trying to use a <code>dataFilter</code>?</p>",
+        "id": 207270573,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1597762986
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>  thanks!   Yes, I was debating to ask here or <a class=\"stream\" data-stream-id=\"179220\" href=\"/#narrow/stream/179220-cql\">#cql</a>  or <a class=\"stream\" data-stream-id=\"179166\" href=\"/#narrow/stream/179166-implementers\">#implementers</a>  -- but didn't want to 'incur the wrath' of double.triple posting ;-)</p>\n<p>As my example shows, if the CQL logic was trying to filter on patients greater than a certain age, I want to have a DR that essentially does the same FHIR search filtering as what would happen in the CQL logic.   (even though ?age isn't a standard Patient search parameter)</p>",
+        "id": 207273257,
+        "sender_full_name": "John Silva",
+        "timestamp": 1597764064
+    },
+    {
+        "content": "<p>No worries! But are you actually issuing a FHIR search? Or... what are you doing with the DR snippet you're creating? That's what I'm confused about.</p>",
+        "id": 207281752,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1597768043
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>  - this FHIR Clinical Reasoning page shows how the dataRequirement is supposed to be mapped to FHIR URL:</p>\n<p><a href=\"https://www.hl7.org/fhir/clinicalreasoning-cds-on-fhir.html#14.5.2.3\">https://www.hl7.org/fhir/clinicalreasoning-cds-on-fhir.html#14.5.2.3</a></p>\n<p>`The concept of prefetch data is represented within Clinical Reasoning as a DataRequirement, which can be transformed to an instance level read or type level search interaction as follows:</p>\n<p>DataRequirement Element Mapping to FHIR URL<br>\ntype    [type]{[id] | ?[parameters]}<br>\nsubject subject={{patientId}}<br>\ncodeFilter  [path]{=|:in}[code|valueSet]<br>\ndateFilter  [path]{eq|lt|gt|ge|le}[valueDateTime|valuePeriod|valueDuration]<br>\nsort    _sort=[sort]<br>\nlimit   _limit=[limit]<br>\nThis prefetch data can be automatically determined from the data requirements of the PlanDefinition and provided as part of the service definition to the CDS Hooks discovery response.`</p>",
+        "id": 207288468,
+        "sender_full_name": "John Silva",
+        "timestamp": 1597771360
+    },
+    {
+        "content": "<p>Maybe, reading 'between the lines' here, the 'transformed to instance-level read' implies 'path' and  'type level search interaction' implies searchParam.    If this is true then I suppose I should use serachParam and then the value has to be a RESTful GET search string?</p>",
+        "id": 207288931,
+        "sender_full_name": "John Silva",
+        "timestamp": 1597771568
+    },
+    {
+        "content": "<p>Hmm, are you building a CDS Hooks client, or CDS Hooks services, or something else? The excerpt you cited seems more like an analogy/mapping exercise, but if you're doing CDS Hooks you'd want to create the actual templated <code>prefetch</code> URL rather than a DataRequirement structure.</p>",
+        "id": 207292252,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1597773229
+    },
+    {
+        "content": "<p>The path is used to specify a path in terms of actual elements in the resource, whereas searchParam is used to specify the name of a search parameter to use for the filtering. The data requirements mapping can be used to construct prefetch declarations, we do this for clinical reasoning modules that we expose as CDS Hooks services.</p>",
+        "id": 207348409,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1597788689
+    },
+    {
+        "content": "<p>Brian, yes, this is what we're trying to do -- use the DR as a way to construct the prefetch searches (if you will).   One thing about this approach that has me wondering though, how can you pre-create the prefetch rules before a possible CQL rule has been 'fired'?   Is this a system setup phase where all the possible PlanDefinitions in the system pre-computed the prefetch searches and store them so they are available when (i.e. before0 the CDS Hook actually fires?</p>",
+        "id": 207417626,
+        "sender_full_name": "John Silva",
+        "timestamp": 1597848686
+    },
+    {
+        "content": "<p>Yes, exactly, the Library resource has a DataRequirements element, and as part of packaging a CQL library, the DataRequirements for the logic are inferred and persisted in the Library so they can be processed for exactly that type of use case. See this <a href=\"http://hl7.org/fhir/us/cqfmeasures/Library-EXM146.html\">library</a> for example</p>",
+        "id": 207441161,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1597860115
+    },
+    {
+        "content": "<p>Thanks!  That library example helps show the correlation between the CQL rules and the dataRequirements.   The only one that is missing a DataRequirement is the \"age between 2 and 17\"; I would assume that would be done using the Patient resource and a searchParam for age, but, of course, age is not a standard Patient search operator (e.g. HAPI doesn't implement it and probably others).</p>\n<p>I still have to think about how all these Library (or PlanDefinitions) would be retrieved to create the prefetch criteria before any rule is fired.  There could be many of these on a FHIR server, how would the CDS Hook code (service) know which ones to use (or all?)</p>",
+        "id": 207467449,
+        "sender_full_name": "John Silva",
+        "timestamp": 1597875106
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191359\">@Bryn Rhodes</span> can you help me understand what this is about? Who implements the mapping described in <a href=\"https://www.hl7.org/fhir/clinicalreasoning-cds-on-fhir.html#surfacing-clinical-decision-support\">https://www.hl7.org/fhir/clinicalreasoning-cds-on-fhir.html#surfacing-clinical-decision-support</a>, and when/why?</p>",
+        "id": 207471850,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1597878367
+    },
+    {
+        "content": "<p>Like, who turns DataRequirements into a prefetch URL (in time to be added to a CDS Service's hooks discovery endpoint)?</p>",
+        "id": 207471899,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1597878416
+    },
+    {
+        "content": "<p>We have it implemented in our CDS Hooks service, so we dynamically construct the discovery response by walking through the registered PlanDefinitions, and reading the DataRequirements from the Libraries used by those PlanDefinitions. Each PlanDefinition corresponds to a CDS Hooks endpoint, and we use this mapping to turn the DataRequirements into prefetch templates.</p>",
+        "id": 207485013,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1597893438
+    },
+    {
+        "content": "<p>So decision support services exposing clinical reasoning content via the CDS Hooks API.</p>",
+        "id": 207485165,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1597893710
+    },
+    {
+        "content": "<p>And is John using your CDS Hooks service? Maybe that's the context I'm missing.</p>",
+        "id": 207521625,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1597929986
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"298707\">@John Silva</span> , there is a CDS Hooks Service PlanDefinition profile that we use to provide the CDS Hooks endpoint that a given PlanDefinition is surfaced on: <a href=\"http://hl7.org/fhir/plandefinition-cdshooks-service.html\">http://hl7.org/fhir/plandefinition-cdshooks-service.html</a></p>",
+        "id": 207593451,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1597973800
+    },
+    {
+        "content": "<p>That's how we know which PlanDefinitions to run through and what endpoint to use to surface them in the discovery.</p>",
+        "id": 207593457,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1597973818
+    },
+    {
+        "content": "<p>Josh, I don't think John is using the CQF Ruler, not sure though, John?</p>",
+        "id": 207593476,
+        "sender_full_name": "Bryn Rhodes",
+        "timestamp": 1597973855
+    },
+    {
+        "content": "<p>Were using some of the <a href=\"https://github.com/cqframework/cql-execution\">https://github.com/cqframework/cql-execution</a> library for executing the CQL.   Not sure that has support for working with the PlanDefinition and its DataDefinitions.</p>",
+        "id": 207595884,
+        "sender_full_name": "John Silva",
+        "timestamp": 1597977810
+    }
+]

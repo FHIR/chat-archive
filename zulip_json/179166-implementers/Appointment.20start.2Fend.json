@@ -1,0 +1,98 @@
+[
+    {
+        "content": "<p>instant seems like an odd data type for Appointment start/end, they're 'human times' rather than 'system times'<br>\nunless I've misunderstood and they're intended to be filled in automatically when a patient arrives/leaves?</p>",
+        "id": 153885490,
+        "sender_full_name": "Ben Spencer",
+        "timestamp": 1492787589
+    },
+    {
+        "content": "<p>Feel free to submit a change request.  I agree that expecting systems to capture down to the second seems a little odd</p>",
+        "id": 153885493,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1492788623
+    },
+    {
+        "content": "<p>Instant as a datatype is the appropriate one.<br>\nAppointments require the time (and zone) that the appointment is to start/end.<br>\nUsing the datetime datatype would then mean we'd need to profile it to require the time, which is what the instant datatype is.<br>\nIf a user interface wants to only display a portion of the data, that's also fine, but note that you should always have the timezone information there.<br>\nIf you don't know the times, then leave the start/end blank, use a status of proposed, and put the requested dates in the requestedPeriod field (along with the required duration)</p>",
+        "id": 153886059,
+        "sender_full_name": "Brian Postlethwaite",
+        "timestamp": 1493175385
+    },
+    {
+        "content": "<p>Need to record historical information for an Appointment - start/end times are available, but not the timezone, and the dataset is worldwide.</p>\n<p>Can either:<br>\n1) not populate <code>start</code>/<code>end</code>, add nullFlavour <code>invalid</code>, use extensions with <code>dateTime</code>s recording the times<br>\n2) assume UTC and populate with that, use a new extension to specify that the timezone was assumed</p>\n<p>What's the lesser evil?</p>\n<p>(1) would severely hamper structural interoperability, (2) would be smudging on semantic interoperability.</p>",
+        "id": 229861827,
+        "sender_full_name": "Vadim Peretokin",
+        "timestamp": 1615474681
+    },
+    {
+        "content": "<p>The timezone offset is not enough?</p>",
+        "id": 229862598,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1615474910
+    },
+    {
+        "content": "<p>The timezone offset is unknown</p>",
+        "id": 229870553,
+        "sender_full_name": "Vadim Peretokin",
+        "timestamp": 1615477613
+    },
+    {
+        "content": "<p>So you know the appointment ran from 15:00 to 15:30, but not if it was Eastern, Pacific or Zulu?  That's a really good question.  From a historical perspective, you probably don't care or a human can infer \"close enough\" by associated location information, time of year, etc.  Realistically, we need to come up with a generic solution to convey \"Timezone is unknown\".  Can you submit a change request for this?  My current leaning is to put an extension on dateTime that allows conveying a 'time' (with no offset).  When the timezone is unknown, you'd convey the dateTime just to the 'date' level of precision and send the time in an extension.  Still 'mostly' computable - and as computable is reasonably safe, while retaining the time information and potentially allowing it for human display.</p>",
+        "id": 229871672,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1615477988
+    },
+    {
+        "content": "<p>Sorry, I misunderstood the question, now I get it</p>",
+        "id": 229874218,
+        "sender_full_name": "Michele Mottini",
+        "timestamp": 1615478632
+    },
+    {
+        "content": "<p>Wouldn't it just be easier to take the hit on validation and assign it to \"historical data\" than to come up with a convoluted process to circumvent the rule that all times have offsets? Specify the date/time in X, unless you don't know the offset, in which case specify flag Z put the date in X and the time in Y. Then the recipient of it has to say If I see flag Z then get the date from X and the time from Y and the recipient has to make some decision as to what offset do WE think the value should be and they are at least 1 more degree away from the source. </p>\n<p>Or the source could say, \"By rule, any timestamp in our system that does not have an offset is understood to be Zulu.\" Problem solved. There is now an offset for every timestamp (by literal or by rule).</p>",
+        "id": 229922891,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1615495566
+    },
+    {
+        "content": "<p>Zulu time means zulu time - it does <em>not</em> mean unknown timezone and it's not conformant to use it for that purpose.  If you make the determination that it is safe for all purposes to treat the time as if it was zulu when it's unknown, then you can choose to do so, but any consumers will be expected to treat the data as if that's the right timezone.</p>",
+        "id": 229929144,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1615498100
+    },
+    {
+        "content": "<p>The FHIR spec requires the offset. If the reality is that offset often isn't known, then creating a dodge to avoid having to specify the offset in FHIR could be easier solved with changing the field type that doesn't require offset or the definition of type. </p>\n<p>What's next, FHIR requires you to have a code, but if you don't then put this other thing over here instead with this flag that will allow you to pass validation without the required code. FHIR requires a string value, but if you don't have one put in NMI to pass validation and we'll document that NMI means \"not known\".  When the spec requires data to be conformant there are 3 choices, change the spec so that the actual data is conformant, change the data to be conformant, ignore the conformant violations.</p>\n<p>As you can probably tell from this and previous thread, I don't care for the idea that data which was collected prior to current requirements has to meet  those requirements. My system is capable of meeting the requirements when the data is available, if some auditor fails my system because I didn't record the offset on a transaction that happened 10 years ago... Ding they are all zulu, pass! (Prove to me they are not.)</p>",
+        "id": 229932950,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1615499545
+    },
+    {
+        "content": "<p>At this point, dateTime is normative, so we can't relax the constraint on offset being mandatory with time.  (Once a part of the spec goes normative, breaking changes aren't allowed - that has benefits, but there are obviously costs.)  Nor can we assign it a meaning other than what it has.  The only 'dodge' available is the use of extensions.  We can't have modifier extensions on data types, and an extension that says \"the offset specified isn't actually the offset\" would be a modifier.  That then leaves the only solution being \"don't send the time and offset and instead convey the time without an offset in an extension\".</p>\n<p>You're certainly free to mark stuff as Zulu if you wish.  But you <em>can't</em> say in an implementation guide \"if you see Zulu, it doesn't actually mean Zulu, it means time offset unknown\".  Or more specifically, you can't claim that the IG is FHIR-conformant if you do.</p>",
+        "id": 229934981,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1615500160
+    },
+    {
+        "content": "<p>What about putting a 'best effort' offset in (e.g., based on the location of the server/client/whatever), and then an extension flagging that the time offset is 'unconfirmed' or some such?</p>\n<p>Curious if that would be a) allowed and b) satisfactory.</p>",
+        "id": 229935887,
+        "sender_full_name": "Gino Canessa",
+        "timestamp": 1615500411
+    },
+    {
+        "content": "<p>\"unconfirmed\" wouldn't be a modifier, so yes that would fly.  And if you knew it was North America, defaulting to Central or Eastern would mean, on average, you wouldn't be off my much.  That'd be better than defaulting to Zulu, though if your data was global, Zulu might be the best you could do.</p>",
+        "id": 229939638,
+        "sender_full_name": "Lloyd McKenzie",
+        "timestamp": 1615501596
+    },
+    {
+        "content": "<p>Sounds like we're leaning towards the (2) solution. I didn't see an available extension for this and I imagine another system importing historical data running into this constraint - I'll file a ticket.</p>",
+        "id": 229991874,
+        "sender_full_name": "Vadim Peretokin",
+        "timestamp": 1615537237
+    },
+    {
+        "content": "<p>I would not serverside be guessing about the timezone. I would leave such fuzzyness for clients. I agree with <span class=\"user-mention\" data-user-id=\"222054\">@Gino Canessa</span> and you might even consider making this a standardized extension if it is a common case</p>",
+        "id": 230748071,
+        "sender_full_name": "Jens Villadsen",
+        "timestamp": 1616007574
+    }
+]

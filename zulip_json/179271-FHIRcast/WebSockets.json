@@ -1,0 +1,500 @@
+[
+    {
+        "content": "<p>I took a look at the WebSocket proposal on github (<a href=\"https://github.com/fhircast/docs/pull/57/commits/2cc6c907cdeb7e69369bd58f8af9b00a896f9633?short_path=1a523bd#diff-1a523bd9fa0dbf998008b37579210e12\" target=\"_blank\" title=\"https://github.com/fhircast/docs/pull/57/commits/2cc6c907cdeb7e69369bd58f8af9b00a896f9633?short_path=1a523bd#diff-1a523bd9fa0dbf998008b37579210e12\">https://github.com/fhircast/docs/pull/57/commits/2cc6c907cdeb7e69369bd58f8af9b00a896f9633?short_path=1a523bd#diff-1a523bd9fa0dbf998008b37579210e12</a>). I was wondereing, when using websockets, why do you need to initialize the connection using the rest-api? Couldn't you just open a websocket and send the subscripe overr that channel?</p>",
+        "id": 155102050,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1547488197
+    },
+    {
+        "content": "<p>Other question on websockets -- what protocol are we using on top of Websockets? STOMP (<a href=\"https://stomp.github.io/stomp-specification-1.2.html\" target=\"_blank\" title=\"https://stomp.github.io/stomp-specification-1.2.html\">https://stomp.github.io/stomp-specification-1.2.html</a>)?</p>",
+        "id": 155102142,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1547488239
+    },
+    {
+        "content": "<p>Hey Bas! Your two questions/points are nicely interrelated. Our current prototype implementations and the PR to the spec that you cite is intended to specify the use of raw Websockets (no sub-protocol above websockets). We spent some time loking at the common websocket libraries, each of which also tends to define its own sub-protocol, typically in a proprietary way. This means that SignalR clients really only work with SignalR servers, same with <a href=\"http://socket.io\" target=\"_blank\" title=\"http://socket.io\">socket.io</a>, etc. Here's <a href=\"https://github.com/fhircast/docs/issues/33\" target=\"_blank\" title=\"https://github.com/fhircast/docs/issues/33\">some background</a>.</p>",
+        "id": 155102541,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1547488636
+    },
+    {
+        "content": "<p>Use of the REST API to established the subscription (and the other client -&gt; Hub API calls) makes sense for two reasons:</p>",
+        "id": 155102569,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1547488681
+    },
+    {
+        "content": "<p>1) Compatibility between websub/rest-hooks and websockets. I wanted to minimize the divergence between these two comm methods as much as possible</p>",
+        "id": 155102640,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1547488726
+    },
+    {
+        "content": "<p>2) _raw_ websockets, when implemented in a browser, doesn't support the sending of HTTP headers in the HTTP-&gt;websocket upgrade. Since we're encouraging the use of OAuth2, we really want to send the Authorization HTTP header with a bearer token when establishing the subscription.</p>",
+        "id": 155102773,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1547488817
+    },
+    {
+        "content": "<p>I hadn't actually seen STOMP. Do you have a sense of how widely deployed it is?</p>",
+        "id": 155102792,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1547488833
+    },
+    {
+        "content": "<blockquote>\n<p>I hadn't actually seen STOMP. Do you have a sense of how widely deployed it is?</p>\n</blockquote>\n<p>It is the default protocol in Java Spring Boot appliactions - I do not have figures but Spring is used a lot</p>",
+        "id": 155102836,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1547488872
+    },
+    {
+        "content": "<p>Isaac and I took another look at the spec and it might be a good idea to reformat it; split the specification into three layers:<br>\n    1. channel protocol - indicates that we are supporting multiple protocols (websub, webhoos, rest access to context, ...)<br>\n    2.Define  subscribe/unsubscribe pattern and event type<br>\n    3. Event definitions</p>\n<p>The channel protocols we currently have are:<br>\n    1. WebSub (exisiting spec)<br>\n    2. Websockets (see below)<br>\n    3. pull based context<br>\nThese could each be described in a separate document with its own lifecycle.</p>\n<p>In order to separate the channels, I suggest to access them on different end-points:<br>\n    WebSub  &lt;baseurl&gt;/&lt;topic&gt;/websub<br>\n    WebSocket   &lt;baseurl&gt;/&lt;topic&gt;/websocket<br>\n    Context &lt;baseurl&gt;/&lt;topic&gt;/context</p>\n<p>&lt;baseurl&gt;/&lt;topic&gt; will give you a list of the supported protocols.</p>",
+        "id": 155185099,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1547571275
+    },
+    {
+        "content": "<p>A first proposal for a STOMP based websocket protocol - please comment:Use STOMP 1.2. <br>\nSome functionality is not required for FHIR CAST. Clients and server SHALL implement the required functionality and SHOULD implement the other.</p>\n<p>STOMP subset<br>\nWe will be using STOMP 1.2 over WebSocket. Not all functionality from STOM is required.<br>\nThe table below indicates the functionality that MAY be unsupported. It is RECOMMENDED that the client and server implement the other functionality required by STOMP although it will not be used by this specification.</p>\n<p>The following table shows the support requirements for the different STOMP messages.<br>\nMessage Source  Status  Description<br>\nCONNECT Client  REQUIRED    Connect to websocket<br>\nSUBSCRIBE   Client  REQUIRED    Subscribe to channel<br>\nUNSUBSCRIBE Client  REQUIRED    Unsubscribe from channel<br>\nBEGIN   Client  OPTIONAL    Start transaction<br>\nCOMMIT  Client  OPTIONAL    Commit transaction<br>\nABORT   Client  OPTIONAL    Abort transaction<br>\nACK Client  REQUIRED    Acknowledge<br>\nNACK    Client  REQUIRED    Not Acknowledge<br>\nDISCONNECT  Client  REQUIRED    Disconnect websocket<br>\nMESSAGE Server  REQUIRED    Send message to client<br>\nRECEIPT Server  REQUIRED    Indicate receipt content<br>\nERROR   Server  REQUIRED    Indicate error occurred</p>\n<p>Destinations<br>\nClients send messages to destinations, a destination is a directory like name on the server.<br>\nAll FhirCast destinations are prefixed with /fhircast/ to separate them from other communication.</p>\n<p>Client--&gt;Server communication SHALL use the following pattern:<br>\n    /fhircast/server/&lt;clientid&gt;/&lt;event&gt;<br>\nwhere<br>\n    &lt;clientid&gt;:     is a unique id of the client, e.g. the client-id used in OAUth<br>\n    &lt;event&gt; is the event name/id the client sends a message to</p>\n<p>Server -&gt;Client SHALL use the following destinations:<br>\n    /fhircast/client/&lt;clientid&gt;/&lt;event&gt;<br>\nwhere<br>\n    &lt;clientid&gt;:     is a unique id of the client, e.g. the client-id used in Oauth<br>\n    &lt;event&gt; is the event name/id the client sends a message to</p>\n<p>Implementations can distinguish on OAuth role, adding client-id makes it easier to filter who receives what.</p>\n<p>Use cases<br>\nClient Subscribe/ Unsubscribe<br>\nAll clients can register on each end-point - check that the client is really linked to &lt;clientid&gt; - prevent other clients from guessing it.</p>\n<p>SUBSCRIBE /fhircast/server/&lt;clientid&gt;/&lt;event&gt;</p>\n<div class=\"codehilite\"><pre><span></span>server replies with message to  \n    /fhircast/client/&amp;lt;clientid&amp;gt;/&amp;lt;event&amp;gt;\n    {\n        &quot;message&quot;: &quot;subscription-conformation&quot;\n        &quot;secret&quot;: &quot;&amp;lt;some-secret&amp;gt;&quot;\n        &quot;event&quot;: &amp;lt;last-event&amp;gt;\n    }\n\n&amp;lt;some-secret&amp;gt; is included in all communication to this client - clients SHALL ignore messages that does not have the correct secret. This is added to prevent clients sending messages to incorrect channels.\n</pre></div>\n\n\n<p>UNSUBSCRIBE &lt;destination&gt;<br>\n    Client-server<br>\n        UNSUSCRIBE /fhircast/client/&lt;clientid&gt;/&lt;event&gt;<br>\n    Server replies to RECEIPT /fhircast/client/&lt;clientid&gt; <br>\n        {<br>\n            \"message\": \"unsubscribe\"<br>\n            \"secret\": \"&lt;some-secret&gt; \"<br>\n        }<br>\n    Allowing clients to detect that subscription has been done. This can only be done if the STOMP subscription id is known. If the unsubscribe is not intended, it can re-subscribe.<br>\n    If unallowed, or incorrect -&gt; ERROR will be returned.</p>\n<p>Deny subscription<br>\n    Server -&gt; Client<br>\n    MESSAGE /fhircast/client/&lt;client-id&gt;/&lt;event&gt;<br>\n        {<br>\n            \"message\": \"subscription-deny\"<br>\n            \"secret\": \"&lt;some-secret&gt;\"<br>\n        }</p>\n<p>Sending events<br>\nServer sends event<br>\n    Server-&gt;Client<br>\n        MESSAGE /fhircast/client/&lt;client-id&gt;/&lt;event&gt;<br>\n            {<br>\n                \"message\": \"event\"<br>\n                \"secret\": \"&lt;some-secret&gt;\"<br>\n                \"event\":  EVENT<br>\n            }</p>\n<p>Clients updates context<br>\n    Server-&gt;Client<br>\n        MESSAGE /fhircast/client/&lt;client-id&gt;/&lt;event&gt;<br>\n            {<br>\n                \"message\": \"event\"<br>\n                \"secret\": \"&lt;some-secret&gt;\"<br>\n                \"event\":  EVENT<br>\n            }</p>\n<div class=\"codehilite\"><pre><span></span>If server accepts it  - ok otherwise, error.\n</pre></div>",
+        "id": 155185307,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1547571482
+    },
+    {
+        "content": "<p>I'm having a hard time following the formatting here (e.g., to tell which messages are sent over WS, vs which messages are http calls, or where the breaks are. Maybe a quick markdown write-up would help?</p>",
+        "id": 155194024,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1547578370
+    },
+    {
+        "content": "<p>Can we assume from this example that \"WebSocket clients\" will use the web socket for everything, and not just for receiving events from the Hub? <span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>  - I think that Bas' example is ALL websockets which would answer your question, no?</p>",
+        "id": 155200594,
+        "sender_full_name": "George Kustas",
+        "timestamp": 1547583430
+    },
+    {
+        "content": "<p>That helps somewhat;  still can't quite tell what's happening with the JSON bits, the \"secret\" values. An end-to-end example would probably help too.</p>",
+        "id": 155200858,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1547583618
+    },
+    {
+        "content": "<p>I think the URL escaping that was done inadvertently (by Zulip?) does make the one sample difficult to read. I'll let <span class=\"user-mention\" data-user-id=\"194452\">@Bas van den Heuvel</span>  or <span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span>  define how \"secret\" is being used.</p>\n<p>By the way, I like the proposal. I never heard of STOMP, but when I proposed raw JSON, I didn't feel particularly good about it. It's nice how the destinations are modeled after URL endpoints, and having the ACK/NACK (How HL7-like) is a good idea.</p>\n<p><span class=\"user-mention\" data-user-id=\"192821\">@Martin Bellehumeur</span> and I need to start working on our prototypes soon, which will include this change (if approved) and OAuth.  Interested to hear more.</p>",
+        "id": 155201784,
+        "sender_full_name": "George Kustas",
+        "timestamp": 1547584360
+    },
+    {
+        "content": "<p>I'll update and repost as soon as I have some time to generate the markdown. For those in present in San Antonio we could discuss it fac2face if ou want.</p>",
+        "id": 155203407,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1547585676
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191315\">@Josh Mandel</span>  thanks for the feedback. I'll take your feedback and  update the document accordingly.</p>",
+        "id": 155207253,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1547588742
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194452\">@Bas van den Heuvel</span>  - this make sense and seems to follow the \"separation of concerns\" in the way IHE profiles are defined.</p>",
+        "id": 155253854,
+        "sender_full_name": "John Silva",
+        "timestamp": 1547646065
+    },
+    {
+        "content": "<p>I've updated the <a href=\"https://github.com/PhilipsOnFhir/fhir-cast\" target=\"_blank\" title=\"https://github.com/PhilipsOnFhir/fhir-cast\">https://github.com/PhilipsOnFhir/fhir-cast</a> repo to include context, websub and websocket functionality. It is still a little bit rough but it works.</p>",
+        "id": 155336220,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1547733308
+    },
+    {
+        "content": "<p>I've wrote down the proposal in a new github issue: <a href=\"https://github.com/fhircast/docs/issues/61\" target=\"_blank\" title=\"https://github.com/fhircast/docs/issues/61\">https://github.com/fhircast/docs/issues/61</a></p>",
+        "id": 155348995,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1547742679
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"194452\">@Bas van den Heuvel</span> - wonderful writeup and thought!</p>",
+        "id": 155365975,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1547756618
+    },
+    {
+        "content": "<p>It looks like <a href=\"https://stomp.github.io/stomp-specification-1.2.html\" target=\"_blank\" title=\"https://stomp.github.io/stomp-specification-1.2.html\">STOMP</a> isn't a standard produced by an ANSI-accredited SDO. This would mean that us building on top of it would also make us responsible for justifying it's use if/when we went normative.</p>",
+        "id": 155365976,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1547756619
+    },
+    {
+        "content": "<p>To be clear, this justification would just be a sentence or so, right?</p>",
+        "id": 155366044,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1547756656
+    },
+    {
+        "content": "<p>I think that we need some hardcore HL7 process perspective to explain to us the consequences of building on top of a non-ANSI standard. I usually (unfairly) lean on Elliot Silver for this for FHIRcast.</p>",
+        "id": 155366182,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1547756779
+    },
+    {
+        "content": "<p>Well at least tag him <span class=\"user-mention\" data-user-id=\"191380\">@Elliot Silver</span>  ;-)</p>",
+        "id": 155366900,
+        "sender_full_name": "Josh Mandel",
+        "timestamp": 1547757422
+    },
+    {
+        "content": "<p>That's for tagging me -- I'll try to hook up with you guys to understand what we're talking about here -- I just skimmed this and need an orientation.</p>",
+        "id": 155368416,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1547758630
+    },
+    {
+        "content": "<p>can I buy you a cookie during cookie time in a little bit, <span class=\"user-mention\" data-user-id=\"191380\">@Elliot Silver</span> ?</p>",
+        "id": 155368449,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1547758670
+    },
+    {
+        "content": "<p>No, but we can talk anyhow. We're wrapping up in a couple of minutes.</p>",
+        "id": 155368595,
+        "sender_full_name": "Elliot Silver",
+        "timestamp": 1547758766
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span>  What is your take on the STOMP proposal being accepted? I ask because I wonder if it is worth my time to start implementing it on my end. There are STOMP client libraries for .NET, but I haven't seen anything for the server.  We may have to implement that ourselves, so before I get too deep....</p>",
+        "id": 156400637,
+        "sender_full_name": "George Kustas",
+        "timestamp": 1547846508
+    },
+    {
+        "content": "<p>Websocket oAuth header handling possibility?  <br>\n<a href=\"http://documentation.sas.com/api/docsets/espws/5.1/content/espws.pdf?locale=en\" target=\"_blank\" title=\"http://documentation.sas.com/api/docsets/espws/5.1/content/espws.pdf?locale=en\">http://documentation.sas.com/api/docsets/espws/5.1/content/espws.pdf?locale=en</a></p>",
+        "id": 156602243,
+        "sender_full_name": "Martin Bellehumeur (Visage Imaging)",
+        "timestamp": 1548162438
+    },
+    {
+        "content": "<p>thanks <span class=\"user-mention\" data-user-id=\"192821\">@Martin Bellehumeur</span> . on vacation this week but will look first thing over the weekend or on monday. At first glance, this looks like it may be an alternative to STOMP? Is it also proprietary spec?</p>",
+        "id": 156695312,
+        "sender_full_name": "George Kustas",
+        "timestamp": 1548255805
+    },
+    {
+        "content": "<p>Hi! I came across FHIRcast documentation and GitHub repositories few weeks ago and I wanted to contribute to the project.</p>\n<p>In order to familiarise myself with the topic, I implemented an experimental FHIRcast WebSocket client demo app using React. Source code, screen capture demo and links to online demo can be found on <a href=\"https://github.com/akalliokoski/fhircast-websocket-demo\" target=\"_blank\" title=\"https://github.com/akalliokoski/fhircast-websocket-demo\">GitHub akalliokoski/fhircast-websocket-demo</a>.</p>\n<p>The implementation is based on WebSocket channel proposal described in sandbox.js. A fork of sandbox.js is used as a hub. As the specification of FHIRcast WebSocket channel is currently in development, the demo might already be outdated.</p>\n<p>I would be happy to receive feedback and improvement ideas for the web app!</p>",
+        "id": 156835063,
+        "sender_full_name": "Antti Kalliokoski",
+        "timestamp": 1548401492
+    },
+    {
+        "content": "<p>Wow!!!  I love it.  Would you consider having it hosted on the FHIRcast github?  I think <span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span>  would welcome that.</p>",
+        "id": 156963401,
+        "sender_full_name": "Martin Bellehumeur (Visage Imaging)",
+        "timestamp": 1548578161
+    },
+    {
+        "content": "<p>Excellent, thanks for the positive feedback! Absolutely, I would happily transfer the ownership of the repository to FHIRcast.</p>",
+        "id": 156980068,
+        "sender_full_name": "Antti Kalliokoski",
+        "timestamp": 1548610179
+    },
+    {
+        "content": "<p>The repository of FHIRcast WebSocket client is now hosted on <a href=\"https://github.com/fhircast/reactclient.js\" target=\"_blank\" title=\"https://github.com/fhircast/reactclient.js\">fhircast/reactclient.js</a>. Thanks <span class=\"user-mention\" data-user-id=\"192821\">@Martin Bellehumeur</span> and <span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span> for helping me!</p>",
+        "id": 157170064,
+        "sender_full_name": "Antti Kalliokoski",
+        "timestamp": 1548836277
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"196690\">@Antti Kalliokoski</span> Your app looks great, and it's nice to have another participant using yet another development environment. I'm looking to get a prototype working with our radiology reporting system (Powerscribe360).  Will this prototype of yours eventually be used in an existing radiology system (like PACS or RIS)? Also, what tool do you use to create the video? I'm kind of a newbie when it comes to github.</p>",
+        "id": 157193724,
+        "sender_full_name": "George Kustas",
+        "timestamp": 1548860962
+    },
+    {
+        "content": "<p>I didn't plan to use the prototype in an existing radiology system but I could try to launch e.g. <a href=\"https://ivmartel.github.io/dwv/\" target=\"_blank\" title=\"https://ivmartel.github.io/dwv/\">DWV</a> using the prototype.</p>\n<p>It would be nice to move the code that handles client's subscriptions and WebSocket to a separate module and create (UI framework agnostic) npm package for it. The npm package could then be used by any web app that needs FHIRcast client functionality. Would you find that kind of npm package useful, <span class=\"user-mention\" data-user-id=\"196152\">@George Kustas</span>? Or is there anything else I could help you with your use case?</p>\n<p>I used <a href=\"https://giphy.com/apps/giphycapture\" target=\"_blank\" title=\"https://giphy.com/apps/giphycapture\">GIPHY Capture</a> for creating the GIF on macOS. There are similar tools also for Windows (e.g. <a href=\"https://www.screentogif.com/\" target=\"_blank\" title=\"https://www.screentogif.com/\">ScreenToGif</a>), but I haven't used those.</p>",
+        "id": 157254579,
+        "sender_full_name": "Antti Kalliokoski",
+        "timestamp": 1548921884
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"196690\">@Antti Kalliokoski</span></p>\n<p>Forgive me if you already know this, but  I work for a company (Nuance) that provides radiology reporting services (and other things). Our reporting system is Powerscribe360 and we currently integrate with many other radiology apps, mostly PACS, using all sorts of various techniques such as COM, file drops, etc. We are hoping FHIRCast will consolidate that list.</p>\n<p>By prototype, what we're really trying to do is help establish FHIRCast as a new standard by showing the industry that it works, works well, AND IS NOT HARD TO IMPLEMENT.   We can do the latter by making certain parts of our code (maybe some libraries) publicly available  and in different development environments. My stuff is mostly in C# (server and client). Others are using Java and/or Javascript(node). </p>\n<p>If you work for a radiology vendor, can you share who it is? If not, we can always use the sample you provided as part of a demo, and I'm sure you can help us down the road.</p>\n<p>By the way, I speak for me only. I'll let the other players speak for themselves :-)</p>",
+        "id": 157693129,
+        "sender_full_name": "George Kustas",
+        "timestamp": 1549462835
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"196152\">@George Kustas</span> Cool, thanks for sharing what you are working on.</p>\n<p>I work for a small Finnish software consulting company (Codeo) that is not specialized in healthcare, actually. I'm just an individual healthcare geek in the company. :) Projects that I have involved in during my career have related to radiology, patient monitoring and laboratory informatics.</p>\n<p>Sure, I would be happy to help also in the future. I'm able to contribute to FHIRcast by taking time off from work or when I'm not working for a customer (which is almost the same thing as taking time off).</p>",
+        "id": 157771351,
+        "sender_full_name": "Antti Kalliokoski",
+        "timestamp": 1549541030
+    },
+    {
+        "content": "<p>I've a java implementation in <a href=\"https://github.com/PhilipsOnFhir/fhir-cast\" target=\"_blank\" title=\"https://github.com/PhilipsOnFhir/fhir-cast\">https://github.com/PhilipsOnFhir/fhir-cast</a> - I receommend that you look at the develop branch for the websocket work.</p>",
+        "id": 159050971,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1550739468
+    },
+    {
+        "content": "<p>Thanks <span class=\"user-mention\" data-user-id=\"194452\">@Bas van den Heuvel</span>, I'll check your Java implementation and Angular clients out.</p>",
+        "id": 159059189,
+        "sender_full_name": "Antti Kalliokoski",
+        "timestamp": 1550747691
+    },
+    {
+        "content": "<p>Is the STOMP based websocket spec <a href=\"https://github.com/HL7/fhircast-docs/issues/61\" target=\"_blank\" title=\"https://github.com/HL7/fhircast-docs/issues/61\">proposal</a> currently the way to go? I was wondering if I should change the React client to use STOMP instead of plain websocket and use the Java implementation as a hub.</p>",
+        "id": 159320053,
+        "sender_full_name": "Antti Kalliokoski",
+        "timestamp": 1551082120
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"196690\">@Antti Kalliokoski</span> </p>\n<p>Some of us are still using raw JSON because there seems to be an open question as to whether or not STOMP will be used.  We simply created a simple wrapper around the schema and bind/unbind it to our applications data model. The wrapper simply adds a \"header\" and a \"body\" element that helps us keep with the HTTP model. See the doc for an example. I like the idea of STOMP, but given the limited amount of data that will be sent over the websocket, it may not be needed. We currently are only using websocket protocol for event notifications.</p>\n<p>I am leading an effort to perform a prototype test of simple context sharing between applications.  See attached document: <a href=\"/user_uploads/10155/gsyhsYfc3HY3F4Slst4AhVbA/FHIR-Websockets-Prototype-Spec.docx\" target=\"_blank\" title=\"FHIR-Websockets-Prototype-Spec.docx\">FHIR-Websockets-Prototype-Spec.docx</a></p>\n<p>I will provide a hub and will be implementing a test client, as well as my company's Radiology reporting system. I'm hoping to get it done by the end of March. You and everyone else is invited to participate! <span class=\"user-mention\" data-user-id=\"194356\">@Will Maethner</span>  <span class=\"user-mention\" data-user-id=\"194452\">@Bas van den Heuvel</span> <span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span> <span class=\"user-mention\" data-user-id=\"192821\">@Martin Bellehumeur</span> <span class=\"user-mention\" data-user-id=\"194364\">@Leo Bergnéhr</span> </p>\n<p>I assume some of you are already preparing for Montreal in May. It would be nice to go there already \"bragging\" of having a prototype under our belts.</p>",
+        "id": 159646242,
+        "sender_full_name": "George Kustas",
+        "timestamp": 1551383703
+    },
+    {
+        "content": "<p>Excellent, thanks <span class=\"user-mention\" data-user-id=\"196152\">@George Kustas</span>. I think I'll also start prototyping little bit based on your spec.</p>",
+        "id": 159699706,
+        "sender_full_name": "Antti Kalliokoski",
+        "timestamp": 1551437295
+    },
+    {
+        "content": "<p>That would be great <span class=\"user-mention\" data-user-id=\"196690\">@Antti Kalliokoski</span> . You mentioned something about DWV. It would be real sweet to have a test application using FHIRCast that actually displays reals images and uses meta data (MRN and accession numbers). I was thinking of looking into that once I finish implementing our own code. Have you actually done any work with this image viewer? I have an MRI of my elbow I got before surgery last week! we can use it for testing :-) Haha</p>\n<p>Here is an updated spec. I've been meaning to do this and I've been putting it off: <a href=\"/user_uploads/10155/Fy4zXjDmSoNEQUQ1wIUB8cRO/FHIR-Websockets-Prototype-Spec.docx\" target=\"_blank\" title=\"FHIR-Websockets-Prototype-Spec.docx\">FHIR-Websockets-Prototype-Spec.docx</a> </p>\n<p>I am also going to (finally) post my prototype code in Github (pending permission is granted) - stand by. it's all .Net environment. .Net Core Hub, and Web Forms C# test app. This is because my programming shop is all Microsoft. It should still be somewhat helpful to other development environments. <span class=\"user-mention\" data-user-id=\"192821\">@Martin Bellehumeur</span> has a Node.js implementation that you can use too.</p>",
+        "id": 159710162,
+        "sender_full_name": "George Kustas",
+        "timestamp": 1551445332
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"196152\">@George Kustas</span>, it's great that you will provide some test images. :D I haven't tried to launch DWV yet but I'll do it next week. The spec for the WebSocket client (web app) prototype could be something like this:</p>\n<ul>\n<li>UI controls<ul>\n<li>log in/out</li>\n<li>open/switch/close imaging study</li>\n</ul>\n</li>\n<li>Image Viewer (DWV)<ul>\n<li>launched based on the context</li>\n</ul>\n</li>\n<li>Functionality<br>\n  1) User logs in with username (secret is stored in the UI app for now)<br>\n  2) Get topic from the hub based on username and secret<br>\n  3) Automatically subscribe to events: open-imaging-study, switch-imaging-study, close-imaging-study, user-logout<br>\n  4) Establish the WebSocket connection to the hub<br>\n  5) Get current context from the hub<br>\n    5.1) If context exists, launch DWV<br>\n  6) React to user actions and FHIRcast events</li>\n</ul>",
+        "id": 159790023,
+        "sender_full_name": "Antti Kalliokoski",
+        "timestamp": 1551523749
+    },
+    {
+        "content": "<p>I've quickly tried the solution now proposed in the spec - there are some issues (see github).  Maybe we should have a short telco on the whole web-socket thingy.</p>",
+        "id": 159919490,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1551711356
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"196152\">@George Kustas</span>, I started prototyping WebSocket client that maybe could be used with your hub implementation. The code and a screen capture demo is in <a href=\"https://github.com/fhircast/reactclient.js/tree/develop\" target=\"_blank\" title=\"https://github.com/fhircast/reactclient.js/tree/develop\">reactclient.js develop branch</a>. Based on the screen capture, would this kind of UI be useful for a demo?</p>\n<p>The implementation is still very much WIP (uses test data, not connected to hub). It uses DWV and just a random DICOM file for displaying imaging study. I also try to simplify the logic and move it in one place. In the original prototype (master) the logic is pretty hardcoded and scattered around the components.</p>",
+        "id": 160192897,
+        "sender_full_name": "Antti Kalliokoski",
+        "timestamp": 1551961972
+    },
+    {
+        "content": "<p>Wow... This would be VERY valuable to any of us looking to demo and as a proof of concept. I look forward to bringing you and this app into our hub environment. I am still in the process of publishing everything to our cloud server. I'll be posting it's availability here soon. Thanks Antti!</p>",
+        "id": 160212290,
+        "sender_full_name": "George Kustas",
+        "timestamp": 1551975548
+    },
+    {
+        "content": "<p>Nice, I'll work on the client implementation again next week. And when you have the hub running on your cloud server, I'll change the client to use the hub, start fixing bugs, add new functionality if needed etc..</p>",
+        "id": 160276506,
+        "sender_full_name": "Antti Kalliokoski",
+        "timestamp": 1552038728
+    },
+    {
+        "content": "<p>I've finally made my .Net hub and test client public on github. Please take a look: <a href=\"https://github.com/fhircast/.net\" target=\"_blank\" title=\"https://github.com/fhircast/.net\">https://github.com/fhircast/.net</a>.</p>\n<p>I am in the process of installing the hub on an azure cloud server. I'll post back when it is ready. In the meantime, I hope the readme will explain what I'm hoping to accomplish with a collaboration of prototypes.</p>",
+        "id": 160483085,
+        "sender_full_name": "George Kustas",
+        "timestamp": 1552314562
+    },
+    {
+        "content": "<p>Great, I've updated my implementation to also support the other web-socket proposal (<a href=\"https://github.com/PhilipsOnFhir/fhir-cast\" target=\"_blank\" title=\"https://github.com/PhilipsOnFhir/fhir-cast\">https://github.com/PhilipsOnFhir/fhir-cast</a> - develop branch). I did not get around to check them against each other yet.</p>",
+        "id": 160491369,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1552320068
+    },
+    {
+        "content": "<p><span aria-label=\"electric plug\" class=\"emoji emoji-1f50c\" role=\"img\" title=\"electric plug\">:electric_plug:</span>  We have <a href=\"https://github.com/HL7/fhircast-docs/issues/104\" target=\"_blank\" title=\"https://github.com/HL7/fhircast-docs/issues/104\">three</a> <a href=\"https://github.com/HL7/fhircast-docs/issues/157\" target=\"_blank\" title=\"https://github.com/HL7/fhircast-docs/issues/157\">formal</a> <a href=\"https://github.com/HL7/fhircast-docs/issues/164\" target=\"_blank\" title=\"https://github.com/HL7/fhircast-docs/issues/164\">ballot</a> comments about web sockets. If you think that this is an important issue, could you please comment on github issue <a href=\"https://github.com/HL7/fhircast-docs/issues/104\" target=\"_blank\" title=\"https://github.com/HL7/fhircast-docs/issues/104\">#104</a> by tomorrow night? (shout out to Ron Parker &amp; <span class=\"user-mention\" data-user-id=\"194452\">@Bas van den Heuvel</span> ).</p>",
+        "id": 165007752,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1557168403
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"196152\">@George Kustas</span>, <span class=\"user-mention\" data-user-id=\"194452\">@Bas van den Heuvel</span>, <span class=\"user-mention\" data-user-id=\"192821\">@Martin Bellehumeur</span>, <span class=\"user-mention\" data-user-id=\"194521\">@Ashish Singh</span> , <span class=\"user-mention\" data-user-id=\"219196\">@Wouter Devriendt</span></p>",
+        "id": 165007909,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1557168506
+    },
+    {
+        "content": "<p>I've added my analysis, comments and preference to the git-hub issue.</p>",
+        "id": 165102152,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1557256830
+    },
+    {
+        "content": "<p>I've added a comment to the github issue.</p>",
+        "id": 165146316,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1557306554
+    },
+    {
+        "content": "<p>We've got time dedicated during two upcoming <a href=\"https://confluence.hl7.org/display/IMIN/Teleconferences\" target=\"_blank\" title=\"https://confluence.hl7.org/display/IMIN/Teleconferences\">Imaging Integration</a> calls to specifically talk through how we can and should enable web sockets in FHIRcast. If you're interested and/or experienced with the use of web sockets, especially as part of context synchronization, please join!</p>",
+        "id": 165278228,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1557427303
+    },
+    {
+        "content": "<p>Upcoming II FHIRcast web sockets calls via this <a href=\"https://global.gotomeeting.com/join/812770693\" target=\"_blank\" title=\"https://global.gotomeeting.com/join/812770693\">gotomeeting</a>:</p>\n<ul>\n<li>Wednesday, May 22, 2019, 10:00-11:00 US ET</li>\n<li>Thursday, June 20, 2019, 10:00-11:00 US ET</li>\n</ul>",
+        "id": 165278233,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1557427305
+    },
+    {
+        "content": "<p>cc <span class=\"user-mention\" data-user-id=\"194452\">@Bas van den Heuvel</span> , <span class=\"user-mention\" data-user-id=\"196152\">@George Kustas</span> , <span class=\"user-mention\" data-user-id=\"194521\">@Ashish Singh</span></p>",
+        "id": 165278300,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1557427333
+    },
+    {
+        "content": "<p>I'm in. Thanks <span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span></p>",
+        "id": 165290102,
+        "sender_full_name": "George Kustas",
+        "timestamp": 1557437027
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"196152\">@George Kustas</span> wrote up this websocket proposal: <a href=\"https://github.com/HL7/fhircast-docs/wiki/Websocket-proposal\" target=\"_blank\" title=\"https://github.com/HL7/fhircast-docs/wiki/Websocket-proposal\">https://github.com/HL7/fhircast-docs/wiki/Websocket-proposal</a>, which we'll be talking through on the Thursday HL7 call (<a href=\"https://confluence.hl7.org/display/IMIN/2019-06-20\" target=\"_blank\" title=\"https://confluence.hl7.org/display/IMIN/2019-06-20\">details</a>).</p>",
+        "id": 168443628,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1560883580
+    },
+    {
+        "content": "<p>Any early thoughts? <span class=\"user-mention\" data-user-id=\"194452\">@Bas van den Heuvel</span> , <span class=\"user-mention\" data-user-id=\"194521\">@Ashish Singh</span></p>",
+        "id": 168443648,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1560883597
+    },
+    {
+        "content": "<p>George - great work.<br>\nMy first early thought: is the acknowledge over websockets needed? I think we can do without. This would also remove the requirement for a header and body section (just the content of the body is enough).</p>",
+        "id": 168498144,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1560944204
+    },
+    {
+        "content": "<p>hey <span class=\"user-mention\" data-user-id=\"194452\">@Bas van den Heuvel</span> - <span class=\"user-mention\" data-user-id=\"196152\">@George Kustas</span> and I were talking about the header/body section being potentially unnecessary in <a href=\"https://github.com/HL7/fhircast-docs/issues/253\" target=\"_blank\" title=\"https://github.com/HL7/fhircast-docs/issues/253\">#253</a>. I just removed this concept from George's writeup in the wiki.</p>",
+        "id": 168510394,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1560953658
+    },
+    {
+        "content": "<blockquote>\n<p>is the acknowledge over websockets needed?</p>\n</blockquote>\n<p>I'm not sure about this. This same idea came up in some FHIR Subscriptions conversations last month. There is a connection established request/response in FHIR Subscriptions websockets right now. They call it bind/bound. See <a href=\"https://www.hl7.org/fhir/subscription.html#2.46.7.2\" target=\"_blank\" title=\"https://www.hl7.org/fhir/subscription.html#2.46.7.2\">https://www.hl7.org/fhir/subscription.html#2.46.7.2</a>, george's websocket proposal uses a dynamically generated url for the websocket connection that it specific to the session. FHIR Subscriptions is using a single FHIR server-wide url for all websocket connections.</p>",
+        "id": 168510819,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1560953959
+    },
+    {
+        "content": "<p>I can think of some good uses for the acknowledgements. I'm thinking, for instance, the case where one of the clients loses its connection with the hub or takes too long to acknowledge (a hang). If the hub detects this situation, it would be nice if the other subscribers of that same topic could either receive an event from the hub, or the hub could expose a method to get the status of all subscribers to a topic.</p>",
+        "id": 168525473,
+        "sender_full_name": "George Kustas",
+        "timestamp": 1560964263
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span>  I went through the proposal from <span class=\"user-mention\" data-user-id=\"196152\">@George Kustas</span> .  It looks great. </p>\n<p>Just a thought, Will there be a use-case wherein a hub can accept only a subset of the events. For instance, if one of the event (among the set of events subscriber has requested for) is not addressed by the Hub. Then What should the response from the hub should contain? Will it be a failure?</p>",
+        "id": 168594159,
+        "sender_full_name": "Ashish Singh",
+        "timestamp": 1561036713
+    },
+    {
+        "content": "<blockquote>\n<p>It looks great.</p>\n</blockquote>\n<p>Awesome. Are you also able to join our call in 20 minutes?</p>",
+        "id": 168596699,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1561038452
+    },
+    {
+        "content": "<blockquote>\n<p>if one of the event (among the set of events subscriber has requested for) is not addressed by the Hub. Then What should the response from the hub should contain? </p>\n</blockquote>\n<p>The client requested list of events is specified in the <a href=\"http://fhircast.org/specification/May2019Ballot/#subscription-request\" target=\"_blank\" title=\"http://fhircast.org/specification/May2019Ballot/#subscription-request\">subscription request</a> in the <code>hub.events</code> POST parameter. The accepted/granted/supported list of events for which the client is successfully subscribed is listed in the <a href=\"http://fhircast.org/specification/May2019Ballot/#intent-verification-request\" target=\"_blank\" title=\"http://fhircast.org/specification/May2019Ballot/#intent-verification-request\">Intent Verification Request</a>'s <code>hub.events</code> parameter. Does that make sense. In every subscription, the hub informs the client which events the subscription is for. This list could be different from those requested.</p>",
+        "id": 168596706,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1561038454
+    },
+    {
+        "content": "<blockquote>\n<blockquote>\n<p>This list could be different from those requested.</p>\n</blockquote>\n</blockquote>\n<p>Thanks . That makes sense.</p>",
+        "id": 168602515,
+        "sender_full_name": "Ashish Singh",
+        "timestamp": 1561042304
+    },
+    {
+        "content": "<p>I've updated our implementation to test the new FhirCast Websocket spec (<a href=\"https://github.com/PhilipsOnFhir/fhir-cast/tree/websocket\" target=\"_blank\" title=\"https://github.com/PhilipsOnFhir/fhir-cast/tree/websocket\">https://github.com/PhilipsOnFhir/fhir-cast/tree/websocket</a>).</p>\n<p>Doing this, I had to make some assumptions that I would like to verify:<br>\n- A subscribe/unsubscribe that has the channel.endpoint, will update the existing websocket.<br>\n- Websocket exists, what happens when a second connection is made? I assume we do the handshake based on the last subscription secret.<br>\n- If we get a subscripe/unsubscribe on a websocket connection with multiple clients, does each of them respond with the handshake. Assumed: yes<br>\n- What happens if the last connection on a websocket is dropped? Assumed - nothing.<br>\n- A subscribe/unsubscribe that has the channel.endpoint, will update the existing websocket.</p>",
+        "id": 169038163,
+        "sender_full_name": "Bas van den Heuvel",
+        "timestamp": 1561560710
+    },
+    {
+        "content": "<p>Hey <span class=\"user-mention\" data-user-id=\"194452\">@Bas van den Heuvel</span>  I was about to post something new when I saw your post above asking for verification. I'm not sure I'm answering your questions but here is the way I've implemented it. Basically, I don't understand how multiple clients would connect on the same websocket. Here's what I do:<br>\n1. The initial Subscribe does NOT contain the endpoint, because the endpoint is unknown.  The hub returns the endpoint on the Subscribe request. The client then connects to a websocket on that endpoint. The endpoint will be unique for that client.<br>\n2. A new websocket is created by each client after subscription.<br>\n3. The hub keeps a list of all subscriptions, and in that list (right now an in-memory dictionary) it stores the unique endpoint in channel.endpoint.<br>\n4. The hub also keeps a list of websockets indexed by the channel endpoint, so there is a one-to-one relationship with some or all of the subscriptions (obviously not the subscriptions that are using REST). <br>\n5. Each time a client requests a websocket connection, the hub essentially instantiates a new thread that simply reads inbound messages until the websocket is closed.<br>\n6. If a client websocket is dropped, the hub (web socket reader thread) removes that subscription from its list, and it's associated websocket from the in-memory collection. The thread then terminates.<br>\nEventually, both in-memory collections (lists) will be database tables.</p>\n<p>If you want to see my Hub websocket implementation, most of it is in one file in my github: <a href=\"https://github.com/fhircast/.net\" target=\"_blank\" title=\"https://github.com/fhircast/.net\">https://github.com/fhircast/.net</a>. Look at websocketmiddleware.cs . </p>\n<p>So... the new thing I was here to post:  If you recall I think it was you  Bas that suggested we don't really need the intent verification step any more, since the hub establishes the websocket endpoint (which is not guessable).  I agreed, but I think we were at the close of the call and we didn't get a general consensus.  <span class=\"user-mention\" data-user-id=\"191864\">@Isaac Vetter</span>  still has it in the spec.  Personally, I don't see the need for it and planned on removing it from my implementation. What do you guys think?</p>",
+        "id": 175150942,
+        "sender_full_name": "George Kustas",
+        "timestamp": 1567881764
+    },
+    {
+        "content": "<p>Hi <span class=\"user-mention\" data-user-id=\"196152\">@George Kustas</span> ,  my client can subscribe , get websocket and received subscription acknowledge.<br>\nSending events seems to work has well but when I connect two clients, I am not receiving the events I publish from the other client.</p>",
+        "id": 175418086,
+        "sender_full_name": "Martin Bellehumeur (Visage Imaging)",
+        "timestamp": 1568197568
+    },
+    {
+        "content": "<p>Has the sandbox code been updated to use/test the websocket implementation?</p>",
+        "id": 175427540,
+        "sender_full_name": "John Silva",
+        "timestamp": 1568206277
+    },
+    {
+        "content": "<p>I have one here that mimics the one from George:<br>\n<a href=\"https://hub-fhircast.azurewebsites.net/websocket\" target=\"_blank\" title=\"https://hub-fhircast.azurewebsites.net/websocket\">https://hub-fhircast.azurewebsites.net/websocket</a></p>",
+        "id": 175427673,
+        "sender_full_name": "Martin Bellehumeur (Visage Imaging)",
+        "timestamp": 1568206369
+    },
+    {
+        "content": "<p>I have a call in a few minutes. If it’s not to late for you, we can connect at around 10:30 my time?</p>\n<p>I’ll look at the logs to see if I can spot any problems.</p>\n<p>By the way… I haven’t removed the intent verification for web socket connections, but I intended to after getting some confirmation from Isaac and Bas. If you are expecting it now, then I’ll leave it alone.</p>",
+        "id": 175431816,
+        "sender_full_name": "George Kustas",
+        "timestamp": 1568208949
+    },
+    {
+        "content": "<p>In theory, we can talk at 10:30.  But waiting for the plumber to show up any minute</p>",
+        "id": 175437150,
+        "sender_full_name": "Martin Bellehumeur (Visage Imaging)",
+        "timestamp": 1568211966
+    },
+    {
+        "content": "<p>I have a client online configured for your hub here:<br>\n<a href=\"https://reporting-fhircast.azurewebsites.net/websocket\" target=\"_blank\" title=\"https://reporting-fhircast.azurewebsites.net/websocket\">https://reporting-fhircast.azurewebsites.net/websocket</a><br>\nYOu can see the subscription response and you can send message through the websocket but I have not seen receiving a message yet.</p>",
+        "id": 175450703,
+        "sender_full_name": "Martin Bellehumeur (Visage Imaging)",
+        "timestamp": 1568219892
+    },
+    {
+        "content": "<p>Martin, George -- did you come to a joint agreement as to the presence of the intent verification step when using websockets? The rationale for keeping it is to simply verify that the websocket connection is functional during the subscription creation process. Also note that a similar project -- FHIR Subscriptions, kind of copied us, by including a <a href=\"https://github.com/argonautproject/subscriptions/blob/master/Formal/Formal-Subscription-Documentation-(-to-go-in-FHIR-Spec-).md#websockets\" target=\"_blank\" title=\"https://github.com/argonautproject/subscriptions/blob/master/Formal/Formal-Subscription-Documentation-(-to-go-in-FHIR-Spec-).md#websockets\"><code>bind :id</code></a> step during their websocket subscription creation</p>",
+        "id": 175588953,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1568342154
+    },
+    {
+        "content": "<p>From testing and discussion during the sept connectathon --</p>",
+        "id": 175715121,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1568489777
+    },
+    {
+        "content": "<p>When using websockets, the <a href=\"http://fhircast.org/specification/STU1#intent-verification\" target=\"_blank\" title=\"http://fhircast.org/specification/STU1#intent-verification\">intent verification</a> step no longer serves the purpose of validating the hub's connectivity to the callback url.</p>",
+        "id": 175715122,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1568489779
+    },
+    {
+        "content": "<p>In theory, preserving the intent verification step and placing it within the websocket stream could have the benefit of informing the subscriber of the <code>hub.events</code> it was granted, in the case where the Hub granted access to different events than the subscriber requested. However, note the the spec implies/assumes that the Hub will always either grant the requested events or reject the subscription.</p>",
+        "id": 175715123,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1568489779
+    },
+    {
+        "content": "<p>Overall, it really does seem like the intent verification step has no purpose. <span class=\"user-mention\" data-user-id=\"196152\">@George Kustas</span>, <span class=\"user-mention\" data-user-id=\"194452\">@Bas van den Heuvel</span> , <span class=\"user-mention\" data-user-id=\"192821\">@Martin Bellehumeur</span> - do you agree?</p>",
+        "id": 175715133,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1568489834
+    },
+    {
+        "content": "<p>I just moved our <a href=\"https://github.com/HL7/fhircast-docs/wiki/Websocket-proposal\" target=\"_blank\" title=\"https://github.com/HL7/fhircast-docs/wiki/Websocket-proposal\">websocket proposal</a> from the wiki to the spec. First draft of PR here: <a href=\"https://github.com/HL7/fhircast-docs/blob/50b1a8bfe03cfb227237cc77bfda0e7a4f5ff827/docs/specification/Feb2020Ballot.md\" target=\"_blank\" title=\"https://github.com/HL7/fhircast-docs/blob/50b1a8bfe03cfb227237cc77bfda0e7a4f5ff827/docs/specification/Feb2020Ballot.md\">https://github.com/HL7/fhircast-docs/blob/50b1a8bfe03cfb227237cc77bfda0e7a4f5ff827/docs/specification/Feb2020Ballot.md</a><br>\nFeedback encouraged! Especially from the developers that implemented per the wiki.</p>",
+        "id": 179079081,
+        "sender_full_name": "Isaac Vetter",
+        "timestamp": 1572029887
+    }
+]

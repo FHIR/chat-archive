@@ -1,0 +1,125 @@
+---
+layout: page
+title: "FHIR Chat  · GF#17409: GraphQL errors · implementers"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/index.html">implementers</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/GF.2317409.3A.20GraphQL.20errors.html">GF#17409: GraphQL errors</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="153972724"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/GF%2317409%3A%20GraphQL%20errors/near/153972724" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/GF.2317409.3A.20GraphQL.20errors.html#153972724">(Jul 01 2018 at 22:17)</a>:</h4>
+<p>When I drafted the graphQL page (<a href="http://build.fhir.org/graphql" target="_blank" title="http://build.fhir.org/graphql">http://build.fhir.org/graphql</a>) I said to use FHIR operation outcome in case of errors - it's a richer error regarding the underlying problem. but an implementer has pointed out that this isn't good for existing client libraries. Does anyone have any comment on this (see <a href="http://facebook.github.io/graphql/draft/#sec-Response-Format" target="_blank" title="http://facebook.github.io/graphql/draft/#sec-Response-Format">http://facebook.github.io/graphql/draft/#sec-Response-Format</a> for graphql spec).</p>
+
+
+
+<a name="153973126"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/GF%2317409%3A%20GraphQL%20errors/near/153973126" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert Winterbottom <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/GF.2317409.3A.20GraphQL.20errors.html#153973126">(Jul 03 2018 at 13:41)</a>:</h4>
+<p>Hi <span class="user-mention" data-user-id="191316">@Grahame Grieve</span>, I have some experience with client side libraries that use GraphQL. Two big ones are Relay Modern and Apollo Client and they both tend to use the method described in the GraphQL specification. While apollo-client does seem to have the ability to handle network errors simultaneously with graphql errors, relay modern does not do so very cleanly(if someone has more experience with this framework and can comment I would be curious to know). This could be problematic for developers using these libraries.</p>
+<p>I am also actively developing a GraphQL server in Node.js which uses a library written by the team at Facebook. They do a lot to try to prevent you from doing things against the spec, so setting response status codes and reshaping the JSON response is not very straightforward. By default, they do not give you access to the response object on the server since they handle response codes and format for you. If you work around it you can cause unhandled promise rejection errors, which in future versions of node.js will terminate the node process.  There is some discussion here, <a href="https://github.com/graphql/express-graphql/pull/118#issuecomment-258027222" target="_blank" title="https://github.com/graphql/express-graphql/pull/118#issuecomment-258027222">https://github.com/graphql/express-graphql/pull/118#issuecomment-258027222</a>, from Lee Byron, one of the core maintainers of GraphQL, about adding a hook to reshape the response to something else (like an operation outcome).</p>
+<p>GraphQL does have an extensions property that exists on errors and could contain an OperationOutcome. This would only require clients to check the response.errors property for any errors, which all GraphQL clients currently support. I think this may be the preferred way to go. There are some hacky ways to proxy all requests coming into GraphQL so you can handle the response in case of an error, but this could break if the GraphQL implementation changes.</p>
+
+
+
+<a name="153973220"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/GF%2317409%3A%20GraphQL%20errors/near/153973220" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/GF.2317409.3A.20GraphQL.20errors.html#153973220">(Jul 03 2018 at 20:10)</a>:</h4>
+<p>ok, so we could say that you SHALL return a valid graphQL error response, and SHOULD also return an OperationOutcome as an extension?</p>
+
+
+
+<a name="153973717"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/GF%2317409%3A%20GraphQL%20errors/near/153973717" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert Winterbottom <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/GF.2317409.3A.20GraphQL.20errors.html#153973717">(Jul 05 2018 at 14:12)</a>:</h4>
+<p>That sounds good to me.  Here is an example error object in the spec with extensions being used, <a href="http://facebook.github.io/graphql/draft/#example-fce18" target="_blank" title="http://facebook.github.io/graphql/draft/#example-fce18">http://facebook.github.io/graphql/draft/#example-fce18</a>.  I am at the point with the server I am building where I am adding in error handling.  If it would be helpful I can put something together explaining all the cases I am encountering and examples of each and post them back here (or wherever is appropriate). Most of them can be summed up with the two scenarios. </p>
+<p>Someone makes a request that DOES NOT make it to a valid graphql endpoint, e.g. /[base]/SomeNonexistentProfile/2/$graphql. In this case I am not sure if it is better to return a normal operation outcome since we are not hitting graphql, or if it is better to format an operation outcome to look like a graphql error for consistency sake (putting it in an extension property under errors), so I am curious what you think about this. </p>
+<p>Someone makes a request that DOES make it to a valid graphql endpoint.  /[base]/Patient/2/$graphql. Here inside graphql we can handle authentication errors, patient does not exist (404 because of the id), internal server errors, and any other error we encounter. These can be returned as you described, as a valid graphql error which should also contain an operation outcome under extension.</p>
+
+
+
+<a name="153973857"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/GF%2317409%3A%20GraphQL%20errors/near/153973857" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/GF.2317409.3A.20GraphQL.20errors.html#153973857">(Jul 05 2018 at 19:08)</a>:</h4>
+<p>I think that the former case has to be a non-graphql error message - else you're saying, any appearance of the graphql parameter invokes global graphql error handling.... overriding the mime type... sounds like a really bad idea</p>
+
+
+
+<a name="153973884"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/GF%2317409%3A%20GraphQL%20errors/near/153973884" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert Winterbottom <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/GF.2317409.3A.20GraphQL.20errors.html#153973884">(Jul 05 2018 at 19:39)</a>:</h4>
+<p>Oh right, I see. If the response was a traditional OperationOutcome than the mime-type would be <code>application/fhir+json</code>, but if we reshaped it to match the GraphQL spec, then we would have to change the mime-type to <code>application/json</code>.   I agree changing the mime-types would be a bad idea.</p>
+<p>So for the former case, we should return a standard operation outcome indicating the issue with mime-type <code>application/fhir+json</code> and for the latter case, when a user reaches the GraphQL endpoint, we return something like the following with a mime-type of <code>application/json</code> ?</p>
+<div class="codehilite"><pre><span></span><span class="p">{</span>
+  <span class="s2">&quot;data&quot;</span><span class="o">:</span> <span class="kc">null</span><span class="p">,</span>
+  <span class="s2">&quot;errors&quot;</span><span class="o">:</span> <span class="p">[</span>
+    <span class="p">{</span>
+      <span class="s2">&quot;extensions&quot;</span><span class="o">:</span> <span class="p">{</span>
+        <span class="s2">&quot;resourceType&quot;</span><span class="o">:</span> <span class="s2">&quot;OperationOutcome&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;issue&quot;</span><span class="o">:</span> <span class="p">[</span>
+          <span class="p">{</span>
+            <span class="s2">&quot;severity&quot;</span><span class="o">:</span> <span class="s2">&quot;error&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;code&quot;</span><span class="o">:</span> <span class="s2">&quot;exception&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;diagnostics&quot;</span><span class="o">:</span> <span class="s2">&quot;500: Internal server error&quot;</span>
+          <span class="p">}</span>
+        <span class="p">]</span>
+      <span class="p">},</span>
+      <span class="s2">&quot;message&quot;</span><span class="o">:</span> <span class="s2">&quot;500: Internal server error&quot;</span>
+    <span class="p">}</span>
+  <span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+
+
+
+<a name="153973885"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/GF%2317409%3A%20GraphQL%20errors/near/153973885" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/GF.2317409.3A.20GraphQL.20errors.html#153973885">(Jul 05 2018 at 19:40)</a>:</h4>
+<p>yes though I thought it would be this:</p>
+
+
+
+<a name="153973886"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/GF%2317409%3A%20GraphQL%20errors/near/153973886" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/GF.2317409.3A.20GraphQL.20errors.html#153973886">(Jul 05 2018 at 19:40)</a>:</h4>
+<div class="codehilite"><pre><span></span>{
+  &quot;data&quot;: null,
+  &quot;errors&quot;: [
+    {
+      &quot;extensions&quot;: {
+         &quot;resource&quot; : {
+          &quot;resourceType&quot;: &quot;OperationOutcome&quot;,
+          &quot;issue&quot;: [
+            {
+              &quot;severity&quot;: &quot;error&quot;,
+              &quot;code&quot;: &quot;exception&quot;,
+              &quot;diagnostics&quot;: &quot;500: Internal server error&quot;
+            }
+          ]
+        },
+        &quot;message&quot;: &quot;500: Internal server error&quot;
+      }
+    }
+  ]
+}
+</pre></div>
+
+
+
+<a name="153973887"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/GF%2317409%3A%20GraphQL%20errors/near/153973887" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert Winterbottom <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/GF.2317409.3A.20GraphQL.20errors.html#153973887">(Jul 05 2018 at 19:44)</a>:</h4>
+<p>I like that. The GraphQL spec says we can put anything under the extensions property as long as it is a map, so placing the content under a <code>resource</code> property sounds like a great idea. This also allows developers to still put their own information in extensions without interfering with the structure of the operation outcome json.</p>
+
+
+
+<a name="153973888"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/GF%2317409%3A%20GraphQL%20errors/near/153973888" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Grahame Grieve <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/GF.2317409.3A.20GraphQL.20errors.html#153973888">(Jul 05 2018 at 19:49)</a>:</h4>
+<p>k I'll change the graphql page soon</p>
+
+
+
+<a name="153973889"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179166-implementers/topic/GF%2317409%3A%20GraphQL%20errors/near/153973889" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Robert Winterbottom <a href="https://fhir.github.io/chat-archive/stream/179166-implementers/topic/GF.2317409.3A.20GraphQL.20errors.html#153973889">(Jul 05 2018 at 19:50)</a>:</h4>
+<p>Awesome, thanks <span class="user-mention" data-user-id="191316">@Grahame Grieve</span></p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

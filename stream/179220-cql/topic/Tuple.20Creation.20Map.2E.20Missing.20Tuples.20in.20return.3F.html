@@ -1,0 +1,84 @@
+---
+layout: page
+title: "FHIR Chat  · Tuple Creation Map. Missing Tuples in return? · cql"
+---
+
+{% raw %}<h2>Stream: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/index.html">cql</a></h2>
+<h3>Topic: <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Tuple.20Creation.20Map.2E.20Missing.20Tuples.20in.20return.3F.html">Tuple Creation Map. Missing Tuples in return?</a></h3>
+
+<hr>
+
+<base href="https://chat.fhir.org">
+
+<head><link href="https://fhir.github.io/chat-archive/style.css" rel="stylesheet"></head>
+
+<a name="250976396"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Tuple%20Creation%20Map.%20Missing%20Tuples%20in%20return%3F/near/250976396" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Tuple.20Creation.20Map.2E.20Missing.20Tuples.20in.20return.3F.html#250976396">(Aug 27 2021 at 18:42)</a>:</h4>
+<p>I am crafting a FHIR-CQL script to not only capture source FHIR resources, but also specifically derived elements as tuples with extra metadata within the tuple to help with downstream processing. The script is a little big so rather than show the entire script, I'm going to describe the workflow and provide a few snippets here. The basic flow of my script is:</p>
+<ul>
+<li>Capture a set of conditions</li>
+<li>Capture a set medicationstatements occurring 2-4 weeks after the conditions</li>
+<li>For each medication, create 3 tuples</li>
+<li>A 'Code' Tuple which captures the actual code captured from the medicationstatement</li>
+<li>A 'Dosage' Tuple which captures the dosage component from the medicationstatement</li>
+<li>A 'Onset' Tuple which captures  the starting datetime of the medicationstatement</li>
+</ul>
+<p>In my testing FHIR server I loaded a Patient with 2 matching conditions, and then assigned a medicationstatement within the timeframe for each condition.</p>
+<p>From my script output I was able to see</p>
+<ul>
+<li>2 source conditions (good)</li>
+<li>2 source medicationstatements (good)</li>
+<li>1 'Code' Tuple (bad)</li>
+<li>2 'Dosage' Tuple (good)</li>
+<li>2 'Onset' Tuple (good)</li>
+</ul>
+<p>Which surprised me, as 2 of the tuple sets we're 1-to-1 on the Dosage and Onset components, but the 'Code' Tuple was missing a tuple. I'm trying to figure out why that might be.</p>
+<p>I wrote my code tuple definition as:</p>
+<div class="codehilite"><pre><span></span><code>define &quot;Penicillin_MSTuple&quot;: from Penicillin_MS target //FhirBundleCursor
+    return Tuple {
+        questionConcept: &#39;20000005&#39;,
+        sourceValue: target.medication.coding[0].code+&#39;^&#39;+target.medication.coding[0].system,
+        answerValue: &#39;http://www.nlm.nih.gov/research/umls/rxnorm^7980^penicillin G&#39;,
+        resultType: &#39;Drug&#39;
+    }
+</code></pre></div>
+<p>and my dosage tuple as:</p>
+<div class="codehilite"><pre><span></span><code>define &quot;Penicillin_MS_DosageTuple&quot;: from Penicillin_MS target //FhirBundleCursor
+    return Tuple {
+        fhirResourceId: target.id,
+        questionConcept: &#39;20000005&#39;,
+        sourceValue: ToString(FHIRHelpers.ToQuantity((&quot;target&quot;.dosage[0].dose as FHIR.Quantity))),
+        answerValue: &#39;target.dosage[0].dose&#39;,
+        resultType: &#39;Drug&#39;,
+        field: &#39;target.dosage[0].dose&#39;
+    }
+</code></pre></div>
+<p>and my onset/effective tuple as</p>
+<div class="codehilite"><pre><span></span><code>define &quot;Penicillin_MS_Date_Medication_StartedTuple&quot;: from Penicillin_MS target //FhirBundleCursor
+    return Tuple {
+        fhirResourceId: target.id,
+        questionConcept: &#39;20000005&#39;,
+        sourceValue: target.effective as FHIR.dateTime,
+        answerValue: &#39;target.effective as FHIR.dateTime&#39;,
+        resultType: &#39;Drug&#39;,
+        field: &#39;target.effective&#39;
+    }
+</code></pre></div>
+<p>All defines returned as the "List" type, with the list of Tuples, but the Code one only contained one. I replicated the issue with another set of medicationstatements too, so I know it's not the source data itself, it's the cql definition causing an issue here. Is there something about tuple rendering that could cause issues?<br>
+I can share test data too if that would be helpful</p>
+
+
+
+<a name="250979695"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Tuple%20Creation%20Map.%20Missing%20Tuples%20in%20return%3F/near/250979695" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Bryn Rhodes <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Tuple.20Creation.20Map.2E.20Missing.20Tuples.20in.20return.3F.html#250979695">(Aug 27 2021 at 19:04)</a>:</h4>
+<p>I'm just guessing here, but the default for _projection_ in a CQL query is <code>distinct</code>, so if all the tuples in the <code>code</code> query are the same, only one will be returned. You can use the <code>all</code> keyword (<code>return all</code>) to preserve duplicates in the result.</p>
+
+
+
+<a name="251240751"></a>
+<h4><a href="https://chat.fhir.org#narrow/stream/179220-cql/topic/Tuple%20Creation%20Map.%20Missing%20Tuples%20in%20return%3F/near/251240751" class="zl"><img src="https://fhir.github.io/chat-archive/assets/img/zulip.svg" alt="view this post on Zulip" style="width:20px;height:20px;"></a> Michael Riley <a href="https://fhir.github.io/chat-archive/stream/179220-cql/topic/Tuple.20Creation.20Map.2E.20Missing.20Tuples.20in.20return.3F.html#251240751">(Aug 30 2021 at 14:48)</a>:</h4>
+<p>That is what's happening Byrn, thank you! The interesting thing is that we have the same dosage information for each MedicationStatement, but in the backend the dosage component is a different pointer in memory, so they appear distinct. If keeping distinctness in tuples is important to the language, it might be good if the fhir data provider could provide some hashcode or id based on the fields in the component itself.</p>
+
+
+{% endraw %}
+<hr><p>Last updated: Apr 12 2022 at 19:14 UTC</p>

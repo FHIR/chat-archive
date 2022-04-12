@@ -1,0 +1,50 @@
+[
+    {
+        "content": "<p>Hi HAPI crowd <span aria-label=\"wave\" class=\"emoji emoji-1f44b\" role=\"img\" title=\"wave\">:wave:</span> I am using HAPI 5.2 (with R4) and have some business logic that requires me to get all contained resources in a given resource. However, I discovered that naive way of doing this - using <code>resource,getContained()</code> - does not always work.  Specifically,  if I construct an object X and refer to it in another resource Y using the <code>setResource()</code> method (see <a href=\"https://hapifhir.io/hapi-fhir/docs/model/references.html\">this section of the HAPI docs</a> ), then Y serializes with X as a contained resource but <code>Y.getContained()</code> returns an empty array (code example below).</p>\n<p>Is there some other generic way of retrieving all contained resources (i.e. everything pointed to by local <code>#id</code> references) in a given instance, without having to loop over each field of type <code>Reference</code>?</p>\n<p>The code below illustrates the issue. It's Kotlin, so <code>obj.prop = x</code> and  <code>z = obj.prop</code> correspond to <code>obj.setProp(x)</code> and <code>z = obj.getProp()</code>, respectively in Java,.</p>\n<div class=\"codehilite\" data-code-language=\"Kotlin\"><pre><span></span><code><span class=\"k\">val</span> <span class=\"py\">obs</span><span class=\"p\">:</span> <span class=\"n\">Observation</span> <span class=\"p\">=</span> <span class=\"n\">Observation</span><span class=\"p\">()</span> <span class=\"c1\">// New Observation instance</span>\n <span class=\"n\">obs</span><span class=\"p\">.</span><span class=\"n\">status</span> <span class=\"p\">=</span> <span class=\"n\">Observation</span><span class=\"p\">.</span><span class=\"n\">ObservationStatus</span><span class=\"p\">.</span><span class=\"n\">FINAL</span>\n <span class=\"k\">val</span> <span class=\"py\">cc</span> <span class=\"p\">=</span> <span class=\"n\">CodeableConcept</span><span class=\"p\">()</span>\n <span class=\"n\">cc</span><span class=\"p\">.</span><span class=\"n\">addCoding</span><span class=\"p\">().</span><span class=\"n\">display</span> <span class=\"p\">=</span> <span class=\"s\">\"Random\"</span>\n <span class=\"k\">val</span> <span class=\"py\">pat</span> <span class=\"p\">=</span> <span class=\"n\">Patient</span><span class=\"p\">()</span> <span class=\"c1\">// New Patient object</span>\n <span class=\"c1\">// Set the Patient resource as the target of the reference in the subject element</span>\n <span class=\"n\">obs</span><span class=\"p\">.</span><span class=\"n\">subject</span><span class=\"p\">.</span><span class=\"n\">resource</span> <span class=\"p\">=</span> <span class=\"n\">pat</span>\n <span class=\"c1\">// Serializes as Observation with a contained Patient</span>\n <span class=\"k\">val</span> <span class=\"py\">obsAsJson</span> <span class=\"p\">=</span> <span class=\"n\">FhirContext</span><span class=\"p\">.</span><span class=\"n\">forR4</span><span class=\"p\">().</span><span class=\"n\">newJsonParser</span><span class=\"p\">().</span><span class=\"n\">encodeResourceToString</span><span class=\"p\">(</span><span class=\"n\">obs</span><span class=\"p\">)</span>\n<span class=\"c1\">// ... but this array is empty</span>\n <span class=\"k\">val</span> <span class=\"py\">containedArray</span> <span class=\"p\">=</span> <span class=\"n\">obs</span><span class=\"p\">.</span><span class=\"n\">contained</span>\n</code></pre></div>",
+        "id": 223373947,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1611150539
+    },
+    {
+        "content": "<p>I translated your code to Java and got the patient contained resource.<br>\n        Observation o = new Observation();<br>\n        o.setStatus(Observation.ObservationStatus.FINAL);<br>\n        CodeableConcept cc = new CodeableConcept();<br>\n        cc.addCoding().setDisplay(\"Random\");<br>\n        Patient p = new Patient();<br>\n        o.getSubject().setResource(p);<br>\n        String json = FhirContext.forR4().newJsonParser().encodeResourceToString(o);</p>\n<p>{\"resourceType\":\"Observation\",\"contained\":[{\"resourceType\":\"Patient\",\"id\":\"1\"}],\"status\":\"final\",\"subject\":{\"reference\":\"#1\"}}</p>",
+        "id": 223377835,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1611152452
+    },
+    {
+        "content": "<p>Interesting, let me test again...</p>",
+        "id": 223378055,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1611152537
+    },
+    {
+        "content": "<p>Hm, still not working on my side. When I debug and inspect the object <code>obs</code>, it has the Patient information inside the <code>subject</code> property and the <code>contained</code> property is an empty array. Consequently, <code>obs.hasContained()</code> evaluates to <em>false</em>. So I was somehow assuming the information is only moved to <code>contained</code> upon serialization. <span class=\"user-mention\" data-user-id=\"335936\">@Daniel Venton</span> what does you object <code>o</code> look like (as a Java object) after construction, is the <code>contained</code> property also empty? (and thanks for looking at this, BTW!)</p>",
+        "id": 223379072,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1611152987
+    },
+    {
+        "content": "<p>O.subject is of type Reference. Is it relevant to this question?</p>",
+        "id": 223382079,
+        "sender_full_name": "Lin Zhang",
+        "timestamp": 1611154215
+    },
+    {
+        "content": "<p>o.contained is null after every step until the .encode, at which time it becomes a [0] length array.  I adjusted the code a bit. What appears to be happening is the observation you are building has \"helpers\" that help you get to a final state observation, but is not final until those helpers are exercised (serialization). The FHIR spec says subject is a reference, but HAPI allows you to put a resource in it (the HAPI helpers convert it to a contained resource later). However, it only appears to happen on serialization instead of on-the-fly. If you want your observation to be in a final state without the serialization step, then you'll have to generate the final state without relying on the helpers. subject.reference = \"#1\". <a href=\"http://p.id\">p.id</a> = \"1\" o.contained addresource(p). Post serialization/deserialzation the contained list is populated. New code illustrates that. Note that ser/deser is a heavy(slow) operation so probably not a production solution. <span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span>  may know of a way to fire the \"helpers\" without calling the serialization.</p>\n<div class=\"codehilite\"><pre><span></span><code>    Observation build = new Observation();\n    build.setStatus(Observation.ObservationStatus.FINAL);\n    Patient p = new Patient();\n    build.getSubject().setResource(p);\n    IParser parser = FhirContext.forR4().newJsonParser();\n    String json = FhirContext.forR4().newJsonParser().encodeResourceToString(build);\n    Observation post = (Observation) parser.parseResource(json);\n</code></pre></div>",
+        "id": 223386211,
+        "sender_full_name": "Daniel Venton",
+        "timestamp": 1611155565
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"335936\">@Daniel Venton</span>  Thanks for the analysis! - that makes sense. Indeed, for me the key thing is that I can extract contained resources from objects constructed by deserialization (i.e. in your code, <code>post.getContained()</code> will be non-empty)  - and that does indeed work <span aria-label=\"tada\" class=\"emoji emoji-1f389\" role=\"img\" title=\"tada\">:tada:</span> . Nonetheless, I agree that it would be nice to have it work consistently, regardless of the object construction method - otherwise, it is hard to use in environments where one does not know the origin of objects. Perhaps it would be possible to lazily trigger the internal processing when the <code>contained</code> element is accessed?</p>",
+        "id": 223487992,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1611223109
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191319\">@James Agnew</span> Would this ( <span aria-label=\"point up\" class=\"emoji emoji-1f446\" role=\"img\" title=\"point up\">:point_up:</span>  - make behavior of <code>getContained()</code> independent of object construction path) be worth a GitHub issue or am I misunderstanding smt.?</p>",
+        "id": 226151458,
+        "sender_full_name": "Morten Ernebjerg",
+        "timestamp": 1613143809
+    }
+]

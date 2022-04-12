@@ -1,0 +1,116 @@
+[
+    {
+        "content": "<p>We have situations where BloodPressure is sent as 1 Observation with systolic/diastolic components to a system that cannot handle that this way and needs to split that up into 1 systolic and 1 diastolic Observation. How would such a system respond to a create request? Can you respond with 2 HTTP 201 statuses each carrying the Location/ETag of the thing that is created? If the create came in a Bundle you could do that.</p>\n<p>Or is this a clear sign that RESTful is not the answer?</p>",
+        "id": 262981641,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1638176810
+    },
+    {
+        "content": "<p>REST is client driven orchestration, so IMHO the server should refuse the create (422), the Observation being submitted is not conformant to its profiles. The server could expose an operation to do the conversion, this could then be used by a client.  Or the client would have to convert before doing (a bundled) create. <br>\nNote that a server could just store the  bloodpressure observation (or fake that it is storing), respond with one single 201 created, and subsequently split that observation into two other observations (and delete the non-splitted/original version of the observation). A  server doesn't have to guarantee the availability of resources for which it has sent a 201.  Not a very nice solution, but IMHO technically correct given the specs.</p>",
+        "id": 262982984,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1638177646
+    },
+    {
+        "content": "<p>So how would a server that responds with 201 but then not actually stores it that way, deal with the SHALL on sending <a href=\"http://hl7.org/fhir/http.html#create\">Location/ETag</a> in the FHIR http spec for create?</p>",
+        "id": 262983177,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1638177772
+    },
+    {
+        "content": "<p>Would it be accepted send just 'something', as long as you guarantee it does not lead to anything else, but just dead-ends in a 404 if you were ever to do a read on that Location?</p>",
+        "id": 262983319,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1638177857
+    },
+    {
+        "content": "<p>Note that on this infrastructure we mostly do query, not read. So having to support a read here, is not the first requirement.</p>",
+        "id": 262983635,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1638178045
+    },
+    {
+        "content": "<p>contained resources?</p>",
+        "id": 262984714,
+        "sender_full_name": "Grahame Grieve",
+        "timestamp": 1638178726
+    },
+    {
+        "content": "<p>Not sure what you ask, but the create is done with an Observation with 2 components. One systolic, one diastolic. The persistence happens in a non-FHIR store in what could be retrieved through query as 2 separate Observations.</p>\n<p>Are you asking about Observation.contained in the initial Observation or are you suggesting a pseudo Observation as response to the create that holds the the two actual Observations as contained resources?</p>",
+        "id": 262986428,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1638179754
+    },
+    {
+        "content": "<p>\"Would it be accepted send just 'something', as long as you guarantee it does not lead to anything else, but just dead-ends in a 404 if you were ever to do a read on that Location?\" - to me, a server could indeed do this. In such cases a client would have to assume that although a resource may have existed at that location, that such a resource no longer exists. What business rules a server have for deleting a resource is up to the server, and when that server executes that business logic (after a millisecond, or a year) is also up to a server.</p>",
+        "id": 262988943,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1638181089
+    },
+    {
+        "content": "<p>I think I can work with that. Somehow though, I feel we need to rewrite future creation requests towards operations or messaging. The RESTful paradigm and the last 30 years of messaging + over 15 years of V3 does not compute too well.</p>",
+        "id": 262991363,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1638182571
+    },
+    {
+        "content": "<p>Can you send an OperationOutcome with the 201 to show the resources as they were actually created?</p>",
+        "id": 263050259,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1638211109
+    },
+    {
+        "content": "<p>Is your question whether or not the spec allows that or if the server potentially could?</p>",
+        "id": 263081093,
+        "sender_full_name": "Alexander Henket",
+        "timestamp": 1638227661
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"191375\">@Alexander Henket</span>  <span class=\"user-mention\" data-user-id=\"192685\">@Vassil Peytchev</span>  I don't believe an OperationOutcome can accompany a 201, but would be interested to hear otherwise.</p>\n<p>Old thread, but I have a somewhat similar issue: <br>\nClient sends an Encounter as a POST. This is saved and also triggers business logic that causes the sever to reflexively create an EpisodeOfCare. The EpisodeOfCare is not directly related to the Encounter however, but some other care that will happen later (by someone else).<br>\nThe issue is how to notify the client of the id of that new EpisodeOfCare. OperationOutcome does not seem to be possible. The likely solution is to put a reference to the EpisodeOfCare into the newly saved Encounter (probably as an extension, since it is \"an\" EpisodeOfCare and not \"the\" EpisodeOfCare for that encounter). <br>\nThis id is a like a second return value, and not a permanent feature of the Encounter (and would likely be erased if the client PUT the Encounter again). <br>\nAlternatively the client could just do a search for the new EpisodeOfCare, but I would prefer a positive statement of the id to be returned from the Create.</p>",
+        "id": 275821042,
+        "sender_full_name": "Rik Smithies",
+        "timestamp": 1647618504
+    },
+    {
+        "content": "<p>an event? via a subscription</p>",
+        "id": 275823182,
+        "sender_full_name": "Kevin Mayfield",
+        "timestamp": 1647619326
+    },
+    {
+        "content": "<p>The HTTP response contains 'what the server has done' - if it creates 2 resources as a result of a post of 1 resource, shouldn't the response then be a Bundle with 2 resources in it? This stretches REST to its limits, but kind of fits with FHIR. Question to the REST pundits whether this is a no-go in principle.</p>\n<p>If the Encounter (if it's the only thing in the response) in the response has populated a reference to the newly created EpisodeOfCare, that minimalistically serves as a notification. The client could also subscribe to new EpisodeOfCares (where the client e.g. is part of the associated careTeam), to have a more explicit notification.</p>",
+        "id": 275826017,
+        "sender_full_name": "René Spronk",
+        "timestamp": 1647620357
+    },
+    {
+        "content": "<p>You can request that the create returns OperationOutcome but getting the actual resource in return is not supported behaviour.  To get an OperationOutcome, just specify it as per: <a href=\"https://www.hl7.org/fhir/http.html#ops\">https://www.hl7.org/fhir/http.html#ops</a></p>\n<p>That's a preference, not a hard requirement, though.</p>",
+        "id": 275832081,
+        "sender_full_name": "David Pyke",
+        "timestamp": 1647622647
+    },
+    {
+        "content": "<p>but I think that is instead of the created Encounter resource not as well as it. Ideal behaviour is to receive the original created resource, plus something else.</p>",
+        "id": 275832732,
+        "sender_full_name": "Rik Smithies",
+        "timestamp": 1647622904
+    },
+    {
+        "content": "<p>An OperationOutcome with 2 resource references would work, but it makes the first part of the create work differently, which is not ideal.</p>",
+        "id": 275832991,
+        "sender_full_name": "Rik Smithies",
+        "timestamp": 1647623007
+    },
+    {
+        "content": "<p><span class=\"user-mention silent\" data-user-id=\"191651\">Rik Smithies</span> <a href=\"#narrow/stream/179166-implementers/topic/RESTful.20create.20and.20processing.20differences/near/275832991\">said</a>:</p>\n<blockquote>\n<p>An OperationOutcome with 2 resource references would work, but it makes the first part of the create work differently, which is not ideal.</p>\n</blockquote>\n<p>Which first part of the create?</p>\n<p>In general, for presented use case (a create of Encounter also creates an EpisodeOfCare not linked to the created Encounter) I see three possible paths:</p>\n<ol>\n<li>In the case where the server always executes this business logic, the IG specifies that the client must always add the preference of getting an OperationOutcome as the response of the Encounter create, and the OperationOutcome contains the references to both the Encounter and the EpisodeOfCare</li>\n<li>In the case where you want to describe the business logic as a service, so that it can be implemented by various servers in addition to a simple Encounter create, then you define an operation.</li>\n<li>In the case where the business logic is part of multi-step workflow where the state is represented via a Task resource, the output of the Task can point to the two resources</li>\n</ol>",
+        "id": 275849723,
+        "sender_full_name": "Vassil Peytchev",
+        "timestamp": 1647630783
+    },
+    {
+        "content": "<p><span class=\"user-mention\" data-user-id=\"192685\">@Vassil Peytchev</span> ~Which first part of the create?</p>\n<p>The part where the client directly causes an Encounter to be created.</p>\n<p>If on most systems that gives 201 and echoes back a created resource with an id filled in (and headers), it would be unhelpful if that changed just because some other additional process happens on one server, some or all of the time. </p>\n<p>The convenience of being told about that should ideally not come with inconvenience of having to work in some special mode. </p>\n<p>This makes 1 and 2 less attractive. For 3 there is no Task anticipated.</p>",
+        "id": 275914897,
+        "sender_full_name": "Rik Smithies",
+        "timestamp": 1647702800
+    }
+]
